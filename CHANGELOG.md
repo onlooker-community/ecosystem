@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.3](https://github.com/onlooker-community/ecosystem/compare/v0.0.2...v0.0.3) (2026-05-21)
+
+
+### Chores
+
+* update release-please configuration to include custom pull request title pattern ([e860f1c](https://github.com/onlooker-community/ecosystem/commit/e860f1c5a7b58909a53ec38a3b3da89f22f0434c))
+
 ## [0.0.2](https://github.com/onlooker-community/ecosystem/compare/v0.0.1...v0.0.2) (2026-05-21)
 
 
