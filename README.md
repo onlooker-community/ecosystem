@@ -6,7 +6,7 @@ Agents, skills, hooks, commands, rules, and MCP configurations that power [Onloo
 
 ## Development
 
-Install tools with [mise](https://mise.jdx.dev/) (`mise install`), then clone the [schema](https://github.com/onlooker-community/schema) repo as a sibling directory (`../schema`) so `npm` can link `@onlooker-community/schema`:
+Install tools with [mise](https://mise.jdx.dev/) (`mise install`), then install dependencies (includes [`@onlooker-community/schema`](https://www.npmjs.com/package/@onlooker-community/schema) from npm):
 
 ```bash
 npm ci

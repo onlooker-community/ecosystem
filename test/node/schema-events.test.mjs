@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -44,7 +45,7 @@ test('mapHookInputToCanonical maps PostToolUseFailure Bash to tool.shell.exec', 
 });
 
 test('buildCanonicalEvent assigns monotonic file-backed sequence', () => {
-  const tmpDir = join(REPO_ROOT, 'test/tmp-schema-sequence-isolated');
+  const tmpDir = mkdtempSync(join(tmpdir(), 'onlooker-seq-'));
   const a = buildCanonicalEvent({
     onlookerDir: tmpDir,
     plugin: 'onlooker',
@@ -62,4 +63,5 @@ test('buildCanonicalEvent assigns monotonic file-backed sequence', () => {
 
   assert.equal(a.sequence, 0);
   assert.equal(b.sequence, 1);
+  rmSync(tmpDir, { recursive: true, force: true });
 });
