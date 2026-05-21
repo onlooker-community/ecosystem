@@ -1,0 +1,14 @@
+{
+	"name": "ecosystem",
+	"version": "0.0.1",
+	"description": "TODO fill this out",
+	"author": {
+		"name": "Onlooker Community",
+		"url": "https://onlooker.dev"
+	},
+	"homepage": "https://onlooker.dev",
+	"repository": "https://github.com/onlooker-community/ecosystem",
+	"license": "MIT",
+	"skills": ["./skills/", "./commands/"],
+	"agents": []
+}

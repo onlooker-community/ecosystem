@@ -1,0 +1,34 @@
+{
+	"name": "@onlooker-community/ecosystem",
+	"version": "1.0.0",
+	"description": "Agents, skills, hooks, commands, rules, and MCP configurations that power [Onlooker](https://onlooker.dev)",
+	"author": {
+		"name": "Onlooker Community",
+		"url": "https://onlooker.dev"
+	},
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git:https://github.com/onlooker-community/ecosystem.git"
+	},
+	"homepage": "https://github.com/onlooker-community/ecosystem#readme",
+	"bugs": {
+		"url": "https://github.com/onlooker-community/ecosystem/issues"
+	},
+	"bin": {
+		"onlooker-install": "install.sh"
+	},
+	"scripts": {
+		"postinstall": "echo '\\n  onlooker-ecosystem installed!\\n  Run: npx onlooker-install typescript\\n  Docs: https://github.com/onlooker-community/ecosystem\\n'",
+		"lint": "biome check . && markdownlint '**/*.md' --ignore node_modules",
+		"lint:fix": "biome check --write ."
+	},
+	"engines": {
+		"node": ">=18"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.4.15",
+		"globals": "^17.6.0",
+		"markdownlint-cli": "^0.48.0"
+	}
+}

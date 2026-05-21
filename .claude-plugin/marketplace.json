@@ -1,0 +1,26 @@
+{
+	"name": "onlooker-community",
+	"owner": {
+		"name": "Onlooker Community",
+		"email": "community@onlooker.dev"
+	},
+	"metadata": {
+		"description": "TODO Fill this out",
+		"version": "0.0.1"
+	},
+	"plugins": [
+		{
+			"name": "ecosystem",
+			"source": "./",
+			"description": "Fill this out",
+			"author": {
+				"name": "Onlooker Community"
+			},
+			"homepage": "https://onlooker.dev",
+			"repository": "https://github.com/onlooker-community/ecosystem",
+			"license": "MIT",
+			"keywords": [],
+			"tags": []
+		}
+	]
+}
