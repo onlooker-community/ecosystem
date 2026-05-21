@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/onlooker-community/ecosystem/compare/v0.2.0...v0.2.1) (2026-05-21)
+
+
+### Bug Fixes
+
+* **ci:** checkout release tag before npm publish :relieved: ([bc7bbdc](https://github.com/onlooker-community/ecosystem/commit/bc7bbdc7a886a55ba8f04fe09bfa60043648c766))
+
 ## [0.2.0](https://github.com/onlooker-community/ecosystem/compare/v0.1.0...v0.2.0) (2026-05-21)
 
 
