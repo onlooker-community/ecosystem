@@ -17,6 +17,19 @@ Agents, skills, hooks, commands, rules, and MCP configurations that power [Onloo
 
 ---
 
+## Development
+
+Install tools with [mise](https://mise.jdx.dev/) (`mise install`), then:
+
+```bash
+npm ci
+npm test              # bats integration tests
+npm run test:shellcheck
+npm run test:ci       # shellcheck + tests + lint
+```
+
+Tests live under `test/bats/` and use an isolated temp home so nothing writes to your real `~/.onlooker`.
+
 ## Quick Start
 
 Get up and running in under 2 minutes:

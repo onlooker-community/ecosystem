@@ -1,2 +1,13 @@
 [tools]
 node = "26.1.0"
+bats = "1.13.0"
+shellcheck = "0.10.0"
+jq = "1.7.1"
+
+[tasks.test]
+description = "Run bats test suite"
+run = "bats test/bats"
+
+[tasks."test:shellcheck"]
+description = "Run shellcheck on shell scripts"
+run = "shellcheck -S error -x install.sh scripts/common.sh scripts/hooks/*.sh scripts/lib/*.sh"

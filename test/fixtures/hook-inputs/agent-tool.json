@@ -1,0 +1,11 @@
+{
+  "session_id": "test-session-001",
+  "tool_name": "Agent",
+  "tool_input": {
+    "subagent_type": "explore",
+    "description": "Search the codebase",
+    "run_in_background": false,
+    "isolation": "worktree",
+    "model": "sonnet"
+  }
+}

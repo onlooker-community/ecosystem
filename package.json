@@ -20,7 +20,10 @@
   },
   "scripts": {
     "postinstall": "echo '\\n  onlooker-ecosystem installed!\\n  Run: npx onlooker-install typescript\\n  Docs: https://github.com/onlooker-community/ecosystem\\n'",
-    "lint:check": "biome check . && markdownlint '**/*.md' --ignore node_modules",
+    "test": "bats test/bats",
+    "test:shellcheck": "shellcheck -S error -x install.sh scripts/common.sh scripts/hooks/*.sh scripts/lib/*.sh",
+    "test:ci": "npm run test:shellcheck && npm test && npm run lint:check",
+    "lint:check": "biome check . && markdownlint '**/*.md' --ignore node_modules --ignore CHANGELOG.md",
     "lint": "biome lint --write",
     "format": "biome format --write",
     "format:check": "biome format",
