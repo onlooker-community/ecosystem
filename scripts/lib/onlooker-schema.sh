@@ -25,6 +25,7 @@ onlooker_event_from_hook() {
 	fi
 
 	printf '%s' "$hook_input" | ONLOOKER_DIR="$ONLOOKER_DIR" ONLOOKER_PLUGIN_NAME="$ONLOOKER_PLUGIN_NAME" \
+		ONLOOKER_TURN_NUMBER="${ONLOOKER_TURN_NUMBER:-}" \
 		node "$_ONLOOKER_EVENT_JS" emit-from-hook 2>/dev/null
 }
 

@@ -1,0 +1,11 @@
+{
+  "session_id": "skill-session-001",
+  "cwd": "/project",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Skill",
+  "tool_use_id": "skill-use-001",
+  "tool_input": {
+    "skill": "code-review",
+    "args": "src/main.ts"
+  }
+}

@@ -38,6 +38,29 @@ setup_file() {
   [ "$status" -eq 0 ]
 }
 
+@test "hooks.json Skill matcher references skill-usage-tracker" {
+  run jq -e '.hooks.PreToolUse[2].matcher == "Skill"' "${REPO_ROOT}/hooks/hooks.json"
+  [ "$status" -eq 0 ]
+
+  local hook_cmd
+  hook_cmd=$(jq -r '.hooks.PreToolUse[2].hooks[0].command' "${REPO_ROOT}/hooks/hooks.json")
+  [[ "$hook_cmd" == *skill-usage-tracker.sh ]]
+
+  local script_path="${hook_cmd//\$CLAUDE_PLUGIN_ROOT/$REPO_ROOT}"
+  script_path="${script_path//\"/}"
+  run test -x "$script_path"
+  [ "$status" -eq 0 ]
+}
+
+@test "hooks.json UserPromptExpansion references skill-usage-tracker" {
+  run jq -e '.hooks.UserPromptExpansion[0].matcher == ""' "${REPO_ROOT}/hooks/hooks.json"
+  [ "$status" -eq 0 ]
+
+  local hook_cmd
+  hook_cmd=$(jq -r '.hooks.UserPromptExpansion[0].hooks[0].command' "${REPO_ROOT}/hooks/hooks.json")
+  [[ "$hook_cmd" == *skill-usage-tracker.sh ]]
+}
+
 @test "hooks.json PostToolUse references tool-history-tracker" {
   run jq -e '.hooks.PostToolUse[0].matcher == "*"' "${REPO_ROOT}/hooks/hooks.json"
   [ "$status" -eq 0 ]

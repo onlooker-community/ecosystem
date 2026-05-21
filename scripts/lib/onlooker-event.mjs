@@ -8,6 +8,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   createEvent,
+  SKILL_INVOKED,
   TOOL_AGENT_COMPLETE,
   TOOL_AGENT_SPAWN,
   TOOL_FILE_EDIT,
@@ -78,11 +79,80 @@ function extractPath(toolInput, toolResponse) {
   return toolInput?.file_path ?? toolInput?.path ?? toolResponse?.filePath ?? toolResponse?.path ?? undefined;
 }
 
+function stripUndefined(obj) {
+  return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined && v !== null && v !== ''));
+}
+
+function parseTurnNumber() {
+  const raw = process.env.ONLOOKER_TURN_NUMBER;
+  if (raw == null || raw === '') return undefined;
+  const n = Number.parseInt(String(raw), 10);
+  return Number.isFinite(n) && n >= 1 ? n : undefined;
+}
+
 /**
- * Map Claude Code PostToolUse / PostToolUseFailure hook input to a canonical event.
- * Returns null when the tool is not mapped to a schema event type.
+ * Map UserPromptExpansion or PreToolUse (Skill) hook input to skill.invoked.
+ * Returns null when the hook input is not a skill invocation.
+ */
+export function mapSkillHookInput(hookInput, options) {
+  const { onlookerDir, plugin, runtime = 'claude-code', adapter_id = 'ecosystem.hooks' } = options;
+  const hookEvent = hookInput?.hook_event_name;
+  const sessionId = hookInput?.session_id ?? 'unknown';
+
+  let payload;
+
+  if (hookEvent === 'UserPromptExpansion') {
+    const skillName = hookInput?.command_name;
+    if (!skillName) return null;
+    payload = stripUndefined({
+      skill_name: skillName,
+      invocation_source: 'slash_command',
+      command_args: hookInput?.command_args,
+      command_source: hookInput?.command_source,
+      expansion_type: hookInput?.expansion_type,
+      turn_number: parseTurnNumber(),
+    });
+  } else if (hookEvent === 'PreToolUse' && hookInput?.tool_name === 'Skill') {
+    const toolInput = hookInput?.tool_input ?? {};
+    const skillName =
+      toolInput.skill ?? toolInput.skill_name ?? toolInput.name ?? toolInput.command ?? toolInput.skill_id;
+    if (!skillName) return null;
+    const args = toolInput.args ?? toolInput.command_args;
+    payload = stripUndefined({
+      skill_name: String(skillName),
+      invocation_source: 'tool',
+      command_args: typeof args === 'string' ? args : args != null ? JSON.stringify(args) : undefined,
+      turn_number: parseTurnNumber(),
+    });
+  } else {
+    return null;
+  }
+
+  const event = buildCanonicalEvent({
+    onlookerDir,
+    runtime,
+    adapter_id,
+    plugin,
+    session_id: sessionId,
+    event_type: SKILL_INVOKED,
+    payload,
+  });
+
+  const result = validate(event);
+  if (!result.valid) {
+    return { valid: false, errors: result.errors, event_type: SKILL_INVOKED };
+  }
+  return { valid: true, event: result.event };
+}
+
+/**
+ * Map Claude Code hook input to a canonical event.
+ * Returns null when the hook input is not mapped to a schema event type.
  */
 export function mapHookInputToCanonical(hookInput, options) {
+  const skillMapped = mapSkillHookInput(hookInput, options);
+  if (skillMapped) return skillMapped;
+
   const { onlookerDir, plugin, runtime = 'claude-code', adapter_id = 'ecosystem.hooks' } = options;
 
   const toolName = hookInput?.tool_name;

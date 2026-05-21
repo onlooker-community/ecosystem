@@ -18,6 +18,26 @@
             "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hooks/agent-spawn-tracker.sh"
           }
         ]
+      },
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hooks/skill-usage-tracker.sh"
+          }
+        ]
+      }
+    ],
+    "UserPromptExpansion": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hooks/skill-usage-tracker.sh"
+          }
+        ]
       }
     ],
     "PostToolUse": [

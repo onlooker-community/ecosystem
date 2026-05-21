@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { validate } from '@onlooker-community/schema';
-import { buildCanonicalEvent, mapHookInputToCanonical } from '../../scripts/lib/onlooker-event.mjs';
+import { buildCanonicalEvent, mapHookInputToCanonical, mapSkillHookInput } from '../../scripts/lib/onlooker-event.mjs';
 
 const REPO_ROOT = join(fileURLToPath(new URL('../..', import.meta.url)));
 const FIXTURES = join(REPO_ROOT, 'test/fixtures/hook-inputs');
@@ -41,6 +41,34 @@ test('mapHookInputToCanonical maps PostToolUseFailure Bash to tool.shell.exec', 
   assert.equal(mapped.event.event_type, 'tool.shell.exec');
   assert.equal(mapped.event.payload.command, 'npm test');
   assert.equal(mapped.event.payload.blocked, true);
+  assert.equal(validate(mapped.event).valid, true);
+});
+
+test('mapSkillHookInput maps UserPromptExpansion to skill.invoked', () => {
+  const hookInput = loadFixture('user-prompt-expansion-skill.json');
+  const tmpDir = join(REPO_ROOT, 'test/tmp-schema-events');
+  const mapped = mapSkillHookInput(hookInput, {
+    onlookerDir: tmpDir,
+    plugin: 'onlooker',
+  });
+
+  assert.equal(mapped.valid, true);
+  assert.equal(mapped.event.event_type, 'skill.invoked');
+  assert.equal(mapped.event.payload.skill_name, 'code-review');
+  assert.equal(mapped.event.payload.invocation_source, 'slash_command');
+  assert.equal(validate(mapped.event).valid, true);
+});
+
+test('mapSkillHookInput maps PreToolUse Skill to skill.invoked', () => {
+  const hookInput = loadFixture('pre-tool-use-skill.json');
+  const tmpDir = join(REPO_ROOT, 'test/tmp-schema-events');
+  const mapped = mapSkillHookInput(hookInput, {
+    onlookerDir: tmpDir,
+    plugin: 'onlooker',
+  });
+
+  assert.equal(mapped.valid, true);
+  assert.equal(mapped.event.payload.invocation_source, 'tool');
   assert.equal(validate(mapped.event).valid, true);
 });
 

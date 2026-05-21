@@ -1,0 +1,10 @@
+{
+  "session_id": "skill-session-001",
+  "cwd": "/project",
+  "hook_event_name": "UserPromptExpansion",
+  "expansion_type": "slash_command",
+  "command_name": "code-review",
+  "command_args": "src/main.ts",
+  "command_source": "plugin",
+  "prompt": "/code-review src/main.ts"
+}
