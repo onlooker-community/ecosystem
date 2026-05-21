@@ -459,11 +459,40 @@ turn_state_export() {
 	fi
 }
 
+# Ensure session tracker exists with turn_number and turn_tool_seq fields.
+# Usage: turn_state_ensure_session "$SESSION_ID"
+turn_state_ensure_session() {
+  local session_id="${1:-}"
+  [[ -z "$session_id" || "$session_id" == "null" ]] && return 0
+
+  local tracker_file="$ONLOOKER_SESSION_TRACKERS_DIR/$session_id"
+  ensure_dir_exists "$ONLOOKER_SESSION_TRACKERS_DIR" || return 1
+
+  if [[ ! -f "$tracker_file" ]]; then
+    echo '{"turn_number":1,"turn_tool_seq":0}' >"$tracker_file"
+    return 0
+  fi
+
+  if ! jq -e '.turn_number' "$tracker_file" >/dev/null 2>&1; then
+    local temp_file
+    temp_file=$(mktemp)
+    if jq '.turn_number = (.turn_number // 1) | .turn_tool_seq = (.turn_tool_seq // 0)' \
+      "$tracker_file" >"$temp_file" 2>/dev/null; then
+      mv "$temp_file" "$tracker_file"
+    else
+      rm -f "$temp_file"
+      echo '{"turn_number":1,"turn_tool_seq":0}' >"$tracker_file"
+    fi
+  fi
+}
+
 # Increment turn_number and reset turn_tool_seq in session tracker.
 # Usage: turn_state_next_turn "$SESSION_ID"
 turn_state_next_turn() {
   local session_id="${1:-}"
   [[ -z "$session_id" || "$session_id" == "null" ]] && return 0
+
+  turn_state_ensure_session "$session_id" || return 1
 
   local tracker_file="$ONLOOKER_SESSION_TRACKERS_DIR/$session_id"
   [[ ! -f "$tracker_file" ]] && return 0
@@ -483,6 +512,8 @@ turn_state_next_turn() {
 turn_state_next_tool() {
   local session_id="${1:-}"
   [[ -z "$session_id" || "$session_id" == "null" ]] && return 0
+
+  turn_state_ensure_session "$session_id" || return 1
 
   local tracker_file="$ONLOOKER_SESSION_TRACKERS_DIR/$session_id"
   [[ ! -f "$tracker_file" ]] && return 0

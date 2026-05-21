@@ -10,13 +10,29 @@ setup_file() {
   [ "$status" -eq 0 ]
 }
 
-@test "hooks.json references existing hook script" {
+@test "hooks.json wildcard matcher references tool-sequence-tracker" {
+  run jq -e '.hooks.PreToolUse[0].matcher == "*"' "${REPO_ROOT}/hooks/hooks.json"
+  [ "$status" -eq 0 ]
+
   local hook_cmd
   hook_cmd=$(jq -r '.hooks.PreToolUse[0].hooks[0].command' "${REPO_ROOT}/hooks/hooks.json")
-  [ -n "$hook_cmd" ]
-  # Expand CLAUDE_PLUGIN_ROOT placeholder for path check
+  [[ "$hook_cmd" == *tool-sequence-tracker.sh ]]
+
   local script_path="${hook_cmd//\$CLAUDE_PLUGIN_ROOT/$REPO_ROOT}"
-  # Strip surrounding quotes from hooks.json command
+  script_path="${script_path//\"/}"
+  run test -x "$script_path"
+  [ "$status" -eq 0 ]
+}
+
+@test "hooks.json Agent matcher references agent-spawn-tracker" {
+  run jq -e '.hooks.PreToolUse[1].matcher == "Agent"' "${REPO_ROOT}/hooks/hooks.json"
+  [ "$status" -eq 0 ]
+
+  local hook_cmd
+  hook_cmd=$(jq -r '.hooks.PreToolUse[1].hooks[0].command' "${REPO_ROOT}/hooks/hooks.json")
+  [[ "$hook_cmd" == *agent-spawn-tracker.sh ]]
+
+  local script_path="${hook_cmd//\$CLAUDE_PLUGIN_ROOT/$REPO_ROOT}"
   script_path="${script_path//\"/}"
   run test -x "$script_path"
   [ "$status" -eq 0 ]
