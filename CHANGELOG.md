@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.0](https://github.com/onlooker-community/ecosystem/compare/v0.1.0...v0.2.0) (2026-05-21)
+
+
+### Features
+
+* **hooks:** emit canonical schema events for tool history :sparkles: ([1e49a24](https://github.com/onlooker-community/ecosystem/commit/1e49a24bfb930942fa477b594395ef352618f574))
+* **hooks:** track tool call sequence on every PreToolUse :sparkles: ([0ad9546](https://github.com/onlooker-community/ecosystem/commit/0ad95465cc22a237e26115a67814a6e7b2951b1d))
+
+
+### Chores
+
+* **deps:** use published @onlooker-community/schema from npm :relieved: ([efc92d8](https://github.com/onlooker-community/ecosystem/commit/efc92d8171592aa5a5f1c27853387e810fee612f))
+
 ## [0.1.0](https://github.com/onlooker-community/ecosystem/compare/v0.0.3...v0.1.0) (2026-05-21)
 
 
