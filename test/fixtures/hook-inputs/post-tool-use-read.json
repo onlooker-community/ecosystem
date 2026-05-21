@@ -1,0 +1,13 @@
+{
+  "session_id": "history-session-001",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Read",
+  "tool_use_id": "toolu_read_001",
+  "duration_ms": 42,
+  "tool_input": {
+    "file_path": "/project/src/main.ts"
+  },
+  "tool_response": {
+    "content": "export function main() {\n  return 1;\n}\n"
+  }
+}

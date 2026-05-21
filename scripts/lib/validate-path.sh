@@ -59,10 +59,8 @@ export ONLOOKER_PLUGIN_NAME
 _HOOK_NAME=""
 _HOOK_START_TIME=""
 
-# Extended content (set by hook_set_context)
-_HOOK_SESSION_ID=""
-_HOOK_EVENT=""
-_HOOK_TOOL_NAME=""
+# Extended hook context (set by hook_set_context; not cleared on re-source so
+# callers can set _HOOK_SESSION_ID before invoking onlooker-emit.sh).
 
 # Detect hook event from script path
 # Looks for known event directory names in the call stack

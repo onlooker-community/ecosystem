@@ -6,16 +6,18 @@ Agents, skills, hooks, commands, rules, and MCP configurations that power [Onloo
 
 ## Development
 
-Install tools with [mise](https://mise.jdx.dev/) (`mise install`), then:
+Install tools with [mise](https://mise.jdx.dev/) (`mise install`), then clone the [schema](https://github.com/onlooker-community/schema) repo as a sibling directory (`../schema`) so `npm` can link `@onlooker-community/schema`:
 
 ```bash
 npm ci
-npm test              # bats integration tests
+npm test              # bats + schema validation tests
 npm run test:shellcheck
-npm run test:ci       # shellcheck + tests + lint
+npm run test:ci       # shellcheck + bats + schema + lint
 ```
 
-Tests live under `test/bats/` and use an isolated temp home so nothing writes to your real `~/.onlooker`.
+Hooks emit [canonical Onlooker events](https://github.com/onlooker-community/schema) via `scripts/lib/onlooker-event.mjs`. Bash helpers live in `scripts/lib/onlooker-schema.sh`.
+
+Tests live under `test/bats/` and `test/node/` and use an isolated temp home so nothing writes to your real `~/.onlooker`.
 
 ## Quick Start
 

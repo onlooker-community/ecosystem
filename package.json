@@ -18,11 +18,16 @@
   "bin": {
     "onlooker-install": "install.sh"
   },
+  "dependencies": {
+    "@onlooker-community/schema": "file:../schema"
+  },
   "scripts": {
     "postinstall": "echo '\\n  onlooker-ecosystem installed!\\n  Run: npx onlooker-install typescript\\n  Docs: https://github.com/onlooker-community/ecosystem\\n'",
-    "test": "bats test/bats",
+    "test": "npm run test:bats && npm run test:schema",
+    "test:bats": "bats test/bats",
+    "test:schema": "node --test test/node/*.test.mjs",
     "test:shellcheck": "shellcheck -S error -x install.sh scripts/common.sh scripts/hooks/*.sh scripts/lib/*.sh",
-    "test:ci": "npm run test:shellcheck && npm test && npm run lint:check",
+    "test:ci": "npm run test:shellcheck && npm run test:bats && npm run test:schema && npm run lint:check",
     "lint:check": "biome check . && markdownlint '**/*.md' --ignore node_modules --ignore CHANGELOG.md",
     "lint": "biome lint --write",
     "format": "biome format --write",

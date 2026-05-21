@@ -1,2 +1,5 @@
 node_modules/
+test/tmp-schema-events/
+test/tmp-schema-sequence/
+test/tmp-schema-sequence-isolated/
 .DS_Store

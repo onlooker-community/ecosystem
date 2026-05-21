@@ -4,6 +4,8 @@ setup() {
   # shellcheck source=../helpers/setup.bash
   source "${BATS_TEST_DIRNAME}/../helpers/setup.bash"
   load_validate_path
+  # shellcheck source=../../scripts/lib/onlooker-schema.sh
+  source "${REPO_ROOT}/scripts/lib/onlooker-schema.sh"
 }
 
 @test "validate_file_exists succeeds for existing file" {
@@ -90,16 +92,18 @@ setup() {
   [ "${ONLOOKER_TURN_TOOL_SEQ}" = "2" ]
 }
 
-@test "safe_emit appends event to onlooker events log" {
+@test "safe_emit appends canonical event to onlooker events log" {
+  export _HOOK_SESSION_ID="emit-session"
   export ONLOOKER_HOOK_TYPE="PreToolUse"
-  export ONLOOKER_TOOL_NAME="Agent"
-  local payload='{"session_id":"emit-session","hello":"world"}'
-  safe_emit "test.event" "$payload"
+  export ONLOOKER_TOOL_NAME="Read"
+  local payload='{"path":"/tmp/example.txt"}'
+  safe_emit "tool.file.read" "$payload"
   [ "$?" -eq 0 ]
   [ -f "$ONLOOKER_EVENTS_LOG" ]
   tail -n 1 "$ONLOOKER_EVENTS_LOG" | jq -e \
-    '.event_type == "test.event"
+    '.event_type == "tool.file.read"
      and .session_id == "emit-session"
-     and .payload.hello == "world"' \
+     and .payload.path == "/tmp/example.txt"
+     and .schema_version == "1.0"' \
     >/dev/null
 }

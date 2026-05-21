@@ -18,6 +18,7 @@ set -uo pipefail # No -e: we must never exit non-zero and block the hook
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../lib/validate-path.sh"
+source "$SCRIPT_DIR/../lib/onlooker-schema.sh"
 source "${CLAUDE_PLUGIN_ROOT:-$SCRIPT_DIR/../..}/scripts/common.sh"
 
 hook_register "agent-spawn-tracker" "Agent Spawn Tracker" "Tracks when an agent is spawned"
@@ -153,10 +154,7 @@ PAYLOAD=$(jq -n \
   + (if $parent_turn != "" then {parent_turn: ($parent_turn | tonumber)} else {} end)
   ')
 
-# Emit telemetry event
-safe_emit "agent_spawn" "$PAYLOAD" 2>/dev/null || true
-
-# Canonical event: tool.agent.spawn
+# Canonical event: tool.agent.spawn (@onlooker-community/schema)
 onlooker_emit_tool_agent_spawn "$SESSION_ID" "$SUBAGENT_TYPE" "$DESCRIPTION" "$MODEL" "$RUN_IN_BACKGROUND" "$ISOLATION" 2>/dev/null && hook_success || hook_failure "Failed to emit tool.agent.spawn event"
 
 exit 0
