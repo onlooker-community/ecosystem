@@ -29,4 +29,3 @@ brew install onlooker
 # Use the wizard to be guided through setup
 onlooker setup
 ```
-
