@@ -3,6 +3,7 @@
   "packages": {
     ".": {
       "release-type": "node",
+      "pull-request-title-pattern": "chore: release ${version}",
       "changelog-path": "CHANGELOG.md",
       "include-component-in-tag": false,
       "include-v-in-tag": true,
