@@ -30,17 +30,25 @@ jobs:
           # scoped to this repo.
           token: ${{ secrets.RELEASE_PLEASE_PAT }}
 
+      # release-please-action does not check out the repo; npm publish needs the
+      # tagged release tree (package.json, install.sh, hooks, etc.).
+      - name: Checkout release tag
+        if: ${{ steps.release.outputs.releases_created == 'true' }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.release.outputs.tag_name }}
+
       - name: Setup Node
+        if: ${{ steps.release.outputs.releases_created == 'true' }}
         uses: actions/setup-node@v6
         with:
           node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Publish to npm
         if: ${{ steps.release.outputs.releases_created == 'true' }}
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          PATHS_RELEASED: ${{ steps.release.outputs.paths_released }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          printf '%s\n' "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> "${HOME}/.npmrc"
-          npm install
+          npm ci
           npm publish --access public
