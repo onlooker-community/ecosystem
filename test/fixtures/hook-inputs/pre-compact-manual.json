@@ -1,0 +1,8 @@
+{
+  "session_id": "compact-session-001",
+  "transcript_path": "/tmp/compact-transcript.jsonl",
+  "cwd": "/project/repo",
+  "hook_event_name": "PreCompact",
+  "trigger": "manual",
+  "custom_instructions": "Focus on API changes"
+}

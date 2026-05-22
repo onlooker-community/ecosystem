@@ -116,6 +116,38 @@ setup_file() {
   [ "$status" -eq 0 ]
 }
 
+@test "hooks.json PreCompact references pre-compact-tracker for manual and auto" {
+  run jq -e '.hooks.PreCompact | length == 2' "${REPO_ROOT}/hooks/hooks.json"
+  [ "$status" -eq 0 ]
+
+  local hook_cmd
+  hook_cmd=$(jq -r '.hooks.PreCompact[0].hooks[0].command' "${REPO_ROOT}/hooks/hooks.json")
+  [[ "$hook_cmd" == *pre-compact-tracker.sh ]]
+
+  run jq -e '.hooks.PreCompact[0].matcher == "manual" and .hooks.PreCompact[1].matcher == "auto"' \
+    "${REPO_ROOT}/hooks/hooks.json"
+  [ "$status" -eq 0 ]
+
+  local script_path="${hook_cmd//\$CLAUDE_PLUGIN_ROOT/$REPO_ROOT}"
+  script_path="${script_path//\"/}"
+  run test -x "$script_path"
+  [ "$status" -eq 0 ]
+}
+
+@test "hooks.json PostCompact references context-compact-tracker for manual and auto" {
+  run jq -e '.hooks.PostCompact | length == 2' "${REPO_ROOT}/hooks/hooks.json"
+  [ "$status" -eq 0 ]
+
+  local hook_cmd
+  hook_cmd=$(jq -r '.hooks.PostCompact[0].hooks[0].command' "${REPO_ROOT}/hooks/hooks.json")
+  [[ "$hook_cmd" == *context-compact-tracker.sh ]]
+
+  local script_path="${hook_cmd//\$CLAUDE_PLUGIN_ROOT/$REPO_ROOT}"
+  script_path="${script_path//\"/}"
+  run test -x "$script_path"
+  [ "$status" -eq 0 ]
+}
+
 @test "hooks.json SessionEnd references session-end-tracker" {
   run jq -e '.hooks.SessionEnd[0].matcher == "*"' "${REPO_ROOT}/hooks/hooks.json"
   [ "$status" -eq 0 ]
