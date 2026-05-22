@@ -1,0 +1,12 @@
+{
+  "session_id": "task-session-001",
+  "transcript_path": "/tmp/transcript.jsonl",
+  "cwd": "/project/repo",
+  "permission_mode": "default",
+  "hook_event_name": "TaskCompleted",
+  "task_id": "task-001",
+  "task_subject": "Implement user authentication",
+  "task_description": "Add login and signup endpoints",
+  "teammate_name": "implementer",
+  "team_name": "my-project"
+}
