@@ -56,7 +56,16 @@ jobs:
           fi
           printf '%s\n' "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> "${HOME}/.npmrc"
           npm ci
-          for path in ${PATHS_RELEASED}; do
-            cd "$path"
-            npm publish --access public --provenance
+          # paths_released is JSON (e.g. ["."], not bare paths)
+          mapfile -t release_paths < <(echo "${PATHS_RELEASED}" | jq -r '.[]')
+          if [[ "${#release_paths[@]}" -eq 0 ]]; then
+            echo "No paths in paths_released; skipping npm publish." >&2
+            exit 0
+          fi
+          for path in "${release_paths[@]}"; do
+            if [[ "$path" == "." ]]; then
+              npm publish --access public --provenance
+            else
+              (cd "$path" && npm publish --access public --provenance)
+            fi
           done
