@@ -10,6 +10,7 @@ import {
   mapHookInputToCanonical,
   mapSkillHookInput,
   mapTaskHookInput,
+  mapWorktreeHookInput,
 } from '../../scripts/lib/onlooker-event.mjs';
 
 const REPO_ROOT = join(fileURLToPath(new URL('../..', import.meta.url)));
@@ -108,6 +109,43 @@ test('mapTaskHookInput maps TaskCompleted to task.complete', () => {
   assert.equal(mapped.event.payload.success, true);
   assert.equal(mapped.event.payload.duration_ms, 1200);
   assert.equal(mapped.event.payload.output_summary, 'Add login and signup endpoints');
+  assert.equal(validate(mapped.event).valid, true);
+});
+
+test('mapWorktreeHookInput maps WorktreeCreate to tool.shell.exec', () => {
+  const hookInput = {
+    ...loadFixture('worktree-create.json'),
+    worktree_path: '/project/repo/.claude/worktrees/feature-auth',
+    branch_name: 'worktree-feature-auth',
+  };
+  const tmpDir = join(REPO_ROOT, 'test/tmp-schema-events');
+  const prev = process.env.ONLOOKER_WORKTREE_DURATION_MS;
+  process.env.ONLOOKER_WORKTREE_DURATION_MS = '15';
+  const mapped = mapWorktreeHookInput(hookInput, {
+    onlookerDir: tmpDir,
+    plugin: 'onlooker',
+  });
+  if (prev === undefined) delete process.env.ONLOOKER_WORKTREE_DURATION_MS;
+  else process.env.ONLOOKER_WORKTREE_DURATION_MS = prev;
+
+  assert.equal(mapped.valid, true);
+  assert.equal(mapped.event.event_type, 'tool.shell.exec');
+  assert.equal(mapped.event.payload.exit_code, 0);
+  assert.equal(mapped.event.payload.duration_ms, 15);
+  assert.match(mapped.event.payload.command, /worktree:create/);
+  assert.equal(validate(mapped.event).valid, true);
+});
+
+test('mapWorktreeHookInput maps WorktreeRemove to tool.shell.exec', () => {
+  const hookInput = loadFixture('worktree-remove.json');
+  const tmpDir = join(REPO_ROOT, 'test/tmp-schema-events');
+  const mapped = mapWorktreeHookInput(hookInput, {
+    onlookerDir: tmpDir,
+    plugin: 'onlooker',
+  });
+
+  assert.equal(mapped.valid, true);
+  assert.match(mapped.event.payload.command, /worktree:remove/);
   assert.equal(validate(mapped.event).valid, true);
 });
 

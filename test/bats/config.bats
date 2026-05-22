@@ -197,6 +197,28 @@ setup_file() {
   [ "$status" -eq 0 ]
 }
 
+@test "hooks.json WorktreeCreate references worktree-tracker" {
+  local hook_cmd
+  hook_cmd=$(jq -r '.hooks.WorktreeCreate[0].hooks[0].command' "${REPO_ROOT}/hooks/hooks.json")
+  [[ "$hook_cmd" == *worktree-tracker.sh ]]
+
+  local script_path="${hook_cmd//\$CLAUDE_PLUGIN_ROOT/$REPO_ROOT}"
+  script_path="${script_path//\"/}"
+  run test -x "$script_path"
+  [ "$status" -eq 0 ]
+}
+
+@test "hooks.json WorktreeRemove references worktree-tracker" {
+  local hook_cmd
+  hook_cmd=$(jq -r '.hooks.WorktreeRemove[0].hooks[0].command' "${REPO_ROOT}/hooks/hooks.json")
+  [[ "$hook_cmd" == *worktree-tracker.sh ]]
+
+  local script_path="${hook_cmd//\$CLAUDE_PLUGIN_ROOT/$REPO_ROOT}"
+  script_path="${script_path//\"/}"
+  run test -x "$script_path"
+  [ "$status" -eq 0 ]
+}
+
 @test "plugin.json is valid JSON" {
   run jq -e '.name and .version' "${REPO_ROOT}/.claude-plugin/plugin.json"
   [ "$status" -eq 0 ]

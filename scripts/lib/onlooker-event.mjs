@@ -198,6 +198,60 @@ export function mapTaskHookInput(hookInput, options) {
 }
 
 /**
+ * Map WorktreeCreate / WorktreeRemove hook input to tool.shell.exec (interim until
+ * worktree.* event types exist in @onlooker-community/schema).
+ */
+export function mapWorktreeHookInput(hookInput, options) {
+  const { onlookerDir, plugin, runtime = 'claude-code', adapter_id = 'ecosystem.hooks' } = options;
+  const hookEvent = hookInput?.hook_event_name;
+  const sessionId = hookInput?.session_id ?? 'unknown';
+  const cwd = hookInput?.cwd;
+
+  let command;
+  let worktreePath = hookInput?.worktree_path;
+
+  if (hookEvent === 'WorktreeCreate') {
+    const name = hookInput?.name;
+    if (!name) return null;
+    const branch = hookInput?.branch_name ?? `worktree-${name}`;
+    worktreePath = hookInput?.worktree_path;
+    command = `worktree:create name=${name} branch=${branch}${worktreePath ? ` path=${worktreePath}` : ''}`;
+  } else if (hookEvent === 'WorktreeRemove') {
+    if (!worktreePath) return null;
+    command = `worktree:remove path=${worktreePath}`;
+  } else {
+    return null;
+  }
+
+  const durationRaw = process.env.ONLOOKER_WORKTREE_DURATION_MS;
+  const durationMs =
+    durationRaw != null && durationRaw !== '' ? Number.parseInt(String(durationRaw), 10) : undefined;
+
+  const payload = stripUndefined({
+    command,
+    exit_code: 0,
+    duration_ms: Number.isFinite(durationMs) && durationMs >= 0 ? durationMs : undefined,
+    working_directory: cwd,
+  });
+
+  const event = buildCanonicalEvent({
+    onlookerDir,
+    runtime,
+    adapter_id,
+    plugin,
+    session_id: sessionId,
+    event_type: TOOL_SHELL_EXEC,
+    payload,
+  });
+
+  const result = validate(event);
+  if (!result.valid) {
+    return { valid: false, errors: result.errors, event_type: TOOL_SHELL_EXEC };
+  }
+  return { valid: true, event: result.event };
+}
+
+/**
  * Map Claude Code hook input to a canonical event.
  * Returns null when the hook input is not mapped to a schema event type.
  */
@@ -207,6 +261,9 @@ export function mapHookInputToCanonical(hookInput, options) {
 
   const taskMapped = mapTaskHookInput(hookInput, options);
   if (taskMapped) return taskMapped;
+
+  const worktreeMapped = mapWorktreeHookInput(hookInput, options);
+  if (worktreeMapped) return worktreeMapped;
 
   const { onlookerDir, plugin, runtime = 'claude-code', adapter_id = 'ecosystem.hooks' } = options;
 
