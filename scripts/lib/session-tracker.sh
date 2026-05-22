@@ -142,6 +142,92 @@ session_tracker_build_end_payload() {
 		}'
 }
 
+# Elapsed session time in milliseconds (0 when start_time_ms is unset).
+# Usage: duration_ms=$(session_tracker_duration_ms "$SESSION_ID")
+session_tracker_duration_ms() {
+	local session_id="${1:-}"
+	[[ -z "$session_id" || "$session_id" == "null" ]] && echo 0 && return 0
+
+	local tracker_file="$ONLOOKER_SESSION_TRACKERS_DIR/$session_id"
+	local now_ms start_ms duration_ms
+	now_ms=$(session_tracker_now_ms)
+
+	if [[ ! -f "$tracker_file" ]]; then
+		echo 0
+		return 0
+	fi
+
+	start_ms=$(jq -r '.start_time_ms // 0' "$tracker_file" 2>/dev/null) || start_ms=0
+	if [[ ! "$start_ms" =~ ^[0-9]+$ ]] || (( start_ms <= 0 )); then
+		echo 0
+		return 0
+	fi
+
+	duration_ms=$((now_ms - start_ms))
+	(( duration_ms < 0 )) && duration_ms=0
+	echo "$duration_ms"
+}
+
+# Human-readable duration for hook context (e.g. "12m 34s", "45s").
+# Usage: label=$(session_tracker_format_duration 754000)
+session_tracker_format_duration() {
+	local duration_ms="${1:-0}"
+	[[ ! "$duration_ms" =~ ^[0-9]+$ ]] && duration_ms=0
+
+	local total_sec=$((duration_ms / 1000))
+	local hours=$((total_sec / 3600))
+	local minutes=$(((total_sec % 3600) / 60))
+	local seconds=$((total_sec % 60))
+
+	if (( hours > 0 )); then
+		printf '%dh %dm' "$hours" "$minutes"
+	elif (( minutes > 0 )); then
+		printf '%dm %ds' "$minutes" "$seconds"
+	else
+		printf '%ds' "$seconds"
+	fi
+}
+
+# Persist session_duration_ms on the per-session tracker file.
+# Usage: session_tracker_update_duration "$SESSION_ID"
+session_tracker_update_duration() {
+	local session_id="${1:-}"
+	[[ -z "$session_id" || "$session_id" == "null" ]] && return 0
+
+	turn_state_ensure_session "$session_id" || return 1
+
+	local tracker_file="$ONLOOKER_SESSION_TRACKERS_DIR/$session_id"
+	local duration_ms
+	duration_ms=$(session_tracker_duration_ms "$session_id")
+
+	local temp_file
+	temp_file=$(mktemp)
+	if ! jq --argjson duration_ms "$duration_ms" \
+		'.session_duration_ms = $duration_ms' \
+		"$tracker_file" >"$temp_file" 2>/dev/null; then
+		rm -f "$temp_file"
+		return 1
+	fi
+	mv "$temp_file" "$tracker_file"
+}
+
+# Build additionalContext line for UserPromptSubmit (turn + elapsed time).
+# Usage: context=$(session_tracker_build_duration_context "$SESSION_ID")
+session_tracker_build_duration_context() {
+	local session_id="${1:-}"
+	local duration_ms turn_number elapsed
+	duration_ms=$(session_tracker_duration_ms "$session_id")
+	elapsed=$(session_tracker_format_duration "$duration_ms")
+
+	if [[ -f "$ONLOOKER_SESSION_TRACKERS_DIR/$session_id" ]]; then
+		turn_number=$(jq -r '.turn_number // 1' "$ONLOOKER_SESSION_TRACKERS_DIR/$session_id" 2>/dev/null) || turn_number=1
+	else
+		turn_number=1
+	fi
+
+	printf 'Onlooker session: turn %s · elapsed %s' "$turn_number" "$elapsed"
+}
+
 # Emit a validated canonical session event and append to logs.
 # Usage: session_tracker_emit "$SESSION_ID" "session.start" "$payload_json"
 session_tracker_emit() {

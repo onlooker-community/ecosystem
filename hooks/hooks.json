@@ -40,6 +40,20 @@
         ]
       }
     ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hooks/turn-tracker.sh"
+          },
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hooks/session-duration-tracker.sh"
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "*",

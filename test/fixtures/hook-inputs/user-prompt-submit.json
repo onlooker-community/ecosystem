@@ -1,0 +1,8 @@
+{
+  "session_id": "prompt-session-001",
+  "transcript_path": "/tmp/transcript.jsonl",
+  "cwd": "/project/repo",
+  "permission_mode": "default",
+  "hook_event_name": "UserPromptSubmit",
+  "prompt": "Add turn tracking hooks for UserPromptSubmit"
+}
