@@ -7,6 +7,13 @@
 
 # Changelog
 
+## [0.10.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.9.0...ecosystem-v0.10.0) (2026-05-22)
+
+
+### Features
+
+* **hooks:** enrich tool.file.read with read chunking observability ([#25](https://github.com/onlooker-community/ecosystem/issues/25)) ([8eb23c8](https://github.com/onlooker-community/ecosystem/commit/8eb23c8f4f03dfbeb701a30de1fa50c1c8ee48ac))
+
 ## [0.9.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.8.0...ecosystem-v0.9.0) (2026-05-22)
 
 
