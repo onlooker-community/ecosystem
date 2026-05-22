@@ -96,7 +96,7 @@ setup() {
   export _HOOK_SESSION_ID="emit-session"
   export ONLOOKER_HOOK_TYPE="PreToolUse"
   export ONLOOKER_TOOL_NAME="Read"
-  local payload='{"path":"/tmp/example.txt"}'
+  local payload='{"path":"/tmp/example.txt","read_mode":"full"}'
   safe_emit "tool.file.read" "$payload"
   [ "$?" -eq 0 ]
   [ -f "$ONLOOKER_EVENTS_LOG" ]

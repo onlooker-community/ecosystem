@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -7,6 +7,9 @@ import { fileURLToPath } from 'node:url';
 import { validate } from '@onlooker-community/schema';
 import {
   buildCanonicalEvent,
+  buildToolFileReadPayload,
+  extractReadRange,
+  LARGE_FILE_BYTES_ON_DISK,
   mapHookInputToCanonical,
   mapSkillHookInput,
   mapTaskHookInput,
@@ -32,6 +35,43 @@ test('mapHookInputToCanonical maps PostToolUse Read to tool.file.read', () => {
   assert.equal(mapped.event.event_type, 'tool.file.read');
   assert.equal(mapped.event.schema_version, '1.0');
   assert.equal(mapped.event.payload.path, '/project/src/main.ts');
+  assert.equal(mapped.event.payload.read_mode, 'full');
+  assert.equal(validate(mapped.event).valid, true);
+});
+
+test('extractReadRange detects partial reads from offset and limit', () => {
+  const range = extractReadRange({ offset: 10, limit: 50 });
+  assert.equal(range.read_mode, 'partial');
+  assert.equal(range.offset, 10);
+  assert.equal(range.limit, 50);
+});
+
+test('buildToolFileReadPayload flags large_file_full_read', () => {
+  const tmpDir = mkdtempSync(join(tmpdir(), 'onlooker-read-chunk-'));
+  const filePath = join(tmpDir, 'big.txt');
+  const bytes = LARGE_FILE_BYTES_ON_DISK + 1;
+  writeFileSync(filePath, 'x'.repeat(bytes), 'utf8');
+
+  const payload = buildToolFileReadPayload({ file_path: filePath }, { content: 'x\n' });
+  assert.equal(payload.read_mode, 'full');
+  assert.equal(payload.large_file_full_read, true);
+  assert.equal(payload.file_bytes_on_disk, bytes);
+
+  rmSync(tmpDir, { recursive: true, force: true });
+});
+
+test('mapHookInputToCanonical maps chunked Read to partial read_mode', () => {
+  const hookInput = loadFixture('post-tool-use-read-chunked.json');
+  const tmpDir = join(REPO_ROOT, 'test/tmp-schema-events');
+  const mapped = mapHookInputToCanonical(hookInput, {
+    onlookerDir: tmpDir,
+    plugin: 'onlooker',
+  });
+
+  assert.equal(mapped.valid, true);
+  assert.equal(mapped.event.payload.read_mode, 'partial');
+  assert.equal(mapped.event.payload.offset, 400);
+  assert.equal(mapped.event.payload.limit, 80);
   assert.equal(validate(mapped.event).valid, true);
 });
 

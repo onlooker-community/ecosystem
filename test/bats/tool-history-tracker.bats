@@ -19,6 +19,7 @@ setup() {
     '.schema_version == "1.0"
      and .event_type == "tool.file.read"
      and .payload.path == "/project/src/main.ts"
+     and .payload.read_mode == "full"
      and .session_id == "history-session-001"' \
     >/dev/null
   echo "$record" | onlooker_validate_event

@@ -4,7 +4,7 @@
  * Uses @onlooker-community/schema for envelope shape and validation.
  */
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   createEvent,
@@ -79,6 +79,85 @@ function summarizeText(value, maxLen = 1000) {
 
 function extractPath(toolInput, toolResponse) {
   return toolInput?.file_path ?? toolInput?.path ?? toolResponse?.filePath ?? toolResponse?.path ?? undefined;
+}
+
+/** Bytes on disk above which a full read is flagged as large_file_full_read. */
+export const LARGE_FILE_BYTES_ON_DISK = 100_000;
+
+const MAX_FILE_LINES_STAT_BYTES = 512 * 1024;
+
+function parseNonNegativeInt(value) {
+  if (value == null || value === '') return undefined;
+  const n = Number.parseInt(String(value), 10);
+  return Number.isFinite(n) && n >= 0 ? n : undefined;
+}
+
+function parsePositiveInt(value, min = 1) {
+  if (value == null || value === '') return undefined;
+  const n = Number.parseInt(String(value), 10);
+  return Number.isFinite(n) && n >= min ? n : undefined;
+}
+
+/**
+ * Derive read_mode and line range from Read tool_input (supports common field aliases).
+ */
+export function extractReadRange(toolInput) {
+  const input = toolInput ?? {};
+  const offset = parseNonNegativeInt(
+    input.offset ?? input.start_line ?? input.start_line_one_indexed ?? input.line_offset,
+  );
+  const limit = parsePositiveInt(input.limit ?? input.line_limit ?? input.num_lines ?? input.line_count);
+  const read_mode = offset != null || limit != null ? 'partial' : 'full';
+  return stripUndefined({ read_mode, offset, limit });
+}
+
+/**
+ * Stat file on disk for chunking analytics (line count omitted for very large files).
+ */
+export function measureFileOnDisk(filePath) {
+  try {
+    if (!filePath || !existsSync(filePath)) return {};
+    const st = statSync(filePath);
+    if (!st.isFile()) return {};
+    const file_bytes_on_disk = st.size;
+    let file_lines_on_disk;
+    if (st.size <= MAX_FILE_LINES_STAT_BYTES) {
+      const text = readFileSync(filePath, 'utf8');
+      file_lines_on_disk = text.split('\n').length;
+    }
+    return stripUndefined({ file_bytes_on_disk, file_lines_on_disk });
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Build tool.file.read payload from Read tool hook fields.
+ */
+export function buildToolFileReadPayload(toolInput, toolResponse, options = {}) {
+  const path = extractPath(toolInput, toolResponse);
+  if (!path) return null;
+
+  const payload = { path, ...extractReadRange(toolInput) };
+  const content = toolResponse?.content;
+  if (typeof content === 'string') {
+    payload.lines_read = content.split('\n').length;
+    payload.file_size_bytes = content.length;
+  }
+
+  if (options.measureOnDisk !== false) {
+    Object.assign(payload, measureFileOnDisk(path));
+  }
+
+  if (
+    payload.read_mode === 'full' &&
+    payload.file_bytes_on_disk != null &&
+    payload.file_bytes_on_disk >= LARGE_FILE_BYTES_ON_DISK
+  ) {
+    payload.large_file_full_read = true;
+  }
+
+  return stripUndefined(payload);
 }
 
 function stripUndefined(obj) {
@@ -279,16 +358,9 @@ export function mapHookInputToCanonical(hookInput, options) {
 
   switch (toolName) {
     case 'Read': {
-      const path = extractPath(toolInput, toolResponse);
-      if (!path) return null;
+      payload = buildToolFileReadPayload(toolInput, toolResponse);
+      if (!payload) return null;
       eventType = TOOL_FILE_READ;
-      payload = { path };
-      const content = toolResponse?.content;
-      if (typeof content === 'string') {
-        const lines = content.split('\n').length;
-        payload.lines_read = lines;
-        payload.file_size_bytes = content.length;
-      }
       break;
     }
     case 'Write': {

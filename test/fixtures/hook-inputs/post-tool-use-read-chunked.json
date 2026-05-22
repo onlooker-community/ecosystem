@@ -1,0 +1,15 @@
+{
+  "session_id": "history-session-001",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Read",
+  "tool_use_id": "toolu_read_002",
+  "duration_ms": 18,
+  "tool_input": {
+    "file_path": "/project/src/large-module.ts",
+    "offset": 400,
+    "limit": 80
+  },
+  "tool_response": {
+    "content": "// chunk line 1\n// chunk line 2\n"
+  }
+}
