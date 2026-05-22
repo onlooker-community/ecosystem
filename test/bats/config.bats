@@ -84,6 +84,24 @@ setup_file() {
   [[ "$hook_cmd" == *tool-history-tracker.sh ]]
 }
 
+@test "hooks.json UserPromptSubmit references turn and session-duration trackers" {
+  run jq -e '.hooks.UserPromptSubmit[0].hooks | length == 2' "${REPO_ROOT}/hooks/hooks.json"
+  [ "$status" -eq 0 ]
+
+  local turn_cmd duration_cmd
+  turn_cmd=$(jq -r '.hooks.UserPromptSubmit[0].hooks[0].command' "${REPO_ROOT}/hooks/hooks.json")
+  duration_cmd=$(jq -r '.hooks.UserPromptSubmit[0].hooks[1].command' "${REPO_ROOT}/hooks/hooks.json")
+  [[ "$turn_cmd" == *turn-tracker.sh ]]
+  [[ "$duration_cmd" == *session-duration-tracker.sh ]]
+
+  for hook_cmd in "$turn_cmd" "$duration_cmd"; do
+    local script_path="${hook_cmd//\$CLAUDE_PLUGIN_ROOT/$REPO_ROOT}"
+    script_path="${script_path//\"/}"
+    run test -x "$script_path"
+    [ "$status" -eq 0 ]
+  done
+}
+
 @test "hooks.json SessionStart references session-start-tracker" {
   run jq -e '.hooks.SessionStart[0].matcher == "*"' "${REPO_ROOT}/hooks/hooks.json"
   [ "$status" -eq 0 ]

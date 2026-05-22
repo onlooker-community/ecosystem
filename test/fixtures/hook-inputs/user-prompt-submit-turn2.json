@@ -1,0 +1,8 @@
+{
+  "session_id": "prompt-session-002",
+  "transcript_path": "/tmp/transcript.jsonl",
+  "cwd": "/project/repo",
+  "permission_mode": "default",
+  "hook_event_name": "UserPromptSubmit",
+  "prompt": "Follow-up prompt for turn increment test"
+}
