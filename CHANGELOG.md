@@ -7,6 +7,13 @@
 
 # Changelog
 
+## [0.8.0](https://github.com/onlooker-community/ecosystem/compare/v0.7.2...v0.8.0) (2026-05-22)
+
+
+### Features
+
+* **hooks:** add TaskCreated and TaskCompleted task lifecycle trackers ([#21](https://github.com/onlooker-community/ecosystem/issues/21)) ([986ffa8](https://github.com/onlooker-community/ecosystem/commit/986ffa84bdd857a464ca0d556671628190ed27bc))
+
 ## [0.7.2](https://github.com/onlooker-community/ecosystem/compare/v0.7.1...v0.7.2) (2026-05-22)
 
 
