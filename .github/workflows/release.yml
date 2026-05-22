@@ -51,6 +51,5 @@ jobs:
         env:
           NPM_CONFIG_PROVENANCE: true
         run: |
-          npm install -g npm@latest
           npm ci
           npm publish --access=public
