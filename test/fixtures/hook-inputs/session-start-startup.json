@@ -1,0 +1,8 @@
+{
+  "session_id": "session-start-001",
+  "transcript_path": "/tmp/transcript.jsonl",
+  "cwd": "/project/repo",
+  "hook_event_name": "SessionStart",
+  "source": "startup",
+  "model": "claude-sonnet-4-6"
+}
