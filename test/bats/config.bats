@@ -10,6 +10,19 @@ setup_file() {
   [ "$status" -eq 0 ]
 }
 
+@test "claude plugin versions match package.json" {
+  local pkg_ver
+  pkg_ver=$(jq -r '.version' "${REPO_ROOT}/package.json")
+
+  run jq -e --arg v "$pkg_ver" '.version == $v' "${REPO_ROOT}/.claude-plugin/plugin.json"
+  [ "$status" -eq 0 ]
+
+  run jq -e --arg v "$pkg_ver" \
+    '[.plugins[].version] | unique | length == 1 and .[0] == $v' \
+    "${REPO_ROOT}/.claude-plugin/marketplace.json"
+  [ "$status" -eq 0 ]
+}
+
 @test "hooks.json wildcard matcher references tool-sequence-tracker" {
   run jq -e '.hooks.PreToolUse[0].matcher == "*"' "${REPO_ROOT}/hooks/hooks.json"
   [ "$status" -eq 0 ]

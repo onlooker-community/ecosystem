@@ -21,7 +21,11 @@ jobs:
         id: release
         uses: googleapis/release-please-action@16a9c90856f42705d54a6fda1823352bdc62cf38 # v4.4.0
         with:
-          release-type: node
+          # Do not set release-type here — it overrides release-please-config.json
+          # and skips extra-files (plugin.json, marketplace.json). Release type
+          # is defined per-package in release-please-config.json.
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
           # Use a PAT instead of GITHUB_TOKEN so the release PR triggers
           # downstream workflows (CI, etc.). Events caused by GITHUB_TOKEN
           # deliberately do not fan out to other workflows; that policy
