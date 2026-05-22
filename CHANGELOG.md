@@ -7,6 +7,33 @@
 
 # Changelog
 
+## [0.9.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.8.0...ecosystem-v0.9.0) (2026-05-22)
+
+
+### Features
+
+* add configuration and hooks for agent spawn tracking ([3ef4590](https://github.com/onlooker-community/ecosystem/commit/3ef459006bbbda246604bdd1ffaf9af0a59f9740))
+* add settings.json for plugin configuration ([67fbdfe](https://github.com/onlooker-community/ecosystem/commit/67fbdfe37f067a45801e7d0355c4a533b687f6b2))
+* **hooks:** add PreCompact and PostCompact context compaction trackers ([#15](https://github.com/onlooker-community/ecosystem/issues/15)) ([1ec5632](https://github.com/onlooker-community/ecosystem/commit/1ec5632404676ed8b35d324b79ad71a2e9093505))
+* **hooks:** add SessionStart and SessionEnd session trackers ([#10](https://github.com/onlooker-community/ecosystem/issues/10)) ([a48d680](https://github.com/onlooker-community/ecosystem/commit/a48d680dd24c98e79ef1c0401b07483ecebf9e8b))
+* **hooks:** add TaskCreated and TaskCompleted task lifecycle trackers ([#21](https://github.com/onlooker-community/ecosystem/issues/21)) ([986ffa8](https://github.com/onlooker-community/ecosystem/commit/986ffa84bdd857a464ca0d556671628190ed27bc))
+* **hooks:** add UserPromptSubmit turn and session duration trackers ([#12](https://github.com/onlooker-community/ecosystem/issues/12)) ([cbb7657](https://github.com/onlooker-community/ecosystem/commit/cbb7657979ed144efce506e6b487e037679b9462))
+* **hooks:** add WorktreeCreate and WorktreeRemove lifecycle trackers ([#24](https://github.com/onlooker-community/ecosystem/issues/24)) ([ff55e39](https://github.com/onlooker-community/ecosystem/commit/ff55e397a0c0adc3e76f66aba12c6b237149ad17))
+* **hooks:** emit canonical schema events for tool history :sparkles: ([1e49a24](https://github.com/onlooker-community/ecosystem/commit/1e49a24bfb930942fa477b594395ef352618f574))
+* **hooks:** track skill usage via skill.invoked events ([23fff0f](https://github.com/onlooker-community/ecosystem/commit/23fff0f0bfad8ab91788d8c45a0457d099d2e870))
+* **hooks:** track tool call sequence on every PreToolUse :sparkles: ([0ad9546](https://github.com/onlooker-community/ecosystem/commit/0ad95465cc22a237e26115a67814a6e7b2951b1d))
+
+
+### Bug Fixes
+
+* **ci:** apply release-please extra-files for Claude plugin manifests ([#17](https://github.com/onlooker-community/ecosystem/issues/17)) ([da9913c](https://github.com/onlooker-community/ecosystem/commit/da9913ca4f7497280edc34f8c64baa903c1e6754))
+* **ci:** checkout release tag before npm publish :relieved: ([bc7bbdc](https://github.com/onlooker-community/ecosystem/commit/bc7bbdc7a886a55ba8f04fe09bfa60043648c766))
+* **ci:** grant id-token write for npm provenance on publish ([c78c9f0](https://github.com/onlooker-community/ecosystem/commit/c78c9f054c1d48ca8a83d0d26b76ce991fffe51b))
+* **ci:** parse release-please paths_released JSON for npm publish ([749e1a0](https://github.com/onlooker-community/ecosystem/commit/749e1a02b563f37f81a8da21fc3f6e10e179314a))
+* **ci:** stop upgrading npm globally before publish ([a7c7a0e](https://github.com/onlooker-community/ecosystem/commit/a7c7a0e1f25aee1bbb75bdd2af130dbc276480a6))
+* **ci:** use HTTPS repository URL for npm provenance ([a7e8927](https://github.com/onlooker-community/ecosystem/commit/a7e89275c5a025a8afee009853265b717091f6ca))
+* **package:** update repository URL format in package.json ([591ce9f](https://github.com/onlooker-community/ecosystem/commit/591ce9f54dd605ec04ceb77b9dcca40b3e08621e))
+
 ## [0.8.0](https://github.com/onlooker-community/ecosystem/compare/v0.7.2...v0.8.0) (2026-05-22)
 
 
