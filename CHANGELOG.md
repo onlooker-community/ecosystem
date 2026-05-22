@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.7.0](https://github.com/onlooker-community/ecosystem/compare/v0.6.0...v0.7.0) (2026-05-22)
+
+
+### Features
+
+* **hooks:** add PreCompact and PostCompact context compaction trackers ([#15](https://github.com/onlooker-community/ecosystem/issues/15)) ([1ec5632](https://github.com/onlooker-community/ecosystem/commit/1ec5632404676ed8b35d324b79ad71a2e9093505))
+
+
+### Bug Fixes
+
+* **ci:** apply release-please extra-files for Claude plugin manifests ([#17](https://github.com/onlooker-community/ecosystem/issues/17)) ([da9913c](https://github.com/onlooker-community/ecosystem/commit/da9913ca4f7497280edc34f8c64baa903c1e6754))
+
+
+### Chores
+
+* enhance release workflow for npm packages ([3b37b56](https://github.com/onlooker-community/ecosystem/commit/3b37b56270a13fec95c2cd6ee8816ba5725a680a))
+* remove npm publish workflow ([5f29c33](https://github.com/onlooker-community/ecosystem/commit/5f29c33baca8c10289d48f8126dc6eb4b4fe8153))
+* remove test job from npm publish workflow ([f25bf9d](https://github.com/onlooker-community/ecosystem/commit/f25bf9d65fbe5066fe9963ce8d075fe81dc8e5c9))
+
 ## [0.6.0](https://github.com/onlooker-community/ecosystem/compare/v0.5.0...v0.6.0) (2026-05-22)
 
 
