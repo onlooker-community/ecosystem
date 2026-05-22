@@ -1,73 +1,31 @@
 name: Release
-
-concurrency:
-  group: ${{ github.workflow }}
-
 on:
   push:
     branches:
       - main
+      - beta
 
 permissions:
   contents: write
+  issues: write
   pull-requests: write
-  # Required for npm publish --provenance (OIDC attestation)
-  id-token: write
 
 jobs:
-  release-please:
-    name: Release Please
+  release:
     runs-on: ubuntu-latest
     steps:
-      - name: Create Release PR
-        id: release
-        uses: googleapis/release-please-action@16a9c90856f42705d54a6fda1823352bdc62cf38 # v4.4.0
-        with:
-          # Do not set release-type here — it overrides release-please-config.json
-          # and skips extra-files (plugin.json, marketplace.json). Release type
-          # is defined per-package in release-please-config.json.
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
-          # Use a PAT instead of GITHUB_TOKEN so the release PR triggers
-          # downstream workflows (CI, etc.). Events caused by GITHUB_TOKEN
-          # deliberately do not fan out to other workflows; that policy
-          # leaves release PRs unchecked. Set RELEASE_PLEASE_PAT to a
-          # fine-grained token with Contents:write + Pull requests:write
-          # scoped to this repo.
-          token: ${{ secrets.RELEASE_PLEASE_PAT }}
-
       - uses: actions/checkout@v6
-        if: ${{ steps.release.outputs.releases_created == 'true'}}
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-node@v6
-        if: ${{ steps.release.outputs.releases_created == 'true'}}
         with:
           node-version: '22'
-          cache: npm
+          registry-url: 'https://registry.npmjs.org'
 
-      - name: Publish tools packages to npm
-        if: ${{ steps.release.outputs.releases_created == 'true' }}
+      - run: npm ci
+      - run: npx semantic-release
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          PATHS_RELEASED: ${{ steps.release.outputs.paths_released }}
-        run: |
-          set -euo pipefail
-          if [[ -z "${NPM_TOKEN}" ]]; then
-            echo "NPM_TOKEN secret is required to publish to npm." >&2
-            exit 1
-          fi
-          printf '%s\n' "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> "${HOME}/.npmrc"
-          npm ci
-          # paths_released is JSON (e.g. ["."], not bare paths)
-          mapfile -t release_paths < <(echo "${PATHS_RELEASED}" | jq -r '.[]')
-          if [[ "${#release_paths[@]}" -eq 0 ]]; then
-            echo "No paths in paths_released; skipping npm publish." >&2
-            exit 0
-          fi
-          for path in "${release_paths[@]}"; do
-            if [[ "$path" == "." ]]; then
-              npm publish --access public --provenance
-            else
-              (cd "$path" && npm publish --access public --provenance)
-            fi
-          done
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
