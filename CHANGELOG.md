@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.0](https://github.com/onlooker-community/ecosystem/compare/v0.2.1...v0.3.0) (2026-05-21)
+
+
+### Features
+
+* **hooks:** track skill usage via skill.invoked events ([23fff0f](https://github.com/onlooker-community/ecosystem/commit/23fff0f0bfad8ab91788d8c45a0457d099d2e870))
+
+
+### Chores
+
+* update GitHub Actions permissions to include id-token ([ca18e61](https://github.com/onlooker-community/ecosystem/commit/ca18e61571b173d1aa6e69cf9031d2daaae1ff72))
+* update npm publish configuration in release workflow ([261fa2d](https://github.com/onlooker-community/ecosystem/commit/261fa2d5c9d656ce74f52193be615b860bc78075))
+
 ## [0.2.1](https://github.com/onlooker-community/ecosystem/compare/v0.2.0...v0.2.1) (2026-05-21)
 
 
