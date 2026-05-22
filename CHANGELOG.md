@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/onlooker-community/ecosystem/compare/v0.7.0...v0.7.1) (2026-05-22)
+
+
+### Bug Fixes
+
+* **ci:** parse release-please paths_released JSON for npm publish ([749e1a0](https://github.com/onlooker-community/ecosystem/commit/749e1a02b563f37f81a8da21fc3f6e10e179314a))
+
 ## [0.7.0](https://github.com/onlooker-community/ecosystem/compare/v0.6.0...v0.7.0) (2026-05-22)
 
 
