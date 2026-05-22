@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.2](https://github.com/onlooker-community/ecosystem/compare/v0.7.1...v0.7.2) (2026-05-22)
+
+
+### Bug Fixes
+
+* **ci:** grant id-token write for npm provenance on publish ([c78c9f0](https://github.com/onlooker-community/ecosystem/commit/c78c9f054c1d48ca8a83d0d26b76ce991fffe51b))
+
 ## [0.7.1](https://github.com/onlooker-community/ecosystem/compare/v0.7.0...v0.7.1) (2026-05-22)
 
 
