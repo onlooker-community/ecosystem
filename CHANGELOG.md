@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/onlooker-community/ecosystem/compare/v0.3.3...v0.4.0) (2026-05-22)
+
+
+### Features
+
+* **hooks:** add SessionStart and SessionEnd session trackers ([#10](https://github.com/onlooker-community/ecosystem/issues/10)) ([a48d680](https://github.com/onlooker-community/ecosystem/commit/a48d680dd24c98e79ef1c0401b07483ecebf9e8b))
+
 ## [0.3.3](https://github.com/onlooker-community/ecosystem/compare/v0.3.2...v0.3.3) (2026-05-22)
 
 
