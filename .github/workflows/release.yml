@@ -11,20 +11,15 @@ on:
 permissions:
   contents: write
   pull-requests: write
-  issues: write
-  id-token: write
 
 jobs:
   release-please:
     name: Release Please
     runs-on: ubuntu-latest
-    outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
     steps:
-      - name: Create Release
-        id: release
-        uses: googleapis/release-please-action@16a9c90856f42705d54a6fda1823352bdc62cf38 # v4.4.0
+      - uses: googleapis/release-please-action@16a9c90856f42705d54a6fda1823352bdc62cf38 # v4.4.0
         with:
+          release-type: node
           # Use a PAT instead of GITHUB_TOKEN so the release PR triggers
           # downstream workflows (CI, etc.). Events caused by GITHUB_TOKEN
           # deliberately do not fan out to other workflows; that policy
@@ -32,17 +27,3 @@ jobs:
           # fine-grained token with Contents:write + Pull requests:write
           # scoped to this repo.
           token: ${{ secrets.RELEASE_PLEASE_PAT }}
-
-  publish:
-    needs: release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '22'
-          registry-url: 'https://registry.npmjs.org'
-
-      - run: npm ci
-      - run: npm publish --provenance

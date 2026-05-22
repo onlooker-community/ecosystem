@@ -1,0 +1,153 @@
+name: Publish npm Package
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  # Manual trigger for emergency releases.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (without v prefix)'
+        required: true
+        type: string
+      tag:
+        description: 'npm dist-tag (latest, beta, next)'
+        required: true
+        default: 'latest'
+        type: choice
+        options:
+          - latest
+          - beta
+          - next
+
+permissions:
+  contents: read
+  id-token: write # for npm provenance
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+      npm_tag: ${{ steps.tag.outputs.value }}
+      is_prerelease: ${{ steps.prerelease.outputs.value }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "value=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Resolve npm tag
+        id: tag
+        run: |
+          VERSION=${{ steps.version.outputs.value }}
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "value=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          elif [[ "$VERSION" == *"-beta"* ]]; then
+            echo "value=beta" >> "$GITHUB_OUTPUT"
+          elif [[ "$VERSION" == *"-rc"* ]]; then
+            echo "value=next" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=latest" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check if prerelease
+        id: prerelease
+        run: |
+          VERSION=${{ steps.version.outputs.value }}
+          if [[ "$VERSION" == *"-"* ]]; then
+            echo "value=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify package.json version matches
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          TAG_VERSION=${{ steps.version.outputs.value }}
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "ERROR: package.json version ($PKG_VERSION) does not match tag ($TAG_VERSION)"
+            exit 1
+          fi
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: ['20', '22']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - run: npm run typecheck
+
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    needs: [validate, test]
+    environment: npm-publish
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Publish
+        run: |
+          npm publish \
+            --tag ${{ needs.validate.outputs.npm_tag }} \
+            --access public \
+            --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [validate, publish]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract changelog entry
+        id: changelog
+        run: |
+          VERSION=${{ needs.validate.outputs.version }}
+          NOTES=$(awk "/^## \[?${VERSION}\]?/{found=1; next} found && /^## /{exit} found{print}" CHANGELOG.md)
+          if [ -z "$NOTES" ]; then
+            NOTES="See CHANGELOG.md for details."
+          fi
+          echo "notes<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$NOTES" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: v${{ needs.validate.outputs.version }}
+          body: ${{ steps.changelog.outputs.notes }}
+          prerelease: ${{ needs.validate.outputs.is_prerelease == 'true' }}
+          draft: false
