@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/onlooker-community/ecosystem/compare/v0.4.0...v0.5.0) (2026-05-22)
+
+
+### Features
+
+* **hooks:** add UserPromptSubmit turn and session duration trackers ([#12](https://github.com/onlooker-community/ecosystem/issues/12)) ([cbb7657](https://github.com/onlooker-community/ecosystem/commit/cbb7657979ed144efce506e6b487e037679b9462))
+
 ## [0.4.0](https://github.com/onlooker-community/ecosystem/compare/v0.3.3...v0.4.0) (2026-05-22)
 
 
