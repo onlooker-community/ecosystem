@@ -11,6 +11,8 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  # Required for npm publish --provenance (OIDC attestation)
+  id-token: write
 
 jobs:
   release-please:
