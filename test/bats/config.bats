@@ -84,6 +84,34 @@ setup_file() {
   [[ "$hook_cmd" == *tool-history-tracker.sh ]]
 }
 
+@test "hooks.json SessionStart references session-start-tracker" {
+  run jq -e '.hooks.SessionStart[0].matcher == "*"' "${REPO_ROOT}/hooks/hooks.json"
+  [ "$status" -eq 0 ]
+
+  local hook_cmd
+  hook_cmd=$(jq -r '.hooks.SessionStart[0].hooks[0].command' "${REPO_ROOT}/hooks/hooks.json")
+  [[ "$hook_cmd" == *session-start-tracker.sh ]]
+
+  local script_path="${hook_cmd//\$CLAUDE_PLUGIN_ROOT/$REPO_ROOT}"
+  script_path="${script_path//\"/}"
+  run test -x "$script_path"
+  [ "$status" -eq 0 ]
+}
+
+@test "hooks.json SessionEnd references session-end-tracker" {
+  run jq -e '.hooks.SessionEnd[0].matcher == "*"' "${REPO_ROOT}/hooks/hooks.json"
+  [ "$status" -eq 0 ]
+
+  local hook_cmd
+  hook_cmd=$(jq -r '.hooks.SessionEnd[0].hooks[0].command' "${REPO_ROOT}/hooks/hooks.json")
+  [[ "$hook_cmd" == *session-end-tracker.sh ]]
+
+  local script_path="${hook_cmd//\$CLAUDE_PLUGIN_ROOT/$REPO_ROOT}"
+  script_path="${script_path//\"/}"
+  run test -x "$script_path"
+  [ "$status" -eq 0 ]
+}
+
 @test "plugin.json is valid JSON" {
   run jq -e '.name and .version' "${REPO_ROOT}/.claude-plugin/plugin.json"
   [ "$status" -eq 0 ]
