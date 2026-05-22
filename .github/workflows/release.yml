@@ -17,7 +17,9 @@ jobs:
     name: Release Please
     runs-on: ubuntu-latest
     steps:
-      - uses: googleapis/release-please-action@16a9c90856f42705d54a6fda1823352bdc62cf38 # v4.4.0
+      - name: Create Release PR
+        id: release
+        uses: googleapis/release-please-action@16a9c90856f42705d54a6fda1823352bdc62cf38 # v4.4.0
         with:
           release-type: node
           # Use a PAT instead of GITHUB_TOKEN so the release PR triggers
@@ -27,3 +29,30 @@ jobs:
           # fine-grained token with Contents:write + Pull requests:write
           # scoped to this repo.
           token: ${{ secrets.RELEASE_PLEASE_PAT }}
+
+      - uses: actions/checkout@v6
+        if: ${{ steps.release.outputs.releases_created == 'true'}}
+
+      - uses: actions/setup-node@v6
+        if: ${{ steps.release.outputs.releases_created == 'true'}}
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Publish tools packages to npm
+        if: ${{ steps.release.outputs.releases_created == 'true' }}
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          PATHS_RELEASED: ${{ steps.release.outputs.paths_released }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${NPM_TOKEN}" ]]; then
+            echo "NPM_TOKEN secret is required to publish to npm." >&2
+            exit 1
+          fi
+          printf '%s\n' "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> "${HOME}/.npmrc"
+          npm ci
+          for path in ${PATHS_RELEASED}; do
+            cd "$path"
+            npm publish --access public --provenance
+          done
