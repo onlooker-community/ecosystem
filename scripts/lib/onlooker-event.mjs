@@ -169,8 +169,7 @@ export function mapTaskHookInput(hookInput, options) {
   } else if (hookEvent === 'TaskCompleted') {
     eventType = TASK_COMPLETE;
     const durationRaw = process.env.ONLOOKER_TASK_DURATION_MS;
-    const durationMs =
-      durationRaw != null && durationRaw !== '' ? Number.parseInt(String(durationRaw), 10) : undefined;
+    const durationMs = durationRaw != null && durationRaw !== '' ? Number.parseInt(String(durationRaw), 10) : undefined;
     const description = hookInput?.task_description;
     payload = stripUndefined({
       success: true,
