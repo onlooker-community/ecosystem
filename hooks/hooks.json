@@ -137,6 +137,26 @@
           }
         ]
       }
+    ],
+    "TaskCreated": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hooks/task-tracker.sh"
+          }
+        ]
+      }
+    ],
+    "TaskCompleted": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hooks/task-tracker.sh"
+          }
+        ]
+      }
     ]
   }
 }

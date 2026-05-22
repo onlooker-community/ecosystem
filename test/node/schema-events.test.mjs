@@ -5,7 +5,12 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { validate } from '@onlooker-community/schema';
-import { buildCanonicalEvent, mapHookInputToCanonical, mapSkillHookInput } from '../../scripts/lib/onlooker-event.mjs';
+import {
+  buildCanonicalEvent,
+  mapHookInputToCanonical,
+  mapSkillHookInput,
+  mapTaskHookInput,
+} from '../../scripts/lib/onlooker-event.mjs';
 
 const REPO_ROOT = join(fileURLToPath(new URL('../..', import.meta.url)));
 const FIXTURES = join(REPO_ROOT, 'test/fixtures/hook-inputs');
@@ -70,6 +75,52 @@ test('mapSkillHookInput maps PreToolUse Skill to skill.invoked', () => {
   assert.equal(mapped.valid, true);
   assert.equal(mapped.event.payload.invocation_source, 'tool');
   assert.equal(validate(mapped.event).valid, true);
+});
+
+test('mapTaskHookInput maps TaskCreated to task.start', () => {
+  const hookInput = loadFixture('task-created.json');
+  const tmpDir = join(REPO_ROOT, 'test/tmp-schema-events');
+  const mapped = mapTaskHookInput(hookInput, {
+    onlookerDir: tmpDir,
+    plugin: 'onlooker',
+  });
+
+  assert.equal(mapped.valid, true);
+  assert.equal(mapped.event.event_type, 'task.start');
+  assert.equal(mapped.event.payload.task_summary, 'Implement user authentication');
+  assert.equal(validate(mapped.event).valid, true);
+});
+
+test('mapTaskHookInput maps TaskCompleted to task.complete', () => {
+  const hookInput = loadFixture('task-completed.json');
+  const tmpDir = join(REPO_ROOT, 'test/tmp-schema-events');
+  const prev = process.env.ONLOOKER_TASK_DURATION_MS;
+  process.env.ONLOOKER_TASK_DURATION_MS = '1200';
+  const mapped = mapTaskHookInput(hookInput, {
+    onlookerDir: tmpDir,
+    plugin: 'onlooker',
+  });
+  if (prev === undefined) delete process.env.ONLOOKER_TASK_DURATION_MS;
+  else process.env.ONLOOKER_TASK_DURATION_MS = prev;
+
+  assert.equal(mapped.valid, true);
+  assert.equal(mapped.event.event_type, 'task.complete');
+  assert.equal(mapped.event.payload.success, true);
+  assert.equal(mapped.event.payload.duration_ms, 1200);
+  assert.equal(mapped.event.payload.output_summary, 'Add login and signup endpoints');
+  assert.equal(validate(mapped.event).valid, true);
+});
+
+test('mapHookInputToCanonical routes TaskCreated through task mapping', () => {
+  const hookInput = loadFixture('task-created.json');
+  const tmpDir = join(REPO_ROOT, 'test/tmp-schema-events');
+  const mapped = mapHookInputToCanonical(hookInput, {
+    onlookerDir: tmpDir,
+    plugin: 'onlooker',
+  });
+
+  assert.equal(mapped.valid, true);
+  assert.equal(mapped.event.event_type, 'task.start');
 });
 
 test('buildCanonicalEvent assigns monotonic file-backed sequence', () => {

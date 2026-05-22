@@ -175,6 +175,28 @@ setup_file() {
   [ "$status" -eq 0 ]
 }
 
+@test "hooks.json TaskCreated references task-tracker" {
+  local hook_cmd
+  hook_cmd=$(jq -r '.hooks.TaskCreated[0].hooks[0].command' "${REPO_ROOT}/hooks/hooks.json")
+  [[ "$hook_cmd" == *task-tracker.sh ]]
+
+  local script_path="${hook_cmd//\$CLAUDE_PLUGIN_ROOT/$REPO_ROOT}"
+  script_path="${script_path//\"/}"
+  run test -x "$script_path"
+  [ "$status" -eq 0 ]
+}
+
+@test "hooks.json TaskCompleted references task-tracker" {
+  local hook_cmd
+  hook_cmd=$(jq -r '.hooks.TaskCompleted[0].hooks[0].command' "${REPO_ROOT}/hooks/hooks.json")
+  [[ "$hook_cmd" == *task-tracker.sh ]]
+
+  local script_path="${hook_cmd//\$CLAUDE_PLUGIN_ROOT/$REPO_ROOT}"
+  script_path="${script_path//\"/}"
+  run test -x "$script_path"
+  [ "$status" -eq 0 ]
+}
+
 @test "plugin.json is valid JSON" {
   run jq -e '.name and .version' "${REPO_ROOT}/.claude-plugin/plugin.json"
   [ "$status" -eq 0 ]

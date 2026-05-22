@@ -9,6 +9,8 @@ import { join } from 'node:path';
 import {
   createEvent,
   SKILL_INVOKED,
+  TASK_COMPLETE,
+  TASK_START,
   TOOL_AGENT_COMPLETE,
   TOOL_AGENT_SPAWN,
   TOOL_FILE_EDIT,
@@ -146,12 +148,65 @@ export function mapSkillHookInput(hookInput, options) {
 }
 
 /**
+ * Map TaskCreated / TaskCompleted hook input to task.start or task.complete.
+ * Returns null when the hook input is not a task lifecycle event.
+ */
+export function mapTaskHookInput(hookInput, options) {
+  const { onlookerDir, plugin, runtime = 'claude-code', adapter_id = 'ecosystem.hooks' } = options;
+  const hookEvent = hookInput?.hook_event_name;
+  const sessionId = hookInput?.session_id ?? 'unknown';
+  const taskSubject = hookInput?.task_subject;
+  if (!taskSubject) return null;
+
+  let eventType;
+  let payload;
+
+  if (hookEvent === 'TaskCreated') {
+    eventType = TASK_START;
+    payload = stripUndefined({
+      task_summary: taskSubject,
+    });
+  } else if (hookEvent === 'TaskCompleted') {
+    eventType = TASK_COMPLETE;
+    const durationRaw = process.env.ONLOOKER_TASK_DURATION_MS;
+    const durationMs = durationRaw != null && durationRaw !== '' ? Number.parseInt(String(durationRaw), 10) : undefined;
+    const description = hookInput?.task_description;
+    payload = stripUndefined({
+      success: true,
+      duration_ms: Number.isFinite(durationMs) && durationMs >= 0 ? durationMs : undefined,
+      output_summary: description ? summarizeText(description, 500) : summarizeText(taskSubject, 500),
+    });
+  } else {
+    return null;
+  }
+
+  const event = buildCanonicalEvent({
+    onlookerDir,
+    runtime,
+    adapter_id,
+    plugin,
+    session_id: sessionId,
+    event_type: eventType,
+    payload,
+  });
+
+  const result = validate(event);
+  if (!result.valid) {
+    return { valid: false, errors: result.errors, event_type: eventType };
+  }
+  return { valid: true, event: result.event };
+}
+
+/**
  * Map Claude Code hook input to a canonical event.
  * Returns null when the hook input is not mapped to a schema event type.
  */
 export function mapHookInputToCanonical(hookInput, options) {
   const skillMapped = mapSkillHookInput(hookInput, options);
   if (skillMapped) return skillMapped;
+
+  const taskMapped = mapTaskHookInput(hookInput, options);
+  if (taskMapped) return taskMapped;
 
   const { onlookerDir, plugin, runtime = 'claude-code', adapter_id = 'ecosystem.hooks' } = options;
 
