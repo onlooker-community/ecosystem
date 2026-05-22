@@ -1,0 +1,8 @@
+{
+  "session_id": "compact-session-001",
+  "transcript_path": "/tmp/compact-transcript.jsonl",
+  "cwd": "/project/repo",
+  "hook_event_name": "PostCompact",
+  "trigger": "manual",
+  "compact_summary": "The user implemented session hooks including SessionStart, SessionEnd, and UserPromptSubmit trackers for turn and duration telemetry."
+}
