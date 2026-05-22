@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.3](https://github.com/onlooker-community/ecosystem/compare/v0.3.2...v0.3.3) (2026-05-22)
+
+
+### Chores
+
+* enhance release workflow with conditional publishing ([d14a868](https://github.com/onlooker-community/ecosystem/commit/d14a86858dcdeb3ed87aa00985c2c79f9ca8a4d3))
+
 ## [0.3.2](https://github.com/onlooker-community/ecosystem/compare/v0.3.1...v0.3.2) (2026-05-22)
 
 
