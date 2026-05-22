@@ -12,25 +12,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: ecosystem
-
-      - uses: actions/checkout@v4
-        with:
-          repository: onlooker-community/schema
-          path: schema
 
       - name: Install mise
         uses: jdx/mise-action@v2
 
       - name: Install tools
-        working-directory: ecosystem
         run: mise install
 
       - name: Install Node dependencies
-        working-directory: ecosystem
         run: npm ci
 
       - name: Run CI test suite
-        working-directory: ecosystem
         run: npm run test:ci

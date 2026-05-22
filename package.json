@@ -19,7 +19,7 @@
     "onlooker-install": "install.sh"
   },
   "dependencies": {
-    "@onlooker-community/schema": "file:../schema"
+    "@onlooker-community/schema": "^1.4.1"
   },
   "scripts": {
     "postinstall": "echo '\\n  onlooker-ecosystem installed!\\n  Run: npx onlooker-install typescript\\n  Docs: https://github.com/onlooker-community/ecosystem\\n'",
