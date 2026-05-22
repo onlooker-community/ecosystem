@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/onlooker-community/ecosystem/compare/v0.3.1...v0.3.2) (2026-05-22)
+
+
+### Bug Fixes
+
+* **ci:** stop upgrading npm globally before publish ([a7c7a0e](https://github.com/onlooker-community/ecosystem/commit/a7c7a0e1f25aee1bbb75bdd2af130dbc276480a6))
+
 ## [0.3.1](https://github.com/onlooker-community/ecosystem/compare/v0.3.0...v0.3.1) (2026-05-22)
 
 
