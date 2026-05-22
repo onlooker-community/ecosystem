@@ -224,8 +224,7 @@ export function mapWorktreeHookInput(hookInput, options) {
   }
 
   const durationRaw = process.env.ONLOOKER_WORKTREE_DURATION_MS;
-  const durationMs =
-    durationRaw != null && durationRaw !== '' ? Number.parseInt(String(durationRaw), 10) : undefined;
+  const durationMs = durationRaw != null && durationRaw !== '' ? Number.parseInt(String(durationRaw), 10) : undefined;
 
   const payload = stripUndefined({
     command,
