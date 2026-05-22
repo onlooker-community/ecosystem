@@ -9,7 +9,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/onlooker-community/ecosystem"
+    "url": "git+https://github.com/onlooker-community/ecosystem.git"
   },
   "homepage": "https://github.com/onlooker-community/ecosystem#readme",
   "bugs": {
