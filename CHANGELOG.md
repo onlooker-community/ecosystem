@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/onlooker-community/ecosystem/compare/v0.3.0...v0.3.1) (2026-05-22)
+
+
+### Bug Fixes
+
+* **ci:** use HTTPS repository URL for npm provenance ([a7e8927](https://github.com/onlooker-community/ecosystem/commit/a7e89275c5a025a8afee009853265b717091f6ca))
+
 ## [0.3.0](https://github.com/onlooker-community/ecosystem/compare/v0.2.1...v0.3.0) (2026-05-21)
 
 
