@@ -20,6 +20,15 @@ setup_test_env() {
   export ONLOOKER_DIR="${TEST_HOME}/.onlooker"
   export CLAUDE_HOME="${TEST_HOME}/.claude"
   export CLAUDE_PLUGIN_ROOT="${REPO_ROOT}"
+
+  # Sever git from the developer's global config. Otherwise XDG_CONFIG_HOME
+  # (which is exported by the parent shell and not affected by reassigning
+  # HOME) leaks `commit.gpgsign = true` and the per-test signingkey path
+  # into git-driven tests like worktree-tracker, where there's no SSH key
+  # in the isolated $TEST_HOME and `git worktree add` fails to sign.
+  export GIT_CONFIG_GLOBAL=/dev/null
+  export GIT_CONFIG_SYSTEM=/dev/null
+  unset XDG_CONFIG_HOME
 }
 
 # Source validate-path.sh with test env vars already set.
