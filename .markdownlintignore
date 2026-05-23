@@ -1,0 +1,3 @@
+node_modules/
+# release-please generated; regenerated on every release, not authored
+**/CHANGELOG.md
