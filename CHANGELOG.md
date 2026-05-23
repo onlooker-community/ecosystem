@@ -7,6 +7,13 @@
 
 # Changelog
 
+## [0.12.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.11.0...ecosystem-v0.12.0) (2026-05-23)
+
+
+### Features
+
+* **prompt-rules:** deterministic regex-triggered guidance injection :relieved: ([#28](https://github.com/onlooker-community/ecosystem/issues/28)) ([662c811](https://github.com/onlooker-community/ecosystem/commit/662c8119657cebc350900f859c43dbaca97d6703))
+
 ## [0.11.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.10.0...ecosystem-v0.11.0) (2026-05-23)
 
 
