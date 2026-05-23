@@ -64,9 +64,9 @@ BACKGROUND=$(jq -r '.tool_input.background // false' <<<"$INPUT")
 STATE_FILE="$ONLOOKER_DIR/agent-spawn-trackers.json"
 LOCKFILE="$STATE_FILE.lock"
 
-# Use flock for exclusive access
-exec 200>"$LOCKFILE"
-flock -w 5 200 || {
+# Acquire exclusive access via the portable lock helper (mkdir-based mutex,
+# works on macOS without util-linux).
+lock_acquire "$LOCKFILE" 5 || {
 	json_response "deny" "Failed to acquire lock"
 	hook_failure
 	exit 0
@@ -103,7 +103,7 @@ STATE=$(jq --arg sid "$SESSION_ID" '
 echo "$STATE" > "$STATE_FILE" 2>/dev/null || true
 
 # Release lock
-flock -u 200
+lock_release "$LOCKFILE"
 
 # Get current session stats
 SPAWN_COUNT=$(jq -r --arg sid "$SESSION_ID" '.sessions[$sid].spawns' <<<"$STATE")

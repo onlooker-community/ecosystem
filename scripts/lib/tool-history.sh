@@ -13,8 +13,9 @@ tool_history_build_record() {
 	onlooker_event_from_hook "$input_json"
 }
 
-# Append a canonical event to the session JSONL history (flock-protected).
-# Usage: tool_history_append "$SESSION_ID" "$event_json"
+# Append a canonical event to the session JSONL history (lock-protected).
+# Uses the portable mkdir-based mutex so the hook works on macOS as well as
+# Linux. Usage: tool_history_append "$SESSION_ID" "$event_json"
 tool_history_append() {
 	local session_id="${1:-}"
 	local record_json="${2:-}"
@@ -25,11 +26,9 @@ tool_history_append() {
 	ensure_dir_exists "$ONLOOKER_SESSION_HISTORY_DIR" || return 1
 
 	local lockfile="${history_file}.lock"
-	exec 202>"$lockfile"
-	if ! flock -w 5 202; then
-		return 1
-	fi
-
+	lock_acquire "$lockfile" 5 || return 1
 	printf '%s\n' "$record_json" >>"$history_file" 2>/dev/null
-	flock -u 202
+	local rc=$?
+	lock_release "$lockfile"
+	return "$rc"
 }

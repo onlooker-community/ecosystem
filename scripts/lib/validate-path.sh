@@ -22,6 +22,10 @@ export ONLOOKER_EVENTS_LOG="$ONLOOKER_DIR/logs/onlooker-events.jsonl"
 export ONLOOKER_HOOK_HEALTH_LOG="$ONLOOKER_DIR/logs/hook-health.jsonl"
 _VALIDATE_PATH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export ONLOOKER_EMIT="$_VALIDATE_PATH_DIR/onlooker-emit.sh"
+# Portable mutex (flock substitute) — every hook script that needs to write
+# shared state can call lock_acquire/lock_release after sourcing this file.
+# shellcheck source=portable-lock.sh
+source "$_VALIDATE_PATH_DIR/portable-lock.sh"
 unset _VALIDATE_PATH_DIR
 
 # ==============================================================================
