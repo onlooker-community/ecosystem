@@ -68,7 +68,12 @@ prompt_rules_load_merged() {
     --argjson g "$global_json" \
     --argjson p "$project_json" \
     '
-    def to_map(arr): (arr | map({(.id): .}) | add) // {};
+    # Coerce non-array inputs to []; drop entries without a string id so a
+    # single malformed rule cannot poison `map({(.id): .})` (which errors when
+    # `.id` is null or non-string).
+    def to_array(x): if (x | type) == "array" then x else [] end;
+    def sanitize(arr): to_array(arr) | map(select(type == "object" and (.id | type) == "string" and .id != ""));
+    def to_map(arr): (sanitize(arr) | map({(.id): .}) | add) // {};
     (to_map($g) + to_map($p))
     | to_entries
     | map(.value)
@@ -90,6 +95,9 @@ prompt_rules_load_fired() {
 }
 
 # Mark a rule id as fired for a session. Idempotent.
+# Read-modify-write is wrapped in a portable file lock so concurrent
+# UserPromptSubmit hooks (or other writers) can't drop updates or corrupt
+# the marker file — same pattern as tool-history.sh.
 # Usage: prompt_rules_mark_fired "$session_id" "$rule_id"
 prompt_rules_mark_fired() {
   local session_id="${1:-unknown}"
@@ -99,24 +107,38 @@ prompt_rules_mark_fired() {
   path=$(prompt_rules_fired_path "$session_id")
   ensure_dir_exists "$(dirname "$path")" || return 1
 
+  local lockfile="${path}.lock"
+  lock_acquire "$lockfile" 5 || return 1
+
   local current='[]'
   if [[ -f "$path" ]]; then
     current=$(jq -c '.fired_ids // []' "$path" 2>/dev/null) || current='[]'
   fi
-  local next
+  local next rc=0
   next=$(jq -cn --argjson cur "$current" --arg id "$rule_id" \
     '{fired_ids: ($cur + [$id] | unique)}')
-  printf '%s\n' "$next" > "$path"
+  printf '%s\n' "$next" > "$path" || rc=$?
+  lock_release "$lockfile"
+  return "$rc"
 }
 
 # Test whether a POSIX ERE pattern matches the given prompt.
-# Returns 0 on match, 1 otherwise. Empty pattern never matches.
+# Returns 0 on match, 1 otherwise (including empty or invalid pattern).
+# Invalid ERE patterns from user-edited rule files would otherwise leak a
+# "syntax error in regular expression" message to stderr and return status 2;
+# we treat that as a non-match so the hook stays quiet on bad input.
 # Usage: prompt_rules_pattern_matches "$prompt" "$pattern" && echo "hit"
 prompt_rules_pattern_matches() {
   local prompt="$1"
   local pattern="$2"
   [[ -z "$pattern" ]] && return 1
-  [[ "$prompt" =~ $pattern ]]
+  { [[ "$prompt" =~ $pattern ]]; } 2>/dev/null
+  local rc=$?
+  # Bash returns 2 for a malformed regex; collapse to "no match".
+  if (( rc == 0 )); then
+    return 0
+  fi
+  return 1
 }
 
 # Append a prompt-rule event to the global events log.

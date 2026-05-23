@@ -82,6 +82,31 @@ write_project_rules() {
   [ "$status" -eq 1 ]
 }
 
+@test "pattern_matches: invalid ERE returns non-match without leaking stderr" {
+  # Unbalanced bracket — bash would normally print "syntax error in regular
+  # expression" to stderr and return 2. The helper must swallow both.
+  run prompt_rules_pattern_matches "anything" "[unterminated"
+  [ "$status" -eq 1 ]
+  [ -z "$stderr" ] || [ -z "${stderr// /}" ]
+}
+
+@test "load_merged: tolerates non-array .rules and entries missing id" {
+  # Object instead of array, and rule entries with missing/non-string ids.
+  write_global_rules '{"rules": "not-an-array"}'
+  write_project_rules "$TEST_HOME" '{
+    "rules": [
+      {"pattern": "no-id"},
+      {"id": null, "pattern": "null-id"},
+      {"id": 42, "pattern": "non-string-id"},
+      {"id": "good", "pattern": "ok", "guidance": "ok"}
+    ]
+  }'
+  local rules
+  rules=$(prompt_rules_load_merged "$TEST_HOME")
+  [ "$(echo "$rules" | jq 'length')" = "1" ]
+  [ "$(echo "$rules" | jq -r '.[0].id')" = "good" ]
+}
+
 @test "mark_fired + load_fired round-trip is idempotent" {
   prompt_rules_mark_fired "sess-A" "rule-1"
   prompt_rules_mark_fired "sess-A" "rule-1"
@@ -153,6 +178,23 @@ write_project_rules() {
   grep -q '"event_type":"prompt_rule.matched"' "$ONLOOKER_EVENTS_LOG"
   grep -q '"event_type":"prompt_rule.applied"' "$ONLOOKER_EVENTS_LOG"
   grep -q '"rule_id":"rule-no-verify"' "$ONLOOKER_EVENTS_LOG"
+}
+
+@test "hook fires repeatedly when fire_once_per_session is false" {
+  write_global_rules '{
+    "rules": [
+      {"id": "rule-no-verify", "pattern": "--no-verify", "guidance": "Skipping hooks usually masks the real issue.", "fire_once_per_session": false}
+    ]
+  }'
+  local fixture="${REPO_ROOT}/test/fixtures/hook-inputs/user-prompt-submit-rule-match.json"
+
+  # Both invocations must inject — explicit false should not get coerced to true.
+  local first second
+  first=$(cat "$fixture" | "${REPO_ROOT}/scripts/hooks/prompt-rule-injector.sh" 2>/dev/null)
+  second=$(cat "$fixture" | "${REPO_ROOT}/scripts/hooks/prompt-rule-injector.sh" 2>/dev/null)
+
+  echo "$first" | jq -e '.hookSpecificOutput.additionalContext | contains("Skipping hooks")' >/dev/null
+  echo "$second" | jq -e '.hookSpecificOutput.additionalContext | contains("Skipping hooks")' >/dev/null
 }
 
 @test "hook still emits prompt_rule.matched on subsequent match but not prompt_rule.applied" {

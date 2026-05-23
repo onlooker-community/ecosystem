@@ -64,7 +64,9 @@ while IFS= read -r rule; do
   PATTERN=$(echo "$rule" | jq -r '.pattern // empty')
   GUIDANCE=$(echo "$rule" | jq -r '.guidance // empty')
   MAX_CHARS=$(echo "$rule" | jq -r '.max_chars // 400')
-  FIRE_ONCE=$(echo "$rule" | jq -r '.fire_once_per_session // true')
+  # `// true` would coerce an explicit `false` to true (jq's // treats `false`
+  # like `null`); check the field explicitly so rules can opt out of fire-once.
+  FIRE_ONCE=$(echo "$rule" | jq -r 'if (.fire_once_per_session == false) then "false" else "true" end')
 
   [[ -z "$RULE_ID" || -z "$PATTERN" || -z "$GUIDANCE" ]] && continue
 
@@ -104,7 +106,7 @@ while IFS= read -r rule; do
   prompt_rules_emit "$SESSION_ID" "prompt_rule.applied" \
     "$(jq -cn --arg id "$RULE_ID" --argjson chars "$ADD_LEN" \
       '{rule_id: $id, guidance_chars: $chars}')" || true
-done < <(echo "$RULES" | jq -c '.[]')
+done < <(echo "$RULES" | jq -c '.[]' 2>/dev/null)
 
 if [[ -n "$COMBINED_GUIDANCE" ]]; then
   jq -n --arg ctx "$COMBINED_GUIDANCE" \
