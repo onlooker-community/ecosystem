@@ -1,5 +1,7 @@
 # Onlooker Ecosystem
 
+[![Test](https://github.com/onlooker-community/ecosystem/actions/workflows/test.yml/badge.svg)](https://github.com/onlooker-community/ecosystem/actions/workflows/test.yml)
+
 Agents, skills, hooks, commands, rules, and MCP configurations that power [Onlooker](https://onlooker.dev).
 
 ---
