@@ -12,7 +12,6 @@
       "name": "ecosystem",
       "source": "./",
       "description": "Fill this out",
-      "version": "0.10.0",
       "author": {
         "name": "Onlooker Community"
       },
@@ -26,23 +25,14 @@
       "name": "archivist",
       "source": "./plugins/archivist",
       "description": "Structured session memory across context truncation. Extracts decisions, dead ends, and open questions on PreCompact and reinjects the most important items at SessionStart. Requires the ecosystem plugin.",
-      "version": "0.0.1",
       "author": {
         "name": "Onlooker Community"
       },
       "homepage": "https://onlooker.dev",
       "repository": "https://github.com/onlooker-community/ecosystem",
       "license": "MIT",
-      "keywords": [
-        "memory",
-        "compaction",
-        "context",
-        "session"
-      ],
-      "tags": [
-        "memory",
-        "context-engineering"
-      ]
+      "keywords": ["memory", "compaction", "context", "session"],
+      "tags": ["memory", "context-engineering"]
     }
   ]
 }

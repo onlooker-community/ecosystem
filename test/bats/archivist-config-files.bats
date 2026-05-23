@@ -23,11 +23,12 @@ setup_file() {
   [ "$status" -eq 0 ]
 }
 
-@test "marketplace.json archivist version matches plugin.json" {
-  local plugin_ver mp_ver
-  plugin_ver=$(jq -r '.version' "${REPO_ROOT}/plugins/archivist/.claude-plugin/plugin.json")
-  mp_ver=$(jq -r '.plugins[1].version' "${REPO_ROOT}/.claude-plugin/marketplace.json")
-  [ "$plugin_ver" = "$mp_ver" ]
+@test "marketplace.json plugin entries omit version (claude reads version from plugin.json)" {
+  # See https://code.claude.com/docs/en/plugins-reference.md#version-management:
+  # plugin.json's version is the cache key. Setting it in both locations is a
+  # documented drift hazard.
+  run jq -e 'all(.plugins[]; has("version") | not)' "${REPO_ROOT}/.claude-plugin/marketplace.json"
+  [ "$status" -eq 0 ]
 }
 
 @test "release-please-manifest.json tracks plugins/archivist" {
