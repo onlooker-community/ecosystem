@@ -16,20 +16,25 @@ jobs:
         id: release
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
-          
+
+      # Only publish to npm when the ecosystem (root) package was released.
+      # Archivist (and future sibling plugins) are distributed via the Claude
+      # Code marketplace, not npm — a release for a sibling alone must not
+      # trigger `npm publish`, which would attempt to re-publish ecosystem at
+      # its existing version and fail.
       - uses: actions/checkout@v4
-        if: ${{ steps.release.outputs.release_created }}
-        
+        if: ${{ steps.release.outputs['.--release_created'] }}
+
       - uses: actions/setup-node@v4
-        if: ${{ steps.release.outputs.release_created }}
+        if: ${{ steps.release.outputs['.--release_created'] }}
         with:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
-          
+
       - run: npm ci
-        if: ${{ steps.release.outputs.release_created }}
-        
+        if: ${{ steps.release.outputs['.--release_created'] }}
+
       - run: npm publish
-        if: ${{ steps.release.outputs.release_created }}
+        if: ${{ steps.release.outputs['.--release_created'] }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
