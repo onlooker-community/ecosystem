@@ -7,6 +7,22 @@
 
 # Changelog
 
+## [0.11.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.10.0...ecosystem-v0.11.0) (2026-05-23)
+
+
+### Features
+
+* **archivist:** introduce structured session memory plugin :rocket: ([378fff3](https://github.com/onlooker-community/ecosystem/commit/378fff3c14b40644af45b1a2335992e7b0428160))
+* **coverage:** report node + bash coverage on every PR :sparkles: ([cb5d122](https://github.com/onlooker-community/ecosystem/commit/cb5d1221ad20e6257d66b507897dae14549a870f))
+* **lint:** add marketplace cross-reference linter :nail_care: ([0f48817](https://github.com/onlooker-community/ecosystem/commit/0f488170326659ef1d0b8bd7ae4d207c78a43694))
+* **lint:** add plugin manifest validator :nail_care: ([e12615f](https://github.com/onlooker-community/ecosystem/commit/e12615ff99d43caf59d5e215d882c0acb3352c01))
+
+
+### Bug Fixes
+
+* **hooks:** replace flock with portable mkdir mutex :bug: ([3dffa6f](https://github.com/onlooker-community/ecosystem/commit/3dffa6f5e43ef9f3c117f2406ddd03ce485df1cd))
+* **release:** sync marketplace.json out-of-band :relieved: ([0d2a0a3](https://github.com/onlooker-community/ecosystem/commit/0d2a0a38c0c4ee0e400b9a143a4be7904ea3f70a))
+
 ## [0.10.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.9.0...ecosystem-v0.10.0) (2026-05-22)
 
 
