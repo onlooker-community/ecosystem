@@ -50,6 +50,10 @@
           {
             "type": "command",
             "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hooks/session-duration-tracker.sh"
+          },
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hooks/prompt-rule-injector.sh"
           }
         ]
       }
