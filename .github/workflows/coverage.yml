@@ -1,0 +1,78 @@
+name: Coverage
+
+# Runs both coverage signals on every PR + push to main:
+#   - node --test --experimental-test-coverage for .mjs (real line/branch/funcs)
+#   - bash function-reference heuristic for scripts/lib/*.sh and plugins/*/scripts/lib/*.sh
+#
+# On pull requests, posts a single markdown comment that updates in place
+# (keyed by the `<!-- onlooker-coverage-comment -->` sentinel) so the PR
+# discussion isn't spammed with one comment per push.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install mise
+        uses: jdx/mise-action@v2
+
+      - name: Install tools
+        run: mise install
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Run node coverage
+        run: node scripts/coverage/run-coverage.mjs --json > coverage-node.json
+
+      - name: Run bash function coverage
+        run: node scripts/coverage/bash-coverage.mjs --json > coverage-bash.json
+
+      - name: Render markdown comment
+        run: |
+          node scripts/coverage/format-comment.mjs \
+            --node coverage-node.json \
+            --bash coverage-bash.json \
+            --sha "$GITHUB_SHA" > coverage-comment.md
+          cat coverage-comment.md
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ github.run_id }}
+          path: |
+            coverage-node.json
+            coverage-bash.json
+            coverage-comment.md
+
+      - name: Upsert PR comment
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # Find any existing coverage comment by the sentinel, edit it if
+          # found, otherwise create a fresh one. Single comment per PR.
+          existing=$(gh pr view "$PR_NUMBER" --json comments \
+            --jq '.comments[] | select(.body | startswith("<!-- onlooker-coverage-comment -->")) | .url' \
+            | head -n1)
+          if [[ -n "$existing" ]]; then
+            comment_id="${existing##*#issuecomment-}"
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" \
+              -f body="$(cat coverage-comment.md)" >/dev/null
+            echo "Updated comment ${comment_id}"
+          else
+            gh pr comment "$PR_NUMBER" --body-file coverage-comment.md
+            echo "Posted new comment"
+          fi
