@@ -1,4 +1,9 @@
 {
   "plugin_name": "onlooker",
-  "storage_path": "~/.onlooker"
+  "storage_path": "~/.onlooker",
+  "prompt_rules": {
+    "enabled": true,
+    "per_turn_max_chars": 1200,
+    "max_rules": 50
+  }
 }
