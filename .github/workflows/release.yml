@@ -12,6 +12,17 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
+      # Force release-please's intermediate PR-branch commits to be authored
+      # by github-actions[bot] instead of inheriting whatever identity the
+      # PAT owner happens to have configured on their local machine. The
+      # squash-merge of the release PR already attributes the merge to the
+      # PAT owner correctly, but the intermediate commits would otherwise
+      # leak the maintainer's hostname-shaped author email.
+      - name: Configure bot identity
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
       - uses: googleapis/release-please-action@v4
         id: release
         with:
