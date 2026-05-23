@@ -21,6 +21,20 @@
       "license": "MIT",
       "keywords": [],
       "tags": []
+    },
+    {
+      "name": "archivist",
+      "source": "./plugins/archivist",
+      "description": "Structured session memory across context truncation. Extracts decisions, dead ends, and open questions on PreCompact and reinjects the most important items at SessionStart. Requires the ecosystem plugin.",
+      "version": "0.0.1",
+      "author": {
+        "name": "Onlooker Community"
+      },
+      "homepage": "https://onlooker.dev",
+      "repository": "https://github.com/onlooker-community/ecosystem",
+      "license": "MIT",
+      "keywords": ["memory", "compaction", "context", "session"],
+      "tags": ["memory", "context-engineering"]
     }
   ]
 }

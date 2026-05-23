@@ -31,3 +31,12 @@ brew install onlooker
 # Use the wizard to be guided through setup
 onlooker setup
 ```
+
+## Marketplace plugins
+
+This repository is a Claude Code plugin marketplace (`.claude-plugin/marketplace.json`). The default plugin, `ecosystem`, lives at the repo root and provides the observability substrate every other plugin in this marketplace builds on. Additional plugins live under `plugins/<name>/` and depend on `ecosystem` being installed.
+
+| Plugin | Location | Status |
+|---|---|---|
+| `ecosystem` | `./` | Default — Onlooker observability hooks and canonical events |
+| [`archivist`](./plugins/archivist) | `./plugins/archivist` | Structured session memory across context truncation |

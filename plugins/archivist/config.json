@@ -1,0 +1,18 @@
+{
+  "plugin_name": "archivist",
+  "storage_path": "~/.onlooker",
+  "archivist": {
+    "enabled": false,
+    "extraction": {
+      "model": "claude-haiku-4-5-20251001",
+      "max_output_tokens": 1500,
+      "transcript_tail_chars": 60000
+    },
+    "injection": {
+      "max_items": 8,
+      "max_chars": 2400,
+      "include_open_questions": true,
+      "include_dead_ends": true
+    }
+  }
+}

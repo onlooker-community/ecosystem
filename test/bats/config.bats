@@ -10,15 +10,17 @@ setup_file() {
   [ "$status" -eq 0 ]
 }
 
-@test "claude plugin versions match package.json" {
+@test "ecosystem plugin version matches package.json" {
   local pkg_ver
   pkg_ver=$(jq -r '.version' "${REPO_ROOT}/package.json")
 
   run jq -e --arg v "$pkg_ver" '.version == $v' "${REPO_ROOT}/.claude-plugin/plugin.json"
   [ "$status" -eq 0 ]
 
+  # Only the ecosystem entry is bound to package.json's version; sibling
+  # plugins (archivist, etc.) version independently via release-please.
   run jq -e --arg v "$pkg_ver" \
-    '[.plugins[].version] | unique | length == 1 and .[0] == $v' \
+    '(.plugins[] | select(.name == "ecosystem") | .version) == $v' \
     "${REPO_ROOT}/.claude-plugin/marketplace.json"
   [ "$status" -eq 0 ]
 }
