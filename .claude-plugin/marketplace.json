@@ -33,8 +33,16 @@
       "homepage": "https://onlooker.dev",
       "repository": "https://github.com/onlooker-community/ecosystem",
       "license": "MIT",
-      "keywords": ["memory", "compaction", "context", "session"],
-      "tags": ["memory", "context-engineering"]
+      "keywords": [
+        "memory",
+        "compaction",
+        "context",
+        "session"
+      ],
+      "tags": [
+        "memory",
+        "context-engineering"
+      ]
     }
   ]
 }
