@@ -33,10 +33,11 @@
     "coverage:bash": "node scripts/coverage/bash-coverage.mjs",
     "coverage": "npm run coverage:node && npm run coverage:bash",
     "test:ci": "npm run test:shellcheck && npm run test:bats && npm run test:schema && npm run lint:check && npm run lint:manifests && npm run lint:references",
-    "lint:check": "biome check . && markdownlint '**/*.md' --ignore node_modules --ignore CHANGELOG.md",
-    "lint": "biome lint --write",
-    "format": "biome format --write",
+    "lint:check": "biome check . && markdownlint '**/*.md'",
+    "lint": "biome lint --write && markdownlint --fix '**/*.md'",
+    "format": "biome format --write && markdownlint --fix '**/*.md'",
     "format:check": "biome format",
+    "format:md": "markdownlint --fix '**/*.md'",
     "biome:ci": "biome ci"
   },
   "engines": {
