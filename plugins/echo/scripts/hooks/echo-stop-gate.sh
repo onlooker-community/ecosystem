@@ -81,9 +81,16 @@ STAGED_FILES=$(git -C "$REPO_ROOT" diff --name-only --cached 2>/dev/null) || STA
 ALL_CHANGED=$(printf '%s\n%s' "$CHANGED_FILES" "$STAGED_FILES" | sort -u | grep -v '^$') || ALL_CHANGED=""
 [[ -z "$ALL_CHANGED" ]] && _done
 
-# Load watch and exclude patterns.
-mapfile -t WATCH_PATTERNS < <(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" echo_config_watch_paths)
-mapfile -t EXCLUDE_PATTERNS < <(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" echo_config_exclude_paths)
+# Load watch and exclude patterns (bash 3 compatible — no mapfile).
+WATCH_PATTERNS=()
+while IFS= read -r _pat; do
+	[[ -n "$_pat" ]] && WATCH_PATTERNS+=("$_pat")
+done < <(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" echo_config_watch_paths)
+
+EXCLUDE_PATTERNS=()
+while IFS= read -r _pat; do
+	[[ -n "$_pat" ]] && EXCLUDE_PATTERNS+=("$_pat")
+done < <(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" echo_config_exclude_paths)
 
 # Filter changed files: must match at least one watch pattern AND no exclude pattern.
 WATCHED_CHANGED=()
@@ -133,7 +140,16 @@ TIMEOUT_SECS=$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" echo_config_timeout)
 DRIFT_THRESHOLD=$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" echo_config_drift_threshold)
 
 SUITE_ID=$(echo_ulid)
-SUITE_START=$(date +%s%3N 2>/dev/null || python3 -c 'import time; print(int(time.time()*1000))' 2>/dev/null || echo 0)
+SUITE_START=$(python3 -c 'import time; print(int(time.time()*1000))' 2>/dev/null || echo 0)
+FIRST_CHANGED="${WATCHED_CHANGED[0]}"
+
+suite_started_payload=$(jq -n \
+	--arg suite_id "$SUITE_ID" \
+	--argjson test_count "${#WATCHED_CHANGED[@]}" \
+	--arg trigger "file_change" \
+	--arg changed_file "$FIRST_CHANGED" \
+	'{suite_id: $suite_id, test_count: $test_count, trigger: $trigger, changed_file: $changed_file}')
+echo_emit_event "echo.suite.started" "$suite_started_payload" || true
 
 PROMPT_FILE=$(mktemp -t echo-prompt.XXXXXX 2>/dev/null) || PROMPT_FILE="/tmp/echo-prompt.$$"
 trap 'rm -f "$PROMPT_FILE"' EXIT
@@ -270,17 +286,7 @@ done
 # Emit suite events
 # ---------------------------------------------------------------------------
 
-FIRST_CHANGED="${WATCHED_CHANGED[0]}"
-
-suite_started_payload=$(jq -n \
-	--arg suite_id "$SUITE_ID" \
-	--argjson test_count "$file_count" \
-	--arg trigger "file_change" \
-	--arg changed_file "$FIRST_CHANGED" \
-	'{suite_id: $suite_id, test_count: $test_count, trigger: $trigger, changed_file: $changed_file}')
-echo_emit_event "echo.suite.started" "$suite_started_payload" || true
-
-SUITE_END=$(date +%s%3N 2>/dev/null || python3 -c 'import time; print(int(time.time()*1000))' 2>/dev/null || echo 0)
+SUITE_END=$(python3 -c 'import time; print(int(time.time()*1000))' 2>/dev/null || echo 0)
 DURATION_MS=$(( SUITE_END - SUITE_START ))
 
 MERGE_RECOMMENDED="false"
