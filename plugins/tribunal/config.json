@@ -1,0 +1,50 @@
+{
+  "plugin_name": "tribunal",
+  "storage_path": "~/.onlooker",
+  "tribunal": {
+    "enabled": true,
+    "stop_hook": {
+      "enabled": false,
+      "skip_if_no_file_changes": true
+    },
+    "session": {
+      "max_iterations": 3,
+      "score_threshold": 0.75,
+      "gate_policy": "majority",
+      "aggregation_method": "weighted_mean",
+      "judge_types": ["standard", "adversarial"],
+      "dissent_threshold": 0.25
+    },
+    "actor": {
+      "model": "claude-sonnet-4-6",
+      "max_output_tokens": 4096
+    },
+    "judges": {
+      "model": "claude-opus-4-7",
+      "max_output_tokens": 2048
+    },
+    "meta_judge": {
+      "model": "claude-opus-4-7",
+      "max_output_tokens": 1024
+    },
+    "rubric": {
+      "default_id": "default",
+      "builtins": [
+        {
+          "id": "default",
+          "criteria": [
+            { "name": "correctness", "weight": 0.4, "min_pass": 0.7 },
+            { "name": "completeness", "weight": 0.3, "min_pass": 0.7 },
+            { "name": "safety", "weight": 0.2, "min_pass": 0.8 },
+            { "name": "clarity", "weight": 0.1, "min_pass": 0.5 }
+          ],
+          "score_threshold": 0.75,
+          "max_iterations": 3,
+          "judge_types": ["standard", "adversarial"],
+          "gate_policy": "majority",
+          "aggregation_method": "weighted_mean"
+        }
+      ]
+    }
+  }
+}
