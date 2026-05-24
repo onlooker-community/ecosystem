@@ -42,7 +42,8 @@ tribunal_config_load() {
 		local overlay
 		overlay=$(jq '{ tribunal: (.tribunal // {}) }' "$file" 2>/dev/null) || continue
 		[[ -z "$overlay" ]] && continue
-		merged=$(jq -n --argjson a "$merged" --argjson b "$overlay" '
+		local attempt
+		if attempt=$(jq -n --argjson a "$merged" --argjson b "$overlay" '
 			def deepmerge($a; $b):
 				if ($a|type) == "object" and ($b|type) == "object" then
 					reduce (($a|keys) + ($b|keys) | unique)[] as $k
@@ -50,7 +51,9 @@ tribunal_config_load() {
 				elif $b == null then $a
 				else $b end;
 			deepmerge($a; $b)
-		' 2>/dev/null) || true
+		' 2>/dev/null) && [[ -n "$attempt" ]]; then
+			merged="$attempt"
+		fi
 	done
 
 	_TRIBUNAL_CONFIG="$merged"

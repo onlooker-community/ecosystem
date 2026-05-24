@@ -29,11 +29,17 @@ tribunal_ulid() {
 		now_ms=$(date +%s%3N 2>/dev/null) || now_ms=$(($(date +%s) * 1000))
 	fi
 
-	local rand_hi rand_lo
-	rand_hi=$((RANDOM * 32768 + RANDOM))
-	rand_lo=$((RANDOM * 32768 + RANDOM))
-	rand_hi=$(((rand_hi * 256 + RANDOM % 256) & ((1 << 40) - 1)))
-	rand_lo=$(((rand_lo * 256 + RANDOM % 256) & ((1 << 40) - 1)))
+	local rand_hex rand_hi rand_lo
+	rand_hex=$(openssl rand -hex 10 2>/dev/null)
+	if [[ -n "$rand_hex" && ${#rand_hex} -eq 20 ]]; then
+		rand_hi=$((16#${rand_hex:0:10}))
+		rand_lo=$((16#${rand_hex:10:10}))
+	else
+		rand_hi=$((RANDOM * 32768 + RANDOM))
+		rand_lo=$((RANDOM * 32768 + RANDOM))
+		rand_hi=$(((rand_hi * 256 + RANDOM % 256) & ((1 << 40) - 1)))
+		rand_lo=$(((rand_lo * 256 + RANDOM % 256) & ((1 << 40) - 1)))
+	fi
 
 	local ts_part hi_part lo_part
 	ts_part=$(_tribunal_ulid_encode "$now_ms" 10)

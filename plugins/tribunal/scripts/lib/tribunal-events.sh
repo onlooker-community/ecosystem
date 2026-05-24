@@ -78,13 +78,18 @@ tribunal_emit_event() {
 		'{plugin: $plugin, session_id: $sid, event_type: $type, payload: $payload}')
 
 	local event
+	local stderr_file
+	stderr_file=$(mktemp -t tribunal-event-err.XXXXXX 2>/dev/null) || stderr_file="/tmp/tribunal-event-err.$$"
 	event=$(printf '%s' "$params" \
 		| ONLOOKER_DIR="${ONLOOKER_DIR:-$HOME/.onlooker}" \
 		  ONLOOKER_PLUGIN_NAME="$_TRIBUNAL_PLUGIN_NAME" \
-		  node "$event_js" emit 2>/dev/null) || {
+		  node "$event_js" emit 2>"$stderr_file") || {
 		printf 'tribunal-events: schema validation failed for %s\n' "$event_type" >&2
+		[[ -s "$stderr_file" ]] && cat "$stderr_file" >&2
+		rm -f "$stderr_file"
 		return 1
 	}
+	rm -f "$stderr_file"
 
 	local log_path="${ONLOOKER_EVENTS_LOG:-${ONLOOKER_DIR:-$HOME/.onlooker}/logs/onlooker-events.jsonl}"
 	mkdir -p "$(dirname "$log_path")" 2>/dev/null || return 1

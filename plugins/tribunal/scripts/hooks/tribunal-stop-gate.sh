@@ -97,6 +97,9 @@ fi
 JUDGE_MODEL=$(tribunal_config_judge_model "standard")
 [[ -z "$JUDGE_MODEL" || "$JUDGE_MODEL" == "null" ]] && JUDGE_MODEL=""
 
+SCORE_THRESHOLD=$(tribunal_config_get '.tribunal.session.score_threshold')
+[[ -z "$SCORE_THRESHOLD" ]] && SCORE_THRESHOLD="0.75"
+
 TRANSCRIPT_TAIL=$(tail -c 30000 "$TRANSCRIPT_PATH" 2>/dev/null) || TRANSCRIPT_TAIL=""
 [[ -z "$TRANSCRIPT_TAIL" ]] && _done
 
@@ -117,7 +120,7 @@ trap 'rm -f "$PROMPT_FILE"' EXIT
 	printf '%s\n' '  "confidence": 0.0..1.0'
 	printf '%s\n' '}'
 	printf '\n'
-	printf '%s\n' 'Score the work the assistant performed in this turn against general correctness, completeness, and clarity. A score >= 0.75 is "passed".'
+	printf '%s\n' "Score the work the assistant performed in this turn against general correctness, completeness, and clarity. A score >= ${SCORE_THRESHOLD} is \"passed\"."
 	printf '%s\n' 'This is advisory — the main session has already ended, no retry will happen. Be concise.'
 	printf '\n'
 	if [[ -n "$DIFF_SUMMARY" ]]; then
@@ -157,8 +160,6 @@ fi
 TASK_ID=$(tribunal_ulid)
 ITERATION_ID=$(tribunal_ulid)
 JUDGE_ID=$(tribunal_ulid)
-SCORE_THRESHOLD=$(tribunal_config_get '.tribunal.session.score_threshold')
-[[ -z "$SCORE_THRESHOLD" ]] && SCORE_THRESHOLD="0.75"
 
 START_PAYLOAD=$(jq -n \
 	--arg task_id "$TASK_ID" \
@@ -169,9 +170,8 @@ START_PAYLOAD=$(jq -n \
 		judge_types: ["standard"],
 		gate_policy: "strict",
 		score_threshold: $thr,
-		max_iterations: 1,
-		judge_model_ids: [$model]
-	} | with_entries(select(.value != null and .value != ""))')
+		max_iterations: 1
+	} + (if $model != "" then {judge_model_ids: [$model]} else {} end)')
 
 ITER_PAYLOAD=$(jq -n \
 	--arg task_id "$TASK_ID" \
@@ -196,10 +196,11 @@ VERDICT_PAYLOAD=$(printf '%s' "$CLEAN_RESPONSE" | jq -c \
 	--arg iter_id "$ITERATION_ID" \
 	--arg judge_id "$JUDGE_ID" \
 	--arg model "$JUDGE_MODEL" \
+	--argjson thr "$SCORE_THRESHOLD" \
 	'{
 		task_id: $task_id,
 		score: .score,
-		passed: (.passed // (.score >= 0.75)),
+		passed: (.passed // (.score >= $thr)),
 		judge_type: "standard",
 		iteration_id: $iter_id,
 		judge_id: $judge_id,
