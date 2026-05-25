@@ -7,6 +7,13 @@
 
 # Changelog
 
+## [0.15.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.15.0...ecosystem-v0.15.1) (2026-05-25)
+
+
+### Bug Fixes
+
+* **ci:** use paths_released to gate npm publish :rage: ([#37](https://github.com/onlooker-community/ecosystem/issues/37)) ([c62b17f](https://github.com/onlooker-community/ecosystem/commit/c62b17f7e1352cfe260a23c8f48be30f72edbbed))
+
 ## [0.15.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.14.0...ecosystem-v0.15.0) (2026-05-25)
 
 
