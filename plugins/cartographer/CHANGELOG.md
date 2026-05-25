@@ -1,0 +1,20 @@
+# Changelog
+
+All notable changes to the Cartographer plugin are documented here.
+
+## [0.1.0] — unreleased
+
+### Added
+
+- SessionStart hook with interval gate and non-blocking background audit launch (`nohup setsid`)
+- PostToolUse hook on Write/Edit/MultiEdit with exact `basename(realpath(...))` matching for CLAUDE.md files
+- Five-phase audit pipeline: discover → extract → relate → synthesize → emit
+- LLM-assisted analysis for contradictions, stale references, dead rules, and scope collisions
+- `flock`-based cross-session audit lock with PID-file fallback for macOS
+- Commutative `finding_hash` (SHA256) for stable finding identity across audit runs
+- Atomic finding writes (`*.tmp` + `mv -f`) and `dedup/<hash>` sentinel store
+- At-least-once `cartographer.issue.found` event delivery; documented dedup contract
+- `/cartographer` skill with `--verbose`, `--status`, `--force`, `--scope`, and `--phase` flags
+- Four ADRs documenting key design decisions
+- Default `exclude_paths` covering `node_modules`, `.git`, `vendor`, `.venv`, and common build dirs
+- `enabled: false` default — opt-in activation via `.claude/settings.json`

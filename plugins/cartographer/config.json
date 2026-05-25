@@ -1,0 +1,21 @@
+{
+  "plugin_name": "cartographer",
+  "storage_path": "~/.onlooker",
+  "cartographer": {
+    "enabled": false,
+    "audit_interval_hours": 24,
+    "phase_timeout_seconds": 60,
+    "total_timeout_seconds": 600,
+    "extraction": {
+      "model": "claude-haiku-4-5-20251001",
+      "max_output_tokens": 2048,
+      "chunk_size_files": 10,
+      "chunk_overlap_pct": 10
+    },
+    "synthesis": {
+      "model": "claude-haiku-4-5-20251001",
+      "max_output_tokens": 2048
+    },
+    "exclude_paths": ["node_modules", ".git", "vendor", ".venv", "dist", ".next", ".nuxt", "build", "__pycache__"]
+  }
+}

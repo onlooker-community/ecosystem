@@ -4,28 +4,27 @@ This document describes how the Onlooker ecosystem fits together: the shared sub
 
 ## Overview
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  Claude Code session                                            │
-│                                                                 │
-│  ┌─────────────┐  ┌───────────┐  ┌──────────┐  ┌──────────┐  │
-│  │  ecosystem  │  │ archivist │  │ tribunal │  │   echo   │  │
-│  │  (substrate)│  │  plugin   │  │  plugin  │  │  plugin  │  │
-│  └──────┬──────┘  └─────┬─────┘  └────┬─────┘  └────┬─────┘  │
-│         │               │             │              │         │
-│         └───────────────┴─────────────┴──────────────┘         │
-│                               │                                 │
-│                    ┌──────────▼──────────┐                     │
-│                    │  onlooker-event.mjs  │  schema-validated   │
-│                    │  (canonical emitter) │  event envelope     │
-│                    └──────────┬──────────┘                     │
-│                               │                                 │
-│                    ┌──────────▼──────────┐                     │
-│                    │  ~/.onlooker/logs/  │                     │
-│                    │  onlooker-events    │  append-only JSONL   │
-│                    │  .jsonl             │                     │
-│                    └─────────────────────┘                     │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph session["Claude Code session"]
+        ecosystem["ecosystem<br/>(substrate)"]
+        archivist["archivist<br/>plugin"]
+        tribunal["tribunal<br/>plugin"]
+        echo["echo<br/>plugin"]
+        cartographer["cartographer<br/>plugin"]
+
+        emitter["onlooker-event.mjs<br/>(canonical emitter)"]
+        log["~/.onlooker/logs/<br/>onlooker-events.jsonl"]
+
+        ecosystem --> emitter
+        archivist --> emitter
+        tribunal --> emitter
+        echo --> emitter
+        cartographer --> emitter
+
+        emitter -->|"schema-validated<br/>event envelope"| log
+        log -.->|"append-only JSONL"| log
+    end
 ```
 
 ## The substrate layer: `ecosystem`
@@ -51,11 +50,18 @@ Plugins are independent packages under `plugins/<name>/`. Each has its own:
 
 Plugins communicate by **emitting events**, not by calling each other directly. An Echo evaluation and a Tribunal jury run both write to the same JSONL log; a dashboard or downstream consumer can query across both.
 
+### Cartographer
+
+[Cartographer](../plugins/cartographer) is the only proactive plugin in the ecosystem. Rather than reacting to tool calls or session events, it runs a periodic background audit of your entire persistent instruction layer (`CLAUDE.md`, `AGENTS.md`, `.claude/rules/`). It surfaces four finding types — `contradiction`, `dead_rule`, `stale_ref`, and `scope_collision` — and emits each as a `cartographer.issue.found` event before the misbehavior they would cause ever occurs.
+
+Findings are stored in `~/.onlooker/cartographer/<project-key>/findings/` and delivered at-least-once (deduplicated on `payload.finding_hash`). The audit runs as a detached background process; your session is never blocked.
+
 ### Plugin dependency model
 
 All plugins depend on `ecosystem`. No plugin depends on another plugin at runtime. This means:
 - Tribunal does not require Archivist to be installed.
 - Echo does not require Tribunal to be installed (despite evaluating similar things — see [Echo ADR-002](../plugins/echo/docs/adr/002-direct-evaluation-vs-tribunal-pipeline.md)).
+- Cartographer does not require any other plugin — it reads instruction files directly and emits events independently.
 - You can install any subset of plugins and the others still work.
 
 ## The event bus
