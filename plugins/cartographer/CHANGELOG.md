@@ -9,7 +9,7 @@ All notable changes to the Cartographer plugin are documented here.
 
 * **cartographer:** add proactive instruction-file audit plugin :mag: ([#35](https://github.com/onlooker-community/ecosystem/issues/35)) ([387d00a](https://github.com/onlooker-community/ecosystem/commit/387d00ad04da5aae91048254ad0526bb674ed498))
 
-## [0.1.0] — unreleased
+## [0.1.0](https://github.com/onlooker-community/ecosystem/releases/tag/cartographer-v0.1.0) (2026-05-25)
 
 ### Added
 
