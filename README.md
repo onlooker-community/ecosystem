@@ -16,6 +16,7 @@ The ecosystem is a **Claude Code plugin marketplace** built around a shared obse
 | [`archivist`](./plugins/archivist) | Structured session memory across context truncation. Extracts decisions, dead ends, and open questions; reinjects the most relevant items at the start of the next session. | Yes — disabled by default |
 | [`tribunal`](./plugins/tribunal) | Multi-agent quality gates. Wraps a task in an Actor → Jury → Meta-Judge → Gate loop; retries the Actor with critique until the gate passes or `max_iterations` is reached. | Yes — skill always available; Stop hook opt-in |
 | [`echo`](./plugins/echo) | Prompt-change regression detection. When a watched agent file is modified, runs a quality pass and reports whether the change improved, degraded, or had no measurable effect. | Yes — disabled by default |
+| [`cartographer`](./plugins/cartographer) | Proactive instruction-file auditor. Discovers all `CLAUDE.md`, `AGENTS.md`, and `.claude/rules/` files, maps their relationships, and surfaces contradictions, dead rules, stale references, and scope collisions before they cause agent misbehavior. | Yes — disabled by default |
 
 For how these fit together, see [docs/architecture.md](docs/architecture.md).
 
