@@ -16,16 +16,6 @@
       "model": "claude-haiku-4-5-20251001",
       "max_output_tokens": 2048
     },
-    "exclude_paths": [
-      "node_modules",
-      ".git",
-      "vendor",
-      ".venv",
-      "dist",
-      ".next",
-      ".nuxt",
-      "build",
-      "__pycache__"
-    ]
+    "exclude_paths": ["node_modules", ".git", "vendor", ".venv", "dist", ".next", ".nuxt", "build", "__pycache__"]
   }
 }
