@@ -73,12 +73,11 @@ command -v jq >/dev/null 2>&1 || _done
 # Identify changed agent files
 # ---------------------------------------------------------------------------
 
-# Files changed vs HEAD (unstaged + staged + untracked-that-are-watched).
-# Using diff-index to catch both staged and unstaged changes.
+# Collect all changed paths: unstaged, staged, and untracked.
 CHANGED_FILES=$(git -C "$REPO_ROOT" diff --name-only HEAD 2>/dev/null) || CHANGED_FILES=""
-# Also catch staged-only changes.
 STAGED_FILES=$(git -C "$REPO_ROOT" diff --name-only --cached 2>/dev/null) || STAGED_FILES=""
-ALL_CHANGED=$(printf '%s\n%s' "$CHANGED_FILES" "$STAGED_FILES" | sort -u | grep -v '^$') || ALL_CHANGED=""
+UNTRACKED_FILES=$(git -C "$REPO_ROOT" ls-files --others --exclude-standard 2>/dev/null) || UNTRACKED_FILES=""
+ALL_CHANGED=$(printf '%s\n%s\n%s' "$CHANGED_FILES" "$STAGED_FILES" "$UNTRACKED_FILES" | sort -u | grep -v '^$') || ALL_CHANGED=""
 [[ -z "$ALL_CHANGED" ]] && _done
 
 # Load watch and exclude patterns (bash 3 compatible — no mapfile).
