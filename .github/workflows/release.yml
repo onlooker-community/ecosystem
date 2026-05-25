@@ -33,19 +33,23 @@ jobs:
       # Code marketplace, not npm — a release for a sibling alone must not
       # trigger `npm publish`, which would attempt to re-publish ecosystem at
       # its existing version and fail.
+      #
+      # We check paths_released (a JSON array) rather than the per-path output
+      # key `.--release_created` because keys starting with `.` are silently
+      # dropped when release-please-action writes them to $GITHUB_OUTPUT.
       - uses: actions/checkout@v4
-        if: ${{ steps.release.outputs['.--release_created'] }}
+        if: ${{ contains(fromJSON(steps.release.outputs.paths_released || '[]'), '.') }}
 
       - uses: actions/setup-node@v4
-        if: ${{ steps.release.outputs['.--release_created'] }}
+        if: ${{ contains(fromJSON(steps.release.outputs.paths_released || '[]'), '.') }}
         with:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
 
       - run: npm ci
-        if: ${{ steps.release.outputs['.--release_created'] }}
+        if: ${{ contains(fromJSON(steps.release.outputs.paths_released || '[]'), '.') }}
 
       - run: npm publish
-        if: ${{ steps.release.outputs['.--release_created'] }}
+        if: ${{ contains(fromJSON(steps.release.outputs.paths_released || '[]'), '.') }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
