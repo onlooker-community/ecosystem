@@ -1,7 +1,7 @@
 {
-  ".": "0.14.0",
+  ".": "0.15.0",
   "plugins/archivist": "0.1.0",
   "plugins/tribunal": "1.0.0",
   "plugins/echo": "0.2.0",
-  "plugins/cartographer": "0.1.0"
+  "plugins/cartographer": "0.2.0"
 }
