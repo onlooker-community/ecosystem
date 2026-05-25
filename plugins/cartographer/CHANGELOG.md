@@ -2,6 +2,13 @@
 
 All notable changes to the Cartographer plugin are documented here.
 
+## [0.2.0](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.1.0...cartographer-v0.2.0) (2026-05-25)
+
+
+### Features
+
+* **cartographer:** add proactive instruction-file audit plugin :mag: ([#35](https://github.com/onlooker-community/ecosystem/issues/35)) ([387d00a](https://github.com/onlooker-community/ecosystem/commit/387d00ad04da5aae91048254ad0526bb674ed498))
+
 ## [0.1.0] — unreleased
 
 ### Added
