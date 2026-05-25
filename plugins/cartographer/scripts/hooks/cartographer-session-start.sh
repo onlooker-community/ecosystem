@@ -57,28 +57,33 @@ elif [[ -f "$STATE_FILE" ]]; then
 	TRIGGER="$INTERVAL_TRIGGER"
 fi
 
-# Acquire lock non-blocking — skip if another session's audit is running
+# Acquire lock non-blocking — skip if another session's audit is running.
+# portable-lock.sh uses atomic mkdir so no fd lifetime concerns.
 cartographer_lock_acquire "$LOCK_FILE" || exit 0
 
-# Launch the audit detached — hook must return immediately
+# Launch the audit detached — hook must return immediately.
+# setsid detaches from the controlling terminal so SIGHUP on session close
+# does not kill the background audit (ADR-001). Falls back to nohup-only on
+# macOS where setsid requires coreutils.
 export CARTOGRAPHER_DIR
 export CARTOGRAPHER_TRIGGER="$TRIGGER"
+export CARTOGRAPHER_REPO_ROOT="$REPO_ROOT"
 export ONLOOKER_DIR
 
-nohup bash -c "
-  trap 'source \"$PLUGIN_ROOT/scripts/lib/cartographer-lock.sh\"; cartographer_lock_release \"$LOCK_FILE\"' EXIT
-  source \"$PLUGIN_ROOT/scripts/lib/cartographer-config.sh\"
-  cartographer_config_load \"$REPO_ROOT\"
-  exec \"$PLUGIN_ROOT/scripts/run-audit.sh\"
-" >>"$CARTOGRAPHER_DIR/audit.log" 2>&1 &
-AUDIT_PID=$!
-
-# Write PID for macOS fallback path (also used by --force in skill)
-printf '%d' "$AUDIT_PID" >"$LOCK_FILE"
-
-# Release our flock fd; the child holds state via PID file
-if command -v flock &>/dev/null; then
-	exec 9>&- 2>/dev/null || true
+if command -v setsid &>/dev/null; then
+	nohup setsid bash -c "
+	  trap 'source \"$PLUGIN_ROOT/scripts/lib/cartographer-lock.sh\"; cartographer_lock_release \"$LOCK_FILE\"' EXIT
+	  source \"$PLUGIN_ROOT/scripts/lib/cartographer-config.sh\"
+	  cartographer_config_load \"$REPO_ROOT\"
+	  exec \"$PLUGIN_ROOT/scripts/run-audit.sh\"
+	" >>"$CARTOGRAPHER_DIR/audit.log" 2>&1 &
+else
+	nohup bash -c "
+	  trap 'source \"$PLUGIN_ROOT/scripts/lib/cartographer-lock.sh\"; cartographer_lock_release \"$LOCK_FILE\"' EXIT
+	  source \"$PLUGIN_ROOT/scripts/lib/cartographer-config.sh\"
+	  cartographer_config_load \"$REPO_ROOT\"
+	  exec \"$PLUGIN_ROOT/scripts/run-audit.sh\"
+	" >>"$CARTOGRAPHER_DIR/audit.log" 2>&1 &
 fi
 
 exit 0

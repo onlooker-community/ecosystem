@@ -34,8 +34,11 @@ source "$PLUGIN_ROOT/scripts/lib/cartographer-analyze.sh"
 CARTOGRAPHER_DIR="${CARTOGRAPHER_DIR:?CARTOGRAPHER_DIR must be set}"
 TRIGGER="${CARTOGRAPHER_TRIGGER:-manual}"
 TARGET_FILE="${CARTOGRAPHER_TARGET_FILE:-}"
+REPO_ROOT="${CARTOGRAPHER_REPO_ROOT:-$(pwd)}"
 AUDIT_ID=$(cartographer_ulid)
 START_TS=$(date +%s)
+
+_TIMEOUT_CMD=$(command -v gtimeout 2>/dev/null || command -v timeout 2>/dev/null || printf 'timeout')
 
 FINDINGS_DIR="$CARTOGRAPHER_DIR/findings"
 DEDUP_DIR="$CARTOGRAPHER_DIR/dedup"
@@ -48,13 +51,14 @@ ALL_FINDINGS="[]"
 
 _phase_timeout=$(cartographer_config_phase_timeout)
 _total_timeout=$(cartographer_config_total_timeout)
+log() { printf '[cartographer] %s\n' "$*" >>"$CARTOGRAPHER_DIR/audit.log" 2>&1; }
+[[ "$_total_timeout" -lt $(( _phase_timeout * 3 )) ]] && \
+	log "warning: total_timeout_seconds=${_total_timeout} is less than 3× phase_timeout_seconds=${_phase_timeout}; phases may be killed early"
 _model_extraction=$(cartographer_config_model_extraction)
 _model_synthesis=$(cartographer_config_model_synthesis)
 _max_tokens_extraction=$(cartographer_config_max_output_tokens_extraction)
 _max_tokens_synthesis=$(cartographer_config_max_output_tokens_synthesis)
 _exclude_json=$(cartographer_config_exclude_paths)
-
-log() { printf '[cartographer] %s\n' "$*" >>"$CARTOGRAPHER_DIR/audit.log" 2>&1; }
 
 emit_safe() {
 	cartographer_emit_event "$1" "$2" 2>>"$CARTOGRAPHER_DIR/audit.log" || true
@@ -63,8 +67,7 @@ emit_safe() {
 # ── Phase 1: Discover ──────────────────────────────────────────────────────────
 run_discover() {
 	log "phase=discover starting"
-	local repo_root
-	repo_root=$(cartographer_project_repo_root "$(pwd)")
+	local repo_root="$REPO_ROOT"
 
 	if [[ -n "$TARGET_FILE" ]]; then
 		# Targeted post-write audit: only the modified file
@@ -83,14 +86,6 @@ run_discover() {
 	file_count=$(printf '%s' "$DISCOVERED_FILES" | jq 'length')
 	log "phase=discover files=${file_count}"
 	PHASES_COMPLETED+=("discover")
-
-	emit_safe "cartographer.audit.complete" "$(jq -n \
-		--arg audit_id "$AUDIT_ID" \
-		--arg trigger "$TRIGGER" \
-		--argjson file_count "$file_count" \
-		--arg phase "discover" \
-		--arg status "started" \
-		'{"audit_id":$audit_id,"trigger":$trigger,"file_count":$file_count,"phase":$phase,"status":$status}')"
 }
 
 # ── Phase 2: Extract ───────────────────────────────────────────────────────────
@@ -125,10 +120,10 @@ run_extract() {
 run_relate() {
 	log "phase=relate starting"
 	local findings
-	findings=$(timeout "$_phase_timeout" bash -c \
+	findings=$($_TIMEOUT_CMD "$_phase_timeout" bash -c \
 		"source '$PLUGIN_ROOT/scripts/lib/cartographer-config.sh'
 		 source '$PLUGIN_ROOT/scripts/lib/cartographer-analyze.sh'
-		 cartographer_config_load '$(pwd)'
+		 cartographer_config_load '$REPO_ROOT'
 		 cartographer_analyze_contradiction '$DISCOVERED_FILES' \
 		   '$_model_extraction' '$_max_tokens_extraction' '$_phase_timeout'" \
 		2>>"$CARTOGRAPHER_DIR/audit.log") || {
@@ -148,18 +143,18 @@ run_synthesize() {
 	log "phase=synthesize starting"
 
 	local stale_findings scope_findings
-	stale_findings=$(timeout "$_phase_timeout" bash -c \
+	stale_findings=$($_TIMEOUT_CMD "$_phase_timeout" bash -c \
 		"source '$PLUGIN_ROOT/scripts/lib/cartographer-config.sh'
 		 source '$PLUGIN_ROOT/scripts/lib/cartographer-analyze.sh'
-		 cartographer_config_load '$(pwd)'
-		 cartographer_analyze_stale_ref '$DISCOVERED_FILES' '$(pwd)' \
+		 cartographer_config_load '$REPO_ROOT'
+		 cartographer_analyze_stale_ref '$DISCOVERED_FILES' '$REPO_ROOT' \
 		   '$_model_synthesis' '$_max_tokens_synthesis' '$_phase_timeout'" \
 		2>>"$CARTOGRAPHER_DIR/audit.log") || stale_findings="[]"
 
-	scope_findings=$(timeout "$_phase_timeout" bash -c \
+	scope_findings=$($_TIMEOUT_CMD "$_phase_timeout" bash -c \
 		"source '$PLUGIN_ROOT/scripts/lib/cartographer-config.sh'
 		 source '$PLUGIN_ROOT/scripts/lib/cartographer-analyze.sh'
-		 cartographer_config_load '$(pwd)'
+		 cartographer_config_load '$REPO_ROOT'
 		 cartographer_analyze_scope_collision '$GLOBAL_FILES' '$DISCOVERED_FILES' \
 		   '$_model_synthesis' '$_max_tokens_synthesis' '$_phase_timeout'" \
 		2>>"$CARTOGRAPHER_DIR/audit.log") || scope_findings="[]"
@@ -298,12 +293,16 @@ main() {
 	run_synthesize || { log "synthesize phase failed"; PHASES_FAILED+=("synthesize"); }
 	run_emit || { log "emit phase failed"; exit 1; }
 
-	# Only advance last_audit_at if no phases failed (full completion)
-	if [[ "${#PHASES_FAILED[@]}" -eq 0 ]]; then
+	# Only advance last_audit_at for full (non-targeted) audits with no failures.
+	# Targeted post-write audits cover only a single file and must not reset the
+	# interval gate — the next session start would otherwise skip a needed full run.
+	if [[ "${#PHASES_FAILED[@]}" -eq 0 && -z "$TARGET_FILE" ]]; then
 		printf '%d' "$(date +%s)" >"$CARTOGRAPHER_DIR/last_audit_at"
 		log "audit_id=${AUDIT_ID} completed successfully"
-	else
+	elif [[ "${#PHASES_FAILED[@]}" -gt 0 ]]; then
 		log "audit_id=${AUDIT_ID} partial — last_audit_at not advanced (failed: ${PHASES_FAILED[*]})"
+	else
+		log "audit_id=${AUDIT_ID} targeted audit complete — last_audit_at not advanced"
 	fi
 }
 

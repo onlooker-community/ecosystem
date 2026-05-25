@@ -58,24 +58,30 @@ mkdir -p "$CARTOGRAPHER_DIR"
 
 LOCK_FILE="$CARTOGRAPHER_DIR/audit.lock"
 
-# Non-blocking lock — if a full scheduled audit is running, skip
+# Non-blocking lock — if a full scheduled audit is running, skip.
+# portable-lock.sh uses atomic mkdir so no fd lifetime concerns.
 cartographer_lock_acquire "$LOCK_FILE" || exit 0
 
 export CARTOGRAPHER_DIR
 export CARTOGRAPHER_TRIGGER="post_tool_use"
 export CARTOGRAPHER_TARGET_FILE="$CANONICAL"
+export CARTOGRAPHER_REPO_ROOT="$REPO_ROOT"
 export ONLOOKER_DIR
 
-nohup bash -c "
-  trap 'source \"$PLUGIN_ROOT/scripts/lib/cartographer-lock.sh\"; cartographer_lock_release \"$LOCK_FILE\"' EXIT
-  source \"$PLUGIN_ROOT/scripts/lib/cartographer-config.sh\"
-  cartographer_config_load \"$REPO_ROOT\"
-  exec \"$PLUGIN_ROOT/scripts/run-audit.sh\"
-" >>"$CARTOGRAPHER_DIR/audit.log" 2>&1 &
-printf '%d' "$!" >"$LOCK_FILE"
-
-if command -v flock &>/dev/null; then
-	exec 9>&- 2>/dev/null || true
+if command -v setsid &>/dev/null; then
+	nohup setsid bash -c "
+	  trap 'source \"$PLUGIN_ROOT/scripts/lib/cartographer-lock.sh\"; cartographer_lock_release \"$LOCK_FILE\"' EXIT
+	  source \"$PLUGIN_ROOT/scripts/lib/cartographer-config.sh\"
+	  cartographer_config_load \"$REPO_ROOT\"
+	  exec \"$PLUGIN_ROOT/scripts/run-audit.sh\"
+	" >>"$CARTOGRAPHER_DIR/audit.log" 2>&1 &
+else
+	nohup bash -c "
+	  trap 'source \"$PLUGIN_ROOT/scripts/lib/cartographer-lock.sh\"; cartographer_lock_release \"$LOCK_FILE\"' EXIT
+	  source \"$PLUGIN_ROOT/scripts/lib/cartographer-config.sh\"
+	  cartographer_config_load \"$REPO_ROOT\"
+	  exec \"$PLUGIN_ROOT/scripts/run-audit.sh\"
+	" >>"$CARTOGRAPHER_DIR/audit.log" 2>&1 &
 fi
 
 exit 0

@@ -39,9 +39,7 @@ cartographer_config_load() {
 		--argjson plugin "$_CARTOGRAPHER_PLUGIN_CONFIG" \
 		--argjson home "$home_settings" \
 		--argjson repo "$repo_settings" \
-		'$plugin * {"cartographer": ($plugin.cartographer // {})} *
-		 {"cartographer": ($home.cartographer // {})} *
-		 {"cartographer": ($repo.cartographer // {})}')
+		'$plugin * {"cartographer": (($plugin.cartographer // {}) * ($home.cartographer // {}) * ($repo.cartographer // {}))}')
 }
 
 cartographer_config_get() {
@@ -61,13 +59,15 @@ cartographer_config_enabled() {
 }
 
 cartographer_config_model_extraction() {
-	cartographer_config_get '.cartographer.extraction.model' \
-		|| printf 'claude-haiku-4-5-20251001'
+	local v
+	v=$(cartographer_config_get '.cartographer.extraction.model')
+	printf '%s' "${v:-claude-haiku-4-5-20251001}"
 }
 
 cartographer_config_model_synthesis() {
-	cartographer_config_get '.cartographer.synthesis.model' \
-		|| printf 'claude-haiku-4-5-20251001'
+	local v
+	v=$(cartographer_config_get '.cartographer.synthesis.model')
+	printf '%s' "${v:-claude-haiku-4-5-20251001}"
 }
 
 cartographer_config_phase_timeout() {

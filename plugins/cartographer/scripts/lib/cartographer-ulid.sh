@@ -34,11 +34,14 @@ cartographer_ulid() {
 
 	local rand_hex
 	rand_hex=$(openssl rand -hex 10 2>/dev/null) \
-		|| rand_hex=$(printf '%020x' $((RANDOM * RANDOM * RANDOM & 0xFFFFFFFFFF)))
+		|| rand_hex=$(printf '%020x' $(( (RANDOM * RANDOM & 0xFFFFF) * 0x100000 + (RANDOM * RANDOM & 0xFFFFF) )))
 
-	local rand_num=$(( 16#${rand_hex:0:10} ))
+	# Bash integers are 63-bit signed, so split the 80-bit random across two 40-bit halves.
+	local rand_hi rand_lo
+	rand_hi=$(( 16#${rand_hex:0:10} ))
+	rand_lo=$(( 16#${rand_hex:10:10} ))
 	local rand_encoded
-	rand_encoded=$(_cartographer_ulid_encode "$rand_num" 16)
+	rand_encoded="$(_cartographer_ulid_encode "$rand_hi" 8)$(_cartographer_ulid_encode "$rand_lo" 8)"
 
 	printf '%s%s' "$ts_encoded" "$rand_encoded"
 }

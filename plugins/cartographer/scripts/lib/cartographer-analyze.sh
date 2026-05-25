@@ -11,13 +11,16 @@
 # Findings are normalized and returned for deduplication + storage.
 #
 # Usage:
-#   cartographer_analyze_contradiction <files_json> <model> <max_tokens> <phase_timeout>
-#   cartographer_analyze_stale_ref     <files_json> <repo_root> <model> <max_tokens> <phase_timeout>
-#   cartographer_analyze_dead_rule     <files_json> <repo_root> <model> <max_tokens> <phase_timeout>
-#   cartographer_analyze_scope         <global_files_json> <project_files_json> <model> <max_tokens> <phase_timeout>
+#   cartographer_analyze_contradiction  <files_json> <model> <max_tokens> <phase_timeout>
+#   cartographer_analyze_stale_ref      <files_json> <repo_root> <model> <max_tokens> <phase_timeout>
+#   cartographer_analyze_scope_collision <global_files_json> <project_files_json> <model> <max_tokens> <phase_timeout>
+#
+# Note: contradiction detection also flags dead_rule findings in a single LLM pass.
 #
 # Each function prints a JSON array of finding objects on stdout:
 #   [{type, severity, file_a, excerpt_a, file_b, excerpt_b, description, suggested_fix}]
+
+_CARTOGRAPHER_TIMEOUT_CMD=$(command -v gtimeout 2>/dev/null || command -v timeout 2>/dev/null || printf 'timeout')
 
 _cartographer_read_files_for_prompt() {
 	local files_json="$1"
@@ -72,7 +75,7 @@ ${corpus}"
 
 	local response
 	response=$(printf '%s' "$full_prompt" \
-		| timeout "$timeout_s" claude -p \
+		| $_CARTOGRAPHER_TIMEOUT_CMD "$timeout_s" claude -p \
 			--model "$model" \
 			--max-tokens "$max_tokens" \
 			2>/dev/null) || { printf '[]'; return 1; }
@@ -155,7 +158,7 @@ ${candidates}
 
 	local response
 	response=$(printf '%s' "$full_prompt" \
-		| timeout "$timeout_s" claude -p \
+		| $_CARTOGRAPHER_TIMEOUT_CMD "$timeout_s" claude -p \
 			--model "$model" \
 			--max-tokens "$max_tokens" \
 			2>/dev/null) || { printf '[]'; return 1; }
@@ -229,7 +232,7 @@ ${project_files}
 
 	local response
 	response=$(printf '%s' "$full_prompt" \
-		| timeout "$timeout_s" claude -p \
+		| $_CARTOGRAPHER_TIMEOUT_CMD "$timeout_s" claude -p \
 			--model "$model" \
 			--max-tokens "$max_tokens" \
 			2>/dev/null) || { printf '[]'; return 1; }

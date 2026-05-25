@@ -54,6 +54,6 @@ cartographer_file_content_hash() {
 	elif command -v shasum &>/dev/null; then
 		shasum -a 256 "$path" | cut -c1-16
 	else
-		python3 -c "import sys,hashlib; print(hashlib.sha256(open('$path','rb').read()).hexdigest()[:16])"
+		python3 -c "import sys,hashlib; print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest()[:16])" "$path"
 	fi
 }
