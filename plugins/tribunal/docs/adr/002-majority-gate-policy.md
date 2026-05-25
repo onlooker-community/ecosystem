@@ -13,11 +13,11 @@ After the Jury and Meta-Judge tiers produce scores, the Gate must decide: accept
 - **Meta-override** — the Meta-Judge's recommendation overrides the jury.
 - **Hybrid** — any combination of the above.
 
-The available policies in config are: `majority`, `unanimous`, `threshold`, `meta_override`.
+The available policies in config are: `majority`, `strict` (alias for `unanimous`), `unanimous`, `meta_override`.
 
 ## Decision
 
-The default gate policy is **`majority`**, with `score_threshold: 0.75` as a secondary signal used for reporting but not blocking.
+The default gate policy is **`majority`**. The gate requires **both** the jury policy vote **and** `score_threshold` to clear — both conditions must be true for a pass. `score_threshold: 0.75` is a hard blocking condition, not just a reporting signal.
 
 ## Rationale
 
@@ -39,10 +39,10 @@ The majority formula is `passed_count * 2 > total_count`. With two judges:
 
 This means with the default two-judge panel, **both judges must pass** for the gate to open. This behaves like unanimous in the 2-judge case. This was observed during early Tribunal development (Echo's own Tribunal evaluation exhausted all 3 iterations because the adversarial judge never passed). It is technically correct — strictly more than half of 2 requires 2 — but surprises users expecting "majority" to mean "1 out of 2".
 
-**The consequence is intentional:** two judges is already a lean panel. Requiring both to pass ensures quality signal from both perspectives before accepting. Users who want the 1/2 behavior can switch to `"gate_policy": "threshold"` with a score threshold, or add a third judge to make 2/3 meaningful.
+**The consequence is intentional:** two judges is already a lean panel. Requiring both to pass ensures quality signal from both perspectives before accepting. Users who want genuine 2/3 behavior should add a third judge type (e.g., `security`) to the panel — majority with three judges means two must pass, which is materially different from two-judge unanimous.
 
 ## Consequences
 
 - The `majority` policy with 2 judges is effectively `unanimous`. This should be documented prominently for users configuring judge panels.
-- Adding a third judge type (e.g., `security`) changes `majority` to mean 2/3, which is a meaningfully different bar. Users who want consistent behavior should specify `gate_policy: "unanimous"` or `gate_policy: "threshold"` explicitly.
+- Adding a third judge type (e.g., `security`) changes `majority` to mean 2/3, which is a meaningfully different bar. Users who want consistent behavior regardless of panel size should specify `gate_policy: "unanimous"` explicitly.
 - The `meta_override` policy gives the Meta-Judge final say, bypassing jury vote counts entirely. This is available but not the default — it introduces a single point of failure (Meta-Judge bias or hallucination) that the default policy is specifically designed to avoid.

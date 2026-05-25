@@ -98,20 +98,8 @@ Two layers ensure artifacts from one repo never surface in another:
 1. **Project keying** — the storage path is derived from the repo's git remote URL (SHA256, first 12 chars). Two different repos produce different keys.
 2. **Path validation** — every `files[]` entry extracted from the transcript is resolved against `git rev-parse --show-toplevel`. Entries referencing paths outside the repo or that don't exist are stripped before persisting.
 
-## Events emitted
-
-Archivist emits canonical `archivist.*` events from [`@onlooker-community/schema`](https://github.com/onlooker-community/schema). All events land in `~/.onlooker/logs/onlooker-events.jsonl`.
-
-| Event | When |
-|-------|------|
-| `archivist.compact.started` | Before extraction begins on `PreCompact`. |
-| `archivist.compact.complete` | After extraction; includes counts of decisions, dead ends, open questions extracted. |
-| `archivist.inject.started` | Before injection begins on `SessionStart`. |
-| `archivist.inject.complete` | After injection; includes item count and chars injected. |
-
 ## Requirements
 
-- The `ecosystem` plugin installed (for `~/.onlooker/` substrate and canonical event emission).
+- The `ecosystem` plugin installed (for `~/.onlooker/` substrate).
 - `claude` CLI on `PATH` for extraction.
 - `jq` for JSON manipulation.
-- `node` for canonical-event emission.

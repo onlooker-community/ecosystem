@@ -29,6 +29,6 @@ Each plugin ships `config.json` with defaults. Users override per-project in `.c
 ## Consequences
 
 - Plugin config keys must not collide with existing Claude Code top-level keys (`permissions`, `hooks`, `mcpServers`, `env`, etc.). Plugin namespaces (`"echo"`, `"tribunal"`, `"archivist"`) are chosen to avoid conflicts.
-- The settings overlay is a shallow key lookup, not a deep merge, for scalar values. Nested objects (e.g., `evaluation.model`) require explicit key paths in the config getter. This is fine for the current set of knobs but would become awkward for very deep schemas.
+- Merge behavior is not yet uniform across plugins. Tribunal and Archivist use a recursive `deepmerge` (implemented in jq) so a user can override a single nested key without replacing the whole sub-object. Echo uses a simpler per-key lookup that falls back to plugin defaults. New plugins should use `deepmerge` for consistency.
 - `config.json` is committed to the repo and ships with the plugin. It is not user-editable in place — users always override via `settings.json`. This prevents accidental plugin updates from overwriting user config.
 - There is no validation that `settings.json` keys are recognized by the plugin. An unknown key silently does nothing. A future lint step could warn on unrecognized plugin config keys.

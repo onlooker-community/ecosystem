@@ -14,7 +14,7 @@ Every plugin produces structured signals — session timings, Tribunal verdicts,
 
 ## Decision
 
-All events are written to a **centralized JSONL log** at `~/.onlooker/logs/onlooker-events.jsonl`, with every event validated against [`@onlooker-community/schema`](https://github.com/onlooker-community/schema) before write.
+All schema-defined events are written to a **centralized JSONL log** at `~/.onlooker/logs/onlooker-events.jsonl`, validated against [`@onlooker-community/schema`](https://github.com/onlooker-community/schema) before write. The log may also contain non-schema events from hooks that predate or have not yet been ported to the canonical pipeline (see Consequences).
 
 ## Rationale
 
@@ -35,5 +35,5 @@ SQLite would give us structured queries, indexes, and transactions. The tradeoff
 ## Consequences
 
 - The log grows indefinitely. A future rotation/archival feature is needed for long-lived developer machines. Currently operators must prune manually.
-- All event types must be defined in `@onlooker-community/schema` before a plugin can emit them. Adding a new event type requires a schema release. This is intentional friction — it prevents undocumented event shapes from accumulating in the log.
+- The goal is that all event types are defined in `@onlooker-community/schema` before a plugin emits them. Adding a new event type requires a schema release — intentional friction that prevents undocumented shapes from accumulating. In practice, `prompt_rule.*` events are a current exception: they are emitted to the log by the prompt-rules hook but are not yet defined in the schema. This should be resolved in a future schema release.
 - Concurrent appends from multiple hooks (e.g., a `PostToolUse` hook and a `Stop` hook firing close together) are safe for lines under ~4 KB on POSIX, but multi-kilobyte payloads could interleave. In practice, event payloads are small and this has not been an issue.
