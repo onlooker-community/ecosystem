@@ -61,7 +61,7 @@ For `iteration_number` from `0` while `iteration_number < max_iterations`:
    - The rubric criteria (just `name` + `weight` + `min_pass`).
    - On retries: a digest of the prior iteration's consensus, dissent (if any), and Meta-Judge override.
 
-   Capture the Actor's final output. **`$actor_output` must be the verbatim, complete text returned by the Agent tool — never a summary, paraphrase, or placeholder string.** Persist it:
+   Capture the Actor's final output. **`$actor_output` must be the verbatim, complete text returned by the Task tool — never a summary, paraphrase, or placeholder string.** Persist it:
    ```bash
    tribunal_write_actor_output "$project_key" "$task_id" "$iteration_id" "$actor_output"
    ```
@@ -78,7 +78,7 @@ For `iteration_number` from `0` while `iteration_number < max_iterations`:
    Persist the jury and emit `tribunal.jury.empaneled`:
    ```bash
    tribunal_write_iteration_artifact "$project_key" "$task_id" "$iteration_id" "jury" "$jury"
-   tribunal_jury_to_schema_judges "$jury"  # pass result as judges[] in the event
+   schema_judges=$(tribunal_jury_to_schema_judges "$jury")  # pass $schema_judges as judges[] in the event
    ```
 
 4. **Run each Judge.** For each entry in the jury panel:
@@ -93,11 +93,12 @@ For `iteration_number` from `0` while `iteration_number < max_iterations`:
 
    Collect the verdicts into a JSON array `verdicts`.
 
-   **Before moving to step 5, verify all per-iteration artifacts are on disk:**
+   **Before moving to step 5, verify all artifacts written so far are on disk:**
    - `iteration-<id>/actor.md` — verbatim actor output (written in step 2)
    - `iteration-<id>/jury.json` — jury panel (written in step 3)
    - `iteration-<id>/verdicts/<judge_id>.json` — one file per judge (written in step 4)
-   - `iteration-<id>/gate.json` — written by the gate step (step 7)
+
+   (`iteration-<id>/gate.json` is written in step 7 — verify it there.)
 
 5. **Aggregate + dissent.**
    ```bash
