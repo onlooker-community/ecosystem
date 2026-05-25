@@ -1,6 +1,6 @@
 {
   "name": "tribunal",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Multi-agent execution with LLM-as-a-Judge quality gates. An Actor performs work; a jury of typed Judges scores it against a project-overridable rubric; a Meta-Judge reviews the jury for bias; the gate decides accept, retry, or exhaust. Grounded in LLM-as-a-Judge (Zheng et al. 2023) and LLM-as-a-Meta-Judge (Wu et al. 2024). Builds on the Onlooker ecosystem plugin.",
   "author": {
     "name": "Onlooker Community",
@@ -9,7 +9,9 @@
   "homepage": "https://onlooker.dev",
   "repository": "https://github.com/onlooker-community/ecosystem",
   "license": "MIT",
-  "skills": ["./skills/tribunal"],
+  "skills": [
+    "./skills/tribunal"
+  ],
   "agents": [
     "./agents/tribunal-actor.md",
     "./agents/tribunal-judge-standard.md",

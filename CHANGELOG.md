@@ -7,6 +7,13 @@
 
 # Changelog
 
+## [0.15.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.15.1...ecosystem-v0.15.2) (2026-05-25)
+
+
+### Bug Fixes
+
+* **tribunal:** persist all artifacts on every iteration including retries :relieved: ([#41](https://github.com/onlooker-community/ecosystem/issues/41)) ([1636105](https://github.com/onlooker-community/ecosystem/commit/163610535a4ce0fa73c8fb82dc5c6296d2d1065a))
+
 ## [0.15.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.15.0...ecosystem-v0.15.1) (2026-05-25)
 
 
