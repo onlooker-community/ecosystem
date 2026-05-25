@@ -1,0 +1,14 @@
+{
+  "name": "echo",
+  "version": "0.1.0",
+  "description": "Prompt-change regression detection. When a watched agent file is modified, Echo runs a single-judge quality pass via claude -p and compares the score against a stored baseline to report improved, degraded, or neutral. Builds on the Onlooker ecosystem plugin.",
+  "author": {
+    "name": "Onlooker Community",
+    "url": "https://onlooker.dev"
+  },
+  "homepage": "https://onlooker.dev",
+  "repository": "https://github.com/onlooker-community/ecosystem",
+  "license": "MIT",
+  "skills": [],
+  "agents": []
+}

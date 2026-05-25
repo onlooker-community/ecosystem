@@ -1,0 +1,15 @@
+{
+  "plugin_name": "echo",
+  "storage_path": "~/.onlooker",
+  "echo": {
+    "enabled": false,
+    "watch_paths": ["plugins/*/agents/*.md"],
+    "exclude_paths": [],
+    "drift_threshold": 0.05,
+    "evaluation": {
+      "model": "claude-haiku-4-5-20251001",
+      "max_output_tokens": 512,
+      "timeout_seconds": 60
+    }
+  }
+}
