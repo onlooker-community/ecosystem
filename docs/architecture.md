@@ -4,28 +4,27 @@ This document describes how the Onlooker ecosystem fits together: the shared sub
 
 ## Overview
 
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│  Claude Code session                                                     │
-│                                                                          │
-│  ┌─────────────┐  ┌───────────┐  ┌──────────┐  ┌────────┐  ┌────────┐  │
-│  │  ecosystem  │  │ archivist │  │ tribunal │  │  echo  │  │ carto- │  │
-│  │  (substrate)│  │  plugin   │  │  plugin  │  │ plugin │  │grapher │  │
-│  └──────┬──────┘  └─────┬─────┘  └────┬─────┘  └───┬────┘  └───┬────┘  │
-│         │               │             │             │            │        │
-│         └───────────────┴─────────────┴─────────────┴────────────┘        │
-│                                       │                                   │
-│                          ┌────────────▼────────────┐                     │
-│                          │  onlooker-event.mjs      │  schema-validated   │
-│                          │  (canonical emitter)     │  event envelope     │
-│                          └────────────┬────────────┘                     │
-│                                       │                                   │
-│                          ┌────────────▼────────────┐                     │
-│                          │  ~/.onlooker/logs/       │                     │
-│                          │  onlooker-events         │  append-only JSONL  │
-│                          │  .jsonl                  │                     │
-│                          └──────────────────────────┘                    │
-└──────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph session["Claude Code session"]
+        ecosystem["ecosystem<br/>(substrate)"]
+        archivist["archivist<br/>plugin"]
+        tribunal["tribunal<br/>plugin"]
+        echo["echo<br/>plugin"]
+        cartographer["cartographer<br/>plugin"]
+
+        emitter["onlooker-event.mjs<br/>(canonical emitter)"]
+        log["~/.onlooker/logs/<br/>onlooker-events.jsonl"]
+
+        ecosystem --> emitter
+        archivist --> emitter
+        tribunal --> emitter
+        echo --> emitter
+        cartographer --> emitter
+
+        emitter -->|"schema-validated<br/>event envelope"| log
+        log -.->|"append-only JSONL"| log
+    end
 ```
 
 ## The substrate layer: `ecosystem`
