@@ -50,14 +50,22 @@ Emit `tribunal.session.start` with the resolved config (`judge_types`, `gate_pol
 
 For `iteration_number` from `0` while `iteration_number < max_iterations`:
 
-1. **Iteration start.** Generate `iteration_id=$(tribunal_ulid)`. `trigger` is `"initial"` for n=0, `"gate_blocked"` for retries. Emit `tribunal.iteration.start`.
+1. **Iteration start.** Generate `iteration_id=$(tribunal_ulid)`. `trigger` is `"initial"` for n=0, `"gate_blocked"` for retries. Initialize the iteration directory (creates `verdicts/` subdirectory):
+   ```bash
+   tribunal_init_iteration "$project_key" "$task_id" "$iteration_id"
+   ```
+   Emit `tribunal.iteration.start`.
 
 2. **Actor.** Emit `tribunal.actor.start`. Use the Task tool to spawn `tribunal-actor` with:
    - The task description.
    - The rubric criteria (just `name` + `weight` + `min_pass`).
    - On retries: a digest of the prior iteration's consensus, dissent (if any), and Meta-Judge override.
 
-   Capture the Actor's final output. Persist it: `tribunal_write_actor_output "$project_key" "$task_id" "$iteration_id" "$actor_output"`. Emit `tribunal.actor.complete` with `success: true` and the inferred `artifact_kind` (`file` / `patch` / `message` / `command`).
+   Capture the Actor's final output. **`$actor_output` must be the verbatim, complete text returned by the Agent tool — never a summary, paraphrase, or placeholder string.** Persist it:
+   ```bash
+   tribunal_write_actor_output "$project_key" "$task_id" "$iteration_id" "$actor_output"
+   ```
+   Emit `tribunal.actor.complete` with `success: true` and the inferred `artifact_kind` (`file` / `patch` / `message` / `command`).
 
 3. **Empanel the jury.** Resolve the panel from configured types:
    ```bash
@@ -67,16 +75,29 @@ For `iteration_number` from `0` while `iteration_number < max_iterations`:
    [[ -n "$rubric_types" && "$rubric_types" != "null" ]] && types="$rubric_types"
    jury=$(tribunal_jury_empanel "$types")
    ```
-   Persist the jury (`tribunal_write_iteration_artifact ... jury ...`) and emit `tribunal.jury.empaneled` with the schema-shaped `judges[]` (`tribunal_jury_to_schema_judges "$jury"`).
+   Persist the jury and emit `tribunal.jury.empaneled`:
+   ```bash
+   tribunal_write_iteration_artifact "$project_key" "$task_id" "$iteration_id" "jury" "$jury"
+   tribunal_jury_to_schema_judges "$jury"  # pass result as judges[] in the event
+   ```
 
 4. **Run each Judge.** For each entry in the jury panel:
    - Emit `tribunal.judge.start` with `judge_id`, `judge_type`, `judge_model_id`.
    - Spawn the judge subagent (`.subagent` field) with the Actor output + rubric.
    - Parse the JSON object the judge returns. Augment it with `task_id`, `iteration_id`, `judge_id`, `judge_model_id` from the panel entry, and `judge_type` from the panel entry (canonical, overriding what the agent self-reported).
    - Emit `tribunal.verdict` with that payload.
-   - Persist with `tribunal_write_judge_verdict`.
+   - **Persist the verdict. This call is required for every judge on every iteration — including retries:**
+     ```bash
+     tribunal_write_judge_verdict "$project_key" "$task_id" "$iteration_id" "$judge_id" "$verdict_json"
+     ```
 
    Collect the verdicts into a JSON array `verdicts`.
+
+   **Before moving to step 5, verify all per-iteration artifacts are on disk:**
+   - `iteration-<id>/actor.md` — verbatim actor output (written in step 2)
+   - `iteration-<id>/jury.json` — jury panel (written in step 3)
+   - `iteration-<id>/verdicts/<judge_id>.json` — one file per judge (written in step 4)
+   - `iteration-<id>/gate.json` — written by the gate step (step 7)
 
 5. **Aggregate + dissent.**
    ```bash
