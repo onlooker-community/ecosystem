@@ -125,3 +125,10 @@ All events land in `~/.onlooker/logs/onlooker-events.jsonl` and are validated ag
 - `claude` CLI on `PATH` (the Stop hook shells out to `claude -p` for its advisory pass).
 - `jq` for JSON manipulation.
 - `node` for canonical-event emission (the ecosystem plugin already requires this).
+
+## Architecture decisions
+
+Key decisions made during initial design are recorded in [`docs/adr/`](docs/adr/):
+
+- [ADR-001](docs/adr/001-actor-jury-meta-gate-loop.md) — The Actor → Jury → Meta-Judge → Gate loop
+- [ADR-002](docs/adr/002-majority-gate-policy.md) — Majority gate policy as default (and the 2-judge edge case)
