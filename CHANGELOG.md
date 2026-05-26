@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.15.2...ecosystem-v0.16.0) (2026-05-26)
+
+
+### Features
+
+* **governor:** resource governance and budget enforcement plugin :rocket: ([#43](https://github.com/onlooker-community/ecosystem/issues/43)) ([04e6d70](https://github.com/onlooker-community/ecosystem/commit/04e6d7051f27db752bb121d389d65b4d8ade04ad))
+
 ## [0.15.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.15.1...ecosystem-v0.15.2) (2026-05-25)
 
 
