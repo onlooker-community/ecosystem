@@ -7,7 +7,7 @@
     "global_policy_path": "~/.onlooker/governance/global-policy.yaml",
     "session": {
       "tokens_default": 100000,
-      "cost_usd_default": 1.00,
+      "cost_usd_default": 1.0,
       "reserve_pct": 10
     },
     "estimation": {

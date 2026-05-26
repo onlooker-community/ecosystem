@@ -58,11 +58,11 @@ setup() {
 	[ "$v" = "100000" ]
 }
 
-@test "default cost budget is 1.00" {
+@test "default cost budget is 1.0" {
 	governor_config_load ""
 	local v
 	v=$(governor_config_get '.governor.session.cost_usd_default')
-	[ "$v" = "1.00" ]
+	[ "$v" = "1.0" ]
 }
 
 @test "default safety margin is 1.3" {
