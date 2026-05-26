@@ -73,16 +73,20 @@ ESTIMATED_TOKENS=$(governor_estimate_tokens "$TOOL_INPUT")
 ESTIMATED_COST=$(governor_estimate_cost "$ESTIMATED_TOKENS")
 ESTIMATION_METHOD=$(governor_estimate_method)
 
-# Build the ledger record.
+# Build the completion ledger record.
+# estimated_tokens is negated to cancel the reservation written by PreToolUse.
+# actual_tokens (when present) complete the two-phase accounting so the running
+# total converges to real spend: N_est + (-N_est) + N_act = N_act.
 AGENT_TYPE="${TOOL_NAME:-Task}"
 TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null) || TS="1970-01-01T00:00:00Z"
+NEG_ESTIMATED=$(( -ESTIMATED_TOKENS ))
 
 RECORD=$(jq -n \
 	--arg ts "$TS" \
 	--arg sid "$SESSION_ID" \
 	--arg aid "${CLAUDE_SESSION_ID:-unknown}" \
 	--arg at "$AGENT_TYPE" \
-	--argjson est "$ESTIMATED_TOKENS" \
+	--argjson est "$NEG_ESTIMATED" \
 	--argjson cost "$ESTIMATED_COST" \
 	--argjson dur "$DURATION_MS" \
 	'{
@@ -94,6 +98,15 @@ RECORD=$(jq -n \
 		cost_usd_estimated: $cost,
 		duration_ms: $dur
 	}' 2>/dev/null) || RECORD="{}"
+
+# Compute actual total once; used for both the ledger record and the event payload.
+ACTUAL_TOTAL=""
+if [[ -n "$ACTUAL_INPUT_TOKENS" && -n "$ACTUAL_OUTPUT_TOKENS" ]]; then
+	ACTUAL_TOTAL=$(( ACTUAL_INPUT_TOKENS + ACTUAL_OUTPUT_TOKENS ))
+	RECORD=$(printf '%s' "$RECORD" | jq \
+		--argjson actual "$ACTUAL_TOTAL" \
+		'. + {actual_tokens: $actual}' 2>/dev/null) || true
+fi
 
 governor_ledger_append "$SESSION_ID" "$RECORD" || true
 
@@ -114,9 +127,7 @@ CALL_PAYLOAD=$(jq -n \
 		duration_ms: $dur
 	}' 2>/dev/null) || CALL_PAYLOAD="{}"
 
-# Attach actual token counts when PostToolUse exposes them.
-if [[ -n "$ACTUAL_INPUT_TOKENS" && -n "$ACTUAL_OUTPUT_TOKENS" ]]; then
-	ACTUAL_TOTAL=$(( ACTUAL_INPUT_TOKENS + ACTUAL_OUTPUT_TOKENS ))
+if [[ -n "$ACTUAL_TOTAL" ]]; then
 	ESTIMATION_ERROR=""
 	if (( ACTUAL_TOTAL > 0 )); then
 		ESTIMATION_ERROR=$(awk \

@@ -93,6 +93,7 @@ AGENT_TYPE=$(printf '%s' "$INPUT" | jq -r '.tool_name // "Task"' 2>/dev/null) ||
 # Estimate tokens for this spawn.
 # -----------------------------------------------------------------------
 ESTIMATED_TOKENS=$(governor_estimate_tokens "$TOOL_INPUT" "$SAFETY_MARGIN")
+ESTIMATED_COST=$(governor_estimate_cost "$ESTIMATED_TOKENS")
 ESTIMATION_METHOD=$(governor_estimate_method)
 
 # -----------------------------------------------------------------------
@@ -107,12 +108,40 @@ TOKENS_CONSUMED=0
 
 if lock_acquire "$GATE_LOCK" 3; then
 	TOKENS_CONSUMED=$(governor_ledger_total_tokens "$SESSION_ID")
-
 	PROJECTED=$(( TOKENS_CONSUMED + ESTIMATED_TOKENS ))
 
-	if (( PROJECTED > TOKENS_BUDGET )); then
+	# Hard stop: unconditionally block when projected exceeds budget * hard_stop_margin.
+	HARD_STOP_THRESHOLD=$(awk "BEGIN { printf \"%d\", int($TOKENS_BUDGET * $HARD_STOP_MARGIN) }" 2>/dev/null) \
+		|| HARD_STOP_THRESHOLD=$(( TOKENS_BUDGET * 2 ))
+
+	if (( PROJECTED > HARD_STOP_THRESHOLD )); then
+		DECISION="block"
+		REASON="ceiling_exceeded"
+	elif (( PROJECTED > TOKENS_BUDGET )); then
 		DECISION="block"
 		REASON="budget_exceeded"
+	fi
+
+	# Write reservation inside the gate lock so concurrent spawns see in-flight cost.
+	if [[ "$DECISION" == "allow" ]]; then
+		TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null) || TS="1970-01-01T00:00:00Z"
+		RESERVATION=$(jq -n \
+			--arg ts "$TS" \
+			--arg sid "$SESSION_ID" \
+			--arg aid "${CLAUDE_SESSION_ID:-unknown}" \
+			--arg at "$AGENT_TYPE" \
+			--argjson est "$ESTIMATED_TOKENS" \
+			--argjson cost "$ESTIMATED_COST" \
+			'{
+				ts: $ts,
+				session_id: $sid,
+				agent_id: $aid,
+				agent_type: $at,
+				estimated_tokens: $est,
+				cost_usd_estimated: $cost,
+				record_type: "reservation"
+			}' 2>/dev/null) || RESERVATION="{}"
+		governor_ledger_write_direct "$LEDGER_PATH" "$RESERVATION" || true
 	fi
 
 	lock_release "$GATE_LOCK"
@@ -159,8 +188,12 @@ governor_emit_event "governor.gate.checked" "$GATE_PAYLOAD" || true
 # -----------------------------------------------------------------------
 # Enforce decision.
 # -----------------------------------------------------------------------
-if [[ "$DECISION" == "block" && "$ENFORCEMENT" == "hard" ]]; then
-	_block "${REASON:-budget_exceeded}"
+# ceiling_exceeded always blocks regardless of enforcement mode.
+# budget_exceeded and lock_timeout only block in hard enforcement mode.
+if [[ "$DECISION" == "block" ]]; then
+	if [[ "$REASON" == "ceiling_exceeded" || "$ENFORCEMENT" == "hard" ]]; then
+		_block "${REASON:-budget_exceeded}"
+	fi
 fi
 
 _allow

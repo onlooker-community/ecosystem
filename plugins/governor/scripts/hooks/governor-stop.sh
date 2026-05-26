@@ -73,6 +73,12 @@ TOTAL_TOKENS_INT=$(printf '%s' "${TOTAL_TOKENS:-0}" | grep -oE '^[0-9]+' || prin
 TOKENS_BUDGET_INT=$(printf '%s' "${TOKENS_BUDGET:-0}" | grep -oE '^[0-9]+' || printf '0')
 (( TOTAL_TOKENS_INT > TOKENS_BUDGET_INT )) && UNDER_BUDGET="false"
 
+# Also check the cost dimension (float comparison via awk).
+if [[ "$UNDER_BUDGET" == "true" ]]; then
+	COST_OVER=$(awk "BEGIN { print (${TOTAL_COST:-0} > ${COST_BUDGET:-1.0}) ? 1 : 0 }" 2>/dev/null) || COST_OVER=0
+	[[ "$COST_OVER" == "1" ]] && UNDER_BUDGET="false"
+fi
+
 SESSION_PAYLOAD=$(jq -n \
 	--argjson total_cost "${TOTAL_COST:-0}" \
 	--argjson budget_usd "${COST_BUDGET:-1.0}" \

@@ -40,7 +40,8 @@ _governor_detect_tier() {
 		|| struct_count=0
 	struct_count=$(printf '%s' "$struct_count" | tr -d ' ')
 
-	if (( struct_count * 10 > len )); then
+	# >= 10% structural → code/JSON
+	if (( struct_count * 10 >= len )); then
 		printf 'code_json'
 		return 0
 	fi
@@ -53,6 +54,12 @@ _governor_detect_tier() {
 
 	if (( ascii_count * 10 < len * 7 )); then
 		printf 'non_latin'
+		return 0
+	fi
+
+	# 5–9% structural → mixed (prose with embedded code/JSON)
+	if (( struct_count * 20 >= len )); then
+		printf 'mixed'
 		return 0
 	fi
 
@@ -79,19 +86,17 @@ governor_estimate_tokens() {
 
 	local chars_per_token
 	case "$tier" in
-		code_json)  chars_per_token=3 ;;
-		mixed)      chars_per_token=2 ;;
-		non_latin)  chars_per_token=1 ;;
-		*)          chars_per_token=4 ;;
+		code_json)  chars_per_token="3.0" ;;
+		mixed)      chars_per_token="2.5" ;;
+		non_latin)  chars_per_token="1.5" ;;
+		*)          chars_per_token="4.0" ;;
 	esac
 
-	# Integer division then apply safety margin with awk
-	local base_tokens=$(( char_count / chars_per_token ))
-	(( base_tokens < 1 )) && base_tokens=1
-
+	# Single awk pass for fractional chars_per_token and safety margin
 	local tokens
-	tokens=$(awk "BEGIN { printf \"%d\", int($base_tokens * $safety_margin + 0.999) }" 2>/dev/null) \
-		|| tokens=$(( base_tokens * 2 ))
+	tokens=$(awk "BEGIN { printf \"%d\", int($char_count / $chars_per_token * $safety_margin + 0.999) }" 2>/dev/null) \
+		|| tokens=$(( char_count * 2 ))
+	(( tokens < 1 )) && tokens=1
 
 	printf '%s' "$tokens"
 }
