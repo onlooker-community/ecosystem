@@ -59,6 +59,19 @@
       "license": "MIT",
       "keywords": ["evaluation", "regression", "prompt-engineering", "testing", "quality"],
       "tags": ["evaluation", "testing"]
+    },
+    {
+      "name": "governor",
+      "source": "./plugins/governor",
+      "description": "Resource governance and budget enforcement. Tracks per-session token and cost spend, gates Task spawns before they exceed a configurable budget ceiling, and emits governor.* events for audit. Named for the steam-engine governor — a device that regulates output. Requires the ecosystem plugin.",
+      "author": {
+        "name": "Onlooker Community"
+      },
+      "homepage": "https://onlooker.dev",
+      "repository": "https://github.com/onlooker-community/ecosystem",
+      "license": "MIT",
+      "keywords": ["governance", "budget", "cost", "tokens", "enforcement", "audit"],
+      "tags": ["governance", "safety"]
     }
   ]
 }
