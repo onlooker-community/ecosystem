@@ -31,7 +31,10 @@ governor_config_load() {
 			|| merged="$defaults"
 	fi
 
-	for file in "${home_dir}/.claude/settings.json" "${repo_root}/.claude/settings.json"; do
+	local repo_settings=""
+	[[ -n "$repo_root" ]] && repo_settings="${repo_root}/.claude/settings.json"
+
+	for file in "${home_dir}/.claude/settings.json" "$repo_settings"; do
 		[[ -n "$file" && -f "$file" ]] || continue
 		local overlay
 		overlay=$(jq '{ governor: (.governor // {}) }' "$file" 2>/dev/null) || continue

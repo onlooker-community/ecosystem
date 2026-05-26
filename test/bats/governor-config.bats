@@ -92,3 +92,15 @@ setup() {
 	v=$(governor_config_get '.governor.no_such_key')
 	[ -z "$v" ]
 }
+
+@test "empty repo_root does not load /.claude/settings.json" {
+	# Place a settings.json at the absolute root path that an empty repo_root would produce.
+	# On a real machine this won't exist, but in CI it might; the guard should skip it.
+	# We verify that a file at / does not influence config by confirming the default holds.
+	governor_config_load ""
+	run governor_config_enabled
+	# Default is disabled — if /.claude/settings.json were loaded with {enabled:true}
+	# this would fail. We can't plant a file at / in tests, so we assert the default
+	# is intact (regression guard rather than direct injection test).
+	[ "$status" -ne 0 ]
+}

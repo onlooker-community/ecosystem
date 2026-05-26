@@ -41,10 +41,11 @@ source "${PLUGIN_ROOT}/scripts/lib/governor-events.sh"
 
 INPUT=$(cat)
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SESSION_ID=""
+CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 
 _done() { exit 0; }
 
-governor_config_load ""
+governor_config_load "$CWD"
 
 if ! governor_config_enabled; then
 	_done

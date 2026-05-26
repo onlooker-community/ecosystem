@@ -44,8 +44,9 @@ _done() { exit 0; }
 INPUT=$(cat)
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SESSION_ID=""
 [[ -z "$SESSION_ID" ]] && SESSION_ID="${CLAUDE_SESSION_ID:-unknown}"
+CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 
-governor_config_load ""
+governor_config_load "$CWD"
 
 if ! governor_config_enabled; then
 	_done
