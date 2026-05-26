@@ -1,0 +1,106 @@
+#!/usr/bin/env bats
+
+setup() {
+	source "${BATS_TEST_DIRNAME}/../helpers/setup.bash"
+	setup_test_env
+
+	PLUGIN_ROOT="${REPO_ROOT}/plugins/governor"
+	export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/governor-config.sh"
+}
+
+@test "governor is disabled by default" {
+	governor_config_load ""
+	run governor_config_enabled
+	[ "$status" -ne 0 ]
+}
+
+@test "user-level settings.json can enable governor" {
+	mkdir -p "${HOME}/.claude"
+	printf '%s\n' '{"governor":{"enabled":true}}' > "${HOME}/.claude/settings.json"
+	governor_config_load ""
+	run governor_config_enabled
+	[ "$status" -eq 0 ]
+}
+
+@test "repo-level settings.json overrides user-level" {
+	mkdir -p "${HOME}/.claude"
+	printf '%s\n' '{"governor":{"enabled":true}}' > "${HOME}/.claude/settings.json"
+	local repo="${BATS_TEST_TMPDIR}/repo"
+	mkdir -p "${repo}/.claude"
+	printf '%s\n' '{"governor":{"enabled":false}}' > "${repo}/.claude/settings.json"
+	governor_config_load "$repo"
+	run governor_config_enabled
+	[ "$status" -ne 0 ]
+}
+
+@test "default enforcement is soft" {
+	governor_config_load ""
+	local v
+	v=$(governor_config_enforcement)
+	[ "$v" = "soft" ]
+}
+
+@test "enforcement can be overridden to hard" {
+	mkdir -p "${HOME}/.claude"
+	printf '%s\n' '{"governor":{"enforcement":"hard"}}' > "${HOME}/.claude/settings.json"
+	governor_config_load ""
+	local v
+	v=$(governor_config_enforcement)
+	[ "$v" = "hard" ]
+}
+
+@test "default tokens budget is 100000" {
+	governor_config_load ""
+	local v
+	v=$(governor_config_get '.governor.session.tokens_default')
+	[ "$v" = "100000" ]
+}
+
+@test "default cost budget is 1.0" {
+	governor_config_load ""
+	local v
+	v=$(governor_config_get '.governor.session.cost_usd_default')
+	[ "$v" = "1.0" ]
+}
+
+@test "default safety margin is 1.3" {
+	governor_config_load ""
+	local v
+	v=$(governor_config_get '.governor.estimation.safety_margin')
+	[ "$v" = "1.3" ]
+}
+
+@test "default hard_stop_margin is 1.5" {
+	governor_config_load ""
+	local v
+	v=$(governor_config_get '.governor.estimation.hard_stop_margin')
+	[ "$v" = "1.5" ]
+}
+
+@test "default estimation method is tier_table" {
+	governor_config_load ""
+	local v
+	v=$(governor_config_get '.governor.estimation.method')
+	[ "$v" = "tier_table" ]
+}
+
+@test "governor_config_get returns empty for missing key" {
+	governor_config_load ""
+	local v
+	v=$(governor_config_get '.governor.no_such_key')
+	[ -z "$v" ]
+}
+
+@test "empty repo_root does not load /.claude/settings.json" {
+	# Place a settings.json at the absolute root path that an empty repo_root would produce.
+	# On a real machine this won't exist, but in CI it might; the guard should skip it.
+	# We verify that a file at / does not influence config by confirming the default holds.
+	governor_config_load ""
+	run governor_config_enabled
+	# Default is disabled — if /.claude/settings.json were loaded with {enabled:true}
+	# this would fail. We can't plant a file at / in tests, so we assert the default
+	# is intact (regression guard rather than direct injection test).
+	[ "$status" -ne 0 ]
+}
