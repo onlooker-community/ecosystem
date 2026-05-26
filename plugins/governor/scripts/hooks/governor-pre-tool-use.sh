@@ -1,0 +1,165 @@
+#!/usr/bin/env bash
+# Governor PreToolUse hook (matcher: Task).
+#
+# Gates Task spawns before they exceed the session budget. Uses
+# portable-lock.sh for an atomic check-and-reserve so concurrent spawns
+# cannot both pass a budget check simultaneously.
+#
+# Decision logic:
+#   - Estimate tokens for the spawn.
+#   - Read current consumed tokens from the JSONL ledger.
+#   - Allow if (consumed + estimated) <= budget_tokens.
+#   - Emit governor.gate.checked with decision and reason.
+#   - In "soft" enforcement: always allow, only emit the event.
+#   - In "hard" enforcement: block by returning {"decision": "block"} on
+#     stdout with exit 0 (Claude Code PreToolUse block protocol).
+#
+# Hook contract:
+#   - Exit 0 always.
+#   - To block: write {"decision": "block", "reason": "..."} to stdout.
+#   - To allow: write nothing (or {"decision": "allow"}) to stdout.
+#   - Skips silently when governor.enabled is false.
+
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+_ECOSYSTEM_ROOT="${ONLOOKER_ECOSYSTEM_ROOT:-}"
+if [[ -z "$_ECOSYSTEM_ROOT" ]]; then
+	_candidate="$(cd "${PLUGIN_ROOT}/../.." 2>/dev/null && pwd)"
+	if [[ -f "${_candidate}/scripts/lib/validate-path.sh" ]]; then
+		_ECOSYSTEM_ROOT="$_candidate"
+	fi
+fi
+
+if [[ -n "$_ECOSYSTEM_ROOT" && -f "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.sh" ]]; then
+	# shellcheck disable=SC1091
+	CLAUDE_PLUGIN_ROOT="$_ECOSYSTEM_ROOT" source "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.sh"
+	# shellcheck disable=SC1091
+	CLAUDE_PLUGIN_ROOT="$_ECOSYSTEM_ROOT" source "${_ECOSYSTEM_ROOT}/scripts/lib/portable-lock.sh"
+fi
+
+export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
+
+# shellcheck source=../lib/governor-config.sh
+source "${PLUGIN_ROOT}/scripts/lib/governor-config.sh"
+# shellcheck source=../lib/governor-events.sh
+source "${PLUGIN_ROOT}/scripts/lib/governor-events.sh"
+# shellcheck source=../lib/governor-estimate.sh
+source "${PLUGIN_ROOT}/scripts/lib/governor-estimate.sh"
+# shellcheck source=../lib/governor-ledger.sh
+source "${PLUGIN_ROOT}/scripts/lib/governor-ledger.sh"
+
+_allow() { exit 0; }
+
+_block() {
+	local reason="${1:-budget_exceeded}"
+	printf '{"decision":"block","reason":"%s"}\n' "$reason"
+	exit 0
+}
+
+INPUT=$(cat)
+SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SESSION_ID=""
+[[ -z "$SESSION_ID" ]] && SESSION_ID="${CLAUDE_SESSION_ID:-unknown}"
+
+governor_config_load ""
+
+if ! governor_config_enabled; then
+	_allow
+fi
+
+# -----------------------------------------------------------------------
+# Read config.
+# -----------------------------------------------------------------------
+ENFORCEMENT=$(governor_config_enforcement)
+TOKENS_BUDGET=$(governor_config_get '.governor.session.tokens_default')
+TOKENS_BUDGET="${TOKENS_BUDGET:-100000}"
+SAFETY_MARGIN=$(governor_config_get '.governor.estimation.safety_margin')
+SAFETY_MARGIN="${SAFETY_MARGIN:-1.3}"
+HARD_STOP_MARGIN=$(governor_config_get '.governor.estimation.hard_stop_margin')
+HARD_STOP_MARGIN="${HARD_STOP_MARGIN:-1.5}"
+
+# Respect env-var budget overrides set by orchestrating agents.
+if [[ -n "${ONLOOKER_SESSION_BUDGET_TOKENS:-}" ]]; then
+	TOKENS_BUDGET="$ONLOOKER_SESSION_BUDGET_TOKENS"
+fi
+
+TOOL_INPUT=$(printf '%s' "$INPUT" | jq -c '.tool_input // {}' 2>/dev/null) || TOOL_INPUT="{}"
+AGENT_TYPE=$(printf '%s' "$INPUT" | jq -r '.tool_name // "Task"' 2>/dev/null) || AGENT_TYPE="Task"
+
+# -----------------------------------------------------------------------
+# Estimate tokens for this spawn.
+# -----------------------------------------------------------------------
+ESTIMATED_TOKENS=$(governor_estimate_tokens "$TOOL_INPUT" "$SAFETY_MARGIN")
+ESTIMATION_METHOD=$(governor_estimate_method)
+
+# -----------------------------------------------------------------------
+# Atomic check-and-reserve via the ledger lock.
+# -----------------------------------------------------------------------
+LEDGER_PATH=$(governor_ledger_path "$SESSION_ID")
+GATE_LOCK="${LEDGER_PATH}.gate.lock"
+
+DECISION="allow"
+REASON=""
+TOKENS_CONSUMED=0
+
+if lock_acquire "$GATE_LOCK" 3; then
+	TOKENS_CONSUMED=$(governor_ledger_total_tokens "$SESSION_ID")
+
+	PROJECTED=$(( TOKENS_CONSUMED + ESTIMATED_TOKENS ))
+
+	if (( PROJECTED > TOKENS_BUDGET )); then
+		DECISION="block"
+		REASON="budget_exceeded"
+	fi
+
+	lock_release "$GATE_LOCK"
+else
+	# Could not acquire gate lock — treat as block to be safe in hard mode.
+	DECISION="block"
+	REASON="lock_timeout"
+fi
+
+TOKENS_AVAILABLE=$(( TOKENS_BUDGET - TOKENS_CONSUMED ))
+(( TOKENS_AVAILABLE < 0 )) && TOKENS_AVAILABLE=0
+
+# -----------------------------------------------------------------------
+# Emit governor.gate.checked.
+# -----------------------------------------------------------------------
+GATE_PAYLOAD=$(jq -n \
+	--arg sid "$SESSION_ID" \
+	--arg aid "${CLAUDE_SESSION_ID:-unknown}" \
+	--arg at "$AGENT_TYPE" \
+	--arg dec "$DECISION" \
+	--argjson est "$ESTIMATED_TOKENS" \
+	--argjson avail "$TOKENS_AVAILABLE" \
+	--arg method "$ESTIMATION_METHOD" \
+	--argjson margin "$SAFETY_MARGIN" \
+	'{
+		session_id: $sid,
+		agent_id: $aid,
+		agent_type: $at,
+		decision: $dec,
+		estimated_tokens: $est,
+		tokens_available: $avail,
+		estimation_method: $method,
+		safety_margin: $margin
+	}' 2>/dev/null) || GATE_PAYLOAD="{}"
+
+if [[ -n "$REASON" ]]; then
+	GATE_PAYLOAD=$(printf '%s' "$GATE_PAYLOAD" \
+		| jq --arg r "$REASON" '. + {reason: $r}' 2>/dev/null) \
+		|| true
+fi
+
+governor_emit_event "governor.gate.checked" "$GATE_PAYLOAD" || true
+
+# -----------------------------------------------------------------------
+# Enforce decision.
+# -----------------------------------------------------------------------
+if [[ "$DECISION" == "block" && "$ENFORCEMENT" == "hard" ]]; then
+	_block "${REASON:-budget_exceeded}"
+fi
+
+_allow
