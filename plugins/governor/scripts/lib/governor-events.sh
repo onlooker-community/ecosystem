@@ -52,27 +52,30 @@ governor_emit_event() {
 	local session_id
 	session_id=$(_governor_session_id)
 
-	local envelope
-	envelope=$(jq -n \
-		--arg et "$event_type" \
-		--arg sid "$session_id" \
+	local params
+	params=$(jq -n \
 		--arg plugin "$_GOVERNOR_PLUGIN_NAME" \
+		--arg sid "$session_id" \
+		--arg type "$event_type" \
 		--argjson payload "$payload" \
-		'{
-			event_type: $et,
-			schema_version: "1.0",
-			session_id: $sid,
-			plugin: $plugin,
-			payload: $payload
-		}' 2>/dev/null) || return 1
+		'{plugin: $plugin, session_id: $sid, event_type: $type, payload: $payload}' \
+		2>/dev/null) || return 1
 
-	local validated
-	validated=$(printf '%s' "$envelope" \
-		| ONLOOKER_DIR="${ONLOOKER_DIR:-}" \
-		  node "$event_js" validate 2>/dev/null) \
-		|| { printf 'governor_emit_event: schema validation failed for %s\n' "$event_type" >&2; return 1; }
+	local event
+	local stderr_file
+	stderr_file=$(mktemp -t governor-event-err.XXXXXX 2>/dev/null) || stderr_file="/tmp/governor-event-err.$$"
+	event=$(printf '%s' "$params" \
+		| ONLOOKER_DIR="${ONLOOKER_DIR:-$HOME/.onlooker}" \
+		  ONLOOKER_PLUGIN_NAME="$_GOVERNOR_PLUGIN_NAME" \
+		  node "$event_js" emit 2>"$stderr_file") || {
+		printf 'governor_emit_event: schema validation failed for %s\n' "$event_type" >&2
+		[[ -s "$stderr_file" ]] && cat "$stderr_file" >&2
+		rm -f "$stderr_file"
+		return 1
+	}
+	rm -f "$stderr_file"
 
-	local log="${ONLOOKER_EVENTS_LOG:-${ONLOOKER_DIR:-$HOME/.onlooker}/logs/onlooker-events.jsonl}"
-	mkdir -p "$(dirname "$log")" 2>/dev/null || true
-	printf '%s\n' "$envelope" >> "$log" 2>/dev/null
+	local log_path="${ONLOOKER_EVENTS_LOG:-${ONLOOKER_DIR:-$HOME/.onlooker}/logs/onlooker-events.jsonl}"
+	mkdir -p "$(dirname "$log_path")" 2>/dev/null || return 1
+	printf '%s\n' "$event" >> "$log_path"
 }

@@ -69,7 +69,7 @@ governor_ledger_append() {
 
 	while (( attempt < GOVERNOR_LEDGER_MAX_RETRIES )); do
 		if lock_acquire "$lock_path" "$GOVERNOR_LEDGER_LOCK_TIMEOUT"; then
-			printf '%s\n' "$record" >> "$ledger_path" 2>/dev/null
+			printf '%s\n' "$(printf '%s' "$record" | jq -c . 2>/dev/null)" >> "$ledger_path" 2>/dev/null
 			local write_ok=$?
 			lock_release "$lock_path"
 			if (( write_ok == 0 )); then
@@ -137,5 +137,5 @@ governor_ledger_call_count() {
 
 	[[ -f "$ledger_path" ]] || { printf '0'; return 0; }
 
-	wc -l < "$ledger_path" 2>/dev/null | tr -d ' ' || printf '0'
+	awk 'END{print NR}' "$ledger_path" 2>/dev/null || printf '0'
 }
