@@ -1,6 +1,6 @@
 {
   "name": "governor",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Resource governance and budget enforcement for the Onlooker ecosystem. Tracks per-session token and cost spend, gates Task spawns before they exceed a configurable budget ceiling, and emits governor.* events for audit. Named for the steam-engine governor — a device that regulates output. Builds on the Onlooker ecosystem plugin.",
   "author": {
     "name": "Onlooker Community",
