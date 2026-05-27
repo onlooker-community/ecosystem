@@ -37,7 +37,7 @@ scripts/lib/onlooker-event.mjs  ← canonical event builder; all plugins route t
 | governor | PreToolUse (Task spawns) | Budget gates on subagent spawns |
 | tribunal | Stop + skill invocation | Post-task quality gate; also invokable via `/tribunal` |
 
-Plugins communicate by emitting events to the JSONL log — they do not call each other directly. No plugin depends on another at runtime; any subset installs cleanly.
+Plugins communicate by emitting events to the JSONL log — they do not call each other directly. All plugins depend on the ecosystem substrate; no plugin depends on another plugin directly.
 
 ## Compass plugin (design phase)
 
@@ -85,4 +85,4 @@ Tests use an isolated temp home; nothing writes to your real `~/.onlooker/`.
 - Hook scripts source shared helpers from `scripts/lib/` (or the plugin's own `scripts/lib/`).
 - Event types follow `<plugin>.<noun>.<verb>` — e.g. `compass.check.skipped`, `tribunal.gate.blocked`.
 - ULIDs everywhere for IDs (not UUIDs). Use `tribunal_ulid` or the ecosystem equivalent.
-- Config defaults live in `config.json`; user overrides live in `~/.onlooker/<plugin>.json` or `.claude/<plugin>.json`. The merge order is: built-in defaults → user home → repo local.
+- Config defaults live in `config.json`. User overrides go in `~/.claude/settings.json` (global) or `.claude/settings.json` (per-project) under the plugin's namespace key (e.g. `"compass"`, `"tribunal"`). See ADR-004.

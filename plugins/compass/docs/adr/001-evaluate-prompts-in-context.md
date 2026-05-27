@@ -1,4 +1,4 @@
-# ADR-0001: Compass Evaluates Prompts-in-Context, Not Prompts-in-Isolation
+# ADR-001: Compass Evaluates Prompts-in-Context, Not Prompts-in-Isolation
 
 - Status: Accepted
 - Date: 2026-04-20

@@ -71,7 +71,7 @@ Rules applied in order; first `skip` match exits early.
 
 **Rule 1 — Tool class filter.** Write-class tools only: `Write`, `Edit`, `MultiEdit`, and `Bash` when the command matches a write pattern (redirect operators, `rm`, `mv`, `cp`, `git commit`, `git push`, `sed -i`, `awk -i`, `dd`, `truncate`, `tee`, `install`). Read-only tools (`Read`, `Glob`, `Grep`, `LS`, `WebSearch`, `WebFetch`) never gated.
 
-**Rule 2 — Dir-plus-stem cooldown.** Skip if the incoming file path shares the same parent directory and filename stem as a file successfully written in the last `cooldown.seconds` (default: 120). Stem comparison uses the full filename-before-first-dot (e.g. `foo.bak.py` has stem `foo.bak`, not `foo`). This handles same-file follow-up writes without suppressing checks on unrelated files. Shell-level renames (`mv`, `git mv`) are not intercepted; a rename followed by a write to a new path gets a full check — which is correct behavior.
+**Rule 2 — Dir-plus-stem cooldown.** Skip if the incoming file path shares the same parent directory and filename stem as a file successfully written in the last `cooldown.seconds` (default: 120). Stem comparison strips only the final extension (e.g. `foo.bak.py` has stem `foo.bak`, not `foo`). This handles same-file follow-up writes without suppressing checks on unrelated files. Note: `mv` in a Bash command is gated by Rule 1 like any write-class operation. What Rule 2 does NOT do is carry the cooldown identity across a rename — a write to the post-rename path is a different `(dir, stem)` pair and gets a full check.
 
 **Rule 3 — Turn budget.** No more than `max_checks_per_turn` evaluations (default: 3) per agent turn. Subsequent writes emit `compass.check.skipped` with `reason: "turn_budget_exhausted"`.
 
@@ -235,7 +235,6 @@ The re-check is capped at one per intervention. After one re-check, the three pa
     "max_checks_per_turn": 3,
     "min_context_chars": 80,
     "context_chars_max": 600,
-    "include_file_contents": false,
     "skip_globs": [
       "**/*.lock",
       "**/*.sum",
