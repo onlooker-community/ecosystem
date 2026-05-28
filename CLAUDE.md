@@ -63,7 +63,7 @@ See `plugins/compass/docs/adr/001-evaluate-prompts-in-context.md` for the full d
 
 1. Create `plugins/<name>/` with `.claude-plugin/plugin.json`, `config.json`, `hooks/hooks.json`.
 2. Use `scripts/lib/onlooker-event.mjs` for all event emission — never write directly to the JSONL log.
-3. Store runtime artifacts under `~/.onlooker/<name>/<project-key>/`.
+3. Store runtime artifacts under `${ONLOOKER_DIR:-$HOME/.onlooker}/<name>/<project-key>/`. Always use `$ONLOOKER_DIR` — never hardcode `~/.onlooker` — so the test suite's isolated temp home is respected.
 4. Derive the project key via `tribunal_project_key` (or equivalent) — first 12 hex chars of SHA256(`remote:<origin-url>`), falling back to SHA256(`root:<repo-root>`) for repos without a remote. See `plugins/tribunal/scripts/lib/tribunal-project-key.sh`.
 5. Register event types in `@onlooker-community/schema` before emitting them (the emitter validates the envelope).
 6. Fail-soft when `~/.onlooker/` is absent — plugins must not block a session they were not invited to.
@@ -84,5 +84,5 @@ Tests use an isolated temp home; nothing writes to your real `~/.onlooker/`.
 - All hooks are bash scripts. No Python, no Node entry points in hook scripts (they may shell out to `node` for event emission or heavy lifting).
 - Hook scripts source shared helpers from `scripts/lib/` (or the plugin's own `scripts/lib/`).
 - Event types follow `<plugin>.<noun>.<verb>` — e.g. `compass.check.skipped`, `tribunal.gate.blocked`.
-- ULIDs everywhere for IDs (not UUIDs). Use `tribunal_ulid` or the ecosystem equivalent.
+- ULIDs everywhere for IDs (not UUIDs). Each plugin ships its own `*_ulid` helper (e.g. `archivist-ulid.sh`, `tribunal-ulid.sh`); there is no shared ecosystem helper. Copy `plugins/tribunal/scripts/lib/tribunal-ulid.sh` as a starting point and rename the function prefix.
 - Config defaults live in `config.json`. User overrides go in `~/.claude/settings.json` (global) or `.claude/settings.json` (per-project) under the plugin's namespace key (e.g. `"compass"`, `"tribunal"`). See ADR-004.

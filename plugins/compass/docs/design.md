@@ -203,7 +203,7 @@ The re-check is capped at one per intervention. After one re-check, the three pa
 ```json
 {
   "plugin_name": "compass",
-  "storage_path": "~/.onlooker",
+  "storage_path": "${ONLOOKER_DIR:-$HOME/.onlooker}",
   "compass": {
     "enabled": false,
     "evaluator": {
@@ -271,6 +271,8 @@ The re-check is capped at one per intervention. After one re-check, the three pa
   }
 }
 ```
+
+`storage_path` is the default. At runtime, hooks resolve the actual root via `${ONLOOKER_DIR:-$HOME/.onlooker}` (sourced from `scripts/lib/validate-path.sh`). Never hardcode `~/.onlooker` in hook scripts — the test suite sets `ONLOOKER_DIR` to a temp directory for isolation.
 
 ---
 
