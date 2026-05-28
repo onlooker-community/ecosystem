@@ -61,7 +61,7 @@ Option 1 is rejected because it weakens Compass uniformly, including for writes 
 
 ## Implementation Notes
 
-- The hook script reads the most recent assistant turn from the session transcript. The transcript path is provided via `CLAUDE_TRANSCRIPT_PATH` if set, with a fallback read of the Onlooker JSONL event log filtered by `session_id` and `event_type: "session.prompt"`.
+- The hook script reads the most recent assistant turn from the session transcript. The transcript path is provided as `transcript_path` in the hook JSON payload (consistent with how `tribunal-stop-gate.sh` reads it: `jq -r '.transcript_path // ""'`). If `transcript_path` is absent or the file is unreadable, the hook proceeds with an empty `prior_assistant_turn`. The Onlooker event log is not a fallback — `session.prompt` events record user-prompt telemetry, not assistant-turn content.
 - Compass's evaluator prompt is updated to use a structured pair: `<prior_assistant_turn>` and `<context_excerpt>` as separate XML-delimited slots. The convergence question is phrased as: "Given the prior assistant turn as context, would two independent readers converge on the same interpretation of this write?"
 - The symbolic skip pattern is implemented in bash using `jq` and regex, consistent with the plugin's hook style.
 - Skip-pattern decisions are logged as `compass.check.skipped` with `reason: "reply_to_question_pattern"` so false-negative and false-positive rates can be measured.

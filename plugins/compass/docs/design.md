@@ -83,9 +83,10 @@ Rules applied in order; first `skip` match exits early.
 
 Before the symbolic skip layer and the LLM evaluator can run, Compass needs the prior assistant turn. The hook resolves this in order:
 
-1. Read `CLAUDE_TRANSCRIPT_PATH` if set — parse as JSONL, find the most recent entry with `role: "assistant"`.
-2. Fall back to the Onlooker JSONL event log (`~/.onlooker/logs/onlooker-events.jsonl`), filtered by the current `session_id` and `event_type: "session.prompt"`, taking the most recent assistant-role entry.
-3. If neither source yields a prior turn within `transcript_max_age_seconds` (default: 300), proceed with an empty `prior_assistant_turn`. This degrades gracefully — the evaluator still runs on the context excerpt alone, which is correct for the first message in a session.
+1. Read `transcript_path` from the hook JSON payload (the same field `tribunal-stop-gate.sh` uses: `jq -r '.transcript_path // ""'`). Parse as JSONL, find the most recent entry with `role: "assistant"`.
+2. If `transcript_path` is absent, empty, or the file does not exist, proceed with an empty `prior_assistant_turn`. This degrades gracefully — the evaluator still runs on the context excerpt alone, which is correct for the first message in a session or any context where the transcript is unavailable.
+
+Note: the Onlooker JSONL event log is not a fallback source for assistant turns. Events like `session.prompt` are user-prompt telemetry (emitted on `UserPromptSubmit`) and do not contain assistant-turn content. The hook payload's `transcript_path` is the only reliable source.
 
 The prior assistant turn is truncated to `prior_turn_chars_max` (default: 800) before use. The same sanitization pipeline (XML delimiter stripping, control-character removal, null-byte removal) applies to this field.
 
