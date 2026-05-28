@@ -4,7 +4,7 @@
 **Tagline:** *Writes with intent.*  
 **Status:** Design (pre-implementation)
 
-Compass is the alignment gate in the Onlooker ecosystem. It fires on `PreToolUse` for write-class operations, evaluates whether the pending write has sufficient intent clarity to proceed, and intervenes with a structured clarification prompt when confidence falls below a configurable threshold. It is the only plugin in the ecosystem that operates before work begins — complementing warden (safety), governor (budget), and tribunal (post-task quality).
+Compass is the alignment gate in the Onlooker ecosystem. It fires on `PreToolUse` for write-class operations, evaluates whether the pending write has sufficient intent clarity to proceed, and intervenes with a structured clarification prompt when confidence falls below a configurable threshold. It is the only plugin that gates write-class tool calls before they execute — complementing governor (budget, `PreToolUse`), tribunal (post-task quality), and warden (safety, planned).
 
 ---
 
@@ -96,13 +96,13 @@ The prior assistant turn is truncated to `prior_turn_chars_max` (default: 800) b
 Before invoking the LLM evaluator, Compass performs a cheap pattern check. If both conditions are true, the write is passed through as `confident` without an API call:
 
 1. **Prior turn is an enumerated question.** The prior assistant turn contains a numbered list (lines matching `^\s*[0-9]+[\.\)]\s+`) and includes a `?` somewhere in the turn.
-2. **Current context is an option reference.** The current context excerpt (the last user message, extracted from the context) matches the option-reference pattern: single-digit number, ordinal phrase ("the first one", "option 2"), or a short affirmation ("yes", "no", "both", "all", "none", "either").
+2. **Current context is an option reference.** The current context excerpt (the last user message, extracted from the context) matches the option-reference pattern: single-digit number, ordinal phrase ("the first one", "option 2"), or a short affirmation ("yes", "no", "both", "all", "none", "either") — **with no qualifier clause** (i.e., does not contain `\b(but|only if|unless|except|if)\b`).
 
 When the skip fires, Compass emits `compass.check.skipped` with `reason: "reply_to_question_pattern"` and passes the write through. This is the Jeong & Son declarative-substrate move: the answer to an enumerated question is not ambiguous; the LLM is reserved for the genuinely ambiguous residual.
 
 The skip pattern is controlled by `skip_patterns.reply_to_question.enabled` (default: `true`). When disabled, all writes that pass the trigger gate go to the full LLM evaluator.
 
-**Known false-negative case.** A reply of "both, but only if it's easy" matches the affirmation pattern and would be skipped. This is intentional — the qualifier "only if it's easy" is a hedge that the agent must handle in the context of the specific write, and Compass's job is not to evaluate hedged conditionals. If the write that follows turns out to be wrong, tribunal catches it post-task.
+**Hedged affirmations are not skipped.** A reply of "both, but only if it's easy" does not match the skip pattern because it contains a qualifier clause. It reaches the LLM evaluator with the prior assistant turn as context, where the conditional can be assessed meaningfully. Clean option references ("both", "the first one", "2") skip; qualified ones do not.
 
 ### Input Sanitizer
 
@@ -187,7 +187,7 @@ The re-check is capped at one per intervention. After one re-check, the three pa
 
 ## Integration Points
 
-**Warden.** Warden has no `PreToolUse` hook on write-class tools (it operates on shell commands via a different matcher). No ordering conflict. If Warden adds a write-class `PreToolUse` hook in the future, Warden should run first (it may hard-block; no point running Compass on a blocked call).
+**Warden (planned).** Warden does not yet exist in the repo. When implemented, it is expected to operate on shell commands via a different matcher and have no ordering conflict with Compass. If Warden adds a write-class `PreToolUse` hook, Warden should run first (it may hard-block; no point running Compass on a blocked call).
 
 **Governor.** Governor gates `Task` spawns (subagent budget). Compass gates write-class tools. No overlap. Compass evaluator calls are attributed to `plugin:compass` in Governor's budget ledger; if the budget is exhausted, evaluator calls are skipped and the write proceeds (consistent with Governor's soft-enforcement default).
 
@@ -285,8 +285,10 @@ Every time the evaluation pipeline runs, Compass sends content to the `evaluator
 | bash command string | yes (command only, not stdin) | yes |
 | prior assistant turn (≤800 chars) | yes | yes |
 | context excerpt (≤600 chars) | yes | yes |
-| session_id | yes | yes |
+| session_id | yes (request metadata) | yes (request metadata) |
 | file content | no | yes |
+
+`session_id` is passed as request metadata (alongside the prompt, not interpolated into the evaluator prompt body) so evaluator calls can be correlated with the session JSONL log without appearing in the prompt itself.
 
 **Near-zero egress.** Set `prior_turn_chars_max: 0` and `context_chars_max: 0` in addition to `include_file_contents: false`. With all three set, only tool name, file path, operation type, bash command, and session_id are transmitted.
 
@@ -356,22 +358,14 @@ Every time the evaluation pipeline runs, Compass sends content to the `evaluator
   "name": "compass",
   "version": "0.1.0",
   "description": "Pre-write intent clarity gate. Intercepts write-class tool calls and requires a confidence threshold before allowing them to proceed. Evaluates the pending write against the prior assistant turn as context to avoid false positives on question-answer turns.",
-  "tagline": "Writes with intent.",
   "author": "onlooker-community",
-  "requires": ["ecosystem"],
   "hooks": "hooks/hooks.json",
-  "config": "config.json",
   "skills": ["./skills/compass"],
-  "agents": [],
-  "events": [
-    "compass.check.passed",
-    "compass.check.failed",
-    "compass.check.skipped",
-    "compass.check.overridden",
-    "compass.check.canceled"
-  ]
+  "agents": []
 }
 ```
+
+The fields above match the schema enforced by `scripts/lint/check-manifests.mjs`. Fields that might seem natural here — `tagline`, `requires`, `config`, and `events` — are not part of the allowed schema and will produce lint warnings in non-strict mode and errors in `--strict` mode. Event types are registered separately in `@onlooker-community/schema`; plugin dependencies are documented in `docs/architecture.md`, not in the manifest.
 
 ---
 

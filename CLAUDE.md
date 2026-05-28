@@ -30,11 +30,11 @@ scripts/lib/onlooker-event.mjs  ← canonical event builder; all plugins route t
 | Plugin | Hook surface | When it fires |
 |--------|-------------|---------------|
 | ecosystem | SessionStart/End, PreToolUse, PostToolUse, UserPromptSubmit | Always — substrate |
-| archivist | Stop | Extracts decisions/dead-ends; reinjects at next SessionStart |
-| cartographer | Periodic background process | Audits instruction files for contradictions and dead rules |
+| archivist | PreCompact, SessionStart | Extracts decisions/dead-ends on compaction; reinjects at next SessionStart |
+| cartographer | SessionStart, PostToolUse (Write, Edit, MultiEdit) | Audits instruction files on session start and after instruction-file writes |
 | compass | PreToolUse (Write, Edit, MultiEdit, Bash) | Before any write — alignment check |
-| echo | PostToolUse on agent file writes | Regression-tests prompt changes |
-| governor | PreToolUse (Task spawns) | Budget gates on subagent spawns |
+| echo | Stop | Regression-tests prompt changes after each agent stop |
+| governor | SessionStart, PreToolUse (Task), PostToolUse (Task), Stop | Budget gates on subagent spawns; tracks spend per session |
 | tribunal | Stop + skill invocation | Post-task quality gate; also invokable via `/tribunal` |
 
 Plugins communicate by emitting events to the JSONL log — they do not call each other directly. All plugins depend on the ecosystem substrate; no plugin depends on another plugin directly.
