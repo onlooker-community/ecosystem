@@ -85,6 +85,19 @@
       "license": "MIT",
       "keywords": ["alignment", "intent", "safety", "pre-write", "evaluation", "clarification"],
       "tags": ["safety", "alignment"]
+    },
+    {
+      "name": "scribe",
+      "source": "./plugins/scribe",
+      "description": "Intent documentation from agent activity. Captures why changes were made — problem context, decisions, tradeoffs, and constraints — and distills them into readable Markdown artifacts at session end. Git logs record what changed; scribe records why. Requires the ecosystem plugin.",
+      "author": {
+        "name": "Onlooker Community"
+      },
+      "homepage": "https://onlooker.dev",
+      "repository": "https://github.com/onlooker-community/ecosystem",
+      "license": "MIT",
+      "keywords": ["documentation", "intent", "decisions", "tradeoffs", "why", "context"],
+      "tags": ["documentation", "memory"]
     }
   ]
 }
