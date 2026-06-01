@@ -1,0 +1,71 @@
+{
+  "plugin_name": "compass",
+  "storage_path": "~/.onlooker",
+  "compass": {
+    "enabled": false,
+    "evaluator": {
+      "model": "claude-haiku-4-5-20251001",
+      "n": 5,
+      "temperature": 0.3,
+      "max_output_tokens": 128,
+      "sample_timeout_seconds": 8,
+      "min_valid_samples": 3
+    },
+    "confidence_threshold": 0.65,
+    "stddev_threshold": 0.2,
+    "threshold_calibration_note": "Noise floor at N=5 temp=0.3 is ~0.62–0.65 for unambiguous tasks. Threshold at 0.65 catches borderline-unambiguous cases (acceptable cost: one clarifying prompt) and prevents ambiguous writes in the 0.60–0.64 range from proceeding silently. Run 'compass calibrate' to measure your project-specific baseline.",
+    "cooldown": {
+      "strategy": "path_and_identity",
+      "seconds": 120,
+      "identity_match": "dir_plus_stem"
+    },
+    "transcript": {
+      "prior_turn_chars_max": 800,
+      "transcript_max_age_seconds": 300
+    },
+    "skip_patterns": {
+      "reply_to_question": {
+        "enabled": true,
+        "question_pattern": "numbered_list_with_question_mark",
+        "reply_pattern": "option_reference_or_affirmation"
+      }
+    },
+    "max_checks_per_turn": 3,
+    "min_context_chars": 80,
+    "context_chars_max": 600,
+    "include_file_contents": false,
+    "skip_globs": ["**/*.lock", "**/*.sum", "**/node_modules/**", "**/.git/**", "**/dist/**", "**/build/**"],
+    "error_policy": "closed",
+    "circuit_breaker": {
+      "enabled": true,
+      "consecutive_failures_to_open": 3,
+      "open_duration_seconds": 300,
+      "open_behavior": "fail_open"
+    },
+    "sanitization": {
+      "strip_sequences": [
+        "<prior_assistant_turn>",
+        "</prior_assistant_turn>",
+        "<context_excerpt>",
+        "</context_excerpt>",
+        "<tool_input>",
+        "</tool_input>",
+        "<instructions>",
+        "</instructions>",
+        "<|",
+        "[INST]",
+        "[/INST]",
+        "<<SYS>>",
+        "<</SYS>>"
+      ],
+      "strip_null_bytes": true
+    },
+    "data_egress": {
+      "include_file_contents": false,
+      "note": "When false, only the tool name, file path, operation type, prior assistant turn excerpt, and context excerpt (<=600 chars) are sent. File contents are never sent. Set context_chars_max: 0 and prior_turn_chars_max: 0 for near-zero egress."
+    },
+    "intervention": {
+      "recheck_limit": 1
+    }
+  }
+}
