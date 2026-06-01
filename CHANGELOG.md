@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.17.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.16.0...ecosystem-v0.17.0) (2026-06-01)
+
+
+### Features
+
+* **compass:** pre-write intent clarity gate plugin :compass: ([#47](https://github.com/onlooker-community/ecosystem/issues/47)) ([144c2ef](https://github.com/onlooker-community/ecosystem/commit/144c2ef44d28bab3dcec14a9eace7ec76470d090))
+* **scribe:** intent documentation from agent activity :pencil2: ([#50](https://github.com/onlooker-community/ecosystem/issues/50)) ([f0a95d1](https://github.com/onlooker-community/ecosystem/commit/f0a95d1058e36d1bb5f0f645964d9e88e8f98b66))
+
 ## [0.16.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.15.2...ecosystem-v0.16.0) (2026-05-26)
 
 
