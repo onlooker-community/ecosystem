@@ -12,7 +12,7 @@
       "min_valid_samples": 3
     },
     "confidence_threshold": 0.65,
-    "stddev_threshold": 0.20,
+    "stddev_threshold": 0.2,
     "threshold_calibration_note": "Noise floor at N=5 temp=0.3 is ~0.62–0.65 for unambiguous tasks. Threshold at 0.65 catches borderline-unambiguous cases (acceptable cost: one clarifying prompt) and prevents ambiguous writes in the 0.60–0.64 range from proceeding silently. Run 'compass calibrate' to measure your project-specific baseline.",
     "cooldown": {
       "strategy": "path_and_identity",
@@ -34,14 +34,7 @@
     "min_context_chars": 80,
     "context_chars_max": 600,
     "include_file_contents": false,
-    "skip_globs": [
-      "**/*.lock",
-      "**/*.sum",
-      "**/node_modules/**",
-      "**/.git/**",
-      "**/dist/**",
-      "**/build/**"
-    ],
+    "skip_globs": ["**/*.lock", "**/*.sum", "**/node_modules/**", "**/.git/**", "**/dist/**", "**/build/**"],
     "error_policy": "closed",
     "circuit_breaker": {
       "enabled": true,
@@ -51,11 +44,19 @@
     },
     "sanitization": {
       "strip_sequences": [
-        "<prior_assistant_turn>", "</prior_assistant_turn>",
-        "<context_excerpt>", "</context_excerpt>",
-        "<tool_input>", "</tool_input>",
-        "<instructions>", "</instructions>",
-        "<|", "[INST]", "[/INST]", "<<SYS>>", "<</SYS>>"
+        "<prior_assistant_turn>",
+        "</prior_assistant_turn>",
+        "<context_excerpt>",
+        "</context_excerpt>",
+        "<tool_input>",
+        "</tool_input>",
+        "<instructions>",
+        "</instructions>",
+        "<|",
+        "[INST]",
+        "[/INST]",
+        "<<SYS>>",
+        "<</SYS>>"
       ],
       "strip_null_bytes": true
     },
