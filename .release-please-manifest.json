@@ -6,5 +6,6 @@
   "plugins/cartographer": "0.2.0",
   "plugins/governor": "0.2.0",
   "plugins/compass": "0.2.0",
-  "plugins/scribe": "0.2.0"
+  "plugins/scribe": "0.2.0",
+  "plugins/counsel": "0.1.0"
 }

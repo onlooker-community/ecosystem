@@ -98,6 +98,19 @@
       "license": "MIT",
       "keywords": ["documentation", "intent", "decisions", "tradeoffs", "why", "context"],
       "tags": ["documentation", "memory"]
+    },
+    {
+      "name": "counsel",
+      "source": "./plugins/counsel",
+      "description": "Weekly synthesis and recommendations from your full observability stack. Reads all plugin event logs, identifies patterns, surfaces improvement opportunities, and injects a structured brief at session start when the last brief is stale. Turns disparate logs into a coaching signal. Requires the ecosystem plugin.",
+      "author": {
+        "name": "Onlooker Community"
+      },
+      "homepage": "https://onlooker.dev",
+      "repository": "https://github.com/onlooker-community/ecosystem",
+      "license": "MIT",
+      "keywords": ["synthesis", "recommendations", "observability", "coaching", "patterns", "weekly"],
+      "tags": ["observability", "coaching"]
     }
   ]
 }
