@@ -1,0 +1,20 @@
+{
+  "scribe": {
+    "enabled": true,
+    "evaluator": {
+      "model": "claude-haiku-4-5-20251001",
+      "timeout": 60,
+      "max_tokens": 2048,
+      "temperature": 0.3
+    },
+    "capture": {
+      "min_turns": 3,
+      "prompt_max_chars": 1000,
+      "transcript_chars_max": 40000
+    },
+    "output": {
+      "mirror_to_project": false,
+      "project_dir": "docs/decisions"
+    }
+  }
+}
