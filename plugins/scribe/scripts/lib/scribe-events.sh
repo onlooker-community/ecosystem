@@ -3,7 +3,7 @@
 #
 # Thin wrapper around the ecosystem plugin's onlooker-event.mjs `emit` mode.
 # Every emission is validated against @onlooker-community/schema before being
-# appended to ~/.onlooker/logs/onlooker-events.jsonl.
+# appended to $ONLOOKER_EVENTS_LOG (defaults to $ONLOOKER_DIR/logs/onlooker-events.jsonl).
 #
 # Usage:
 #   scribe_emit_event "scribe.distill.complete" '{"session_id":"...","captures_processed":1,...}'

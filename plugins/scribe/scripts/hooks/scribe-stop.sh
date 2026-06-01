@@ -55,9 +55,9 @@ if [[ -z "$TRANSCRIPT_PATH" || ! -f "$TRANSCRIPT_PATH" ]]; then
 fi
 
 _distill_rc=0
-output_path=$(scribe_distill "$SESSION_ID" "$CWD" "$TRANSCRIPT_PATH" 2>/dev/null) || _distill_rc=$?
+output_path=$(scribe_distill "$SESSION_ID" "$CWD" "$TRANSCRIPT_PATH") || _distill_rc=$?
 if [[ $_distill_rc -ne 0 ]]; then
-	# rc=2 means below min_turns — not an error worth logging.
+	# rc=2 means below min_turns — silent skip, not an error.
 	[[ $_distill_rc -ne 2 ]] && printf 'scribe-stop: distillation failed for session %s\n' "$SESSION_ID" >&2
 	_done
 fi

@@ -73,6 +73,7 @@ scribe_extract_intent() {
 	local timeout_s="${3:-60}"
 	local max_tokens="${4:-2048}"
 	local temperature="${5:-0.3}"
+	local transcript_chars_max="${6:-40000}"
 
 	[[ -f "$transcript_path" ]] || return 1
 
@@ -96,7 +97,7 @@ scribe_extract_intent() {
 				end
 			)
 		else empty end
-	' "$transcript_path" 2>/dev/null | head -c 40000) || transcript_content=""
+	' "$transcript_path" 2>/dev/null | head -c "$transcript_chars_max") || transcript_content=""
 
 	[[ -z "$transcript_content" ]] && return 1
 
@@ -116,7 +117,7 @@ scribe_extract_intent() {
 		return 1
 	fi
 
-	local claude_args=(-p --max-turns 1 --model "$model")
+	local claude_args=(-p --max-turns 1 --model "$model" --max-tokens "$max_tokens")
 
 	local response=""
 	if command -v timeout >/dev/null 2>&1; then
@@ -134,9 +135,9 @@ scribe_extract_intent() {
 	clean=$(printf '%s' "$response" \
 		| sed -e 's/^```json[[:space:]]*//' -e 's/^```[[:space:]]*//' -e 's/[[:space:]]*```$//')
 
-	# Validate required keys.
+	# Validate all required keys from the extraction prompt.
 	if ! printf '%s' "$clean" | jq -e \
-		'.problem and (.decisions | type == "array") and (.tradeoffs | type == "array") and .summary' \
+		'.problem and (.decisions | type == "array") and (.tradeoffs | type == "array") and (.constraints | type == "array") and (.out_of_scope | type == "array") and .summary' \
 		>/dev/null 2>&1; then
 		printf 'scribe_extract_intent: response missing required keys\n' >&2
 		return 1

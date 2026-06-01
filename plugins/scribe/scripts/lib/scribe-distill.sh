@@ -154,12 +154,11 @@ scribe_distill() {
 	turn_count=$(scribe_count_turns "$transcript_path")
 
 	if [[ "$turn_count" -lt "$min_turns" ]]; then
-		printf 'scribe_distill: only %s turns (min %s) — skipping\n' "$turn_count" "$min_turns" >&2
 		return 2
 	fi
 
 	# Resolve config.
-	local model timeout_s max_tokens temperature
+	local model timeout_s max_tokens temperature transcript_chars_max
 	model=$(scribe_config_get '.scribe.evaluator.model')
 	[[ -z "$model" || "$model" == "null" ]] && model="claude-haiku-4-5-20251001"
 	timeout_s=$(scribe_config_get '.scribe.evaluator.timeout')
@@ -168,11 +167,13 @@ scribe_distill() {
 	[[ -z "$max_tokens" || "$max_tokens" == "null" ]] && max_tokens="2048"
 	temperature=$(scribe_config_get '.scribe.evaluator.temperature')
 	[[ -z "$temperature" || "$temperature" == "null" ]] && temperature="0.3"
+	transcript_chars_max=$(scribe_config_get '.scribe.capture.transcript_chars_max')
+	[[ -z "$transcript_chars_max" || "$transcript_chars_max" == "null" ]] && transcript_chars_max="40000"
 
 	# Run extraction.
 	local intent_json
 	intent_json=$(scribe_extract_intent \
-		"$transcript_path" "$model" "$timeout_s" "$max_tokens" "$temperature") || {
+		"$transcript_path" "$model" "$timeout_s" "$max_tokens" "$temperature" "$transcript_chars_max") || {
 		printf 'scribe_distill: extraction failed for session %s\n' "$session_id" >&2
 		return 1
 	}
@@ -218,7 +219,9 @@ scribe_distill() {
 		[[ -z "$project_dir" || "$project_dir" == "null" ]] && project_dir="docs/decisions"
 		local mirror_dir="${project_root}/${project_dir}"
 		if mkdir -p "$mirror_dir" 2>/dev/null; then
-			cp "$output_path" "${mirror_dir}/${filename}" 2>/dev/null || true
+			if cp "$output_path" "${mirror_dir}/${filename}" 2>/dev/null; then
+				artifacts=2
+			fi
 		fi
 	fi
 
