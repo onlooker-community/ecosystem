@@ -5,9 +5,10 @@
 # doesn't match a write pattern. When a write pattern is detected,
 # delegates to the shared compass-gate.sh pipeline.
 #
-# Hook contract:
-#   - Exit 0: allow the tool call.
-#   - Exit 1 with JSON on stdout: block with reason shown to the agent.
+# Hook contract (Claude Code PreToolUse protocol):
+#   - Always exits 0.
+#   - To block: compass_run_gate writes {"decision":"block","reason":"..."} to stdout.
+#   - To allow: nothing written to stdout.
 #   - Errors are written to stderr only.
 
 set -uo pipefail

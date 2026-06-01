@@ -4,9 +4,10 @@
 # Fires before write-class tool calls. Resolves the file path from the
 # tool input and delegates to the shared compass-gate.sh pipeline.
 #
-# Hook contract:
-#   - Exit 0: allow the tool call.
-#   - Exit 1 with JSON on stdout: block with reason shown to the agent.
+# Hook contract (Claude Code PreToolUse protocol):
+#   - Always exits 0.
+#   - To block: compass_run_gate writes {"decision":"block","reason":"..."} to stdout.
+#   - To allow: nothing written to stdout.
 #   - Errors are written to stderr only.
 
 set -uo pipefail

@@ -18,9 +18,10 @@
 #   compass_run_gate <tool_name> <file_path> <operation> \
 #                   <context_or_command> <session_id> <cwd>
 #
-# Exit codes:
-#   0 — allow (passed gate or skipped)
-#   1 — block (intervention output on stdout as JSON decision)
+# Hook contract (Claude Code PreToolUse protocol):
+#   - Always exits 0.
+#   - To block: write {"decision":"block","reason":"..."} to stdout before returning.
+#   - To allow: write nothing to stdout.
 
 # -----------------------------------------------------------------------
 # Helper: update session state (turn_check_count, circuit_breaker).
@@ -256,7 +257,7 @@ compass_run_gate() {
 	local cwd="${6:-}"
 
 	local _allow_exit=0
-	local _block_exit=1
+	local _block_exit=0
 
 	# ---- Rule 1: skip sentinel ----------------------------------------
 	if printf '%s' "${context}${file_path}" | grep -qF '[compass:skip]' 2>/dev/null; then
