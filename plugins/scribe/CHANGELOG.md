@@ -1,0 +1,8 @@
+# Changelog
+
+## [0.2.0](https://github.com/onlooker-community/ecosystem/compare/scribe-v0.1.0...scribe-v0.2.0) (2026-06-01)
+
+
+### Features
+
+* **scribe:** intent documentation from agent activity :pencil2: ([#50](https://github.com/onlooker-community/ecosystem/issues/50)) ([f0a95d1](https://github.com/onlooker-community/ecosystem/commit/f0a95d1058e36d1bb5f0f645964d9e88e8f98b66))
