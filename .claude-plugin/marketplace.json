@@ -72,6 +72,19 @@
       "license": "MIT",
       "keywords": ["governance", "budget", "cost", "tokens", "enforcement", "audit"],
       "tags": ["governance", "safety"]
+    },
+    {
+      "name": "compass",
+      "source": "./plugins/compass",
+      "description": "Pre-write intent clarity gate. Intercepts write-class tool calls and samples N=5 parallel evaluators to score intent clarity before allowing writes to proceed. Blocks when confidence is low or evaluators disagree, surfacing a structured clarification prompt. Requires the ecosystem plugin.",
+      "author": {
+        "name": "Onlooker Community"
+      },
+      "homepage": "https://onlooker.dev",
+      "repository": "https://github.com/onlooker-community/ecosystem",
+      "license": "MIT",
+      "keywords": ["alignment", "intent", "safety", "pre-write", "evaluation", "clarification"],
+      "tags": ["safety", "alignment"]
     }
   ]
 }
