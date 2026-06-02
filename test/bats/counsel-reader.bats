@@ -93,3 +93,40 @@ setup() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"scribe.distill.complete"* ]]
 }
+
+@test "read_events output is JSONL-shaped: one object per line" {
+  local log="${BATS_TEST_TMPDIR}/multi-events.jsonl"
+  local ts
+  ts=$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null) || ts="2099-01-01T00:00:00Z"
+  printf '%s\n' \
+    "{\"event_type\":\"tribunal.gate.blocked\",\"timestamp\":\"${ts}\",\"session_id\":\"s1\",\"payload\":{}}" \
+    "{\"event_type\":\"echo.regression.detected\",\"timestamp\":\"${ts}\",\"session_id\":\"s2\",\"payload\":{}}" \
+    "{\"event_type\":\"scribe.distill.complete\",\"timestamp\":\"${ts}\",\"session_id\":\"s3\",\"payload\":{}}" \
+    > "$log"
+  export ONLOOKER_EVENTS_LOG="$log"
+
+  local events
+  events=$(counsel_read_events "30" "60000")
+
+  # count_events must see exactly 3 records, not inflated by pretty-printing.
+  run counsel_count_events "$events"
+  [ "$status" -eq 0 ]
+  [ "$output" = "3" ]
+}
+
+@test "read_events output preserves source types for sources_from_events" {
+  local log="${BATS_TEST_TMPDIR}/source-events.jsonl"
+  local ts
+  ts=$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null) || ts="2099-01-01T00:00:00Z"
+  printf '%s\n' \
+    "{\"event_type\":\"tribunal.gate.blocked\",\"timestamp\":\"${ts}\",\"session_id\":\"s1\",\"payload\":{}}" \
+    > "$log"
+  export ONLOOKER_EVENTS_LOG="$log"
+
+  local events
+  events=$(counsel_read_events "30" "60000")
+
+  run counsel_sources_from_events "$events"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"tribunal_verdicts"* ]]
+}

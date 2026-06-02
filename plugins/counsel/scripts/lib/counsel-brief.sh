@@ -191,8 +191,6 @@ counsel_generate_brief() {
 	}
 
 	# Compute period bounds.
-	local now_epoch
-	now_epoch=$(date +%s 2>/dev/null) || now_epoch=0
 	local period_start period_end
 	period_end=$(date '+%Y-%m-%d' 2>/dev/null) || period_end="unknown"
 	if [[ "$(uname)" == "Darwin" ]]; then

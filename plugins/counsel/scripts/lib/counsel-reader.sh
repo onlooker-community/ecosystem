@@ -46,7 +46,9 @@ counsel_read_events() {
 	# Filter to events within the lookback window. If cutoff_ts is empty (date
 	# command unavailable) fall through and include all events.
 	local summary
-	summary=$(jq -r --arg cutoff "$cutoff_ts" '
+	# -rc: compact output keeps each object on one line (JSONL-shaped), which
+	# downstream counsel_count_events and counsel_sources_from_events require.
+	summary=$(jq -rc --arg cutoff "$cutoff_ts" '
 		select(.timestamp != null) |
 		select($cutoff == "" or .timestamp >= $cutoff) |
 		{
