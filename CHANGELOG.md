@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.19.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.18.0...ecosystem-v0.19.0) (2026-06-02)
+
+
+### Features
+
+* **warden:** untrusted-content gate enforcing the Agents Rule of Two :shield: ([#53](https://github.com/onlooker-community/ecosystem/issues/53)) ([210aa51](https://github.com/onlooker-community/ecosystem/commit/210aa51bff66226a0eec1f17292a2af4ea4ef56a))
+
 ## [0.18.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.17.0...ecosystem-v0.18.0) (2026-06-02)
 
 

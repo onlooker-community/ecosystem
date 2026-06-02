@@ -1,6 +1,6 @@
 {
   "name": "warden",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Untrusted-content gate. Scans content flowing in through WebFetch and Read for prompt-injection patterns, and when a threat is detected closes a session-scoped gate that blocks Write, Edit, and Bash until the user explicitly clears it. Grounded in Meta's Agents Rule of Two: an agent should hold no more than two of {private data, external actions, untrusted content} at once — warden removes the external-actions property while untrusted content is in play. Builds on the Onlooker ecosystem plugin.",
   "author": {
     "name": "Onlooker Community",

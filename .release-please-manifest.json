@@ -1,5 +1,5 @@
 {
-  ".": "0.18.0",
+  ".": "0.19.0",
   "plugins/archivist": "0.1.0",
   "plugins/tribunal": "1.0.1",
   "plugins/echo": "0.2.0",
@@ -8,5 +8,5 @@
   "plugins/compass": "0.2.0",
   "plugins/scribe": "0.2.0",
   "plugins/counsel": "0.2.0",
-  "plugins/warden": "0.1.0"
+  "plugins/warden": "0.2.0"
 }
