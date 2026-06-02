@@ -67,7 +67,7 @@ _warden_run_single_eval() {
 		-H "anthropic-version: 2023-06-01" \
 		-H "content-type: application/json" \
 		-d "$request_body" \
-		--max-time 15 \
+		--max-time "${_WARDEN_EVAL_MAX_TIME:-15}" \
 		2>/dev/null) || { printf '{"error":"curl_failed"}' > "$output_file"; return 1; }
 
 	http_code=$(printf '%s' "$http_response" | tail -n1)
@@ -81,7 +81,7 @@ _warden_run_single_eval() {
 			-H "anthropic-version: 2023-06-01" \
 			-H "content-type: application/json" \
 			-d "$request_body" \
-			--max-time 15 \
+			--max-time "${_WARDEN_EVAL_MAX_TIME:-15}" \
 			2>/dev/null) || { printf '{"error":"curl_failed_retry"}' > "$output_file"; return 1; }
 		http_code=$(printf '%s' "$http_response" | tail -n1)
 		response_body=$(printf '%s' "$http_response" | head -n -1)
@@ -122,11 +122,13 @@ _warden_mean() {
 	local values=("$@")
 	local n="${#values[@]}"
 	[[ "$n" -eq 0 ]] && { printf '0'; return; }
+	# Pass values via `awk -v` rather than interpolating into the program:
+	# confidences originate from model output and must be treated as data.
 	local sum=0 v
 	for v in "${values[@]}"; do
-		sum=$(awk "BEGIN {printf \"%.6f\", $sum + $v}" 2>/dev/null) || sum=0
+		sum=$(awk -v s="$sum" -v x="$v" 'BEGIN {printf "%.6f", s + x}' 2>/dev/null) || sum=0
 	done
-	awk "BEGIN {printf \"%.4f\", $sum / $n}" 2>/dev/null || printf '0'
+	awk -v s="$sum" -v n="$n" 'BEGIN {printf "%.4f", s / n}' 2>/dev/null || printf '0'
 }
 
 # Main evaluator entry point.
@@ -149,6 +151,10 @@ warden_evaluate() {
 	timeout_secs="${timeout_secs:-12}"
 	min_valid=$(warden_config_get '.warden.escalation.min_valid_samples')
 	min_valid="${min_valid:-2}"
+
+	# Bound each curl call by the configured per-sample timeout (not a hard-coded
+	# 15s). Visible to the subshells spawned below as a plain shell global.
+	_WARDEN_EVAL_MAX_TIME="$timeout_secs"
 
 	local prompt
 	prompt=$(_warden_build_prompt "$source_type" "$excerpt")
@@ -189,7 +195,9 @@ warden_evaluate() {
 		is_inj=$(printf '%s' "$content" | jq -r 'if (.is_injection != null) then (.is_injection|tostring) else empty end' 2>/dev/null) || is_inj=""
 		[[ -z "$is_inj" ]] && continue
 		valid_count=$((valid_count + 1))
-		conf=$(printf '%s' "$content" | jq -r '.confidence // 0.5' 2>/dev/null) || conf="0.5"
+		# Coerce to a number at the source: a manipulated model response could
+		# otherwise return a non-numeric confidence that flows into awk.
+		conf=$(printf '%s' "$content" | jq -r '(.confidence | if type=="number" then . else 0.5 end)' 2>/dev/null) || conf="0.5"
 		confidences+=("$conf")
 		if [[ "$is_inj" == "true" ]]; then
 			yes_votes=$((yes_votes + 1))

@@ -91,8 +91,11 @@ _matches_skip_glob() {
 	local file_path="$1"
 	local globs_json="$2"
 	[[ -z "$file_path" || -z "$globs_json" ]] && return 1
-	local globs glob pattern
-	mapfile -t globs < <(printf '%s' "$globs_json" | jq -r '.[]' 2>/dev/null) || return 1
+	# bash 3.2 (macOS default) has no `mapfile`; collect with a while-read loop.
+	local globs=() glob pattern
+	while IFS= read -r glob; do
+		[[ -n "$glob" ]] && globs+=("$glob")
+	done < <(printf '%s' "$globs_json" | jq -r '.[]' 2>/dev/null)
 	for glob in "${globs[@]}"; do
 		pattern="${glob//\*\*/DOUBLE_STAR}"
 		pattern="${pattern//\*/[^/]*}"

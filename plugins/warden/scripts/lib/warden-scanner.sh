@@ -21,8 +21,13 @@
 #             "matched_pattern":"<p>", "method":"<m>", "rationale":"<str>"}
 
 # awk-based float >= comparison. Returns 0 (true) if $1 >= $2.
+#
+# Values are passed via `awk -v` (data), never interpolated into the program
+# string: thresholds can originate from repo-level .claude/settings.json, which
+# is untrusted under warden's threat model. -v also makes non-numeric input
+# degrade to 0 rather than executing as awk code.
 _warden_ge() {
-	awk "BEGIN {exit !((${1:-0}) >= (${2:-0}))}" 2>/dev/null
+	awk -v a="${1:-0}" -v b="${2:-0}" 'BEGIN {exit !(a >= b)}' 2>/dev/null
 }
 
 _warden_scan_result() {

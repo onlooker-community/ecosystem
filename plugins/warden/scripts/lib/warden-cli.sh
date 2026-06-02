@@ -29,8 +29,11 @@ _warden_cli_resolve_session() {
 		return 0
 	fi
 
-	local closed
-	mapfile -t closed < <(warden_list_closed_sessions)
+	# bash 3.2 (macOS default) has no `mapfile`; collect with a while-read loop.
+	local closed=() line
+	while IFS= read -r line; do
+		[[ -n "$line" ]] && closed+=("$line")
+	done < <(warden_list_closed_sessions)
 	if [[ "${#closed[@]}" -eq 1 ]]; then
 		printf '%s' "${closed[0]}"
 		return 0
@@ -56,8 +59,10 @@ warden_cli() {
 
 	# Report ambiguity when multiple gates are closed and none was specified.
 	if [[ -z "$session_id" ]]; then
-		local closed
-		mapfile -t closed < <(warden_list_closed_sessions)
+		local closed=() line
+		while IFS= read -r line; do
+			[[ -n "$line" ]] && closed+=("$line")
+		done < <(warden_list_closed_sessions)
 		if [[ "${#closed[@]}" -gt 1 ]]; then
 			printf 'Multiple sessions have a closed gate. Re-run with an explicit session id:\n'
 			printf '  %s\n' "${closed[@]}"
