@@ -1,8 +1,15 @@
 {
-  "hooks": [
-    {
-      "event": "SessionStart",
-      "script": "scripts/hooks/counsel-session-start.sh"
-    }
-  ]
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hooks/counsel-session-start.sh"
+          }
+        ]
+      }
+    ]
+  }
 }
