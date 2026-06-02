@@ -142,6 +142,22 @@
           "jsonpath": "$.version"
         }
       ]
+    },
+    "plugins/warden": {
+      "changelog-path": "CHANGELOG.md",
+      "release-type": "simple",
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": false,
+      "component": "warden",
+      "draft": false,
+      "prerelease": false,
+      "extra-files": [
+        {
+          "type": "json",
+          "path": ".claude-plugin/plugin.json",
+          "jsonpath": "$.version"
+        }
+      ]
     }
   },
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json"

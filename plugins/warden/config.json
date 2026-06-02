@@ -1,0 +1,51 @@
+{
+  "plugin_name": "warden",
+  "storage_path": "~/.onlooker",
+  "warden": {
+    "enabled": false,
+    "scan": {
+      "sources": ["web_fetch", "file_read"],
+      "max_content_chars": 20000,
+      "skip_globs": ["**/*.lock", "**/*.sum", "**/node_modules/**", "**/.git/**", "**/dist/**", "**/build/**"],
+      "store_snippet": true,
+      "snippet_max_chars": 240
+    },
+    "detection": {
+      "close_threshold": 0.65,
+      "strong_pattern_confidence": 0.9,
+      "weak_pattern_confidence": 0.5,
+      "threshold_calibration_note": "Strong pattern hits (explicit override/exfil phrasing) score 0.9 and close the gate without an LLM call. Weak hits (suspicion markers near imperative verbs, delimiter tags, long base64 blobs) score 0.5 — below close_threshold — and escalate to the evaluator when escalation.enabled is true. Clean content never calls the model."
+    },
+    "escalation": {
+      "enabled": true,
+      "borderline_only": true,
+      "model": "claude-haiku-4-5-20251001",
+      "n": 3,
+      "temperature": 0.0,
+      "max_output_tokens": 192,
+      "sample_timeout_seconds": 12,
+      "min_valid_samples": 2
+    },
+    "gate": {
+      "blocked_tools": ["Write", "Edit", "MultiEdit", "Bash"],
+      "clear_policy": "user_override_only"
+    },
+    "sanitization": {
+      "strip_sequences": [
+        "<source_content>",
+        "</source_content>",
+        "<instructions>",
+        "</instructions>",
+        "<|",
+        "[INST]",
+        "[/INST]",
+        "<<SYS>>",
+        "<</SYS>>"
+      ],
+      "strip_null_bytes": true
+    },
+    "data_egress": {
+      "note": "On escalation, only a sanitized, length-capped excerpt of the ingested content is sent to the evaluator model. Set escalation.enabled=false to disable all egress — warden then relies on the deterministic pattern floor alone (zero network, zero egress, weaker coverage of novel phrasing)."
+    }
+  }
+}

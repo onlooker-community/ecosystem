@@ -36,6 +36,7 @@ scripts/lib/onlooker-event.mjs  ← canonical event builder; all plugins route t
 | echo | Stop | Regression-tests prompt changes after each agent stop |
 | governor | SessionStart, PreToolUse (Task), PostToolUse (Task), Stop | Budget gates on subagent spawns; tracks spend per session |
 | tribunal | Stop + skill invocation | Post-task quality gate; also invokable via `/tribunal` |
+| warden | PostToolUse (WebFetch, Read), PreToolUse (Write, Edit, MultiEdit, Bash), SessionStart + skill invocation | Scans ingested content for injection; closes a content gate that blocks write-class tools until cleared via `/warden` |
 
 Plugins communicate by emitting events to the JSONL log — they do not call each other directly. All plugins depend on the ecosystem substrate; no plugin depends on another plugin directly.
 
