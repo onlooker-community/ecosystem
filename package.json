@@ -26,7 +26,7 @@
     "test": "npm run test:bats && npm run test:schema",
     "test:bats": "bats test/bats",
     "test:schema": "node --test test/node/*.test.mjs",
-    "test:shellcheck": "shellcheck -S error -x install.sh scripts/common.sh scripts/hooks/*.sh scripts/lib/*.sh plugins/archivist/scripts/hooks/*.sh plugins/archivist/scripts/lib/*.sh plugins/tribunal/scripts/hooks/*.sh plugins/tribunal/scripts/lib/*.sh plugins/echo/scripts/hooks/*.sh plugins/echo/scripts/lib/*.sh plugins/governor/scripts/hooks/*.sh plugins/governor/scripts/lib/*.sh plugins/compass/scripts/hooks/*.sh plugins/compass/scripts/lib/*.sh plugins/scribe/scripts/hooks/*.sh plugins/scribe/scripts/lib/*.sh",
+    "test:shellcheck": "shellcheck -S error -x install.sh scripts/common.sh scripts/hooks/*.sh scripts/lib/*.sh plugins/archivist/scripts/hooks/*.sh plugins/archivist/scripts/lib/*.sh plugins/tribunal/scripts/hooks/*.sh plugins/tribunal/scripts/lib/*.sh plugins/echo/scripts/hooks/*.sh plugins/echo/scripts/lib/*.sh plugins/governor/scripts/hooks/*.sh plugins/governor/scripts/lib/*.sh plugins/compass/scripts/hooks/*.sh plugins/compass/scripts/lib/*.sh plugins/scribe/scripts/hooks/*.sh plugins/scribe/scripts/lib/*.sh plugins/counsel/scripts/hooks/*.sh plugins/counsel/scripts/lib/*.sh",
     "lint:references": "node scripts/lint/check-references.mjs",
     "lint:manifests": "node scripts/lint/check-manifests.mjs",
     "coverage:node": "node scripts/coverage/run-coverage.mjs",

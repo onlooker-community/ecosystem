@@ -1,0 +1,20 @@
+{
+  "counsel": {
+    "enabled": true,
+    "synthesis_interval_days": 7,
+    "lookback_days": 30,
+    "evaluator": {
+      "model": "claude-haiku-4-5-20251001",
+      "timeout": 90,
+      "max_tokens": 4096,
+      "temperature": 0.4
+    },
+    "capture": {
+      "min_events": 10,
+      "events_chars_max": 60000
+    },
+    "output": {
+      "brief_max_chars": 3000
+    }
+  }
+}
