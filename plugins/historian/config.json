@@ -1,0 +1,30 @@
+{
+  "plugin_name": "historian",
+  "storage_path": "~/.onlooker",
+  "historian": {
+    "enabled": false,
+    "indexing": {
+      "trigger": "SessionEnd",
+      "min_transcript_chars_to_index": 1200,
+      "chunk_target_chars": 2400,
+      "chunk_overlap_chars": 400,
+      "retention_days": 365
+    },
+    "sanitization": {
+      "redact_secret_patterns": true,
+      "drop_skip_marker": true,
+      "never_index_paths": []
+    },
+    "session_archive": {
+      "enabled": false,
+      "_note": "When true, the full transcript at SessionEnd is copied alongside the chunks so retrieval can link to the source. When false, only chunk bodies are retained."
+    },
+    "embedder": {
+      "backend": "none",
+      "_note": "Embedder backends (ollama, fastembed, remote) are deferred to a follow-up. The current 'none' value indexes chunks without vectors; retrieval is also deferred."
+    },
+    "retrieval": {
+      "_note": "UserPromptSubmit retrieval and surfacer are deferred to a follow-up commit; the hook currently no-ops."
+    }
+  }
+}
