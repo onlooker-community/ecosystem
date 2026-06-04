@@ -103,41 +103,111 @@ if [[ -z "$MEM_DIR" || ! -d "$MEM_DIR" ]]; then
 fi
 
 # ----------------------------------------------------------------------------
-# Cheap-tier checks.
+# Cheap-tier rate gate.
+#
+# Three knobs:
+#   cheap_checks.enabled            global on/off for the cheap tier
+#   cheap_checks.wall_clock_budget_ms   abort phases past this elapsed
+#   surfacer.max_pointer_chars      truncate additionalContext at this
 # ----------------------------------------------------------------------------
 
-SCAN_START_S=$(date +%s)
+CHEAP_ENABLED=$(curator_config_get '.curator.cheap_checks.enabled')
+SCAN_START_MS=$(python3 -c 'import time; print(int(time.time() * 1000))' 2>/dev/null) \
+	|| SCAN_START_MS=$(($(date +%s) * 1000))
+SCAN_START_S=$((SCAN_START_MS / 1000))
+
 curator_emit "curator.scan.started" "$SESSION_ID" "$(jq -cn '{ mode: "cheap" }')"
 
-MEMORIES=$(curator_memory_load_all "$MEM_DIR")
+if [[ "$CHEAP_ENABLED" == "false" ]]; then
+	# Cheap tier explicitly off — emit scan.complete with skip_reason
+	# and skip straight to the surfacer (which reads previously-persisted
+	# findings, if any).
+	curator_emit "curator.scan.complete" "$SESSION_ID" "$(jq -cn \
+		--arg mode "cheap" --arg outcome "skipped" \
+		--arg skip_reason "disabled" \
+		--argjson findings_new 0 --argjson findings_resolved 0 \
+		--argjson duration_ms 0 \
+		'{ mode: $mode, outcome: $outcome, skip_reason: $skip_reason,
+		   findings_new: $findings_new, findings_resolved: $findings_resolved,
+		   duration_ms: $duration_ms }')"
+	FINDINGS_NEW=0
+	# Skip the per-check pipeline; fall through to the surfacer.
+	OUTCOME_FOR_SCAN_COMPLETE="skipped"
+else
+	OUTCOME_FOR_SCAN_COMPLETE="ok"
+fi
 
-# Date check
-DATE_GRACE=$(curator_config_get '.curator.date_check.date_grace_period_days')
-[[ -z "$DATE_GRACE" || "$DATE_GRACE" == "null" ]] && DATE_GRACE=14
-DATE_CHECK_ENABLED=$(curator_config_get '.curator.date_check.enabled')
+BUDGET_MS=$(curator_config_get '.curator.cheap_checks.wall_clock_budget_ms')
+[[ -z "$BUDGET_MS" || "$BUDGET_MS" == "null" ]] && BUDGET_MS=500
 
+_curator_now_ms() {
+	python3 -c 'import time; print(int(time.time() * 1000))' 2>/dev/null \
+		|| echo "$(( $(date +%s) * 1000 ))"
+}
+
+_curator_over_budget() {
+	local now elapsed
+	now=$(_curator_now_ms)
+	elapsed=$((now - SCAN_START_MS))
+	(( elapsed > BUDGET_MS ))
+}
+
+# When the cheap tier is enabled, run the four checks under the budget
+# gate. Each phase checks the budget BEFORE its work — partial phases
+# are allowed to finish since check work itself is cheap.
 DATE_FINDINGS='[]'
-if [[ "$DATE_CHECK_ENABLED" != "false" ]]; then
-	DATE_FINDINGS=$(curator_check_dates "$MEMORIES" "$DATE_GRACE") || DATE_FINDINGS='[]'
-fi
-
-# Path reference check (requires a repo root).
 PATH_FINDINGS='[]'
-REF_CHECK_ENABLED=$(curator_config_get '.curator.reference_check.enabled')
-if [[ "$REF_CHECK_ENABLED" != "false" && -n "$REPO_ROOT" ]]; then
-	PATH_FINDINGS=$(curator_check_paths "$MEMORIES" "$REPO_ROOT") || PATH_FINDINGS='[]'
-fi
+BROKEN_INDEX='[]'
+ORPHANED='[]'
+BUDGET_TRIPPED="false"
+MEMORIES='[]'
 
-# Broken-index + orphan checks (cheap, no external dependencies).
-BROKEN_INDEX=$(curator_check_broken_index "$MEMORIES")
-ORPHANED=$(curator_check_orphaned "$MEMORIES")
+if [[ "$CHEAP_ENABLED" != "false" ]]; then
+	if _curator_over_budget; then
+		BUDGET_TRIPPED="true"
+	else
+		MEMORIES=$(curator_memory_load_all "$MEM_DIR")
+	fi
+
+	DATE_GRACE=$(curator_config_get '.curator.date_check.date_grace_period_days')
+	[[ -z "$DATE_GRACE" || "$DATE_GRACE" == "null" ]] && DATE_GRACE=14
+	DATE_CHECK_ENABLED=$(curator_config_get '.curator.date_check.enabled')
+
+	if [[ "$BUDGET_TRIPPED" != "true" && "$DATE_CHECK_ENABLED" != "false" ]]; then
+		if _curator_over_budget; then
+			BUDGET_TRIPPED="true"
+		else
+			DATE_FINDINGS=$(curator_check_dates "$MEMORIES" "$DATE_GRACE") || DATE_FINDINGS='[]'
+		fi
+	fi
+
+	REF_CHECK_ENABLED=$(curator_config_get '.curator.reference_check.enabled')
+	if [[ "$BUDGET_TRIPPED" != "true" && "$REF_CHECK_ENABLED" != "false" && -n "$REPO_ROOT" ]]; then
+		if _curator_over_budget; then
+			BUDGET_TRIPPED="true"
+		else
+			PATH_FINDINGS=$(curator_check_paths "$MEMORIES" "$REPO_ROOT") || PATH_FINDINGS='[]'
+		fi
+	fi
+
+	if [[ "$BUDGET_TRIPPED" != "true" ]]; then
+		if _curator_over_budget; then
+			BUDGET_TRIPPED="true"
+		else
+			BROKEN_INDEX=$(curator_check_broken_index "$MEMORIES")
+			ORPHANED=$(curator_check_orphaned "$MEMORIES")
+		fi
+	fi
+fi
 
 # ----------------------------------------------------------------------------
 # Persist findings (with dedup by deduped_hash) and emit per-finding events.
+# Skipped entirely when the cheap tier is disabled — the disabled path above
+# already emitted scan.complete and set FINDINGS_NEW=0.
 # ----------------------------------------------------------------------------
 
 NOW_TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-FINDINGS_NEW=0
+[[ "$CHEAP_ENABLED" == "false" ]] || FINDINGS_NEW=0
 
 _write_finding() {
 	local kind="$1"
@@ -189,27 +259,46 @@ _emit_kind_findings() {
 	done
 }
 
-_emit_kind_findings "date_decayed" "$DATE_FINDINGS"
-_emit_kind_findings "path_broken" "$PATH_FINDINGS"
-_emit_kind_findings "broken_index" "$BROKEN_INDEX"
-_emit_kind_findings "orphaned_memory" "$ORPHANED"
+if [[ "$CHEAP_ENABLED" != "false" ]]; then
+	_emit_kind_findings "date_decayed" "$DATE_FINDINGS"
+	_emit_kind_findings "path_broken" "$PATH_FINDINGS"
+	_emit_kind_findings "broken_index" "$BROKEN_INDEX"
+	_emit_kind_findings "orphaned_memory" "$ORPHANED"
+fi
 
 # ----------------------------------------------------------------------------
-# Watermark + scan.complete.
+# Watermark + scan.complete. The disabled-tier branch above already emitted
+# scan.complete; this branch fires only when the cheap tier ran (success or
+# budget tripped).
 # ----------------------------------------------------------------------------
 
-curator_storage_write_watermark "$(curator_last_cheap_scan_path "$PROJECT_KEY")" || true
+if [[ "$CHEAP_ENABLED" != "false" ]]; then
+	curator_storage_write_watermark "$(curator_last_cheap_scan_path "$PROJECT_KEY")" || true
 
-DURATION_MS=$(( ($(date +%s) - SCAN_START_S) * 1000 ))
-curator_emit "curator.scan.complete" "$SESSION_ID" "$(jq -cn \
-	--arg mode "cheap" --arg outcome "ok" \
-	--argjson findings_new "$FINDINGS_NEW" \
-	--argjson findings_resolved 0 \
-	--argjson duration_ms "$DURATION_MS" \
-	'{ mode: $mode, outcome: $outcome,
-	   findings_new: $findings_new,
-	   findings_resolved: $findings_resolved,
-	   duration_ms: $duration_ms }')"
+	DURATION_MS=$(( $(_curator_now_ms) - SCAN_START_MS ))
+	if [[ "$BUDGET_TRIPPED" == "true" ]]; then
+		curator_emit "curator.scan.complete" "$SESSION_ID" "$(jq -cn \
+			--arg mode "cheap" --arg outcome "skipped" \
+			--arg skip_reason "over_budget" \
+			--argjson findings_new "$FINDINGS_NEW" \
+			--argjson findings_resolved 0 \
+			--argjson duration_ms "$DURATION_MS" \
+			'{ mode: $mode, outcome: $outcome, skip_reason: $skip_reason,
+			   findings_new: $findings_new,
+			   findings_resolved: $findings_resolved,
+			   duration_ms: $duration_ms }')"
+	else
+		curator_emit "curator.scan.complete" "$SESSION_ID" "$(jq -cn \
+			--arg mode "cheap" --arg outcome "ok" \
+			--argjson findings_new "$FINDINGS_NEW" \
+			--argjson findings_resolved 0 \
+			--argjson duration_ms "$DURATION_MS" \
+			'{ mode: $mode, outcome: $outcome,
+			   findings_new: $findings_new,
+			   findings_resolved: $findings_resolved,
+			   duration_ms: $duration_ms }')"
+	fi
+fi
 
 # ----------------------------------------------------------------------------
 # Surfacer.
@@ -238,6 +327,17 @@ CONTEXT=$(printf 'Curator: %s open finding%s (%s). Review with `/curator review`
 	"$OPEN_COUNT" \
 	"$([ "$OPEN_COUNT" -eq 1 ] && echo "" || echo "s")" \
 	"$SUMMARY")
+
+# Cap the pointer length so a long per-kind summary never overflows the
+# user's SessionStart context.
+MAX_POINTER=$(curator_config_get '.curator.surfacer.max_pointer_chars')
+[[ -z "$MAX_POINTER" || "$MAX_POINTER" == "null" ]] && MAX_POINTER=200
+if [[ "${#CONTEXT}" -gt "$MAX_POINTER" ]]; then
+	# Reserve room for the truncation ellipsis without exceeding the cap.
+	TRUNC=$((MAX_POINTER - 1))
+	(( TRUNC < 1 )) && TRUNC=1
+	CONTEXT="${CONTEXT:0:TRUNC}…"
+fi
 
 _emit "$CONTEXT"
 exit 0

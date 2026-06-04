@@ -141,7 +141,7 @@
     {
       "name": "curator",
       "source": "./plugins/curator",
-      "description": "Maintenance layer for the typed auto-memory store. Runs cheap heuristic checks at every SessionStart — broken path references, ISO-8601 dates past the grace period, broken MEMORY.md index entries, orphaned memories — and an LLM contradiction sweep at most once per week. Surfaces findings via /curator review; never edits the memory store directly. Parallel to cartographer (which audits hand-maintained instruction files), curator audits the auto-memory substrate. Requires the ecosystem plugin.",
+      "description": "Maintenance layer for the typed auto-memory store. At every SessionStart, runs four cheap heuristic checks against the memories at ~/.claude/projects/<encoded>/memory/ — date_decayed (ISO-8601 dates past the grace period), path_broken (path-shaped references that don't resolve under the repo root), broken_index (MEMORY.md pointing at missing files), and orphaned_memory (files in the dir not referenced from MEMORY.md). Surfaces findings via /curator review; never edits the memory store directly. Parallel to cartographer (which audits hand-maintained instruction files), curator audits the auto-memory substrate. Requires the ecosystem plugin.",
       "author": {
         "name": "Onlooker Community"
       },

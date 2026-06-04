@@ -144,12 +144,17 @@ curator_storage_count_open() {
 
 # Open-finding counts grouped by kind. Used by the surfacer to render a
 # pointer like "2 path-broken, 1 date-decayed".
+#
+# jq's group_by groups CONSECUTIVE matches, so the array must be sorted
+# by .kind first or the same kind can produce multiple groups (and the
+# downstream summary double-counts).
 curator_storage_open_counts_by_kind() {
 	local key="$1"
 	local all
 	all=$(curator_storage_load_findings "$key")
 	printf '%s' "$all" | jq -c '
 		[.[] | select((.status // "open") == "open")]
+		| sort_by(.kind)
 		| group_by(.kind)
 		| map({ kind: .[0].kind, count: length })
 		| sort_by(-.count)

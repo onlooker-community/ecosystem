@@ -52,7 +52,12 @@ curator_config_load() {
 
 curator_config_get() {
 	local path="$1"
-	printf '%s' "$_CURATOR_CONFIG" | jq -r "${path} // empty" 2>/dev/null
+	# The `// empty` operator treats `false` the same as null, so a
+	# value of `false` would silently disappear and the caller would
+	# misread "explicitly disabled" as "default to enabled". Use an
+	# explicit null check so booleans round-trip correctly.
+	printf '%s' "$_CURATOR_CONFIG" \
+		| jq -r "${path} | if . == null then empty else . end" 2>/dev/null
 }
 
 curator_config_enabled() {

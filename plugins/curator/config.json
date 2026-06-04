@@ -19,11 +19,13 @@
       "url_allowlist": []
     },
     "usage_tracker": {
-      "enabled": true,
-      "usage_window_days": 30
+      "enabled": false,
+      "usage_window_days": 30,
+      "_note": "Disabled until the substrate memory.recalled emitter ships. Setting to true today is a no-op."
     },
     "llm_sweep": {
-      "enabled": true,
+      "enabled": false,
+      "_note": "Disabled until the Haiku pair-evaluation loop ships. Setting to true today is a no-op.",
       "model": "claude-haiku-4-5-20251001",
       "temperature": 0.2,
       "max_output_tokens": 96,

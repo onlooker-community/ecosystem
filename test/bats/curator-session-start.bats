@@ -182,3 +182,127 @@ _write_index() {
   ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
   [[ "$ctx" == *"2 open findings"* ]]
 }
+
+@test "MEMORY.md path-traversal entries are recorded as broken_index, never read" {
+  # Seed a sentinel file outside the memory dir that the parser must
+  # NEVER touch. The escape attempt below points at a path that would
+  # resolve to this file if filename sanitization were missing.
+  local outside_dir="${TEST_HOME}/.claude/projects"
+  local sentinel="${outside_dir}/sentinel.txt"
+  printf 'untouched\n' > "$sentinel"
+  local sentinel_mtime_before
+  sentinel_mtime_before=$(stat -f %m "$sentinel" 2>/dev/null || stat -c %Y "$sentinel")
+
+  # MEMORY.md tries to escape with `../sentinel.txt` and an absolute path.
+  _write_index "$(printf '%s\n%s\n%s' \
+    '- [Escape](../sentinel.txt) — traversal attempt' \
+    '- [Abs](/tmp/curator-abs-attempt.md) — absolute path attempt' \
+    '- [Normal](real.md) — clean reference')"
+  _seed_memory "real.md" "project" "Normal body."
+
+  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  [ "$status" -eq 0 ]
+
+  # Both unsafe entries surface as broken_index findings.
+  grep '"event_type":"curator.finding.broken_index"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e 'select(.payload.referenced_file == "../sentinel.txt")' >/dev/null
+  grep '"event_type":"curator.finding.broken_index"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e 'select(.payload.referenced_file == "/tmp/curator-abs-attempt.md")' >/dev/null
+
+  # The clean reference resolves as expected (no broken_index for it).
+  ! grep '"event_type":"curator.finding.broken_index"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e 'select(.payload.referenced_file == "real.md")' >/dev/null
+
+  # The sentinel file wasn't read (mtime unchanged) and content intact.
+  local sentinel_mtime_after
+  sentinel_mtime_after=$(stat -f %m "$sentinel" 2>/dev/null || stat -c %Y "$sentinel")
+  [ "$sentinel_mtime_before" = "$sentinel_mtime_after" ]
+  grep -q 'untouched' "$sentinel"
+}
+
+@test "path_broken does not fire on URLs or absolute paths in memory bodies" {
+  _seed_memory "reference_urls.md" "reference" "$(cat <<'BODY'
+See https://example.com/foo.py for upstream context.
+Also /usr/bin/python3.11 is the system python on macOS.
+But scripts/legacy_ingest.py is the broken in-repo path.
+BODY
+)"
+  _write_index '- [Refs](reference_urls.md) — mixed refs'
+
+  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  [ "$status" -eq 0 ]
+
+  # The in-repo broken path still fires.
+  grep '"event_type":"curator.finding.path_broken"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e 'select(.payload.broken_path == "scripts/legacy_ingest.py")' >/dev/null
+
+  # Neither the URL host nor the absolute path produce a finding.
+  ! grep '"event_type":"curator.finding.path_broken"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e 'select(.payload.broken_path | contains("example.com"))' >/dev/null
+  ! grep '"event_type":"curator.finding.path_broken"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e 'select(.payload.broken_path | contains("python3.11"))' >/dev/null
+}
+
+@test "surfacer counts multiple same-kind findings correctly" {
+  # Two date_decayed findings: with the group_by-without-sort bug, the
+  # summary would render as "1 date-decayed, 1 date-decayed" because
+  # ULID-ordered findings can interleave kinds. The sort_by(.kind) fix
+  # makes the summary aggregate correctly to "2 date-decayed".
+  _seed_memory "project_a.md" "project" "Stale date 2025-01-01"
+  _seed_memory "project_b.md" "project" "Older date 2024-06-30"
+  _write_index "$(printf '%s\n%s' \
+    '- [A](project_a.md) — a' \
+    '- [B](project_b.md) — b')"
+
+  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  [ "$status" -eq 0 ]
+  local ctx
+  ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
+  [[ "$ctx" == *"2 date-decayed"* ]]
+  # The buggy output would have looked like "1 date-decayed, 1 date-decayed".
+  [[ "$ctx" != *"1 date-decayed, 1 date-decayed"* ]]
+}
+
+@test "cheap_checks.enabled=false skips the scan and emits skip_reason disabled" {
+  printf '%s\n' \
+    '{"curator":{"enabled":true,"memory_store_path":"'"$MEM_DIR"'","cheap_checks":{"enabled":false}}}' \
+    > "${PROJECT_REPO}/.claude/settings.json"
+
+  _seed_memory "project_stale.md" "project" "Decayed 2025-01-01"
+  _write_index '- [S](project_stale.md) — s'
+
+  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  [ "$status" -eq 0 ]
+
+  # scan.complete uses skip_reason: disabled.
+  grep '"event_type":"curator.scan.complete"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e '.payload.outcome == "skipped" and .payload.skip_reason == "disabled"' >/dev/null
+
+  # No findings were written, even though the date would have matched.
+  [ ! -d "${CURATOR_DIR}/findings" ] || [ -z "$(ls -A "${CURATOR_DIR}/findings" 2>/dev/null)" ]
+
+  # No per-finding events emitted.
+  ! grep -q '"event_type":"curator.finding.date_decayed"' "$ONLOOKER_EVENTS_LOG"
+}
+
+@test "surfacer truncates context past max_pointer_chars" {
+  printf '%s\n' \
+    '{"curator":{"enabled":true,"memory_store_path":"'"$MEM_DIR"'","surfacer":{"max_pointer_chars":40}}}' \
+    > "${PROJECT_REPO}/.claude/settings.json"
+
+  _seed_memory "project_a.md" "project" "Date 2025-01-01"
+  _seed_memory "project_b.md" "project" "Date 2024-06-30"
+  _write_index "$(printf '%s\n%s' \
+    '- [A](project_a.md) — a' \
+    '- [B](project_b.md) — b')"
+
+  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  [ "$status" -eq 0 ]
+  local ctx ctx_len
+  ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
+  # Grapheme-aware length so the trailing "…" doesn't confuse a
+  # byte-counting bash check.
+  ctx_len=$(python3 -c 'import sys; print(len(sys.argv[1]))' "$ctx")
+  [ "$ctx_len" -le 40 ]
+  [[ "$ctx" == *"…"* ]]
+}

@@ -20,6 +20,23 @@
 # get their own record with `referenced: false`. Broken index entries
 # (referenced by MEMORY.md but missing on disk) get `exists: false`.
 
+# Returns 0 iff the given filename contains a path separator, parent-dir
+# escape, leading dot, null byte, or other shape that should never get
+# joined onto the memory dir. Used to defang MEMORY.md entries before we
+# interpolate them into a filesystem path.
+_curator_memory_unsafe_filename() {
+	local fname="$1"
+	[[ -z "$fname" ]] && return 0
+	case "$fname" in
+		# Absolute paths, traversal, separators, dotfiles, control chars.
+		/*|*/*|*\\*|*..*|.*|*$'\n'*|*$'\r'*) return 0 ;;
+	esac
+	# Must end in .md and look like a plain filename.
+	[[ "$fname" == *.md ]] || return 0
+	[[ "$fname" =~ ^[A-Za-z0-9._-]+\.md$ ]] || return 0
+	return 1
+}
+
 # Resolve the memory store path. The runtime resolves
 # $CLAUDE_PROJECT_ENCODED — when unset, the caller provides it explicitly.
 #
@@ -153,6 +170,11 @@ curator_memory_load_all() {
 	local seen_json='{}'
 
 	# Referenced first — preserves MEMORY.md ordering for downstream display.
+	# Filename sanitization: anything with a path separator, parent-dir
+	# escape, leading dot, or non-printable bytes is recorded as a broken
+	# index entry and NEVER passed to the parser. Without this guard a
+	# MEMORY.md entry like `[X](../../etc/passwd)` would read outside the
+	# memory dir.
 	local refcount
 	refcount=$(printf '%s' "$referenced_json" | jq 'length')
 	local i
@@ -161,6 +183,24 @@ curator_memory_load_all() {
 		[[ -z "$fname" || "$fname" == "null" ]] && continue
 		# Skip MEMORY.md itself if it self-references.
 		[[ "$fname" == "MEMORY.md" ]] && continue
+
+		if _curator_memory_unsafe_filename "$fname"; then
+			# Record as a broken/unsafe index entry so the broken_index
+			# check surfaces it. The parser is bypassed, so no read
+			# happens outside the memory dir.
+			rec=$(jq -cn \
+				--arg filename "$fname" \
+				'{
+					filename: $filename,
+					title: null, description: null, type: null, body: "",
+					exists: false, referenced: true,
+					frontmatter_parsed: false, unsafe: true
+				}')
+			all=$(printf '%s' "$all" | jq --argjson rec "$rec" '. + [$rec]')
+			seen_json=$(printf '%s' "$seen_json" | jq --arg f "$fname" '. + {($f): true}')
+			continue
+		fi
+
 		rec=$(curator_memory_parse_file "${mem_dir}/${fname}" true)
 		[[ -z "$rec" ]] && continue
 		all=$(printf '%s' "$all" | jq --argjson rec "$rec" '. + [$rec]')

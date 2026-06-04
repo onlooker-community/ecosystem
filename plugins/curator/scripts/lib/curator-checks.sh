@@ -67,10 +67,15 @@ PY
 # when the path doesn't resolve under the given repo root.
 #
 # Path heuristic: at least one `/`, contains an extension (`.ext`), and
-# only matches the conservative character class `[A-Za-z0-9._/-]+`. The
-# goal is to avoid both runaway false positives ("foo/bar baz" — has a
-# space, skipped) and to be sensitive to renames (`scripts/old_name.py`
-# really getting flagged when renamed to `scripts/new_name.py`).
+# only matches the conservative character class `[A-Za-z0-9._/-]+`. A
+# negative lookbehind rejects candidates preceded by `/` or `:`, so:
+#   - URL substrings ("https://example.com/foo.py") don't match — the
+#     host segment is preceded by `:`, the path segment is preceded by `/`.
+#   - Absolute paths ("/usr/bin/python3.11") don't match — the first
+#     segment is preceded by `/`.
+# That preserves the conservative "rename detection" target (in-repo
+# relative paths like scripts/legacy_ingest.py) without the URL and
+# absolute-path false positives Copilot review caught.
 #
 # Usage: curator_check_paths <memories_json> <repo_root>
 curator_check_paths() {
@@ -83,12 +88,13 @@ curator_check_paths() {
 	abs_root=$(cd "$repo_root" 2>/dev/null && pwd -P) || { echo '[]'; return 0; }
 
 	# Extract candidate paths per memory body. The jq scan regex returns
-	# every match in the body; deduping happens after.
+	# every match in the body; the negative lookbehind keeps URL and
+	# absolute-path substrings from matching at all. Deduping happens after.
 	local candidates
 	candidates=$(printf '%s' "$memories" | jq -c '
 		[ .[] | select(.exists and .body != null and .body != "")
 			| .filename as $fname
-			| (.body | [scan("[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)+\\.[A-Za-z0-9]+")])
+			| (.body | [scan("(?<![A-Za-z0-9._/:-])[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)+\\.[A-Za-z0-9]+")])
 			| unique
 			| .[]
 			| { memory_file: $fname, candidate: . }

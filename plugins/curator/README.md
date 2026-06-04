@@ -2,7 +2,9 @@
 
 Maintenance layer for the user's typed auto-memory store.
 
-At every `SessionStart`, Curator runs cheap heuristic checks against the memories at `~/.claude/projects/<encoded-project>/memory/` — broken path references, stale ISO-8601 dates past the grace period, broken `MEMORY.md` index entries — and surfaces findings as a one-line pointer to `/curator review`. An LLM-backed contradiction sweep runs at most once per week per project. Curator never edits the memory store directly.
+At every `SessionStart`, Curator runs cheap heuristic checks against the memories at `~/.claude/projects/<encoded-project>/memory/` — stale ISO-8601 dates past the grace period, broken path references, broken `MEMORY.md` index entries, and orphaned memory files — and surfaces findings as a one-line pointer to `/curator review`. Curator never edits the memory store directly.
+
+The weekly LLM-backed contradiction sweep described in [`docs/design.md`](docs/design.md) is a future capability — see the **Status** section below for what's actually shipped today.
 
 Curator is a sibling plugin to [`ecosystem`](../../) and assumes the Onlooker observability substrate (`~/.onlooker/`) is present. It is parallel to [`cartographer`](../cartographer) (which audits hand-maintained instruction files like `CLAUDE.md`) — same audit shape, different substrate.
 
@@ -10,7 +12,7 @@ Curator is a sibling plugin to [`ecosystem`](../../) and assumes the Onlooker ob
 
 | Hook | What Curator does |
 |------|---------------------|
-| `SessionStart` | Runs cheap-tier checks (date decay, path references, broken index, orphaned memories) inside a wall-clock budget. Writes findings under `~/.onlooker/curator/<project-key>/findings/`. Optionally runs the LLM contradiction sweep when the weekly interval has elapsed. Injects a one-line `additionalContext` pointer when open findings exist. |
+| `SessionStart` | Runs the four cheap-tier checks (date_decayed, path_broken, broken_index, orphaned_memory) against the memory store, inside a wall-clock budget (`cheap_checks.wall_clock_budget_ms`, default 500ms). Writes new findings under `~/.onlooker/curator/<project-key>/findings/` keyed by ULID, deduping repeat findings via `deduped_hash`. Injects a one-line `additionalContext` pointer when open findings exist. |
 
 ## Activation
 
@@ -38,11 +40,16 @@ Or globally in `~/.claude/settings.json`. See [`config.json`](config.json) for t
 
 ## Status
 
-This plugin ships **scaffolding + cheap-tier checks (date decay, path references) + SessionStart surfacer**. The LLM contradiction sweep and the `/curator review` interactive walkthrough are deferred to follow-up commits. The usage tracker (memory recall frequency) becomes usable once the substrate `memory.recalled` event is wired up — see [`docs/design.md`](docs/design.md) Open Question #1.
+This plugin ships **scaffolding + four cheap-tier checks (date_decayed, path_broken, broken_index, orphaned_memory) + SessionStart surfacer**. Deferred to follow-up landings:
+
+- **LLM contradiction sweep** — design and the watermark plumbing (`last_llm_sweep.json`) are in place; the Haiku pair-evaluation loop is not implemented. `llm_sweep.enabled` defaults to `false` and is a no-op until the sweep ships.
+- **`/curator review` interactive walkthrough** — accept / prune / edit / reclassify / acknowledge / defer for surfaced findings.
+- **Usage tracker** (zero-recall-window findings) — depends on a substrate-level `memory.recalled` emitter that doesn't exist yet. `usage_tracker.enabled` defaults to `false`; see [`docs/design.md`](docs/design.md) Open Question #1.
+- **Symbol reference check** — backtick-wrapped identifiers grep'd against the repo. Not yet wired.
 
 ## Requirements
 
 - The `ecosystem` plugin installed (for `~/.onlooker/` substrate).
 - `jq` for JSON manipulation.
+- `python3` for date math and path resolution.
 - `git` to resolve the project key and (for the reference check) the repo root.
-- `claude` CLI on `PATH` for the weekly LLM contradiction sweep (when enabled).
