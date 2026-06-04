@@ -1,0 +1,41 @@
+{
+  "plugin_name": "curator",
+  "storage_path": "~/.onlooker",
+  "curator": {
+    "enabled": false,
+    "memory_store_path": "${HOME}/.claude/projects/${CLAUDE_PROJECT_ENCODED}/memory",
+    "cheap_checks": {
+      "enabled": true,
+      "wall_clock_budget_ms": 500,
+      "skip_if_session_age_under_seconds": 5
+    },
+    "date_check": {
+      "enabled": true,
+      "date_grace_period_days": 14
+    },
+    "reference_check": {
+      "enabled": true,
+      "check_urls": false,
+      "url_allowlist": []
+    },
+    "usage_tracker": {
+      "enabled": false,
+      "usage_window_days": 30,
+      "_note": "Disabled until the substrate memory.recalled emitter ships. Setting to true today is a no-op."
+    },
+    "llm_sweep": {
+      "enabled": false,
+      "_note": "Disabled until the Haiku pair-evaluation loop ships. Setting to true today is a no-op.",
+      "model": "claude-haiku-4-5-20251001",
+      "temperature": 0.2,
+      "max_output_tokens": 96,
+      "interval_days": 7,
+      "max_pair_evaluations_per_sweep": 50,
+      "contradiction_similarity_threshold": 0.4
+    },
+    "surfacer": {
+      "max_pointer_chars": 200,
+      "skip_when_zero": true
+    }
+  }
+}
