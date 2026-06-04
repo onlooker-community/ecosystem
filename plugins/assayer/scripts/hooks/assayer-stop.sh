@@ -149,9 +149,16 @@ checked_claims="[]"
 while IFS= read -r claim; do
 	[[ -z "$claim" ]] && continue
 
-	# Confidence floor — skip low-confidence extractions.
+	# Confidence floor — skip low-confidence extractions. Compare with awk via
+	# -v bindings (not string-interpolated into code), so an LLM- or
+	# config-supplied value is treated as a number and a non-numeric value
+	# degrades to 0 instead of executing as code.
 	conf=$(printf '%s' "$claim" | jq -r '.confidence // 0.6' 2>/dev/null) || conf="0.6"
-	keep=$(python3 -c "print('1' if $conf >= $MIN_CONFIDENCE else '0')" 2>/dev/null) || keep="1"
+	if awk -v a="$conf" -v b="$MIN_CONFIDENCE" 'BEGIN { exit !(a >= b) }' 2>/dev/null; then
+		keep=1
+	else
+		keep=0
+	fi
 	[[ "$keep" != "1" ]] && continue
 
 	claim_text=$(printf '%s' "$claim" | jq -r '.text // ""' 2>/dev/null) || claim_text=""

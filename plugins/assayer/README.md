@@ -56,7 +56,6 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
     "enabled": false,
     "evaluation": {
       "model": "claude-haiku-4-5-20251001",
-      "max_output_tokens": 1024,
       "timeout_seconds": 60
     },
     "max_claims": 12,
@@ -70,7 +69,6 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
 |-----|---------|-------------|
 | `enabled` | `false` | Must be `true` for any audit to run. |
 | `evaluation.model` | `claude-haiku-4-5-20251001` | Model used for claim extraction. Haiku is fast and cheap; the task is structured and shallow. |
-| `evaluation.max_output_tokens` | `1024` | Token ceiling for the extraction response. |
 | `evaluation.timeout_seconds` | `60` | Per-pass wall-clock timeout passed to the `timeout` command. |
 | `max_claims` | `12` | Maximum number of claims to extract from a final message. |
 | `min_confidence` | `0.5` | Claims the extractor scores below this are dropped before verification. |

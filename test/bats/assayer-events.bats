@@ -39,7 +39,8 @@ _validate_latest_event() {
 		node "${REPO_ROOT}/scripts/lib/onlooker-event.mjs" validate >/dev/null
 }
 
-AUDIT_ID="01J000000000000000000AUDIT"
+# Valid 26-char Crockford Base32 ULID (no I, L, O, or U).
+AUDIT_ID="01J0000000000000000000AB34"
 
 @test "assayer.audit.started validates" {
 	_require_assayer_schema
