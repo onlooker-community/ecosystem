@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.23.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.23.0...ecosystem-v0.23.1) (2026-06-04)
+
+
+### Bug Fixes
+
+* **scribe:** mark hook scripts executable :relieved: ([#64](https://github.com/onlooker-community/ecosystem/issues/64)) ([05603e5](https://github.com/onlooker-community/ecosystem/commit/05603e56895c009c1435d1712592adbbc4c15e61))
+
 ## [0.23.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.22.0...ecosystem-v0.23.0) (2026-06-04)
 
 
