@@ -124,6 +124,32 @@
       "license": "MIT",
       "keywords": ["security", "prompt-injection", "rule-of-two", "safety", "content-gate", "untrusted-content"],
       "tags": ["safety", "security"]
+    },
+    {
+      "name": "librarian",
+      "source": "./plugins/librarian",
+      "description": "Consolidation layer between archivist's per-session artifacts and the user's durable typed memory store. Reads archivist artifacts at SessionEnd, applies a durability filter, classifies survivors via Haiku into the four memory types (user, feedback, project, reference), and queues proposals for explicit confirmation via /librarian review. Auto-promotion is opt-in. Requires the ecosystem plugin.",
+      "author": {
+        "name": "Onlooker Community"
+      },
+      "homepage": "https://onlooker.dev",
+      "repository": "https://github.com/onlooker-community/ecosystem",
+      "license": "MIT",
+      "keywords": ["memory", "consolidation", "promotion", "classifier", "auto-memory", "session"],
+      "tags": ["memory", "context-engineering"]
+    },
+    {
+      "name": "curator",
+      "source": "./plugins/curator",
+      "description": "Maintenance layer for the typed auto-memory store. Runs cheap heuristic checks at every SessionStart — broken path references, ISO-8601 dates past the grace period, broken MEMORY.md index entries, orphaned memories — and an LLM contradiction sweep at most once per week. Surfaces findings via /curator review; never edits the memory store directly. Parallel to cartographer (which audits hand-maintained instruction files), curator audits the auto-memory substrate. Requires the ecosystem plugin.",
+      "author": {
+        "name": "Onlooker Community"
+      },
+      "homepage": "https://onlooker.dev",
+      "repository": "https://github.com/onlooker-community/ecosystem",
+      "license": "MIT",
+      "keywords": ["memory", "audit", "staleness", "findings", "auto-memory", "decay"],
+      "tags": ["memory", "context-engineering"]
     }
   ]
 }

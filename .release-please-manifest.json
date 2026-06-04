@@ -9,5 +9,6 @@
   "plugins/scribe": "0.2.0",
   "plugins/counsel": "0.2.0",
   "plugins/warden": "0.2.0",
-  "plugins/librarian": "0.1.0"
+  "plugins/librarian": "0.1.0",
+  "plugins/curator": "0.0.1"
 }
