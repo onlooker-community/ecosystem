@@ -16,7 +16,7 @@
 #     when the source is `compact` (compaction is metadata-only; the
 #     same memories remain in scope, so re-emitting would double-count).
 
-set -uo pipefail
+set -uo pipefail # No -e: never block session startup
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../lib/validate-path.sh
@@ -24,7 +24,15 @@ source "$SCRIPT_DIR/../lib/validate-path.sh"
 # shellcheck source=../lib/onlooker-schema.sh
 source "$SCRIPT_DIR/../lib/onlooker-schema.sh"
 
+# Standard hook health instrumentation. hook_register sets up the timer;
+# hook_set_context exports _HOOK_SESSION_ID + _HOOK_EVENT_NAME so failures
+# attach to the right session in ~/.onlooker/logs/hook-health.jsonl;
+# hook_success / hook_failure close the health record.
+hook_register "memory-recall-tracker" "Memory Recall Tracker" "Emits memory.recalled per typed memory file present at SessionStart"
+
 INPUT=$(cat 2>/dev/null || true)
+hook_set_context "$INPUT" "SessionStart"
+
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SESSION_ID=""
 SOURCE=$(printf '%s' "$INPUT" | jq -r '.source // "startup"' 2>/dev/null) || SOURCE="startup"
@@ -34,13 +42,16 @@ SOURCE=$(printf '%s' "$INPUT" | jq -r '.source // "startup"' 2>/dev/null) || SOU
 # Compaction reloads the session with the same memories still in scope.
 # Re-emitting on each compaction would inflate usage counts; skip.
 if [[ "$SOURCE" == "compact" ]]; then
+	hook_success
 	exit 0
 fi
 
 # ---------------------------------------------------------------------------
-# Resolve project_key (SHA256-of-remote-URL with repo-root fallback). This is
-# the same scheme every memory-flavored plugin uses for its own storage —
-# see plugins/librarian/scripts/lib/librarian-project-key.sh, etc.
+# Resolve project_key. Mirrors the SHA256-of-remote-URL + common-dir
+# fallback every memory plugin uses (see plugins/librarian/scripts/lib/
+# librarian-project-key.sh and friends): if there's no origin remote,
+# anchor the key on git --git-common-dir rather than --show-toplevel so
+# two worktrees of the same local-only repo share a key.
 # ---------------------------------------------------------------------------
 
 _memory_sha256_first12() {
@@ -54,21 +65,43 @@ _memory_sha256_first12() {
 	fi
 }
 
+_memory_repo_root_via_common_dir() {
+	local cwd="$1"
+	local common_dir toplevel
+	common_dir=$(git -C "$cwd" rev-parse --git-common-dir 2>/dev/null) || return 0
+	# git-common-dir may be relative; resolve relative to cwd.
+	if [[ -n "$common_dir" && "$common_dir" != /* ]]; then
+		common_dir="$(cd "$cwd" && cd "$common_dir" 2>/dev/null && pwd -P)" || common_dir=""
+	fi
+	if [[ -n "$common_dir" && -d "$common_dir" ]]; then
+		# common_dir is typically the .git dir of the main repo; its
+		# parent is the canonical repo root (shared across worktrees).
+		toplevel="$(cd "$common_dir/.." 2>/dev/null && pwd -P)" || toplevel=""
+	fi
+	if [[ -z "$toplevel" ]]; then
+		toplevel=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null || true)
+		[[ -n "$toplevel" ]] && toplevel="$(cd "$toplevel" 2>/dev/null && pwd -P)"
+	fi
+	printf '%s' "$toplevel"
+}
+
 PROJECT_KEY=""
 if git -C "$CWD" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 	REMOTE=$(git -C "$CWD" remote get-url origin 2>/dev/null || true)
 	if [[ -n "$REMOTE" ]]; then
 		PROJECT_KEY=$(_memory_sha256_first12 "remote:${REMOTE}")
 	else
-		ROOT=$(git -C "$CWD" rev-parse --show-toplevel 2>/dev/null || true)
+		ROOT=$(_memory_repo_root_via_common_dir "$CWD")
 		if [[ -n "$ROOT" ]]; then
-			ROOT=$(cd "$ROOT" 2>/dev/null && pwd -P)
 			PROJECT_KEY=$(_memory_sha256_first12 "root:${ROOT}")
 		fi
 	fi
 fi
 
-[[ -z "$PROJECT_KEY" ]] && exit 0
+if [[ -z "$PROJECT_KEY" ]]; then
+	hook_success
+	exit 0
+fi
 
 # ---------------------------------------------------------------------------
 # Resolve the per-project typed-memory store at
@@ -89,7 +122,10 @@ if [[ -z "$ENCODED" ]]; then
 fi
 
 MEMORY_DIR="${CLAUDE_HOME}/projects/${ENCODED}/memory"
-[[ -z "$ENCODED" || ! -d "$MEMORY_DIR" ]] && exit 0
+if [[ -z "$ENCODED" || ! -d "$MEMORY_DIR" ]]; then
+	hook_success
+	exit 0
+fi
 
 # ---------------------------------------------------------------------------
 # Walk every *.md file (excluding MEMORY.md itself, which is the index, not
@@ -143,15 +179,22 @@ for file in "$MEMORY_DIR"/*.md; do
 			recall_position: $recall_position
 		}')
 
+	# Use the canonical ecosystem plugin name (matches the
+	# `${ONLOOKER_PLUGIN_NAME:-onlooker}` default that scripts/lib/
+	# onlooker-emit.sh and onlooker-event.mjs both fall back to). Other
+	# substrate-level emissions land under "onlooker" too, so this stays
+	# consistent with the existing event stream.
+	local_plugin="${ONLOOKER_PLUGIN_NAME:-onlooker}"
+
 	params=$(jq -cn \
-		--arg plugin "ecosystem" \
+		--arg plugin "$local_plugin" \
 		--arg sid "$SESSION_ID" \
 		--arg type "memory.recalled" \
 		--argjson payload "$payload" \
 		'{ plugin: $plugin, session_id: $sid, event_type: $type, payload: $payload }')
 
 	event_json=$(printf '%s' "$params" \
-		| ONLOOKER_DIR="$ONLOOKER_DIR" ONLOOKER_PLUGIN_NAME="ecosystem" \
+		| ONLOOKER_DIR="$ONLOOKER_DIR" ONLOOKER_PLUGIN_NAME="$local_plugin" \
 		  node "$_ONLOOKER_EVENT_JS" emit 2>/dev/null) || event_json=""
 	[[ -z "$event_json" ]] && continue
 
@@ -159,4 +202,5 @@ for file in "$MEMORY_DIR"/*.md; do
 	position=$((position + 1))
 done
 
+hook_success
 exit 0

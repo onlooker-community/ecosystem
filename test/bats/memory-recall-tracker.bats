@@ -109,8 +109,20 @@ _seed_memory() {
     | jq -e '.payload.memory_file == "feedback_valid.md"' >/dev/null
 }
 
-@test "memory-recall is a no-op when there is no memory store" {
-  # No MEM_DIR contents at all — leave it empty.
+@test "memory-recall emits nothing when the memory store is empty" {
+  # MEM_DIR exists (created in setup) but contains no *.md files. The
+  # hook walks the glob, finds zero matches, and emits no events.
+  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  [ "$status" -eq 0 ]
+  [ ! -f "$ONLOOKER_EVENTS_LOG" ] || ! grep -q '"event_type":"memory.recalled"' "$ONLOOKER_EVENTS_LOG"
+}
+
+@test "memory-recall emits nothing when the memory store directory does not exist" {
+  # This is the genuinely-missing-directory branch — the dir check at
+  # the top of the hook short-circuits before any file walk.
+  rm -rf "$MEM_DIR"
+  [ ! -d "$MEM_DIR" ]
+
   run bash -c "printf '%s' '$(_input)' | '$HOOK'"
   [ "$status" -eq 0 ]
   [ ! -f "$ONLOOKER_EVENTS_LOG" ] || ! grep -q '"event_type":"memory.recalled"' "$ONLOOKER_EVENTS_LOG"
