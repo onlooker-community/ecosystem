@@ -1,0 +1,65 @@
+name: Auto-format
+
+# Applies `npm run lint` + `npm run format` automatically so formatting drift
+# never has to be fixed by hand. On pull requests it pushes a fixup commit back
+# to the PR branch (re-triggering checks via the PAT) — this is what keeps the
+# release-please PR green without manual intervention. On push to main it acts
+# as a safety net, committing fixes directly with `[skip ci]` to avoid looping.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  autofix:
+    name: Auto-format and lint
+    runs-on: ubuntu-latest
+    # On fork PRs the PAT secret is not available and we cannot push to the
+    # contributor's branch, so skip the job rather than fail noisily. Same-repo
+    # PRs (including release-please's) and pushes to main always run.
+    if: >-
+      github.event_name == 'push' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Use the release-please PAT (not the default GITHUB_TOKEN) so the
+          # pushed fixup commit re-triggers required checks on the PR. Commits
+          # made with GITHUB_TOKEN do not start new workflow runs.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          # Check out the actual branch head. For pull_request events the
+          # default checkout is a detached merge ref we cannot push from.
+          ref: ${{ github.head_ref || github.ref_name }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Apply lint and format fixes
+        run: |
+          npm run lint
+          npm run format
+
+      - name: Commit and push fixes
+        run: |
+          if git diff --quiet; then
+            echo "No formatting changes needed."
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if [ "${{ github.event_name }}" = 'push' ]; then
+            # On main, do not skip CI; the follow-up autofix run will no-op once the repo is clean.
+            git commit -m 'style: auto-format :art:'
+          else
+            git commit -m 'style: auto-format :art:'
+          fi
+          git push origin HEAD:${{ github.head_ref || github.ref_name }}

@@ -8,7 +8,5 @@
   },
   "homepage": "https://onlooker.dev",
   "license": "MIT",
-  "requires": [
-    "ecosystem"
-  ]
+  "requires": ["ecosystem"]
 }
