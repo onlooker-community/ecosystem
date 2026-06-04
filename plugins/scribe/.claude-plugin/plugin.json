@@ -1,6 +1,6 @@
 {
   "name": "scribe",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Intent documentation from agent activity. Captures why changes were made — problem context, decisions, tradeoffs — and distills them into readable artifacts at session end.",
   "author": {
     "name": "Onlooker Community",
@@ -8,5 +8,7 @@
   },
   "homepage": "https://onlooker.dev",
   "license": "MIT",
-  "requires": ["ecosystem"]
+  "requires": [
+    "ecosystem"
+  ]
 }
