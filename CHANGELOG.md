@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.24.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.23.1...ecosystem-v0.24.0) (2026-06-04)
+
+
+### Features
+
+* **librarian:** /librarian review skill closes promotion loop :tada: ([#68](https://github.com/onlooker-community/ecosystem/issues/68)) ([8f3e3db](https://github.com/onlooker-community/ecosystem/commit/8f3e3dbdf6f08dceb0cf61d46281936a4f9954de))
+
 ## [0.23.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.23.0...ecosystem-v0.23.1) (2026-06-04)
 
 
