@@ -47,6 +47,8 @@ source "${PLUGIN_ROOT}/scripts/lib/historian-transcript.sh"
 source "${PLUGIN_ROOT}/scripts/lib/historian-chunker.sh"
 # shellcheck source=../lib/historian-sanitizer.sh
 source "${PLUGIN_ROOT}/scripts/lib/historian-sanitizer.sh"
+# shellcheck source=../lib/historian-embedder.sh
+source "${PLUGIN_ROOT}/scripts/lib/historian-embedder.sh"
 
 INPUT=$(cat 2>/dev/null || true)
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
@@ -135,6 +137,25 @@ SANITIZED=$(historian_sanitizer_run "$CHUNKS" "$NEVER_INDEX_PATHS" "$REDACT_SECR
 KEPT=$(printf '%s' "$SANITIZED" | jq '.kept')
 DROPPED=$(printf '%s' "$SANITIZED" | jq '.dropped')
 
+# Probe the embedder once before the chunk loop. If unavailable we
+# index without vectors. The retriever shipped today is embedding-only,
+# so chunks written without an `embedding` field are persisted but
+# invisible to retrieval until they are re-indexed against a working
+# embedder. Chunk bodies stay intact, so re-indexing is a re-embed pass
+# rather than a full re-chunk.
+EMBEDDER_READY=0
+EMBEDDER_BACKEND=$(historian_config_get '.historian.embedder.backend')
+[[ -z "$EMBEDDER_BACKEND" || "$EMBEDDER_BACKEND" == "null" ]] && EMBEDDER_BACKEND="none"
+if [[ "$EMBEDDER_BACKEND" != "none" ]]; then
+	if historian_embedder_available; then
+		EMBEDDER_READY=1
+	else
+		historian_emit "historian.embedder.unavailable" "$SESSION_ID" "$(jq -cn \
+			--arg backend "$EMBEDDER_BACKEND" \
+			'{ backend: $backend }')"
+	fi
+fi
+
 # Re-indexing replaces the existing session file rather than appending,
 # so SessionEnd is safely idempotent if re-fired against the same id.
 historian_storage_reset_session "$PROJECT_KEY" "$SESSION_ID"
@@ -149,7 +170,9 @@ for ((i = 0; i < KEPT_COUNT; i++)); do
 
 	CHUNK_ID=$(historian_ulid)
 	REDACTION_COUNT=$(printf '%s' "$CHUNK" | jq -r '.redaction_count // 0')
+	BODY=$(printf '%s' "$CHUNK" | jq -r '.body_redacted // ""')
 
+	# Build the base record. The embedding (if any) is added below.
 	RECORD=$(jq -cn \
 		--arg chunk_id "$CHUNK_ID" \
 		--arg session_id "$SESSION_ID" \
@@ -162,6 +185,14 @@ for ((i = 0; i < KEPT_COUNT; i++)); do
 			created_at: $created_at,
 			source: $source
 		}')
+
+	if (( EMBEDDER_READY == 1 )) && [[ -n "$BODY" ]]; then
+		EMBEDDING=$(historian_embedder_embed "$BODY")
+		if [[ -n "$EMBEDDING" ]]; then
+			RECORD=$(printf '%s' "$RECORD" | jq -c --argjson v "$EMBEDDING" \
+				'. + { embedding: $v }')
+		fi
+	fi
 
 	if historian_storage_append_chunk "$PROJECT_KEY" "$SESSION_ID" "$RECORD"; then
 		CHUNKS_INDEXED=$((CHUNKS_INDEXED + 1))

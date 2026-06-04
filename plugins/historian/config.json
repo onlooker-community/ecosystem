@@ -20,11 +20,27 @@
       "_note": "When true, the full transcript at SessionEnd is copied alongside the chunks so retrieval can link to the source. When false, only chunk bodies are retained."
     },
     "embedder": {
-      "backend": "none",
-      "_note": "Embedder backends (ollama, fastembed, remote) are deferred to a follow-up. The current 'none' value indexes chunks without vectors; retrieval is also deferred."
+      "backend": "ollama",
+      "_note": "Backend selector. `ollama` (default) talks to a local Ollama daemon. `none` skips embedding entirely; retrieval no-ops without vectors. `fastembed` and `remote` are reserved for a future landing.",
+      "ollama": {
+        "host": "http://127.0.0.1:11434",
+        "model": "nomic-embed-text",
+        "request_timeout_seconds": 8
+      }
     },
     "retrieval": {
-      "_note": "UserPromptSubmit retrieval and surfacer are deferred to a follow-up commit; the hook currently no-ops."
+      "enabled": true,
+      "cooldown_seconds": 60,
+      "max_retrievals_per_session": 5,
+      "min_prompt_chars": 60,
+      "retrieval_top_k": 5,
+      "min_similarity": 0.55,
+      "max_age_days": 180
+    },
+    "surfacer": {
+      "excerpt_chars_max": 400,
+      "include_age_hint": true,
+      "_note": "Retrieval always surfaces top-1 (per the design's deliberate top-1 inject). Multi-result surfacing is reserved for a future `/historian recall` skill rather than the UserPromptSubmit inject path."
     }
   }
 }
