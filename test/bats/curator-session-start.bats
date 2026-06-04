@@ -190,8 +190,16 @@ _write_index() {
   local outside_dir="${TEST_HOME}/.claude/projects"
   local sentinel="${outside_dir}/sentinel.txt"
   printf 'untouched\n' > "$sentinel"
+
+  # Linux's stat uses `-c FORMAT` and ignores `-f`; macOS uses `-f FORMAT`
+  # and does not accept `-c`. Try Linux first (CI runs on Ubuntu); fall
+  # back to BSD/macOS form for local runs.
+  _file_mtime() {
+    stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null
+  }
   local sentinel_mtime_before
-  sentinel_mtime_before=$(stat -f %m "$sentinel" 2>/dev/null || stat -c %Y "$sentinel")
+  sentinel_mtime_before=$(_file_mtime "$sentinel")
+  [ -n "$sentinel_mtime_before" ]
 
   # MEMORY.md tries to escape with `../sentinel.txt` and an absolute path.
   _write_index "$(printf '%s\n%s\n%s' \
@@ -215,7 +223,7 @@ _write_index() {
 
   # The sentinel file wasn't read (mtime unchanged) and content intact.
   local sentinel_mtime_after
-  sentinel_mtime_after=$(stat -f %m "$sentinel" 2>/dev/null || stat -c %Y "$sentinel")
+  sentinel_mtime_after=$(_file_mtime "$sentinel")
   [ "$sentinel_mtime_before" = "$sentinel_mtime_after" ]
   grep -q 'untouched' "$sentinel"
 }
