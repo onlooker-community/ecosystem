@@ -57,8 +57,8 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
           if [ "${{ github.event_name }}" = 'push' ]; then
-            # On main, skip CI on the formatting commit to avoid a trigger loop.
-            git commit -m 'style: auto-format [skip ci] :art:'
+            # On main, do not skip CI; the follow-up autofix run will no-op once the repo is clean.
+            git commit -m 'style: auto-format :art:'
           else
             git commit -m 'style: auto-format :art:'
           fi
