@@ -108,3 +108,48 @@ historian_storage_reset_session() {
 	[[ -f "$path" ]] || return 0
 	: > "$path"
 }
+
+# ============================================================================
+# Retrieval watermarks (per-session, scoped to the project key)
+# ============================================================================
+
+# Path used to hold the per-session retrieval state (count + last_ts) so
+# the rate gate persists across UserPromptSubmit invocations within a
+# single session. We key on (project, session) so cross-session retrieval
+# limits don't leak.
+historian_retrieval_state_path() {
+	local key="$1"
+	local session_id="$2"
+	local safe
+	safe=$(printf '%s' "$session_id" | tr -cd '[:alnum:]._-')
+	[[ -z "$safe" ]] && safe="unknown"
+	printf '%s/retrieval-state/%s.json' "$(historian_project_dir "$key")" "$safe"
+}
+
+# Read the JSON document at the watermark path. Returns {"count":0,
+# "last_ms":0} when the file is absent or unreadable.
+historian_retrieval_state_read() {
+	local key="$1"
+	local session_id="$2"
+	local path
+	path=$(historian_retrieval_state_path "$key" "$session_id")
+	if [[ -f "$path" ]]; then
+		jq -c '. // {count:0, last_ms:0}' "$path" 2>/dev/null \
+			|| printf '%s' '{"count":0,"last_ms":0}'
+	else
+		printf '%s' '{"count":0,"last_ms":0}'
+	fi
+}
+
+# Bump the count and update last_ms.
+historian_retrieval_state_write() {
+	local key="$1"
+	local session_id="$2"
+	local count="$3"
+	local last_ms="$4"
+	local path
+	path=$(historian_retrieval_state_path "$key" "$session_id")
+	mkdir -p "$(dirname "$path")" 2>/dev/null
+	jq -cn --argjson count "$count" --argjson last_ms "$last_ms" \
+		'{ count: $count, last_ms: $last_ms }' > "$path" 2>/dev/null
+}
