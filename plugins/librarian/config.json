@@ -1,0 +1,52 @@
+{
+  "plugin_name": "librarian",
+  "storage_path": "~/.onlooker",
+  "librarian": {
+    "enabled": false,
+    "auto_promote": false,
+    "auto_promote_threshold": 0.85,
+    "memory_store_path": "${HOME}/.claude/projects/${CLAUDE_PROJECT_ENCODED}/memory",
+    "scan": {
+      "trigger": "SessionEnd",
+      "bootstrap_lookback_days": 14,
+      "min_detail_chars": 40
+    },
+    "classifier": {
+      "model": "claude-haiku-4-5-20251001",
+      "temperature": 0.2,
+      "max_output_tokens": 256,
+      "min_classifier_confidence": 0.6
+    },
+    "durability_filter": {
+      "marker_phrases": [
+        "always",
+        "never",
+        "remember",
+        "from now on",
+        "every time",
+        "whenever",
+        "prefer",
+        "the reason",
+        "because",
+        "historically",
+        "legacy",
+        "compliance",
+        "requirement"
+      ],
+      "require_grounding": false,
+      "repetition_min_sessions": 2
+    },
+    "conflict": {
+      "duplicate_threshold": 0.7,
+      "merge_candidate_threshold": 0.45,
+      "conflict_keyword_overlap": 0.5
+    },
+    "surfacer": {
+      "max_pending_for_inject": 20,
+      "skip_inject_when_zero": true
+    },
+    "tombstones": {
+      "ttl_days": 180
+    }
+  }
+}
