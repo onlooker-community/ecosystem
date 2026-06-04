@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.23.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.22.0...ecosystem-v0.23.0) (2026-06-04)
+
+
+### Features
+
+* **ecosystem:** emit memory.recalled at SessionStart :link: ([#62](https://github.com/onlooker-community/ecosystem/issues/62)) ([d5876f9](https://github.com/onlooker-community/ecosystem/commit/d5876f9f819165cc07d691d733662b549863b7f5))
+* **historian:** retrieval pipeline + ollama embedder :telescope: ([#61](https://github.com/onlooker-community/ecosystem/issues/61)) ([7eae752](https://github.com/onlooker-community/ecosystem/commit/7eae752a288c4678ab093042469f2e65d428f0d9))
+
 ## [0.22.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.21.0...ecosystem-v0.22.0) (2026-06-04)
 
 
