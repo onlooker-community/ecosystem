@@ -1,6 +1,6 @@
 {
   "name": "ecosystem",
-  "version": "0.24.0",
+  "version": "0.25.0",
   "description": "Observability substrate for Claude Code. Provides the shared ~/.onlooker/ storage root, canonical schema-validated event emission, session and tool tracking hooks, and prompt rules. Required by all other Onlooker plugins.",
   "author": {
     "name": "Onlooker Community",
