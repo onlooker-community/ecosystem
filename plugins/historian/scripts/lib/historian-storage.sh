@@ -113,10 +113,12 @@ historian_storage_reset_session() {
 # Retrieval watermarks (per-session, scoped to the project key)
 # ============================================================================
 
-# Path used to hold the per-session retrieval state (count + last_ts) so
+# Path used to hold the per-session retrieval state (count + last_ms) so
 # the rate gate persists across UserPromptSubmit invocations within a
 # single session. We key on (project, session) so cross-session retrieval
-# limits don't leak.
+# limits don't leak. The state file uses `last_ms` — an epoch-millisecond
+# timestamp of the last retrieval the rate gate let through — and the
+# cooldown gate compares (now_ms - last_ms) against cooldown_seconds.
 historian_retrieval_state_path() {
 	local key="$1"
 	local session_id="$2"

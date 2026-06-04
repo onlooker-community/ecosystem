@@ -38,9 +38,9 @@
       "max_age_days": 180
     },
     "surfacer": {
-      "surface_top_n": 1,
       "excerpt_chars_max": 400,
-      "include_age_hint": true
+      "include_age_hint": true,
+      "_note": "Retrieval always surfaces top-1 (per the design's deliberate top-1 inject). Multi-result surfacing is reserved for a future `/historian recall` skill rather than the UserPromptSubmit inject path."
     }
   }
 }

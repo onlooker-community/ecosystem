@@ -138,8 +138,11 @@ KEPT=$(printf '%s' "$SANITIZED" | jq '.kept')
 DROPPED=$(printf '%s' "$SANITIZED" | jq '.dropped')
 
 # Probe the embedder once before the chunk loop. If unavailable we
-# index without vectors (chunks remain queryable lexically and will
-# get embeddings on a re-index after the embedder is back).
+# index without vectors. The retriever shipped today is embedding-only,
+# so chunks written without an `embedding` field are persisted but
+# invisible to retrieval until they are re-indexed against a working
+# embedder. Chunk bodies stay intact, so re-indexing is a re-embed pass
+# rather than a full re-chunk.
 EMBEDDER_READY=0
 EMBEDDER_BACKEND=$(historian_config_get '.historian.embedder.backend')
 [[ -z "$EMBEDDER_BACKEND" || "$EMBEDDER_BACKEND" == "null" ]] && EMBEDDER_BACKEND="none"

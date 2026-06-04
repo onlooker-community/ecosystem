@@ -2,7 +2,7 @@
 
 Episodic memory layer for past Claude Code sessions.
 
-At every `SessionEnd`, Historian reads the session transcript, splits it into overlapping chunks at turn boundaries, redacts secret-shaped substrings, embeds each chunk via a local Ollama daemon, and persists the chunks under `~/.onlooker/historian/<project-key>/sessions/<session-id>.jsonl`. At every `UserPromptSubmit`, Historian embeds the prompt and retrieves the most similar past chunk (within a similarity floor and freshness window) and surfaces it as a one-line `additionalContext` pointer.
+At every `SessionEnd`, Historian reads the session transcript, splits it into overlapping chunks at turn boundaries, redacts secret-shaped substrings, embeds each chunk via a local Ollama daemon, and persists the chunks under `~/.onlooker/historian/<project-key>/sessions/<session-id>.jsonl`. At every `UserPromptSubmit`, Historian embeds the prompt and retrieves the most similar past chunk (within a similarity floor and freshness window), then injects an `additionalContext` block whose first line is a "looks similar" pointer and whose body is a multi-line excerpt of the matched chunk.
 
 Historian is a sibling plugin to [`ecosystem`](../../) and assumes the Onlooker observability substrate (`~/.onlooker/`) is present. It is parallel to [`librarian`](../librarian) (which consolidates session decisions into the typed memory store) — both turn session-scoped material into something queryable across sessions, but at different levels of distillation. Librarian distills; historian preserves verbatim.
 
@@ -13,7 +13,7 @@ See [`docs/design.md`](docs/design.md) and [ADR-001](docs/adr/001-local-embeddin
 | Hook | What Historian does |
 |------|---------------------|
 | `SessionEnd` | Reads the transcript at `transcript_path`, drops tool calls and tool results (keeps user + assistant messages), chunks at turn boundaries inside the configured character target with overlap, runs the sanitizer (secret redaction + `[historian:skip]` markers + path-deny list), embeds each surviving chunk via the configured backend, and appends one JSONL line per chunk to the session's file. Emits `historian.indexing.*`, `historian.chunk.*`, and `historian.embedder.unavailable` events along the way. |
-| `UserPromptSubmit` | Rate-gated retrieval: short prompts, cooldown windows, and per-session caps short-circuit before the embedder runs. Otherwise embeds the prompt, walks every JSONL chunk for the project, and surfaces the top cosine-similarity match above the floor as a one-line `additionalContext` pointer. Excludes chunks from the current session id (a session retrieving its own chunks is the degenerate case). Emits `historian.retrieval.started`, `historian.retrieval.surfaced`, and `historian.retrieval.complete` with `outcome: surfaced\|empty\|skipped` and a `skip_reason` enum. |
+| `UserPromptSubmit` | Rate-gated retrieval: short prompts, cooldown windows, and per-session caps short-circuit before the embedder runs. Otherwise embeds the prompt, streams every JSONL chunk for the project, and injects an `additionalContext` block — a header pointer line plus a multi-line excerpt — for the top cosine-similarity match above the floor. Excludes chunks from the current session id (a session retrieving its own chunks is the degenerate case). Emits `historian.retrieval.started` when the rate gate clears, `historian.retrieval.surfaced` on the surfaced outcome, and `historian.retrieval.complete` with `outcome: surfaced\|empty\|skipped` and a `skip_reason` enum for skipped runs. |
 
 ## Activation
 

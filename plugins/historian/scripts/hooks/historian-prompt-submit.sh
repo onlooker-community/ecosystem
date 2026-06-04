@@ -6,17 +6,25 @@
 #      min_prompt_chars). Each ungated invocation costs one ollama
 #      embedding round-trip; the gates keep the cost bounded.
 #   2. Embed the prompt via the configured backend.
-#   3. Load every chunk record for the project, cosine-search against
-#      the query vector, filter by min_similarity and max_age_days.
+#   3. Stream every chunk record for the project from disk one line at
+#      a time, cosine-search against the query vector, filter by
+#      min_similarity and max_age_days.
 #   4. Emit one historian.retrieval.surfaced event for the top match
-#      and inject a single-line additionalContext pointer at it.
+#      and inject an `additionalContext` block whose first line is a
+#      "looks similar" pointer and whose body is a multi-line excerpt
+#      of the matched chunk.
 #
 # Hook contract:
 #   - Always exits 0. Never blocks the prompt.
 #   - Emits valid hookSpecificOutput JSON even when nothing to inject.
 #   - No-ops when historian.enabled is not true OR retrieval is disabled.
-#   - Skip cases (rate gate / short prompt / embedder unavailable / no
-#     hit above floor) emit historian.retrieval.skipped or .empty.
+#   - Lifecycle events: historian.retrieval.started fires when the rate
+#     gate clears and we are about to embed. All outcomes flow through
+#     historian.retrieval.complete with `outcome: surfaced | empty |
+#     skipped` and (on skipped) a `skip_reason` enum (short_prompt,
+#     cooldown, budget, embedder_unavailable). The surfaced case also
+#     emits historian.retrieval.surfaced with the matched chunk's
+#     chunk_id, similarity, age_days, and source_session_id.
 
 set -uo pipefail
 
@@ -180,8 +188,8 @@ MIN_SIMILARITY=$(historian_config_get '.historian.retrieval.min_similarity')
 MAX_AGE=$(historian_config_get '.historian.retrieval.max_age_days')
 [[ -z "$MAX_AGE" || "$MAX_AGE" == "null" ]] && MAX_AGE=180
 
-CHUNKS=$(historian_retriever_load_all_chunks "$PROJECT_KEY")
-RESULTS=$(historian_retriever_search "$CHUNKS" "$QUERY_EMBEDDING" "$TOP_K" \
+SESSIONS_DIR=$(historian_sessions_dir "$PROJECT_KEY")
+RESULTS=$(historian_retriever_search "$SESSIONS_DIR" "$QUERY_EMBEDDING" "$TOP_K" \
 	"$MIN_SIMILARITY" "$MAX_AGE" "$SESSION_ID")
 RESULT_COUNT=$(printf '%s' "$RESULTS" | jq 'length' 2>/dev/null) || RESULT_COUNT=0
 

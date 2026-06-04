@@ -54,7 +54,14 @@ PY
 
 # Compute top-K cosine-similarity matches against the query embedding.
 #
-# Usage: historian_retriever_search <chunks_json> <query_embedding_json>
+# The chunks are streamed from disk one line at a time so memory and
+# argv stay bounded as the per-project store grows. Earlier versions
+# passed the full chunks array as an argv string, which would trip the
+# OS ARG_MAX limit somewhere around tens of thousands of chunks; this
+# form never holds more than one chunk in memory at a time.
+#
+# Usage: historian_retriever_search <sessions_dir>
+#                                   <query_embedding_json>
 #                                   <top_k> <min_similarity>
 #                                   <max_age_days> <current_session_id>
 #
@@ -64,22 +71,27 @@ PY
 #   chunk_index, start_turn_index, end_turn_index, source
 # }
 historian_retriever_search() {
-	local chunks="${1:-[]}"
+	local sessions_dir="${1:-}"
 	local query="${2:-[]}"
 	local top_k="${3:-5}"
 	local min_sim="${4:-0.55}"
 	local max_age_days="${5:-180}"
 	local current_session="${6:-}"
 
-	python3 - "$top_k" "$min_sim" "$max_age_days" "$current_session" "$query" "$chunks" <<'PY'
-import datetime, json, math, sys
+	if [[ -z "$sessions_dir" || ! -d "$sessions_dir" ]]; then
+		echo '[]'
+		return 0
+	fi
 
-top_k = int(sys.argv[1])
-min_sim = float(sys.argv[2])
-max_age_days = int(sys.argv[3])
-current_session = sys.argv[4]
-query = json.loads(sys.argv[5] or "null")
-chunks = json.loads(sys.argv[6] or "[]")
+	python3 - "$sessions_dir" "$top_k" "$min_sim" "$max_age_days" "$current_session" "$query" <<'PY'
+import datetime, json, math, os, sys
+
+sessions_dir = sys.argv[1]
+top_k = int(sys.argv[2])
+min_sim = float(sys.argv[3])
+max_age_days = int(sys.argv[4])
+current_session = sys.argv[5]
+query = json.loads(sys.argv[6] or "null")
 
 
 def cosine(a, b):
@@ -114,27 +126,27 @@ if not isinstance(query, list) or not query:
 
 now = datetime.datetime.now(datetime.timezone.utc)
 scored = []
-for chunk in chunks:
+
+
+def consider(chunk):
     sid = chunk.get("session_id", "")
     # Exclude chunks from the session that is currently asking for
     # context; a session retrieving its own chunks is a degenerate case.
     if current_session and sid == current_session:
-        continue
+        return
     embedding = chunk.get("embedding")
     if not isinstance(embedding, list) or not embedding:
-        continue
+        return
     sim = cosine(query, embedding)
     if sim is None or sim < min_sim:
-        continue
+        return
     created = parse_iso(chunk.get("created_at"))
     if created is None:
-        # Without a date we can't enforce the freshness gate; keep but
-        # report age_days as -1 so the surfacer can flag it.
         age_days = -1
     else:
         age_days = (now - created).days
         if max_age_days > 0 and age_days > max_age_days:
-            continue
+            return
     scored.append(
         {
             "chunk_id": chunk.get("chunk_id"),
@@ -148,6 +160,30 @@ for chunk in chunks:
             "source": chunk.get("source", "local"),
         }
     )
+
+
+try:
+    names = sorted(os.listdir(sessions_dir))
+except OSError:
+    names = []
+
+for name in names:
+    if not name.endswith(".jsonl"):
+        continue
+    path = os.path.join(sessions_dir, name)
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    chunk = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                consider(chunk)
+    except OSError:
+        continue
 
 scored.sort(key=lambda c: c["similarity"], reverse=True)
 print(json.dumps(scored[:top_k]))
