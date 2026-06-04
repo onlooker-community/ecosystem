@@ -67,13 +67,12 @@ REMOTE_URL=$(historian_project_remote_url "$CWD")
 historian_storage_write_manifest "$PROJECT_KEY" "$REMOTE_URL" "$REPO_ROOT" || true
 
 # ----------------------------------------------------------------------------
-# Indexing started → transcript shape gate → skip_reason if not viable.
+# Transcript-availability check first — emit no started/complete for the
+# transcript_unavailable path, just a complete-with-skip so the timeline
+# reads cleanly. Once we have a real char count, emit started with that
+# count (the schema requires transcript_chars on started, so emitting
+# zero before the read produced misleading telemetry).
 # ----------------------------------------------------------------------------
-
-historian_emit "historian.indexing.started" "$SESSION_ID" "$(jq -cn \
-	--arg session_id "$SESSION_ID" \
-	--argjson transcript_chars 0 \
-	'{ session_id: $session_id, transcript_chars: $transcript_chars }')"
 
 SCAN_START_MS=$(python3 -c 'import time; print(int(time.time() * 1000))' 2>/dev/null) \
 	|| SCAN_START_MS=$(($(date +%s) * 1000))
@@ -103,6 +102,11 @@ TURNS=$(historian_transcript_load "$TRANSCRIPT_PATH")
 TRANSCRIPT_CHARS=$(historian_transcript_char_count "$TURNS")
 [[ -z "$TRANSCRIPT_CHARS" || "$TRANSCRIPT_CHARS" == "null" ]] && TRANSCRIPT_CHARS=0
 
+historian_emit "historian.indexing.started" "$SESSION_ID" "$(jq -cn \
+	--arg session_id "$SESSION_ID" \
+	--argjson transcript_chars "$TRANSCRIPT_CHARS" \
+	'{ session_id: $session_id, transcript_chars: $transcript_chars }')"
+
 if (( TRANSCRIPT_CHARS < MIN_CHARS )); then
 	_emit_skip "too_short"
 	exit 0
@@ -121,7 +125,13 @@ CHUNKS=$(historian_chunker_split "$TURNS" "$TARGET_CHARS" "$OVERLAP_CHARS")
 NEVER_INDEX_PATHS=$(historian_config_get '.historian.sanitization.never_index_paths | tojson')
 [[ -z "$NEVER_INDEX_PATHS" || "$NEVER_INDEX_PATHS" == "null" ]] && NEVER_INDEX_PATHS='[]'
 
-SANITIZED=$(historian_sanitizer_run "$CHUNKS" "$NEVER_INDEX_PATHS")
+# Honor the two on/off knobs from the config block.
+REDACT_SECRETS=$(historian_config_get '.historian.sanitization.redact_secret_patterns')
+[[ -z "$REDACT_SECRETS" || "$REDACT_SECRETS" == "null" ]] && REDACT_SECRETS="true"
+DROP_SKIP=$(historian_config_get '.historian.sanitization.drop_skip_marker')
+[[ -z "$DROP_SKIP" || "$DROP_SKIP" == "null" ]] && DROP_SKIP="true"
+
+SANITIZED=$(historian_sanitizer_run "$CHUNKS" "$NEVER_INDEX_PATHS" "$REDACT_SECRETS" "$DROP_SKIP")
 KEPT=$(printf '%s' "$SANITIZED" | jq '.kept')
 DROPPED=$(printf '%s' "$SANITIZED" | jq '.dropped')
 

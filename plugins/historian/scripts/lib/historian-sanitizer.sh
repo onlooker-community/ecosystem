@@ -17,19 +17,33 @@
 #         array of `dropped` records keyed by reason.
 
 # Usage: historian_sanitizer_run <chunks_json> <never_index_paths_json>
+#                                 <redact_secret_patterns> <drop_skip_marker>
+#
+# The two boolean args honor the corresponding config knobs:
+#   redact_secret_patterns: false → skip the secret regex substitutions
+#                                    (chunk bodies copy through unchanged)
+#   drop_skip_marker: false → keep chunks even when they contain the
+#                              [historian:skip] marker
+#
 # Output: { "kept": [...], "dropped": [...] }
 historian_sanitizer_run() {
 	local chunks="${1:-[]}"
 	local never_index_paths="${2:-[]}"
+	local redact_secrets="${3:-true}"
+	local drop_skip="${4:-true}"
 
-	python3 - "$chunks" "$never_index_paths" <<'PY'
+	python3 - "$chunks" "$never_index_paths" "$redact_secrets" "$drop_skip" <<'PY'
 import json, re, sys
 
 chunks = json.loads(sys.argv[1] or "[]")
 deny_paths = json.loads(sys.argv[2] or "[]")
+redact_secrets = sys.argv[3] != "false"
+drop_skip = sys.argv[4] != "false"
 
 # Secret-shaped patterns. Conservative — false positives are acceptable;
-# false negatives are the failure mode we care about.
+# false negatives are the failure mode we care about. Bearer matches
+# case-insensitively because the "Bearer" scheme is case-insensitive per
+# RFC 6750 and uppercase / lowercase variants occur in the wild.
 SECRET_PATTERNS = [
     # AWS access keys (AKIA followed by 16 base32-ish chars).
     re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
@@ -41,8 +55,8 @@ SECRET_PATTERNS = [
     re.compile(r"\bghr_[A-Za-z0-9]{20,}\b"),
     # Anthropic API keys.
     re.compile(r"\bsk-ant-[A-Za-z0-9_-]{20,}\b"),
-    # Bearer tokens in headers.
-    re.compile(r"Bearer\s+[A-Za-z0-9._\-+/=]{20,}"),
+    # Bearer tokens in headers. Case-insensitive on the scheme name only.
+    re.compile(r"(?i:Bearer)\s+[A-Za-z0-9._\-+/=]{20,}"),
     # KEY=value where KEY contains key/secret/token (case-insensitive).
     # We redact only the value (everything after the first =).
     re.compile(
@@ -57,7 +71,6 @@ def sanitize(body):
     out = body
     for pat in SECRET_PATTERNS[:-1]:
         new = pat.sub("[REDACTED:secret]", out)
-        # Each match is one redaction event.
         matches = pat.findall(out)
         if matches:
             count += len(matches)
@@ -83,7 +96,7 @@ kept = []
 dropped = []
 for chunk in chunks:
     body = chunk.get("body", "")
-    if SKIP_MARKER in body:
+    if drop_skip and SKIP_MARKER in body:
         dropped.append({
             "chunk_index": chunk.get("chunk_index"),
             "reason": "skip_marker",
@@ -95,7 +108,10 @@ for chunk in chunks:
             "reason": "never_index_path",
         })
         continue
-    redacted, count = sanitize(body)
+    if redact_secrets:
+        redacted, count = sanitize(body)
+    else:
+        redacted, count = body, 0
     new_chunk = dict(chunk)
     new_chunk.pop("body", None)
     new_chunk["body_redacted"] = redacted

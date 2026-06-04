@@ -213,3 +213,84 @@ _chunk_count() {
   grep '"event_type":"historian.indexing.complete"' "$ONLOOKER_EVENTS_LOG" \
     | jq -e ".payload.outcome == \"ok\" and .payload.chunks_indexed == $second_count" >/dev/null
 }
+
+@test "Bearer token redaction is case-insensitive" {
+  # Lowercase + mixed-case bearer variants — Copilot caught that the
+  # original regex only matched the title-case "Bearer" form.
+  local lower mixed
+  lower="b""earer abcdefghijklmnopqrstuvwxyz1234"
+  mixed="B""EARER zyxwvutsrqponmlkjihgfedcba98765432"
+  local body
+  body=$(printf "Headers: %s; also %s; padding here for length." "$lower" "$mixed")
+  _append_text_turn "user" "$body"
+
+  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  [ "$status" -eq 0 ]
+
+  local jsonl="${HIST_DIR}/sessions/${SESSION_ID}.jsonl"
+  ! grep -F -q "abcdefghijklmnopqrstuvwxyz1234" "$jsonl"
+  ! grep -F -q "zyxwvutsrqponmlkjihgfedcba98765432" "$jsonl"
+  grep -q 'REDACTED:secret' "$jsonl"
+}
+
+@test "redact_secret_patterns=false leaves secret-shaped strings untouched" {
+  printf '%s\n' \
+    '{"historian":{"enabled":true,"indexing":{"min_transcript_chars_to_index":50,"chunk_target_chars":400,"chunk_overlap_chars":50},"sanitization":{"redact_secret_patterns":false}}}' \
+    > "${PROJECT_REPO}/.claude/settings.json"
+
+  # Synthetic AWS-shaped string. Without redaction it should pass through
+  # to the JSONL verbatim; the chunk's redaction_count should be 0.
+  local fake_aws="AK""IAABCDEFGHIJKLMNOP"
+  _append_text_turn "user" "Header: AWS=$fake_aws — please do not redact this value because the user explicitly opted out."
+
+  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  [ "$status" -eq 0 ]
+
+  local jsonl="${HIST_DIR}/sessions/${SESSION_ID}.jsonl"
+  grep -F -q "$fake_aws" "$jsonl"
+  ! grep -q 'REDACTED:secret' "$jsonl"
+  jq -e '.redaction_count == 0' "$jsonl" >/dev/null
+}
+
+@test "drop_skip_marker=false keeps chunks containing the marker" {
+  printf '%s\n' \
+    '{"historian":{"enabled":true,"indexing":{"min_transcript_chars_to_index":50,"chunk_target_chars":400,"chunk_overlap_chars":50},"sanitization":{"drop_skip_marker":false}}}' \
+    > "${PROJECT_REPO}/.claude/settings.json"
+
+  local marker
+  marker='[hist''orian:skip]'
+  _append_text_turn "user" "Body that contains the ${marker} marker but should still be indexed when the flag is disabled. Padding to clear the min-chars threshold easily."
+
+  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  [ "$status" -eq 0 ]
+
+  local jsonl="${HIST_DIR}/sessions/${SESSION_ID}.jsonl"
+  [ "$(_chunk_count)" -ge 1 ]
+  grep -F -q "$marker" "$jsonl"
+  ! grep '"event_type":"historian.chunk.dropped"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e 'select(.payload.reason == "skip_marker")' >/dev/null || true
+}
+
+@test "historian.indexing.started reports a non-zero transcript_chars" {
+  # Previously the started event emitted transcript_chars: 0 because it
+  # fired before the transcript was read. Now it fires after the read,
+  # carrying the real character count.
+  _append_text_turn "user" "$(printf 'long enough for chars %.0s' {1..20})"
+  _append_text_turn "assistant" "$(printf 'response with content %.0s' {1..20})"
+
+  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  [ "$status" -eq 0 ]
+
+  grep '"event_type":"historian.indexing.started"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e '.payload.transcript_chars > 0' >/dev/null
+}
+
+@test "transcript_unavailable path emits complete without a started event" {
+  # When the transcript path is missing we never read it, so no started
+  # event makes it to the log. Only the complete-with-skip remains.
+  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  [ "$status" -eq 0 ]
+
+  ! grep -q '"event_type":"historian.indexing.started"' "$ONLOOKER_EVENTS_LOG"
+  grep -q '"event_type":"historian.indexing.complete"' "$ONLOOKER_EVENTS_LOG"
+}
