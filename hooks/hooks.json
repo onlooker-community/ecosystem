@@ -87,6 +87,10 @@
           {
             "type": "command",
             "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hooks/session-start-tracker.sh"
+          },
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hooks/memory-recall-tracker.sh"
           }
         ]
       }
