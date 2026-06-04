@@ -150,6 +150,19 @@
       "license": "MIT",
       "keywords": ["memory", "audit", "staleness", "findings", "auto-memory", "decay"],
       "tags": ["memory", "context-engineering"]
+    },
+    {
+      "name": "historian",
+      "source": "./plugins/historian",
+      "description": "Episodic memory layer for past Claude Code sessions. At SessionEnd, reads the session transcript, drops tool calls and tool results, chunks the remaining user + assistant turns at turn boundaries with overlap, redacts secret-shaped substrings (AWS keys, GitHub PATs, Anthropic API keys, KEY=value env assignments), and appends one JSONL line per surviving chunk to ~/.onlooker/historian/<project-key>/sessions/<session-id>.jsonl. Future-tense retrieval (vector embeddings + UserPromptSubmit similarity surfacer) lands in a follow-up; this version ships the indexing pipeline only. Requires the ecosystem plugin.",
+      "author": {
+        "name": "Onlooker Community"
+      },
+      "homepage": "https://onlooker.dev",
+      "repository": "https://github.com/onlooker-community/ecosystem",
+      "license": "MIT",
+      "keywords": ["memory", "episodic", "transcript", "indexing", "session", "retrieval"],
+      "tags": ["memory", "context-engineering"]
     }
   ]
 }

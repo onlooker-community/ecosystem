@@ -1,0 +1,14 @@
+{
+  "name": "historian",
+  "version": "0.0.1",
+  "description": "Episodic memory layer. At SessionEnd, chunks and sanitizes the session transcript and stores the chunks locally under ~/.onlooker/historian/<project-key>/sessions/. Future-tense retrieval (vector embeddings + UserPromptSubmit similarity surfacer) lands in a follow-up; this PR ships the indexing pipeline only. Builds on the Onlooker ecosystem plugin.",
+  "author": {
+    "name": "Onlooker Community",
+    "url": "https://onlooker.dev"
+  },
+  "homepage": "https://onlooker.dev",
+  "repository": "https://github.com/onlooker-community/ecosystem",
+  "license": "MIT",
+  "skills": [],
+  "agents": []
+}
