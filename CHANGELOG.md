@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.20.0...ecosystem-v0.21.0) (2026-06-04)
+
+
+### Features
+
+* **curator:** introduce plugin with cheap-tier checks :microscope: ([#57](https://github.com/onlooker-community/ecosystem/issues/57)) ([7f9fa18](https://github.com/onlooker-community/ecosystem/commit/7f9fa18bbde29c8b5bd1eaad185bd4c5595a3762))
+
 ## [0.20.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.19.0...ecosystem-v0.20.0) (2026-06-04)
 
 
