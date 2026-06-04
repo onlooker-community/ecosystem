@@ -6,8 +6,8 @@
 #   librarian_cli show <proposal_id>           # full proposal body + provenance + conflict state
 #   librarian_cli accept <proposal_id>         # write to typed memory store, mark accepted
 #   librarian_cli reject <proposal_id> [reason]  # tombstone + mark rejected
-#   librarian_cli defer  <proposal_id>         # no-op except a defer-marker event
-#   librarian_cli status                       # one-line counts (pending / accepted / rejected / deferred)
+#   librarian_cli defer  <proposal_id>         # mark as deferred=true while keeping status pending
+#   librarian_cli status                       # one-line counts (pending / accepted / rejected)
 #
 # Memory store writes go to:
 #   ${HOME}/.claude/projects/${CLAUDE_PROJECT_ENCODED}/memory/<filename>
@@ -161,7 +161,7 @@ librarian_cli_list() {
 		printf 'ID\tTYPE\tCONFIDENCE\tCONFLICT\tTITLE\n'
 		printf '%s' "$pending" | jq -r '
 			.[] | [
-				.id[0:14],
+				(.id // ""),
 				(.proposed.type // "?"),
 				((.proposed.classifier_confidence // 0) | tostring),
 				(.conflict_state // "none"),
@@ -264,12 +264,16 @@ librarian_cli_reject() {
 	# Tombstone keyed on body hash so the same content does not re-propose.
 	body_hash=$(librarian_body_hash "$body")
 	if [[ -n "$body_hash" ]]; then
-		librarian_storage_write_tombstone "$key" "$body_hash" "$original_filename" || true
-		librarian_emit "librarian.tombstone.created" "$session_id" "$(jq -cn \
-			--arg body_hash "$body_hash" \
-			--arg original_filename "$original_filename" \
-			'{body_hash: $body_hash, original_filename: (if $original_filename == "" then null else $original_filename end)}
-			 | with_entries(select(.value != null))')"
+		if librarian_storage_write_tombstone "$key" "$body_hash" "$original_filename"; then
+			librarian_emit "librarian.tombstone.created" "$session_id" "$(jq -cn \
+				--arg body_hash "$body_hash" \
+				--arg original_filename "$original_filename" \
+				'{body_hash: $body_hash, original_filename: (if $original_filename == "" then null else $original_filename end)}
+				 | with_entries(select(.value != null))')"
+		else
+			printf 'Failed to write tombstone for proposal %s.\n' "$proposal_id"
+			return 1
+		fi
 	fi
 
 	_librarian_cli_set_proposal_status "$key" "$proposal_id" "rejected" \

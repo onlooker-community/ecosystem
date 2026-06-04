@@ -128,6 +128,9 @@ _seed_proposal() {
   # Both pending titles surface.
   [[ "$output" == *"Prefer functional patterns"* ]]
   [[ "$output" == *"Auth rewrite is compliance"* ]]
+  # Pending rows include full IDs that can be used with show/accept/reject/defer.
+  [[ "$output" == *"01LISTPENDINGA000000000000"* ]]
+  [[ "$output" == *"01LISTPENDINGB000000000000"* ]]
   # Accepted entry does NOT appear in the list output.
   [[ "$output" != *"Already accepted"* ]]
 }
