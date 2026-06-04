@@ -1,0 +1,15 @@
+{
+  "plugin_name": "assayer",
+  "storage_path": "~/.onlooker",
+  "assayer": {
+    "enabled": false,
+    "evaluation": {
+      "model": "claude-haiku-4-5-20251001",
+      "max_output_tokens": 1024,
+      "timeout_seconds": 60
+    },
+    "max_claims": 12,
+    "min_confidence": 0.5,
+    "final_message_chars": 6000
+  }
+}
