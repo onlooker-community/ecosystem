@@ -1,6 +1,6 @@
 {
   "name": "curator",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Maintenance layer for the user's typed auto-memory store. At every SessionStart, runs four cheap heuristic checks (date_decayed, path_broken, broken_index, orphaned_memory) against the memories at ~/.claude/projects/<encoded>/memory/ inside a wall-clock budget. Surfaces findings as a one-line pointer to /curator review; never edits the memory store directly. Builds on the Onlooker ecosystem plugin.",
   "author": {
     "name": "Onlooker Community",
