@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.25.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.24.0...ecosystem-v0.25.0) (2026-06-04)
+
+
+### Features
+
+* **assayer:** introduce claim-verification plugin ([#70](https://github.com/onlooker-community/ecosystem/issues/70)) ([1d0500b](https://github.com/onlooker-community/ecosystem/commit/1d0500b64f8cd670d1cfa1ac070182d72696bdfd))
+
 ## [0.24.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.23.1...ecosystem-v0.24.0) (2026-06-04)
 
 
