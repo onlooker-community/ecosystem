@@ -9,7 +9,10 @@
 #   cartographer_lock_acquire <lock_file>   # returns 0=acquired, 1=timeout
 #   cartographer_lock_release <lock_file>
 
-_CARTOGRAPHER_LOCK_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../scripts/lib" && pwd)/portable-lock.sh"
+# portable-lock.sh is vendored into this plugin's lib dir (a sibling of this
+# file) so cartographer stays self-contained when installed standalone from
+# the marketplace, where the ecosystem repo's top-level scripts/lib/ is absent.
+_CARTOGRAPHER_LOCK_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/portable-lock.sh"
 
 if [[ ! -f "$_CARTOGRAPHER_LOCK_LIB" ]]; then
 	printf '[cartographer-lock] ERROR: portable-lock.sh not found at %s\n' \
@@ -17,7 +20,7 @@ if [[ ! -f "$_CARTOGRAPHER_LOCK_LIB" ]]; then
 	exit 1
 fi
 
-# shellcheck source=../../../../scripts/lib/portable-lock.sh
+# shellcheck source=./portable-lock.sh
 source "$_CARTOGRAPHER_LOCK_LIB"
 
 cartographer_lock_acquire() {
