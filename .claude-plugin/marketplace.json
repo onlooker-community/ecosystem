@@ -5,26 +5,26 @@
     "email": "community@onlooker.dev"
   },
   "metadata": {
-    "description": "TODO Fill this out"
+    "description": "Composable observability, memory, and quality-gate plugins for Claude Code — all built on the Onlooker ecosystem event substrate."
   },
   "plugins": [
     {
       "name": "ecosystem",
       "source": "./",
-      "description": "Fill this out",
+      "description": "Observability substrate for Claude Code. Provides the shared ~/.onlooker/ storage root, canonical schema-validated event emission, session and tool tracking hooks, and prompt rules. Required by all other Onlooker plugins.",
       "author": {
         "name": "Onlooker Community"
       },
       "homepage": "https://onlooker.dev",
       "repository": "https://github.com/onlooker-community/ecosystem",
       "license": "MIT",
-      "keywords": [],
-      "tags": []
+      "keywords": ["observability", "substrate", "events", "hooks", "telemetry"],
+      "tags": ["observability", "substrate"]
     },
     {
       "name": "archivist",
       "source": "./plugins/archivist",
-      "description": "Structured session memory across context truncation. Extracts decisions, dead ends, and open questions on PreCompact and reinjects the most important items at SessionStart. Requires the ecosystem plugin.",
+      "description": "Structured session memory across context truncation: extracts decisions, dead ends, and open questions on PreCompact and reinjects the most important items at SessionStart. Requires the ecosystem plugin.",
       "author": {
         "name": "Onlooker Community"
       },
@@ -35,9 +35,22 @@
       "tags": ["memory", "context-engineering"]
     },
     {
+      "name": "cartographer",
+      "source": "./plugins/cartographer",
+      "description": "Proactive periodic auditor of the persistent instruction layer (CLAUDE.md, AGENTS.md, .claude/rules/). Discovers all instruction files in the repo, extracts semantic maps, and surfaces contradictions, shadowing, gaps, and drift before they cause expensive agent misbehavior. Requires the ecosystem plugin.",
+      "author": {
+        "name": "Onlooker Community"
+      },
+      "homepage": "https://onlooker.dev",
+      "repository": "https://github.com/onlooker-community/ecosystem",
+      "license": "MIT",
+      "keywords": ["instructions", "audit", "claude-md", "agents-md", "drift", "consistency"],
+      "tags": ["instructions", "context-engineering"]
+    },
+    {
       "name": "tribunal",
       "source": "./plugins/tribunal",
-      "description": "Multi-agent execution with LLM-as-a-Judge quality gates. An Actor performs work; a jury of typed Judges scores it against a project-overridable rubric; a Meta-Judge reviews the jury for bias; the gate decides accept, retry, or exhaust. Requires the ecosystem plugin.",
+      "description": "Multi-agent execution with LLM-as-a-Judge quality gates. An Actor performs work; a jury of typed Judges scores it against a project-overridable rubric; a Meta-Judge reviews the jury for bias; the gate decides accept, retry, or exhaust. Grounded in LLM-as-a-Judge (Zheng et al. 2023) and LLM-as-a-Meta-Judge (Wu et al. 2024). Requires the ecosystem plugin.",
       "author": {
         "name": "Onlooker Community"
       },
@@ -76,7 +89,7 @@
     {
       "name": "compass",
       "source": "./plugins/compass",
-      "description": "Pre-write intent clarity gate. Intercepts write-class tool calls and samples N=5 parallel evaluators to score intent clarity before allowing writes to proceed. Blocks when confidence is low or evaluators disagree, surfacing a structured clarification prompt. Requires the ecosystem plugin.",
+      "description": "Pre-write intent clarity gate. Intercepts write-class tool calls and requires a confidence threshold before allowing them to proceed. Evaluates the pending write against the prior assistant turn as context to avoid false positives on question-answer turns. Requires the ecosystem plugin.",
       "author": {
         "name": "Onlooker Community"
       },
@@ -89,7 +102,7 @@
     {
       "name": "scribe",
       "source": "./plugins/scribe",
-      "description": "Intent documentation from agent activity. Captures why changes were made — problem context, decisions, tradeoffs, and constraints — and distills them into readable Markdown artifacts at session end. Git logs record what changed; scribe records why. Requires the ecosystem plugin.",
+      "description": "Intent documentation from agent activity. Captures why changes were made — problem context, decisions, tradeoffs — and distills them into readable artifacts at session end. Requires the ecosystem plugin.",
       "author": {
         "name": "Onlooker Community"
       },
@@ -102,7 +115,7 @@
     {
       "name": "counsel",
       "source": "./plugins/counsel",
-      "description": "Weekly synthesis and recommendations from your full observability stack. Reads all plugin event logs, identifies patterns, surfaces improvement opportunities, and injects a structured brief at session start when the last brief is stale. Turns disparate logs into a coaching signal. Requires the ecosystem plugin.",
+      "description": "Weekly synthesis and recommendations from the full observability stack. Reads all plugin event logs, produces a structured improvement brief, and injects it at session start when the last brief is stale. Requires the ecosystem plugin.",
       "author": {
         "name": "Onlooker Community"
       },
@@ -115,7 +128,7 @@
     {
       "name": "warden",
       "source": "./plugins/warden",
-      "description": "Untrusted-content gate. Scans content flowing in through WebFetch and Read for prompt-injection patterns, and when a threat is detected closes a session-scoped gate that blocks Write, Edit, and Bash until the user explicitly clears it. Grounded in Meta's Agents Rule of Two — warden removes the agent's external-actions property while untrusted content is in play. Requires the ecosystem plugin.",
+      "description": "Untrusted-content gate. Scans content flowing in through WebFetch and Read for prompt-injection patterns, and when a threat is detected closes a session-scoped gate that blocks Write, Edit, and Bash until the user explicitly clears it. Grounded in Meta's Agents Rule of Two: an agent should hold no more than two of {private data, external actions, untrusted content} at once — warden removes the external-actions property while untrusted content is in play. Requires the ecosystem plugin.",
       "author": {
         "name": "Onlooker Community"
       },
@@ -128,7 +141,7 @@
     {
       "name": "librarian",
       "source": "./plugins/librarian",
-      "description": "Consolidation layer between archivist's per-session artifacts and the user's durable typed memory store. Reads archivist artifacts at SessionEnd, applies a durability filter, classifies survivors via Haiku into the four memory types (user, feedback, project, reference), and queues proposals for explicit confirmation via /librarian review. Auto-promotion is opt-in. Requires the ecosystem plugin.",
+      "description": "Consolidation layer between archivist's per-session artifacts and the user's durable typed memory store. Detects which session decisions, dead-ends, and open questions deserve to live across sessions, classifies them into the user/feedback/project/reference types, and queues them as proposals for explicit confirmation. Auto-promotion is opt-in. Requires the ecosystem plugin.",
       "author": {
         "name": "Onlooker Community"
       },
@@ -141,7 +154,7 @@
     {
       "name": "curator",
       "source": "./plugins/curator",
-      "description": "Maintenance layer for the typed auto-memory store. At every SessionStart, runs four cheap heuristic checks against the memories at ~/.claude/projects/<encoded>/memory/ — date_decayed (ISO-8601 dates past the grace period), path_broken (path-shaped references that don't resolve under the repo root), broken_index (MEMORY.md pointing at missing files), and orphaned_memory (files in the dir not referenced from MEMORY.md). Surfaces findings via /curator review; never edits the memory store directly. Parallel to cartographer (which audits hand-maintained instruction files), curator audits the auto-memory substrate. Requires the ecosystem plugin.",
+      "description": "Maintenance layer for the user's typed auto-memory store. At every SessionStart, runs four cheap heuristic checks (date_decayed, path_broken, broken_index, orphaned_memory) against the memories at ~/.claude/projects/<encoded>/memory/ inside a wall-clock budget. Surfaces findings as a one-line pointer to /curator review; never edits the memory store directly. Requires the ecosystem plugin.",
       "author": {
         "name": "Onlooker Community"
       },
@@ -154,7 +167,7 @@
     {
       "name": "historian",
       "source": "./plugins/historian",
-      "description": "Episodic memory layer for past Claude Code sessions. At SessionEnd, reads the session transcript, drops tool calls and tool results, chunks the remaining user + assistant turns at turn boundaries with overlap, redacts secret-shaped substrings (AWS keys, GitHub PATs, Anthropic API keys, KEY=value env assignments), and appends one JSONL line per surviving chunk to ~/.onlooker/historian/<project-key>/sessions/<session-id>.jsonl. Future-tense retrieval (vector embeddings + UserPromptSubmit similarity surfacer) lands in a follow-up; this version ships the indexing pipeline only. Requires the ecosystem plugin.",
+      "description": "Episodic memory layer. At SessionEnd, chunks and sanitizes the session transcript and stores chunks under $ONLOOKER_DIR/historian/<project-key>/sessions/ (default $HOME/.onlooker). On UserPromptSubmit, embeds the prompt and performs similarity retrieval over stored chunks to surface relevant past context. Requires the ecosystem plugin.",
       "author": {
         "name": "Onlooker Community"
       },
@@ -167,7 +180,7 @@
     {
       "name": "assayer",
       "source": "./plugins/assayer",
-      "description": "Claim verification. At session end, parses the agent's final message for testable success claims (\"I ran the tests, they pass\", \"the build is green\") and cross-checks each against the actual command results in the session transcript, classifying it corroborated, contradicted, or unverifiable. Catches lying-without-malice. Advisory by default. Requires the ecosystem plugin.",
+      "description": "Claim verification. At session end, parses the agent's final message for testable claims (\"I ran the tests, they pass\", \"the build is green\") and checks each against the actual command results in the session transcript, classifying it corroborated, contradicted, or unverifiable. Catches lying-without-malice. Advisory by default. Requires the ecosystem plugin.",
       "author": {
         "name": "Onlooker Community"
       },
