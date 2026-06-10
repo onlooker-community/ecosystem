@@ -1,6 +1,6 @@
 {
   "name": "cartographer",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Proactive periodic auditor of the persistent instruction layer (CLAUDE.md, AGENTS.md, .claude/rules/). Discovers all instruction files in the repo, extracts semantic maps, and surfaces contradictions, shadowing, gaps, and drift before they cause expensive agent misbehavior. Builds on the Onlooker ecosystem plugin.",
   "author": {
     "name": "Onlooker Community",
