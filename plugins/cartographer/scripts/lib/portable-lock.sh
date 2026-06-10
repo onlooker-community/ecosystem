@@ -1,4 +1,13 @@
 #!/usr/bin/env bash
+# portable-lock.sh — vendored copy of the ecosystem substrate's portable lock.
+#
+# Vendored into the cartographer plugin so the plugin is self-contained when
+# installed standalone from the marketplace: the cache layout
+# (~/.claude/plugins/cache/<owner>/cartographer/<version>/) does not include
+# the ecosystem repo's top-level scripts/lib/, so reaching up to it breaks.
+# This mirrors the per-plugin vendoring of cartographer-ulid.sh and friends.
+# Keep in sync with scripts/lib/portable-lock.sh at the repo root.
+#
 # Portable advisory file locking via mkdir() atomicity.
 #
 # Replaces flock(1), which ships with util-linux on Linux but is not present

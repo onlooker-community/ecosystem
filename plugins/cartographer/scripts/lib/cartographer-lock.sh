@@ -9,16 +9,26 @@
 #   cartographer_lock_acquire <lock_file>   # returns 0=acquired, 1=timeout
 #   cartographer_lock_release <lock_file>
 
-_CARTOGRAPHER_LOCK_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../scripts/lib" && pwd)/portable-lock.sh"
+# portable-lock.sh is vendored into this plugin's lib dir (a sibling of this
+# file) so cartographer stays self-contained when installed standalone from
+# the marketplace, where the ecosystem repo's top-level scripts/lib/ is absent.
+_CARTOGRAPHER_LOCK_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/portable-lock.sh"
 
-if [[ ! -f "$_CARTOGRAPHER_LOCK_LIB" ]]; then
-	printf '[cartographer-lock] ERROR: portable-lock.sh not found at %s\n' \
+if [[ -f "$_CARTOGRAPHER_LOCK_LIB" ]]; then
+	# shellcheck source=./portable-lock.sh
+	source "$_CARTOGRAPHER_LOCK_LIB"
+else
+	# The vendored lock should always be present, but if an unexpected
+	# packaging or path issue removes it we must degrade gracefully: the
+	# cartographer hooks are fail-soft and contractually exit 0, so a hard
+	# exit here would crash a session this plugin was only meant to observe.
+	# Define a primitive that always fails to acquire, so the hooks'
+	# `cartographer_lock_acquire ... || exit 0` skips the audit instead.
+	printf '[cartographer-lock] WARN: portable-lock.sh not found at %s; locking disabled, skipping audit\n' \
 		"$_CARTOGRAPHER_LOCK_LIB" >&2
-	exit 1
+	lock_acquire() { return 1; }
+	lock_release() { return 0; }
 fi
-
-# shellcheck source=../../../../scripts/lib/portable-lock.sh
-source "$_CARTOGRAPHER_LOCK_LIB"
 
 cartographer_lock_acquire() {
 	local lock_file="${1:?lock_file required}"

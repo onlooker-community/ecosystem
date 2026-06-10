@@ -1,4 +1,15 @@
 #!/usr/bin/env bash
+# portable-lock.sh — vendored copy of the ecosystem substrate's portable lock.
+#
+# Vendored into the governor plugin so the ledger's atomic appends keep
+# working when governor is installed standalone from the marketplace: the
+# cache layout (~/.claude/plugins/cache/<owner>/governor/<version>/) does not
+# include the ecosystem repo's top-level scripts/lib/. Without a local copy,
+# lock_acquire would be undefined and governor_ledger_append would poison the
+# ledger after exhausting its retries. This mirrors the per-plugin vendoring
+# of governor-ulid.sh and friends.
+# Keep in sync with scripts/lib/portable-lock.sh at the repo root.
+#
 # Portable advisory file locking via mkdir() atomicity.
 #
 # Replaces flock(1), which ships with util-linux on Linux but is not present

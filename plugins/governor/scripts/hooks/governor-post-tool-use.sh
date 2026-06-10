@@ -24,11 +24,15 @@ fi
 if [[ -n "$_ECOSYSTEM_ROOT" && -f "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.sh" ]]; then
 	# shellcheck disable=SC1091
 	CLAUDE_PLUGIN_ROOT="$_ECOSYSTEM_ROOT" source "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.sh"
-	# shellcheck disable=SC1091
-	CLAUDE_PLUGIN_ROOT="$_ECOSYSTEM_ROOT" source "${_ECOSYSTEM_ROOT}/scripts/lib/portable-lock.sh"
 fi
 
 export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
+
+# portable-lock.sh is vendored into this plugin's lib dir so the ledger's
+# atomic appends keep working when governor is installed standalone, where the
+# ecosystem repo's top-level scripts/lib/ is absent from the plugin cache.
+# shellcheck source=../lib/portable-lock.sh
+source "${PLUGIN_ROOT}/scripts/lib/portable-lock.sh"
 
 # shellcheck source=../lib/governor-config.sh
 source "${PLUGIN_ROOT}/scripts/lib/governor-config.sh"
