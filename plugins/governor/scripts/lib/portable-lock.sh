@@ -15,7 +15,7 @@
 # Replaces flock(1), which ships with util-linux on Linux but is not present
 # in stock macOS. This matters because the Onlooker hooks run on user
 # machines, not just in CI: a macOS user without util-linux would otherwise
-# see every PostToolUse history append silently fail.
+# see concurrent writes to $ONLOOKER_DIR silently clobber each other.
 #
 # mkdir() is atomic on POSIX local filesystems, which is the only place
 # $ONLOOKER_DIR ever lives. Network filesystems (NFS) do not guarantee
