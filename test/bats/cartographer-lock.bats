@@ -75,3 +75,22 @@ teardown() {
   [ "$status" -ne 0 ]
   wait
 }
+
+@test "missing vendored portable-lock.sh degrades to a no-op lock, never crashes" {
+  # Copy only the wrapper into an isolated dir WITHOUT its sibling
+  # portable-lock.sh to simulate a broken packaging/path. The cartographer
+  # hooks are fail-soft (exit 0), so sourcing must not abort and acquire must
+  # fail so the caller's `... || exit 0` skips the audit instead of crashing.
+  cp "${REPO_ROOT}/plugins/cartographer/scripts/lib/cartographer-lock.sh" "${BATS_TEST_TMPDIR}/cartographer-lock.sh"
+  run bash -c "
+    source '${BATS_TEST_TMPDIR}/cartographer-lock.sh'
+    echo SOURCED_OK
+    cartographer_lock_acquire '${BATS_TEST_TMPDIR}/x.lock' && echo ACQUIRED || echo ACQUIRE_FAILED
+    cartographer_lock_release '${BATS_TEST_TMPDIR}/x.lock' && echo RELEASE_OK
+  "
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"SOURCED_OK"* ]]
+  [[ "$output" == *"ACQUIRE_FAILED"* ]]
+  [[ "$output" == *"RELEASE_OK"* ]]
+  [[ "$output" == *"locking disabled"* ]]
+}
