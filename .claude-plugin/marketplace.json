@@ -11,7 +11,7 @@
     {
       "name": "ecosystem",
       "source": "./",
-      "description": "Observability substrate for Claude Code. Provides the shared ~/.onlooker/ storage root, canonical schema-validated event emission, session and tool tracking hooks, and prompt rules. Required by all other Onlooker plugins.",
+      "description": "Observability substrate for Claude Code. Provides the shared $ONLOOKER_DIR storage root (default $HOME/.onlooker), canonical schema-validated event emission, session and tool tracking hooks, and prompt rules. Required by all other Onlooker plugins.",
       "author": {
         "name": "Onlooker Community"
       },
