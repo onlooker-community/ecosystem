@@ -198,12 +198,21 @@ counsel_generate_brief() {
 	# Compute period bounds. The brief heading shows calendar dates; the emitted
 	# event requires RFC 3339 date-time strings (schema format: date-time), so
 	# compute the timestamps first and derive the date-only strings from them.
+	# Prefer UTC; fall back to local time (still RFC 3339, just a different zone)
+	# if -u is unavailable. If even that fails the date subsystem is broken and
+	# the bounds stay empty — the emit below skips rather than send garbage.
 	local period_start_ts period_end_ts
-	period_end_ts=$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null) || period_end_ts=""
+	period_end_ts=$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null) \
+		|| period_end_ts=$(date '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null) \
+		|| period_end_ts=""
 	if [[ "$(uname)" == "Darwin" ]]; then
-		period_start_ts=$(date -u -v "-${lookback_days}d" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null) || period_start_ts=""
+		period_start_ts=$(date -u -v "-${lookback_days}d" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null) \
+			|| period_start_ts=$(date -v "-${lookback_days}d" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null) \
+			|| period_start_ts=""
 	else
-		period_start_ts=$(date -u -d "-${lookback_days} days" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null) || period_start_ts=""
+		period_start_ts=$(date -u -d "-${lookback_days} days" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null) \
+			|| period_start_ts=$(date -d "-${lookback_days} days" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null) \
+			|| period_start_ts=""
 	fi
 	local period_start period_end
 	period_end="${period_end_ts%%T*}"; [[ -z "$period_end" ]] && period_end="unknown"
@@ -251,7 +260,13 @@ counsel_generate_brief() {
 		--argjson src "$sources_json" \
 		'{period_start: $ps, period_end: $pe, recommendation_count: $rc, sources_consulted: $src}') || payload=""
 
-	[[ -n "$payload" ]] && counsel_emit_event "counsel.brief.generated" "$payload" || true
+	# Only emit when the period bounds are valid RFC 3339 date-times — emitting
+	# empty bounds would fail schema validation and silently drop the event.
+	if [[ -n "$payload" && -n "$period_start_ts" && -n "$period_end_ts" ]]; then
+		counsel_emit_event "counsel.brief.generated" "$payload" || true
+	else
+		printf 'counsel_generate_brief: skipped counsel.brief.generated (no valid period bounds)\n' >&2
+	fi
 
 	printf '%s' "$output_path"
 }

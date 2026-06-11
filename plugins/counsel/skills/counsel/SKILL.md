@@ -49,9 +49,10 @@ BRIEFS_DIR=$(counsel_project_dir "$PROJECT_KEY")
 ### `/counsel` — run the weekly review now (default)
 
 Forces a synthesis pass regardless of brief freshness, writes the brief to
-`~/.onlooker/counsel/<project-key>/briefs/<YYYY-WW>.md`, emits
+`${ONLOOKER_DIR:-~/.onlooker}/counsel/<project-key>/briefs/<YYYY-WW>.md`, emits
 `counsel.brief.generated`, and renders the result. Re-running in the same ISO
-week overwrites that week's brief in place.
+week overwrites that week's brief in place. (`$ONLOOKER_DIR` overrides the
+storage root; the test suite and non-default installs rely on it.)
 
 ```bash
 SESSION_ID="${CLAUDE_SESSION_ID:-$(counsel_ulid)}"

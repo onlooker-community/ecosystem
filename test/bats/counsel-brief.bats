@@ -146,3 +146,22 @@ gen() {
   run grep -o '"period_start":"[^"]*"' "$ONLOOKER_EVENTS_LOG"
   [[ "$output" == *"T"*"Z"* ]]
 }
+
+# If date cannot produce timestamps the bounds are empty; rather than emit an
+# event that fails schema validation, the emit is skipped and the brief is
+# still written.
+@test "emit is skipped (never invalid) when date cannot produce bounds" {
+  local datestub="${BATS_TEST_TMPDIR}/datebin"
+  mkdir -p "$datestub"
+  printf '#!/usr/bin/env bash\nexit 1\n' > "${datestub}/date"
+  chmod +x "${datestub}/date"
+  PATH="${datestub}:${PATH}"
+
+  gen "sess-nodate" "$WORK" force
+  [ "$GEN_STATUS" -eq 0 ]
+  [ -f "$GEN_OUT" ]
+  grep -q "SYNTH_MARKER" "$GEN_OUT"
+  # No counsel.brief.generated event should have been appended.
+  run grep -c '"event_type":"counsel.brief.generated"' "$ONLOOKER_EVENTS_LOG"
+  [ "$output" -eq 0 ]
+}
