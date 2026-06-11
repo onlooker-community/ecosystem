@@ -18,6 +18,18 @@ Counsel partitions the event stream by source plugin, recognizing `tribunal`, `e
 
 The hook always exits 0 — it never blocks a session from starting. It skips silently when Counsel is disabled, the directory has no project key (non-git), the latest brief is still fresh, or fewer than `capture.min_events` events fall inside the lookback window.
 
+## On-demand brief — `/counsel`
+
+The SessionStart path only regenerates when the latest brief is stale. To run the weekly review immediately — regardless of freshness — invoke the `/counsel` skill. It forces a synthesis pass, writes the brief, emits `counsel.brief.generated`, and renders the result in the conversation instead of injecting it invisibly.
+
+| Invocation | What it does |
+|------------|--------------|
+| `/counsel` | Forces a fresh synthesis now (bypassing the staleness gate), writes `<YYYY-WW>.md`, and prints the brief. Re-running in the same ISO week overwrites that week's brief in place. |
+| `/counsel --show` | Renders the most recent brief already on disk. No LLM call, no events emitted. |
+| `/counsel --status` | Reports the latest brief's age, last-generated time, and whether it is stale. No LLM call. |
+
+The on-demand path bypasses only the staleness gate — output, events, storage layout, project keying, and the `capture.min_events` floor are identical to the SessionStart path. If too few events fall inside the lookback window, `/counsel` reports that rather than emitting a thin brief.
+
 ## Activation
 
 Counsel is **on by default**. Disable it per-project in `.claude/settings.json` (or globally in `~/.claude/settings.json`):
