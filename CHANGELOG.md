@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.25.1...ecosystem-v0.26.0) (2026-06-11)
+
+
+### Features
+
+* **counsel:** add /counsel on-demand weekly-review command :rocket: ([#76](https://github.com/onlooker-community/ecosystem/issues/76)) ([8ce951c](https://github.com/onlooker-community/ecosystem/commit/8ce951cd5cb7b173f194f86c2960a31fb0d6889d))
+
 ## [0.25.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.25.0...ecosystem-v0.25.1) (2026-06-10)
 
 
