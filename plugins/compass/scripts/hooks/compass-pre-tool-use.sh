@@ -65,14 +65,17 @@ case "$TOOL_NAME" in
 		OPERATION="edit"
 		;;
 	MultiEdit)
-		# For MultiEdit, use the first file path and a summary as context.
+		# MultiEdit applies to one file via a top-level file_path; fall back to
+		# the first edit's path for any nested shape.
 		FILE_PATH=$(printf '%s' "$INPUT" \
-			| jq -r '.tool_input.edits[0].file_path // ""' 2>/dev/null) || FILE_PATH=""
+			| jq -r '.tool_input.file_path // .tool_input.edits[0].file_path // ""' 2>/dev/null) || FILE_PATH=""
 		_edit_count=$(printf '%s' "$INPUT" \
 			| jq '.tool_input.edits | length' 2>/dev/null) || _edit_count="?"
+		# Combine the top-level path with any per-edit paths, drop blanks/nulls.
 		_file_list=$(printf '%s' "$INPUT" \
-			| jq -r '[.tool_input.edits[].file_path] | unique | join(", ")' 2>/dev/null) \
-			|| _file_list="(multiple files)"
+			| jq -r '([.tool_input.file_path] + [.tool_input.edits[]?.file_path] | map(select(. != null and . != "")) | unique) | join(", ")' 2>/dev/null) \
+			|| _file_list=""
+		[[ -z "$_file_list" ]] && _file_list="$FILE_PATH"
 		CONTEXT="MultiEdit: ${_edit_count} edit(s) across: ${_file_list}"
 		OPERATION="multi_edit"
 		;;
