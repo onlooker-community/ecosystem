@@ -1,6 +1,6 @@
 {
   "name": "@onlooker-community/ecosystem",
-  "version": "0.27.0",
+  "version": "0.28.0",
   "description": "Agents, skills, hooks, commands, rules, and MCP configurations that power [Onlooker](https://onlooker.dev)",
   "author": {
     "name": "Onlooker Community",

@@ -1,6 +1,6 @@
 {
   "name": "lineage",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Per-change provenance for the Onlooker ecosystem. Records session/turn metadata plus a secret-redacted, size-capped snippet for every Edit/Write/MultiEdit at PostToolUse, then answers \"why does this line exist?\" via /lineage by joining change records to historian-preserved transcripts. Emits lineage.* events for audit. Builds on the Onlooker ecosystem plugin.",
   "author": {
     "name": "Onlooker Community",
@@ -9,6 +9,8 @@
   "homepage": "https://onlooker.dev",
   "repository": "https://github.com/onlooker-community/ecosystem",
   "license": "MIT",
-  "skills": ["./skills/lineage"],
+  "skills": [
+    "./skills/lineage"
+  ],
   "agents": []
 }
