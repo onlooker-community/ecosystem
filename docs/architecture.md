@@ -60,6 +60,10 @@ Findings are stored in `~/.onlooker/cartographer/<project-key>/findings/` and de
 
 [Bursar](../plugins/bursar) is the clearest example of one plugin consuming another's output **through the bus rather than by direct coupling**. Governor tracks spend per session and emits `governor.session.complete`; bursar reads those events at `SessionEnd`, rolls each session's totals into a per-project ledger under `~/.onlooker/bursar/projects/<project-key>/`, and surfaces "this project burned $X this week" at the next `SessionStart`. It never imports governor's code — if governor is disabled the events simply aren't there, and bursar degrades to a session count. This is the dependency model working as intended: the cross-session rollup is a separate, independently installable plugin that observes governor's event stream.
 
+### Lineage
+
+[Lineage](../plugins/lineage) is the provenance graph — it answers "why does this line exist?" by **joining its own tool-use records to another plugin's transcript store**. On `PostToolUse` it records each `Edit`/`Write`/`MultiEdit` (content-anchored, secret-redacted) into a per-project ledger under `~/.onlooker/lineage/<project-key>/`. The originating prompt is resolved lazily at query time: the `/lineage` skill reads the change ledger, content-anchors a line to the change that introduced it, and joins to [historian](../plugins/historian)'s durable per-session chunks (`start_turn_index`/`end_turn_index`) to recover the conversation context — falling back to the live transcript, then to "unavailable." Historian is the join target precisely because it persists transcripts long after the ephemeral `transcript_path` is gone; lineage stays decoupled and degrades gracefully when historian is absent.
+
 ### Plugin dependency model
 
 All plugins depend on `ecosystem`. No plugin depends on another plugin at runtime. This means:
