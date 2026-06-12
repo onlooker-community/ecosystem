@@ -111,8 +111,8 @@ setup() {
 @test "task_tracker_record_created no-ops on empty session_id" {
   run task_tracker_record_created "" "task-rec-002"
   [ "$status" -eq 0 ]
-  [ ! -e "${ONLOOKER_SESSION_TRACKERS_DIR}/" ] || \
-    [ -z "$(find "${ONLOOKER_SESSION_TRACKERS_DIR}" -type f 2>/dev/null)" ]
+  # load_validate_path always creates the trackers dir; assert no tracker file landed.
+  [ -z "$(find "${ONLOOKER_SESSION_TRACKERS_DIR}" -type f 2>/dev/null)" ]
 }
 
 @test "task_tracker_record_created no-ops on null session_id" {

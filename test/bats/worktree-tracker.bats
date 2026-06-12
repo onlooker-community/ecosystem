@@ -142,6 +142,7 @@ setup() {
   mkdir -p "$non_repo"
 
   run worktree_tracker_repo_root "$non_repo"
+  [ "$status" -ne 0 ]
   [ -z "$output" ]
 }
 

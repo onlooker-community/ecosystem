@@ -5,10 +5,13 @@ setup() {
   source "${BATS_TEST_DIRNAME}/../helpers/setup.bash"
   load_validate_path
   export CLAUDE_PLUGIN_ROOT="${REPO_ROOT}"
-  # shellcheck source=../../scripts/lib/turn-tracker.sh
+  # shellcheck source=../../scripts/lib/onlooker-schema.sh
   source "${REPO_ROOT}/scripts/lib/onlooker-schema.sh"
+  # shellcheck source=../../scripts/lib/tool-history.sh
   source "${REPO_ROOT}/scripts/lib/tool-history.sh"
+  # shellcheck source=../../scripts/lib/session-tracker.sh
   source "${REPO_ROOT}/scripts/lib/session-tracker.sh"
+  # shellcheck source=../../scripts/lib/turn-tracker.sh
   source "${REPO_ROOT}/scripts/lib/turn-tracker.sh"
 }
 
