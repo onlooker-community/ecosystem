@@ -97,3 +97,105 @@ setup() {
   tail -n 1 "$ONLOOKER_EVENTS_LOG" | jq -e '.event_type == "task.start"' >/dev/null
   tail -n 1 "$ONLOOKER_EVENTS_LOG" | onlooker_validate_event
 }
+
+@test "task_tracker_record_created writes start_time_ms as a number" {
+  local sid="rec-session-001"
+  local tracker="${ONLOOKER_SESSION_TRACKERS_DIR}/${sid}"
+
+  run task_tracker_record_created "$sid" "task-rec-001"
+  [ "$status" -eq 0 ]
+  [ -f "$tracker" ]
+  jq -e '.tasks["task-rec-001"].start_time_ms | type == "number"' "$tracker" >/dev/null
+}
+
+@test "task_tracker_record_created no-ops on empty session_id" {
+  run task_tracker_record_created "" "task-rec-002"
+  [ "$status" -eq 0 ]
+  # load_validate_path always creates the trackers dir; assert no tracker file landed.
+  [ -z "$(find "${ONLOOKER_SESSION_TRACKERS_DIR}" -type f 2>/dev/null)" ]
+}
+
+@test "task_tracker_record_created no-ops on null session_id" {
+  run task_tracker_record_created "null" "task-rec-003"
+  [ "$status" -eq 0 ]
+  [ ! -f "${ONLOOKER_SESSION_TRACKERS_DIR}/null" ]
+}
+
+@test "task_tracker_record_created no-ops on empty task_id" {
+  local sid="rec-session-empty-task"
+  run task_tracker_record_created "$sid" ""
+  [ "$status" -eq 0 ]
+  [ ! -f "${ONLOOKER_SESSION_TRACKERS_DIR}/${sid}" ]
+}
+
+@test "task_tracker_duration_ms returns elapsed ms for a seeded task" {
+  local sid="dur-session-001"
+  turn_state_ensure_session "$sid"
+  local tracker="${ONLOOKER_SESSION_TRACKERS_DIR}/${sid}"
+
+  local past
+  past=$(( $(session_tracker_now_ms) - 2000 ))
+  jq --argjson ms "$past" '.tasks["task-dur-001"] = {start_time_ms: $ms}' \
+    "$tracker" >"${tracker}.tmp"
+  mv "${tracker}.tmp" "$tracker"
+
+  local elapsed
+  elapsed=$(task_tracker_duration_ms "$sid" "task-dur-001")
+  [ -n "$elapsed" ]
+  echo "$elapsed" | grep -Eq '^[0-9]+$'
+  [ "$elapsed" -ge 1900 ]
+}
+
+@test "task_tracker_duration_ms is empty for an unknown task_id" {
+  local sid="dur-session-unknown"
+  turn_state_ensure_session "$sid"
+
+  local out
+  run task_tracker_duration_ms "$sid" "task-does-not-exist"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "task_tracker_clear removes the task timing entry" {
+  local sid="clear-session-001"
+  local tracker="${ONLOOKER_SESSION_TRACKERS_DIR}/${sid}"
+
+  task_tracker_record_created "$sid" "task-clear-001"
+  jq -e '.tasks["task-clear-001"]' "$tracker" >/dev/null
+
+  run task_tracker_clear "$sid" "task-clear-001"
+  [ "$status" -eq 0 ]
+
+  run jq -e '.tasks["task-clear-001"]' "$tracker"
+  [ "$status" -ne 0 ]
+}
+
+@test "task_tracker_clear no-ops when tracker file is missing" {
+  local sid="clear-session-missing"
+  local tracker="${ONLOOKER_SESSION_TRACKERS_DIR}/${sid}"
+  rm -f "$tracker"
+
+  run task_tracker_clear "$sid" "task-nope"
+  [ "$status" -eq 0 ]
+  [ ! -f "$tracker" ]
+}
+
+@test "task_tracker_append delegates to tool_history_append" {
+  local sid="append-session-001"
+  local history_file="${ONLOOKER_SESSION_HISTORY_DIR}/${sid}.jsonl"
+  rm -f "$history_file" "${history_file}.lock"
+
+  local event
+  event=$(jq -c -n --arg sid "$sid" \
+    '{schema_version: "1.0",
+      plugin: "ecosystem",
+      session_id: $sid,
+      event_type: "task.start",
+      payload: {task_summary: "append test"}}')
+
+  run task_tracker_append "$sid" "$event"
+  [ "$status" -eq 0 ]
+  [ -f "$history_file" ]
+  tail -n 1 "$history_file" | jq -e '.event_type == "task.start"' >/dev/null
+  tail -n 1 "$history_file" | jq -e '.session_id == "append-session-001"' >/dev/null
+}

@@ -117,3 +117,82 @@ setup() {
   first_id=$(printf '%s' "$ranked" | jq -r '.[0].id')
   [ "$first_id" = "$newer_id" ]
 }
+
+@test "storage_root prints the archivist dir under ONLOOKER_DIR" {
+  run archivist_storage_root
+  [ "$status" -eq 0 ]
+  [ "$output" = "${ONLOOKER_DIR}/archivist" ]
+}
+
+@test "project_dir prints root joined with the key" {
+  local key="abc123def456"
+  run archivist_project_dir "$key"
+  [ "$status" -eq 0 ]
+  [ "$output" = "${ONLOOKER_DIR}/archivist/${key}" ]
+}
+
+@test "kind_dir prints the per-kind subdir under the project dir" {
+  local key="abc123def456"
+  run archivist_kind_dir "$key" "decisions"
+  [ "$status" -eq 0 ]
+  [ "$output" = "${ONLOOKER_DIR}/archivist/${key}/decisions" ]
+}
+
+@test "kind_dir honors an arbitrary kind name" {
+  local key="abc123def456"
+  run archivist_kind_dir "$key" "dead_ends"
+  [ "$status" -eq 0 ]
+  [ "$output" = "${ONLOOKER_DIR}/archivist/${key}/dead_ends" ]
+}
+
+@test "write_manifest creates manifest.json under the project dir" {
+  local key="abc123def456"
+  run archivist_storage_write_manifest "$key" "git@github.com:org/repo.git" "$REPO"
+  [ "$status" -eq 0 ]
+  [ -f "${ONLOOKER_DIR}/archivist/${key}/manifest.json" ]
+}
+
+@test "write_manifest records the project_key, remote_url, and repo_root" {
+  local key="abc123def456"
+  local remote="git@github.com:org/repo.git"
+  archivist_storage_write_manifest "$key" "$remote" "$REPO"
+  local manifest="${ONLOOKER_DIR}/archivist/${key}/manifest.json"
+
+  [ "$(jq -r '.project_key' "$manifest")" = "$key" ]
+  [ "$(jq -r '.remote_url' "$manifest")" = "$remote" ]
+  [ "$(jq -r '.repo_root' "$manifest")" = "$REPO" ]
+  [ "$(jq -r '.source' "$manifest")" = "local" ]
+}
+
+@test "write_manifest stamps an ISO-8601 last_compact_at timestamp" {
+  local key="abc123def456"
+  archivist_storage_write_manifest "$key" "remote" "$REPO"
+  local manifest="${ONLOOKER_DIR}/archivist/${key}/manifest.json"
+
+  local ts
+  ts=$(jq -r '.last_compact_at' "$manifest")
+  [[ "$ts" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]
+}
+
+@test "write_manifest stores null for an empty remote_url" {
+  local key="abc123def456"
+  archivist_storage_write_manifest "$key" "" "$REPO"
+  local manifest="${ONLOOKER_DIR}/archivist/${key}/manifest.json"
+
+  [ "$(jq -r '.remote_url' "$manifest")" = "null" ]
+  [ "$(jq '.remote_url == null' "$manifest")" = "true" ]
+}
+
+@test "write_manifest stores null for an empty repo_root" {
+  local key="abc123def456"
+  archivist_storage_write_manifest "$key" "remote" ""
+  local manifest="${ONLOOKER_DIR}/archivist/${key}/manifest.json"
+
+  [ "$(jq -r '.repo_root' "$manifest")" = "null" ]
+  [ "$(jq '.repo_root == null' "$manifest")" = "true" ]
+}
+
+@test "write_manifest rejects an empty key" {
+  run archivist_storage_write_manifest "" "remote" "$REPO"
+  [ "$status" -ne 0 ]
+}
