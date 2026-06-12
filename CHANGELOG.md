@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.28.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.28.0...ecosystem-v0.28.1) (2026-06-12)
+
+
+### Bug Fixes
+
+* **compass:** resolve MultiEdit file path from the top-level field ([#85](https://github.com/onlooker-community/ecosystem/issues/85)) ([468abaa](https://github.com/onlooker-community/ecosystem/commit/468abaaad4bef59fe4308bd8887dfcf6d633921a))
+
 ## [0.28.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.27.0...ecosystem-v0.28.0) (2026-06-12)
 
 

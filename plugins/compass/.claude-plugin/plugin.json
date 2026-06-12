@@ -1,6 +1,6 @@
 {
   "name": "compass",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Pre-write intent clarity gate. Intercepts write-class tool calls and requires a confidence threshold before allowing them to proceed. Evaluates the pending write against the prior assistant turn as context to avoid false positives on question-answer turns. Builds on the Onlooker ecosystem plugin.",
   "author": {
     "name": "Onlooker Community",
