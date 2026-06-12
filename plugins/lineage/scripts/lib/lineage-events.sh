@@ -7,8 +7,7 @@
 # ~/.onlooker/logs/onlooker-events.jsonl.
 #
 # Usage:
-#   lineage_emit_event "lineage.session.recorded" '{"project_key":"...",...}' "$SESSION_ID"
-
+#   lineage_emit_event "lineage.change.recorded" '{"project_key":"...",...}' "$SESSION_ID"
 _LINEAGE_PLUGIN_NAME="lineage"
 
 _lineage_event_js_path() {

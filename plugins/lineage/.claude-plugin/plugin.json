@@ -1,7 +1,7 @@
 {
   "name": "lineage",
   "version": "0.0.1",
-  "description": "Per-change provenance for the Onlooker ecosystem. Records the prompt, agent, and session behind every Edit/Write/MultiEdit at PostToolUse, then answers \"why does this line exist?\" via the /lineage query by joining its change records to the transcripts historian preserves. Emits lineage.* events for audit. Builds on the Onlooker ecosystem plugin.",
+  "description": "Per-change provenance for the Onlooker ecosystem. Records session/turn metadata plus a secret-redacted, size-capped snippet for every Edit/Write/MultiEdit at PostToolUse, then answers \"why does this line exist?\" via /lineage by joining change records to historian-preserved transcripts. Emits lineage.* events for audit. Builds on the Onlooker ecosystem plugin.",
   "author": {
     "name": "Onlooker Community",
     "url": "https://onlooker.dev"

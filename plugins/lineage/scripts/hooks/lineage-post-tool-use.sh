@@ -53,7 +53,18 @@ lineage_config_enabled || _done
 PROJECT_KEY=$(lineage_project_key "$CWD")
 [[ -z "$PROJECT_KEY" ]] && _done
 
-FILE_PATH=$(printf '%s' "$TOOL_INPUT" | jq -r '.file_path // ""' 2>/dev/null) || FILE_PATH=""
+FILE_PATH=""
+case "$TOOL" in
+	MultiEdit)
+		FILE_PATH=$(printf '%s' "$TOOL_INPUT" | jq -r '.edits[0].file_path // ""' 2>/dev/null) || FILE_PATH=""
+		# Avoid misattribution if a MultiEdit spans multiple files. (Future: split into one record per file.)
+		unique_count=$(printf '%s' "$TOOL_INPUT" | jq -r '[.edits[]?.file_path] | unique | length' 2>/dev/null) || unique_count=0
+		[[ "$unique_count" -gt 1 ]] && _done
+		;;
+	*)
+		FILE_PATH=$(printf '%s' "$TOOL_INPUT" | jq -r '.file_path // .path // ""' 2>/dev/null) || FILE_PATH=""
+		;;
+esac
 [[ -z "$FILE_PATH" ]] && _done
 
 # Skip ignored paths. Supports the common glob shapes in config:

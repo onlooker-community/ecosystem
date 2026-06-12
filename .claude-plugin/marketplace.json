@@ -206,7 +206,7 @@
     {
       "name": "lineage",
       "source": "./plugins/lineage",
-      "description": "Per-change provenance — answers \"why does this line exist?\". Records the prompt, agent, and session behind every Edit/Write/MultiEdit at PostToolUse into a per-project change ledger, then traces a file or line back to the change that introduced it by joining its records to the transcripts historian preserves. Emits lineage.* events for audit. Requires the ecosystem plugin.",
+      "description": "Per-change provenance — answers \"why does this line exist?\". Records session/turn metadata plus a secret-redacted, size-capped snippet for every Edit/Write/MultiEdit at PostToolUse into a per-project change ledger, then traces a file or line back to the change that introduced it by joining records to the transcripts historian preserves. Emits lineage.* events for audit. Requires the ecosystem plugin.",
       "author": {
         "name": "Onlooker Community"
       },
