@@ -53,7 +53,11 @@ counsel_synthesize() {
 	local events_text="${1:-}"
 	local model="${2:-claude-haiku-4-5-20251001}"
 	local timeout_s="${3:-90}"
+	# shellcheck disable=SC2034  # accepted for call-site compatibility; the
+	# claude CLI print mode exposes no max-tokens/temperature flags, so neither
+	# is forwarded (see claude_args below).
 	local max_tokens="${4:-4096}"
+	# shellcheck disable=SC2034
 	local temperature="${5:-0.4}"
 
 	[[ -z "$events_text" ]] && return 1
@@ -74,7 +78,10 @@ counsel_synthesize() {
 		printf '</event_log>\n'
 	} > "$prompt_file"
 
-	local claude_args=(-p --max-turns 1 --model "$model" --max-tokens "$max_tokens")
+	# NOTE: `claude -p` does not accept --max-tokens (it errors with "unknown
+	# option") and has no temperature flag, so we pass neither. Output length is
+	# governed by the model/prompt; the synthesis prompt asks for terse JSON.
+	local claude_args=(-p --max-turns 1 --model "$model")
 
 	local response=""
 	if command -v timeout >/dev/null 2>&1; then
