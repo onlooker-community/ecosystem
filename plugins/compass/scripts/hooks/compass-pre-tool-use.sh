@@ -76,6 +76,8 @@ case "$TOOL_NAME" in
 			| jq -r '([.tool_input.file_path] + [.tool_input.edits[]?.file_path] | map(select(. != null and . != "")) | unique) | join(", ")' 2>/dev/null) \
 			|| _file_list=""
 		[[ -z "$_file_list" ]] && _file_list="$FILE_PATH"
+		# Both blank (a MultiEdit with no resolvable path) — keep the context legible.
+		[[ -z "$_file_list" ]] && _file_list="(unknown)"
 		CONTEXT="MultiEdit: ${_edit_count} edit(s) across: ${_file_list}"
 		OPERATION="multi_edit"
 		;;
