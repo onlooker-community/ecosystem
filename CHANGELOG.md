@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.28.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.27.0...ecosystem-v0.28.0) (2026-06-12)
+
+
+### Features
+
+* **lineage:** introduce per-change provenance plugin ([#83](https://github.com/onlooker-community/ecosystem/issues/83)) ([86b00d3](https://github.com/onlooker-community/ecosystem/commit/86b00d3d7393e2b63c5b04d60692fc89f202bf6c))
+
 ## [0.27.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.26.1...ecosystem-v0.27.0) (2026-06-12)
 
 
