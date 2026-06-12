@@ -1,0 +1,11 @@
+{
+  "plugin_name": "lineage",
+  "storage_path": "~/.onlooker",
+  "lineage": {
+    "enabled": false,
+    "max_snippet_chars": 4000,
+    "redact_secrets": true,
+    "ignore_globs": ["**/.git/**", "**/node_modules/**", "**/dist/**", "**/*.lock"],
+    "prompt_source": "historian_then_transcript"
+  }
+}

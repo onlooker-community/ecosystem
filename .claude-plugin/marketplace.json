@@ -202,6 +202,19 @@
       "license": "MIT",
       "keywords": ["budget", "cost", "rollup", "multi-session", "accounting", "audit"],
       "tags": ["governance", "observability"]
+    },
+    {
+      "name": "lineage",
+      "source": "./plugins/lineage",
+      "description": "Per-change provenance — answers \"why does this line exist?\". Records the prompt, agent, and session behind every Edit/Write/MultiEdit at PostToolUse into a per-project change ledger, then traces a file or line back to the change that introduced it by joining its records to the transcripts historian preserves. Emits lineage.* events for audit. Requires the ecosystem plugin.",
+      "author": {
+        "name": "Onlooker Community"
+      },
+      "homepage": "https://onlooker.dev",
+      "repository": "https://github.com/onlooker-community/ecosystem",
+      "license": "MIT",
+      "keywords": ["provenance", "blame", "history", "tool-use", "transcript", "audit"],
+      "tags": ["observability", "provenance"]
     }
   ]
 }
