@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.26.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.26.0...ecosystem-v0.26.1) (2026-06-12)
+
+
+### Bug Fixes
+
+* **counsel:** drop unsupported --max-tokens flag from claude synthesis call :relieved: ([#79](https://github.com/onlooker-community/ecosystem/issues/79)) ([ade85ce](https://github.com/onlooker-community/ecosystem/commit/ade85cecb3243781f47e14fea4990ce31e69e8f4))
+* **counsel:** stop pipefail from discarding all events on large logs :relieved: ([#78](https://github.com/onlooker-community/ecosystem/issues/78)) ([638347d](https://github.com/onlooker-community/ecosystem/commit/638347dec3b9df740b7a85c3e475fa2ffe5d054b))
+
 ## [0.26.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.25.1...ecosystem-v0.26.0) (2026-06-11)
 
 
