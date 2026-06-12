@@ -114,6 +114,34 @@ setup() {
   [ "$output" = "3" ]
 }
 
+@test "read_events survives caller pipefail when output exceeds chars_max" {
+  # Regression: head -c closes the pipe once chars_max bytes arrive, sending jq
+  # SIGPIPE. Under the caller's `set -o pipefail` (as the hook and skill run),
+  # the reader must still return the truncated output, not discard everything.
+  local log="${BATS_TEST_TMPDIR}/big-events.jsonl"
+  local ts
+  ts=$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null) || ts="2099-01-01T00:00:00Z"
+  : > "$log"
+  local i
+  for ((i = 0; i < 60; i++)); do
+    printf '%s\n' \
+      "{\"event_type\":\"tribunal.gate.blocked\",\"timestamp\":\"${ts}\",\"session_id\":\"s${i}\",\"payload\":{\"k\":\"vvvvvvvvvvvvvvvvvvvvvvvvvvvvvv\"}}" \
+      >> "$log"
+  done
+  export ONLOOKER_EVENTS_LOG="$log"
+
+  # Tiny cap so head closes the pipe after the first event or two.
+  local out
+  set -o pipefail
+  out=$(counsel_read_events "30" "200")
+  set +o pipefail
+
+  [ -n "$out" ]
+  run counsel_count_events "$out"
+  [ "$status" -eq 0 ]
+  [ "$output" -ge 1 ]
+}
+
 @test "read_events output preserves source types for sources_from_events" {
   local log="${BATS_TEST_TMPDIR}/source-events.jsonl"
   local ts
