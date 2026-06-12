@@ -267,3 +267,101 @@ write_project_rules() {
   echo "$out" | grep -A2 "id: r1" | grep -q "fired: yes"
   echo "$out" | grep -A2 "id: r2" | grep -q "fired: no"
 }
+
+@test "project_path: appends .claude/prompt-rules.json to the given cwd" {
+  local path
+  path=$(prompt_rules_project_path "/some/where")
+  [ "$path" = "/some/where/.claude/prompt-rules.json" ]
+}
+
+@test "project_path: defaults to \$PWD when no cwd is given" {
+  local path expected
+  path=$(prompt_rules_project_path)
+  expected="$PWD/.claude/prompt-rules.json"
+  [ "$path" = "$expected" ]
+}
+
+@test "fired_path: builds path under the sessions dir from the session id" {
+  local path expected
+  path=$(prompt_rules_fired_path "sess-XYZ")
+  expected="$ONLOOKER_PROMPT_RULES_SESSIONS_DIR/sess-XYZ.json"
+  [ "$path" = "$expected" ]
+}
+
+@test "fired_path: defaults session id to 'unknown' when none is given" {
+  local path expected
+  path=$(prompt_rules_fired_path)
+  expected="$ONLOOKER_PROMPT_RULES_SESSIONS_DIR/unknown.json"
+  [ "$path" = "$expected" ]
+}
+
+@test "emit: appends a JSON event line with type, session, payload, and plugin" {
+  : >"$ONLOOKER_EVENTS_LOG"
+  run prompt_rules_emit "sess-emit" "prompt_rule.matched" '{"rule_id":"rule-1"}'
+  [ "$status" -eq 0 ]
+
+  local line
+  line=$(tail -1 "$ONLOOKER_EVENTS_LOG")
+  [ "$(echo "$line" | jq -r '.event_type')" = "prompt_rule.matched" ]
+  [ "$(echo "$line" | jq -r '.session_id')" = "sess-emit" ]
+  [ "$(echo "$line" | jq -r '.payload.rule_id')" = "rule-1" ]
+  # No ONLOOKER_PLUGIN_NAME exported in this test → defaults to "onlooker".
+  [ "$(echo "$line" | jq -r '.plugin')" = "onlooker" ]
+}
+
+@test "emit: honors ONLOOKER_PLUGIN_NAME for the plugin field" {
+  : >"$ONLOOKER_EVENTS_LOG"
+  ONLOOKER_PLUGIN_NAME="prompt-rules" prompt_rules_emit "sess-plugin" "prompt_rule.applied" '{"rule_id":"r9"}'
+
+  local line
+  line=$(tail -1 "$ONLOOKER_EVENTS_LOG")
+  [ "$(echo "$line" | jq -r '.plugin')" = "prompt-rules" ]
+}
+
+@test "emit: defaults payload to an empty object when none is given" {
+  : >"$ONLOOKER_EVENTS_LOG"
+  run prompt_rules_emit "sess-nopayload" "prompt_rule.matched"
+  [ "$status" -eq 0 ]
+
+  local line
+  line=$(tail -1 "$ONLOOKER_EVENTS_LOG")
+  [ "$(echo "$line" | jq -c '.payload')" = "{}" ]
+}
+
+@test "emit: defaults session id to 'unknown' when none is given" {
+  : >"$ONLOOKER_EVENTS_LOG"
+  prompt_rules_emit "" "prompt_rule.matched" '{}'
+
+  local line
+  line=$(tail -1 "$ONLOOKER_EVENTS_LOG")
+  [ "$(echo "$line" | jq -r '.session_id')" = "unknown" ]
+}
+
+@test "emit: includes a numeric turn field when ONLOOKER_TURN_NUMBER is exported" {
+  : >"$ONLOOKER_EVENTS_LOG"
+  ONLOOKER_TURN_NUMBER=7 prompt_rules_emit "sess-turn" "prompt_rule.matched" '{}'
+
+  local line
+  line=$(tail -1 "$ONLOOKER_EVENTS_LOG")
+  [ "$(echo "$line" | jq -r '.turn')" = "7" ]
+  [ "$(echo "$line" | jq -r '.turn | type')" = "number" ]
+}
+
+@test "emit: omits the turn field when ONLOOKER_TURN_NUMBER is unset" {
+  : >"$ONLOOKER_EVENTS_LOG"
+  # Guard against any ambient value leaking in from the environment.
+  unset ONLOOKER_TURN_NUMBER
+  prompt_rules_emit "sess-noturn" "prompt_rule.matched" '{}'
+
+  local line
+  line=$(tail -1 "$ONLOOKER_EVENTS_LOG")
+  [ "$(echo "$line" | jq -e 'has("turn")')" = "false" ] || \
+    [ "$(echo "$line" | jq 'has("turn")')" = "false" ]
+}
+
+@test "emit: returns 1 and writes nothing when event_type is empty" {
+  : >"$ONLOOKER_EVENTS_LOG"
+  run prompt_rules_emit "sess-empty" ""
+  [ "$status" -eq 1 ]
+  [ ! -s "$ONLOOKER_EVENTS_LOG" ]
+}

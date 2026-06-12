@@ -71,3 +71,128 @@ setup() {
 @test "compact_tracker_estimate_tokens estimates from string length" {
   [ "$(compact_tracker_estimate_tokens "abcdefghij" false)" -eq 2 ]
 }
+
+@test "compact_tracker_state_file prints path under compact trackers dir" {
+  local session_id="unit-state-file"
+  local result
+  result=$(compact_tracker_state_file "$session_id")
+  [ "$result" = "${ONLOOKER_COMPACT_TRACKERS_DIR}/${session_id}" ]
+}
+
+@test "compact_tracker_record_pre creates state file with pending and compact_count 1" {
+  local session_id="unit-record-pre-1"
+  local state_file="${ONLOOKER_COMPACT_TRACKERS_DIR}/${session_id}"
+  rm -f "$state_file"
+
+  compact_tracker_record_pre "$session_id" '{"trigger":"manual","transcript_path":""}'
+
+  [ -f "$state_file" ]
+  jq -e '.pending == true
+    and .trigger == "manual"
+    and .compact_count == 1
+    and (.started_ms | type) == "number"' \
+    "$state_file" >/dev/null
+}
+
+@test "compact_tracker_record_pre increments compact_count on second call" {
+  local session_id="unit-record-pre-2"
+  local state_file="${ONLOOKER_COMPACT_TRACKERS_DIR}/${session_id}"
+  rm -f "$state_file"
+
+  compact_tracker_record_pre "$session_id" '{"trigger":"manual","transcript_path":""}'
+  jq -e '.compact_count == 1' "$state_file" >/dev/null
+
+  compact_tracker_record_pre "$session_id" '{"trigger":"manual","transcript_path":""}'
+  jq -e '.compact_count == 2' "$state_file" >/dev/null
+}
+
+@test "compact_tracker_record_pre preserves custom_instructions when present" {
+  local session_id="unit-record-pre-3"
+  local state_file="${ONLOOKER_COMPACT_TRACKERS_DIR}/${session_id}"
+  rm -f "$state_file"
+
+  compact_tracker_record_pre "$session_id" \
+    '{"trigger":"manual","transcript_path":"","custom_instructions":"keep the API design notes"}'
+
+  jq -e '.custom_instructions == "keep the API design notes"' "$state_file" >/dev/null
+}
+
+@test "compact_tracker_append_summary appends a JSONL record" {
+  local session_id="unit-append-1"
+  local summary_file="${ONLOOKER_SESSION_SUMMARIES_DIR}/${session_id}.jsonl"
+  rm -f "$summary_file"
+
+  compact_tracker_append_summary "$session_id" \
+    '{"trigger":"manual","compact_summary":"first summary"}'
+
+  [ -f "$summary_file" ]
+  # Records are written as a JSON stream; count objects rather than physical lines.
+  [ "$(jq -s 'length' "$summary_file")" -eq 1 ]
+  jq -se '.[0].compact_summary == "first summary" and .[0].trigger == "manual"' "$summary_file" >/dev/null
+}
+
+@test "compact_tracker_append_summary appends a second line on second call" {
+  local session_id="unit-append-2"
+  local summary_file="${ONLOOKER_SESSION_SUMMARIES_DIR}/${session_id}.jsonl"
+  rm -f "$summary_file"
+
+  compact_tracker_append_summary "$session_id" '{"trigger":"manual","compact_summary":"one"}'
+  compact_tracker_append_summary "$session_id" '{"trigger":"auto","compact_summary":"two"}'
+
+  [ "$(jq -s 'length' "$summary_file")" -eq 2 ]
+  [ "$(jq -s -r '.[0].compact_summary' "$summary_file")" = "one" ]
+  [ "$(jq -s -r '.[1].trigger' "$summary_file")" = "auto" ]
+}
+
+@test "compact_tracker_append_summary is a no-op when compact_summary is empty" {
+  local session_id="unit-append-3"
+  local summary_file="${ONLOOKER_SESSION_SUMMARIES_DIR}/${session_id}.jsonl"
+  rm -f "$summary_file"
+
+  run compact_tracker_append_summary "$session_id" '{"trigger":"manual","compact_summary":""}'
+  [ "$status" -eq 0 ]
+  [ ! -f "$summary_file" ]
+}
+
+@test "compact_tracker_build_compact_payload uses tokens_before from state file" {
+  local session_id="unit-build-payload"
+  local state_file="${ONLOOKER_COMPACT_TRACKERS_DIR}/${session_id}"
+  printf '%s\n' '{"tokens_before":1000}' >"$state_file"
+
+  local payload
+  payload=$(compact_tracker_build_compact_payload "$session_id" \
+    '{"compact_summary":"a short compacted summary of the prior context"}')
+
+  echo "$payload" | jq -e '.tokens_before == 1000
+    and (.tokens_after | type) == "number"
+    and (.compression_ratio | type) == "number"' >/dev/null
+}
+
+@test "compact_tracker_record_post finalizes state and resets turn_tool_seq" {
+  local session_id="unit-record-post-1"
+  local state_file="${ONLOOKER_COMPACT_TRACKERS_DIR}/${session_id}"
+  local tracker_file="${ONLOOKER_SESSION_TRACKERS_DIR}/${session_id}"
+
+  printf '%s\n' '{"pending":true,"started_ms":1700000000000,"compact_count":1}' >"$state_file"
+  printf '%s\n' '{"turn_number":3,"turn_tool_seq":5}' >"$tracker_file"
+
+  compact_tracker_record_post "$session_id" '{"trigger":"manual","compact_summary":"done"}'
+
+  jq -e '.pending == false and (.completed_ms | type) == "number"' "$state_file" >/dev/null
+  jq -e '.turn_tool_seq == 0 and .turn_number == 3' "$tracker_file" >/dev/null
+}
+
+@test "compact_tracker_record_post falls back to create state when none exists" {
+  local session_id="unit-record-post-2"
+  local state_file="${ONLOOKER_COMPACT_TRACKERS_DIR}/${session_id}"
+  local tracker_file="${ONLOOKER_SESSION_TRACKERS_DIR}/${session_id}"
+  rm -f "$state_file" "$tracker_file"
+
+  compact_tracker_record_post "$session_id" '{"trigger":"auto","compact_summary":"recovered"}'
+
+  [ -f "$state_file" ]
+  jq -e '.pending == false
+    and (.completed_ms | type) == "number"
+    and .compact_count == 1' \
+    "$state_file" >/dev/null
+}
