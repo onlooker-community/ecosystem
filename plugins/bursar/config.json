@@ -1,0 +1,11 @@
+{
+  "plugin_name": "bursar",
+  "storage_path": "~/.onlooker",
+  "bursar": {
+    "enabled": false,
+    "window": "rolling_7d",
+    "week_start": "monday",
+    "surface_at_session_start": true,
+    "min_cost_to_surface_usd": 0
+  }
+}

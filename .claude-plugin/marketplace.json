@@ -189,6 +189,19 @@
       "license": "MIT",
       "keywords": ["verification", "claims", "exit-codes", "honesty", "testing", "transcript"],
       "tags": ["verification", "testing"]
+    },
+    {
+      "name": "bursar",
+      "source": "./plugins/bursar",
+      "description": "Multi-session, per-project budget accounting. Rolls each session's spend into a per-project ledger on SessionEnd and surfaces \"this project burned $X this week\" at SessionStart. Where governor regulates a single session, bursar is the cross-session rollup: it reads governor.session.complete off the shared event bus and degrades to a session count when governor is absent. Requires the ecosystem plugin.",
+      "author": {
+        "name": "Onlooker Community"
+      },
+      "homepage": "https://onlooker.dev",
+      "repository": "https://github.com/onlooker-community/ecosystem",
+      "license": "MIT",
+      "keywords": ["budget", "cost", "rollup", "multi-session", "accounting", "audit"],
+      "tags": ["governance", "observability"]
     }
   ]
 }

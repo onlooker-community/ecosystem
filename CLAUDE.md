@@ -11,6 +11,7 @@ ecosystem/                    ← substrate plugin (always-on observability)
 
 plugins/
   archivist/                  ← session memory across context truncation
+  bursar/                     ← multi-session, per-project budget rollup (governor's cross-session view)
   cartographer/               ← instruction-file auditor (CLAUDE.md, AGENTS.md, rules/)
   compass/                    ← pre-write alignment gate (design phase)
   echo/                       ← prompt-change regression detection
@@ -38,6 +39,7 @@ scripts/lib/onlooker-event.mjs  ← canonical event builder; all plugins route t
 | tribunal | Stop + skill invocation | Post-task quality gate; also invokable via `/tribunal` |
 | warden | PostToolUse (WebFetch, Read), PreToolUse (Write, Edit, MultiEdit, Bash), SessionStart + skill invocation | Scans ingested content for injection; closes a content gate that blocks write-class tools until cleared via `/warden` |
 | assayer | Stop | Verifies the agent's final-message claims against actual command results in the transcript; advisory |
+| bursar | SessionStart, SessionEnd | Rolls each session's spend into a per-project ledger on SessionEnd; surfaces "this project burned $X this week" at SessionStart. Governor is per-session; bursar is the cross-session rollup |
 
 Plugins communicate by emitting events to the JSONL log — they do not call each other directly. All plugins depend on the ecosystem substrate; no plugin depends on another plugin directly.
 
