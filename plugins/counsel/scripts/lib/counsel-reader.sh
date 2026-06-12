@@ -46,9 +46,15 @@ counsel_read_events() {
 	# Filter to events within the lookback window. If cutoff_ts is empty (date
 	# command unavailable) fall through and include all events.
 	local summary
+	# Run inside a subshell with pipefail disabled. head -c closes the pipe once
+	# chars_max bytes have arrived, which sends jq SIGPIPE; under the caller's
+	# `set -o pipefail` (the SessionStart hook and the /counsel skill both set it)
+	# that marks the whole pipeline failed, and the `|| summary=""` fallback would
+	# then discard *every* event on any log large enough to exceed chars_max.
+	# Disabling pipefail locally keeps the truncated output.
 	# -rc: compact output keeps each object on one line (JSONL-shaped), which
 	# downstream counsel_count_events and counsel_sources_from_events require.
-	summary=$(jq -rc --arg cutoff "$cutoff_ts" '
+	summary=$(set +o pipefail; jq -rc --arg cutoff "$cutoff_ts" '
 		select(.timestamp != null) |
 		select($cutoff == "" or .timestamp >= $cutoff) |
 		{
