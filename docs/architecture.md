@@ -56,6 +56,10 @@ Plugins communicate by **emitting events**, not by calling each other directly. 
 
 Findings are stored in `~/.onlooker/cartographer/<project-key>/findings/` and delivered at-least-once (deduplicated on `payload.finding_hash`). The audit runs as a detached background process; your session is never blocked.
 
+### Bursar
+
+[Bursar](../plugins/bursar) is the clearest example of one plugin consuming another's output **through the bus rather than by direct coupling**. Governor tracks spend per session and emits `governor.session.complete`; bursar reads those events at `SessionEnd`, rolls each session's totals into a per-project ledger under `~/.onlooker/bursar/projects/<project-key>/`, and surfaces "this project burned $X this week" at the next `SessionStart`. It never imports governor's code — if governor is disabled the events simply aren't there, and bursar degrades to a session count. This is the dependency model working as intended: the cross-session rollup is a separate, independently installable plugin that observes governor's event stream.
+
 ### Plugin dependency model
 
 All plugins depend on `ecosystem`. No plugin depends on another plugin at runtime. This means:
