@@ -103,6 +103,23 @@ _run_hook() {
 	[ ! -d "${ONLOOKER_DIR}/bursar/projects" ]
 }
 
+@test "keeps the breadcrumb and emits nothing when the ledger write fails" {
+	_enable
+	_breadcrumb
+	_seed_governor_event
+	# Force bursar_ledger_record to fail: a file where the projects dir must go,
+	# so its `mkdir -p` cannot create the project directory.
+	mkdir -p "${ONLOOKER_DIR}/bursar"
+	printf 'x' > "${ONLOOKER_DIR}/bursar/projects"
+	_run_hook
+	[ "$status" -eq 0 ]
+	# Breadcrumb retained so the attribution survives for a later attempt.
+	[ -f "${ONLOOKER_DIR}/bursar/sessions/${SID}.json" ]
+	# No false "recorded" event.
+	run grep -c '"event_type":"bursar.session.recorded"' "$ONLOOKER_EVENTS_LOG"
+	[ "$output" -eq 0 ]
+}
+
 @test "emits bursar.session.recorded" {
 	_enable
 	_breadcrumb

@@ -74,12 +74,21 @@ COST=""
 TOKENS=""
 CALLS=""
 
-if [[ -f "$LOG" ]]; then
-	SPEND=$(grep -F '"governor.session.complete"' "$LOG" 2>/dev/null \
+# Reads event-log lines on stdin; echoes the latest matching session.complete payload.
+_latest_governor_payload() {
+	grep -F '"governor.session.complete"' 2>/dev/null \
 		| jq -c --arg sid "$SESSION_ID" \
 			'select(.event_type == "governor.session.complete" and .payload.session_id == $sid) | .payload' \
 			2>/dev/null \
-		| tail -n 1)
+		| tail -n 1
+}
+
+if [[ -f "$LOG" ]]; then
+	# The matching event was emitted seconds ago (governor's final Stop), so it is
+	# almost always near the tail. Scan a recent slice first to keep this hook
+	# fast as the global log grows; fall back to the full file only on a miss.
+	SPEND=$(tail -n 2000 "$LOG" 2>/dev/null | _latest_governor_payload)
+	[[ -z "$SPEND" ]] && SPEND=$(_latest_governor_payload < "$LOG")
 	if [[ -n "$SPEND" ]]; then
 		GOV_PRESENT="true"
 		COST=$(printf '%s' "$SPEND" | jq -r '.total_cost_usd // empty' 2>/dev/null) || COST=""
@@ -113,16 +122,21 @@ RECORD=$(jq -n \
 	--argjson gp "$GOV_PRESENT" \
 	'{ts: $ts, ts_epoch: $te, session_id: $sid, project_key: $pk, governor_present: $gp}' 2>/dev/null)
 RECORD=$(add_fields "$RECORD")
-[[ -n "$RECORD" ]] && bursar_ledger_record "$PROJECT_KEY" "$RECORD" || true
 
-EV=$(jq -n \
-	--arg pk "$PROJECT_KEY" \
-	--arg sid "$SESSION_ID" \
-	--argjson gp "$GOV_PRESENT" \
-	'{project_key: $pk, session_id: $sid, governor_present: $gp}' 2>/dev/null)
-EV=$(add_fields "$EV")
-[[ -n "$EV" ]] && bursar_emit_event "bursar.session.recorded" "$EV" "$SESSION_ID" || true
+# Only claim the session was recorded — and only drop the breadcrumb — once the
+# ledger upsert actually succeeds. A failed write (lock timeout, mv failure)
+# must keep the breadcrumb so the session→project attribution survives for a
+# later attempt rather than being lost behind a false "recorded" event.
+if [[ -n "$RECORD" ]] && bursar_ledger_record "$PROJECT_KEY" "$RECORD"; then
+	EV=$(jq -n \
+		--arg pk "$PROJECT_KEY" \
+		--arg sid "$SESSION_ID" \
+		--argjson gp "$GOV_PRESENT" \
+		'{project_key: $pk, session_id: $sid, governor_present: $gp}' 2>/dev/null)
+	EV=$(add_fields "$EV")
+	[[ -n "$EV" ]] && bursar_emit_event "bursar.session.recorded" "$EV" "$SESSION_ID" || true
 
-rm -f "$BREADCRUMB" 2>/dev/null || true
+	rm -f "$BREADCRUMB" 2>/dev/null || true
+fi
 
 _done

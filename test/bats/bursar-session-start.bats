@@ -88,6 +88,23 @@ _run_hook() {
 	[[ "$output" == *"burned \$0.42"* ]]
 }
 
+@test "reports a tracked \$0.00 total without nudging to enable governor" {
+	_enable
+	# governor present, but the window's cost is legitimately zero
+	local dir="${ONLOOKER_DIR}/bursar/projects/${KEY}"
+	mkdir -p "$dir"
+	local now
+	now=$(date +%s)
+	jq -nc --arg pk "$KEY" --argjson te "$now" \
+		'{ts:"x", ts_epoch:$te, session_id:"zero", project_key:$pk,
+		  governor_present:true, cost_usd:0, tokens:0, api_calls:0}' \
+		> "${dir}/sessions.jsonl"
+	_run_hook
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"burned \$0.00"* ]]
+	[[ "$output" != *"Enable governor"* ]]
+}
+
 @test "emits bursar.rollup.surfaced when data exists" {
 	_enable
 	_seed_ledger

@@ -92,10 +92,12 @@ WINDOW_LABEL="in the last 7 days"
 [[ "$WINDOW" == "calendar_week" ]] && WINDOW_LABEL="this week"
 COST_FMT=$(awk -v c="$TOTAL_COST" 'BEGIN { printf "%.2f", c }')
 TOKENS_FMT=$(bursar_fmt_tokens "$TOTAL_TOKENS")
-HAS_COST=$(awk -v c="$TOTAL_COST" 'BEGIN { print (c > 0) ? 1 : 0 }')
 SESS_NOUN=$([[ "${SESSION_COUNT:-0}" -eq 1 ]] && printf 'session' || printf 'sessions')
 
-if [[ "${SESSIONS_WITH_COST:-0}" -eq 0 || "$HAS_COST" == "0" ]]; then
+# Key the "enable governor" prompt on cost *coverage*, not on the dollar total:
+# governor can legitimately report $0.00 for a window, and that should still
+# render as a tracked total rather than a nudge to enable governor.
+if [[ "${SESSIONS_WITH_COST:-0}" -eq 0 ]]; then
 	MSG="Bursar: ${SESSION_COUNT} ${SESS_NOUN} in this project ${WINDOW_LABEL}. Enable governor for \$ cost tracking."
 elif [[ "${SESSIONS_WITH_COST:-0}" -lt "${SESSION_COUNT:-0}" ]]; then
 	MSG="Bursar: this project burned \$${COST_FMT} across ${SESSIONS_WITH_COST} of ${SESSION_COUNT} sessions ${WINDOW_LABEL} (~${TOKENS_FMT} tokens); enable governor in the rest for full cost tracking."
