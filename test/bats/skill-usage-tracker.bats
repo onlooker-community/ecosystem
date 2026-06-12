@@ -74,3 +74,66 @@ setup() {
   tail -n 1 "$ONLOOKER_EVENTS_LOG" | jq -e '.event_type == "skill.invoked"' >/dev/null
   tail -n 1 "$ONLOOKER_EVENTS_LOG" | onlooker_validate_event
 }
+
+@test "skill_usage_append writes a built skill.invoked record to the session history file" {
+  local fixture="${REPO_ROOT}/test/fixtures/hook-inputs/user-prompt-expansion-skill.json"
+  local history_file="${ONLOOKER_SESSION_HISTORY_DIR}/skill-session-001.jsonl"
+  rm -f "$history_file" "${history_file}.lock"
+
+  local record
+  record=$(skill_usage_build_record "$(cat "$fixture")")
+
+  run skill_usage_append "skill-session-001" "$record"
+  [ "$status" -eq 0 ]
+
+  [ -f "$history_file" ]
+  tail -n 1 "$history_file" | jq -e \
+    '.event_type == "skill.invoked"
+     and .payload.skill_name == "code-review"
+     and .payload.invocation_source == "slash_command"
+     and .session_id == "skill-session-001"' \
+    >/dev/null
+  tail -n 1 "$history_file" | onlooker_validate_event
+}
+
+@test "skill_usage_append routes the record to the per-session file named after the session id" {
+  local fixture="${REPO_ROOT}/test/fixtures/hook-inputs/pre-tool-use-skill.json"
+  local session_id="skill-session-custom"
+  local history_file="${ONLOOKER_SESSION_HISTORY_DIR}/${session_id}.jsonl"
+  rm -f "$history_file" "${history_file}.lock"
+
+  # Build a canonical record, then retarget its session_id; skill_usage_append
+  # must file it under the session_id argument, not the embedded one.
+  local record
+  record=$(skill_usage_build_record "$(cat "$fixture")" \
+    | jq -c --arg sid "$session_id" '.session_id = $sid')
+
+  run skill_usage_append "$session_id" "$record"
+  [ "$status" -eq 0 ]
+
+  [ -f "$history_file" ]
+  [ "$(wc -l <"$history_file")" -eq 1 ]
+  tail -n 1 "$history_file" | jq -e \
+    '.session_id == "skill-session-custom"
+     and .payload.skill_name == "code-review"
+     and .payload.invocation_source == "tool"' \
+    >/dev/null
+  tail -n 1 "$history_file" | onlooker_validate_event
+}
+
+@test "skill_usage_append is a no-op when the session id is empty" {
+  local fixture="${REPO_ROOT}/test/fixtures/hook-inputs/pre-tool-use-skill.json"
+  local record
+  record=$(skill_usage_build_record "$(cat "$fixture")")
+
+  # Snapshot the history dir, then assert the empty-session call adds nothing.
+  local before
+  before=$(find "$ONLOOKER_SESSION_HISTORY_DIR" -type f | sort)
+
+  run skill_usage_append "" "$record"
+  [ "$status" -eq 0 ]
+
+  local after
+  after=$(find "$ONLOOKER_SESSION_HISTORY_DIR" -type f | sort)
+  [ "$before" = "$after" ]
+}

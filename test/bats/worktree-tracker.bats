@@ -127,3 +127,169 @@ setup() {
      and (.payload.command | test("worktree:create"))' \
     >/dev/null
 }
+
+@test "worktree_tracker_repo_root prints the git toplevel for a cwd inside the repo" {
+  local expected
+  expected=$(git -C "$GIT_REPO" rev-parse --show-toplevel)
+
+  run worktree_tracker_repo_root "$GIT_REPO"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$expected" ]
+}
+
+@test "worktree_tracker_repo_root returns empty for a non-repo directory" {
+  local non_repo="${BATS_TEST_TMPDIR}/not-a-repo"
+  mkdir -p "$non_repo"
+
+  run worktree_tracker_repo_root "$non_repo"
+  [ -z "$output" ]
+}
+
+@test "worktree_tracker_repo_root returns non-zero for empty cwd" {
+  run worktree_tracker_repo_root ""
+  [ "$status" -ne 0 ]
+  [ -z "$output" ]
+}
+
+@test "worktree_tracker_git_create creates a worktree at the expected path" {
+  local name="feature-create"
+  local expected="${GIT_REPO}/.claude/worktrees/${name}"
+
+  local worktree_path
+  worktree_path=$(worktree_tracker_git_create "$GIT_REPO" "$name" 2>/dev/null)
+
+  [ "$worktree_path" = "$(cd "$expected" && pwd -P)" ]
+  [ -d "$worktree_path" ]
+  git -C "$GIT_REPO" worktree list --porcelain | grep -Fq "worktree $(cd "$expected" && pwd -P)"
+  git -C "$GIT_REPO" show-ref --verify --quiet "refs/heads/worktree-${name}"
+
+  worktree_tracker_git_remove "$GIT_REPO" "$worktree_path" 2>/dev/null
+}
+
+@test "worktree_tracker_git_create is idempotent for an existing worktree dir" {
+  local name="feature-idempotent"
+
+  local first second
+  first=$(worktree_tracker_git_create "$GIT_REPO" "$name" 2>/dev/null)
+  second=$(worktree_tracker_git_create "$GIT_REPO" "$name" 2>/dev/null)
+
+  [ "$first" = "$second" ]
+  [ -d "$second" ]
+
+  worktree_tracker_git_remove "$GIT_REPO" "$first" 2>/dev/null
+}
+
+@test "worktree_tracker_git_create returns non-zero with missing args" {
+  run worktree_tracker_git_create "$GIT_REPO" ""
+  [ "$status" -ne 0 ]
+}
+
+@test "worktree_tracker_git_remove removes a registered worktree" {
+  local name="feature-remove"
+  local worktree_path
+  worktree_path=$(worktree_tracker_git_create "$GIT_REPO" "$name" 2>/dev/null)
+  [ -d "$worktree_path" ]
+
+  worktree_tracker_git_remove "$GIT_REPO" "$worktree_path" 2>/dev/null
+
+  [ ! -d "$worktree_path" ]
+  ! git -C "$GIT_REPO" worktree list --porcelain | grep -Fq "worktree ${worktree_path}"
+}
+
+@test "worktree_tracker_record_created writes timing into the session tracker" {
+  local session_id="worktree-record-001"
+  local name="feature-record"
+  local worktree_path="${GIT_REPO}/.claude/worktrees/${name}"
+  local branch="worktree-${name}"
+  rm -f "${ONLOOKER_SESSION_TRACKERS_DIR}/${session_id}"
+
+  worktree_tracker_record_created "$session_id" "$name" "$worktree_path" "$branch"
+
+  local tracker_file="${ONLOOKER_SESSION_TRACKERS_DIR}/${session_id}"
+  [ -f "$tracker_file" ]
+  jq -e \
+    --arg name "$name" \
+    --arg path "$worktree_path" \
+    --arg branch "$branch" \
+    '.worktrees[$name].path == $path
+     and .worktrees[$name].branch == $branch
+     and (.worktrees[$name].start_time_ms | type == "number")' \
+    "$tracker_file" >/dev/null
+}
+
+@test "worktree_tracker_record_created is a no-op with missing args" {
+  local session_id="worktree-record-noop"
+  rm -f "${ONLOOKER_SESSION_TRACKERS_DIR}/${session_id}"
+
+  run worktree_tracker_record_created "$session_id" "" "/some/path" "branch"
+  [ "$status" -eq 0 ]
+  [ ! -f "${ONLOOKER_SESSION_TRACKERS_DIR}/${session_id}" ]
+}
+
+@test "worktree_tracker_duration_ms returns elapsed ms from a seeded start" {
+  local session_id="worktree-duration-001"
+  local name="feature-duration"
+  local worktree_path="${GIT_REPO}/.claude/worktrees/${name}"
+  rm -f "${ONLOOKER_SESSION_TRACKERS_DIR}/${session_id}"
+
+  worktree_tracker_record_created "$session_id" "$name" "$worktree_path" "worktree-${name}"
+
+  # Rewind the recorded start_time_ms by ~2s so elapsed is a stable positive value.
+  local tracker_file="${ONLOOKER_SESSION_TRACKERS_DIR}/${session_id}"
+  local now_ms past temp
+  now_ms=$(session_tracker_now_ms)
+  past=$(( now_ms - 2000 ))
+  temp=$(mktemp)
+  jq --arg name "$name" --argjson ms "$past" \
+    '.worktrees[$name].start_time_ms = $ms' "$tracker_file" >"$temp"
+  mv "$temp" "$tracker_file"
+
+  local duration
+  duration=$(worktree_tracker_duration_ms "$session_id" "$worktree_path")
+  [[ "$duration" =~ ^[0-9]+$ ]]
+  [ "$duration" -ge 1900 ]
+}
+
+@test "worktree_tracker_duration_ms returns empty for an unknown worktree path" {
+  local session_id="worktree-duration-unknown"
+  rm -f "${ONLOOKER_SESSION_TRACKERS_DIR}/${session_id}"
+  turn_state_ensure_session "$session_id"
+
+  run worktree_tracker_duration_ms "$session_id" "/never/recorded"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "worktree_tracker_clear_by_path removes the recorded entry" {
+  local session_id="worktree-clear-001"
+  local name="feature-clear"
+  local worktree_path="${GIT_REPO}/.claude/worktrees/${name}"
+  rm -f "${ONLOOKER_SESSION_TRACKERS_DIR}/${session_id}"
+
+  worktree_tracker_record_created "$session_id" "$name" "$worktree_path" "worktree-${name}"
+  local tracker_file="${ONLOOKER_SESSION_TRACKERS_DIR}/${session_id}"
+  jq -e --arg name "$name" '.worktrees | has($name)' "$tracker_file" >/dev/null
+
+  worktree_tracker_clear_by_path "$session_id" "$worktree_path"
+
+  jq -e --arg name "$name" '(.worktrees | has($name)) | not' "$tracker_file" >/dev/null
+  run worktree_tracker_duration_ms "$session_id" "$worktree_path"
+  [ -z "$output" ]
+}
+
+@test "worktree_tracker_append lands a JSON line in the session history" {
+  local session_id="worktree-append-001"
+  local history_file="${ONLOOKER_SESSION_HISTORY_DIR}/${session_id}.jsonl"
+  rm -f "$history_file" "${history_file}.lock"
+
+  local event
+  event=$(jq -c -n '{event_type: "tool.shell.exec", payload: {command: "git worktree:create"}}')
+
+  worktree_tracker_append "$session_id" "$event"
+
+  [ -f "$history_file" ]
+  tail -n 1 "$history_file" | jq -e \
+    '.event_type == "tool.shell.exec"
+     and (.payload.command | test("worktree:create"))' \
+    >/dev/null
+}
