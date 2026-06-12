@@ -48,6 +48,28 @@ _run() {
 	[ "$(jq -rs '.[0].tool' "$(_ledger)")" = "Edit" ]
 }
 
+@test "records a single-file MultiEdit (top-level file_path)" {
+	_enable
+	_run MultiEdit "${REPO}/foo.py" "$(jq -nc --arg f "${REPO}/foo.py" \
+		'{file_path:$f, edits:[{old_string:"a", new_string:"a1"},{old_string:"b", new_string:"b1"}]}')"
+	[ "$status" -eq 0 ]
+	[ -f "$(_ledger)" ]
+	[ "$(jq -rs '.[0].file_path' "$(_ledger)")" = "${REPO}/foo.py" ]
+	[ "$(jq -rs '.[0].tool' "$(_ledger)")" = "MultiEdit" ]
+	[ "$(jq -rs '.[0].operation' "$(_ledger)")" = "multi_edit" ]
+}
+
+@test "skips a MultiEdit whose edits span multiple distinct files" {
+	_enable
+	# Hypothetical per-edit-file_path shape spanning two files — skip to avoid misattribution.
+	local ti
+	ti=$(jq -nc --arg a "${REPO}/a.py" --arg b "${REPO}/b.py" \
+		'{edits:[{file_path:$a, old_string:"x", new_string:"x1"},{file_path:$b, old_string:"y", new_string:"y1"}]}')
+	_run MultiEdit "${REPO}/a.py" "$ti"
+	[ "$status" -eq 0 ]
+	[ ! -f "$(_ledger)" ]
+}
+
 @test "records the turn number from the session tracker" {
 	_enable
 	printf '%s' '{"turn_number":7}' > "${ONLOOKER_DIR}/session-trackers/${SID}"

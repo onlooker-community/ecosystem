@@ -56,10 +56,13 @@ PROJECT_KEY=$(lineage_project_key "$CWD")
 FILE_PATH=""
 case "$TOOL" in
 	MultiEdit)
-		FILE_PATH=$(printf '%s' "$TOOL_INPUT" | jq -r '.edits[0].file_path // ""' 2>/dev/null) || FILE_PATH=""
-		# Avoid misattribution if a MultiEdit spans multiple files. (Future: split into one record per file.)
-		unique_count=$(printf '%s' "$TOOL_INPUT" | jq -r '[.edits[]?.file_path] | unique | length' 2>/dev/null) || unique_count=0
-		[[ "$unique_count" -gt 1 ]] && _done
+		# MultiEdit applies to one file via a top-level file_path; some shapes
+		# nest file_path per edit, so fall back to the first edit's.
+		FILE_PATH=$(printf '%s' "$TOOL_INPUT" | jq -r '.file_path // .edits[0].file_path // ""' 2>/dev/null) || FILE_PATH=""
+		# If edits carry distinct per-file paths spanning more than one file,
+		# skip to avoid misattribution. (Future: split into one record per file.)
+		unique_count=$(printf '%s' "$TOOL_INPUT" | jq -r '[.edits[]?.file_path // empty] | unique | length' 2>/dev/null) || unique_count=0
+		[[ "${unique_count:-0}" -gt 1 ]] && _done
 		;;
 	*)
 		FILE_PATH=$(printf '%s' "$TOOL_INPUT" | jq -r '.file_path // .path // ""' 2>/dev/null) || FILE_PATH=""
