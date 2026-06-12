@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/onlooker-community/ecosystem/compare/compass-v0.2.0...compass-v0.2.1) (2026-06-12)
+
+
+### Bug Fixes
+
+* **compass:** resolve MultiEdit file path from the top-level field ([#85](https://github.com/onlooker-community/ecosystem/issues/85)) ([468abaa](https://github.com/onlooker-community/ecosystem/commit/468abaaad4bef59fe4308bd8887dfcf6d633921a))
+
 ## [0.2.0](https://github.com/onlooker-community/ecosystem/compare/compass-v0.1.0...compass-v0.2.0) (2026-06-01)
 
 
