@@ -215,6 +215,19 @@
       "license": "MIT",
       "keywords": ["provenance", "blame", "history", "tool-use", "transcript", "audit"],
       "tags": ["observability", "provenance"]
+    },
+    {
+      "name": "inspector",
+      "source": "./plugins/inspector",
+      "description": "Per-edit lint and typecheck gate. Runs the project's configured checks on just the touched file after every Write/Edit/MultiEdit, so the agent sees its own lint and type errors before claiming success. Cheaper than running the full project verify; complements assayer (which catches the agent lying about claims). Emits inspector.* events for downstream analysis. Requires the ecosystem plugin.",
+      "author": {
+        "name": "Onlooker Community"
+      },
+      "homepage": "https://onlooker.dev",
+      "repository": "https://github.com/onlooker-community/ecosystem",
+      "license": "MIT",
+      "keywords": ["verification", "lint", "typecheck", "post-tool-use", "audit", "feedback"],
+      "tags": ["verification", "observability"]
     }
   ]
 }
