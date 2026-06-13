@@ -7,6 +7,13 @@ setup() {
 	source "${BATS_TEST_DIRNAME}/../helpers/setup.bash"
 	setup_test_env
 
+	# These tests assert on the event log, so they require a schema that
+	# accepts inspector.* events. Skip when the installed package is too old.
+	if ! grep -q "inspector.check.passed" \
+		"${BATS_TEST_DIRNAME}/../../node_modules/@onlooker-community/schema/schemas/event.v1.json" 2>/dev/null; then
+		skip "installed @onlooker-community/schema has no inspector.* types yet"
+	fi
+
 	PLUGIN_ROOT="${REPO_ROOT}/plugins/inspector"
 	HOOK="${PLUGIN_ROOT}/scripts/hooks/inspector-post-write.sh"
 	export ONLOOKER_EVENTS_LOG="${ONLOOKER_DIR}/logs/onlooker-events.jsonl"
