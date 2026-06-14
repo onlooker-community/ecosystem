@@ -12,6 +12,12 @@
 
 set -uo pipefail
 
+# Recursion guard — must be first.
+# When the evaluator shells out to `claude -p`, that subprocess can
+# trigger its own Write/Edit hooks, which would re-enter Compass.
+[[ "${COMPASS_NESTED:-}" == "1" ]] && exit 0
+export COMPASS_NESTED=1
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
@@ -34,6 +40,7 @@ INPUT=$(cat)
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SESSION_ID=""
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 TOOL_NAME=$(printf '%s' "$INPUT" | jq -r '.tool_name // ""' 2>/dev/null) || TOOL_NAME=""
+TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | jq -r '.transcript_path // ""' 2>/dev/null) || TRANSCRIPT_PATH=""
 
 export _HOOK_SESSION_ID="$SESSION_ID"
 
@@ -87,5 +94,5 @@ case "$TOOL_NAME" in
 		;;
 esac
 
-compass_run_gate "$TOOL_NAME" "$FILE_PATH" "$OPERATION" "$CONTEXT" "$SESSION_ID" "$CWD"
+compass_run_gate "$TOOL_NAME" "$FILE_PATH" "$OPERATION" "$CONTEXT" "$SESSION_ID" "$CWD" "$TRANSCRIPT_PATH"
 exit $?

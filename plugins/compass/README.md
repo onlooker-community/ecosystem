@@ -74,8 +74,7 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
       "identity_match": "dir_plus_stem"
     },
     "transcript": {
-      "prior_turn_chars_max": 800,
-      "transcript_max_age_seconds": 300
+      "prior_turn_chars_max": 800
     },
     "skip_patterns": {
       "reply_to_question": {
@@ -115,7 +114,6 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
 | `cooldown.seconds` | `120` | A write whose path shares a parent directory and filename stem with a recent successful write is skipped within this window. |
 | `cooldown.identity_match` | `dir_plus_stem` | Cooldown identity strategy. Stem comparison strips only the final extension; the cooldown does not carry across a rename. |
 | `transcript.prior_turn_chars_max` | `800` | Maximum characters of the prior assistant turn fed into the evaluator. Set to `0` to omit the prior turn for near-zero egress. |
-| `transcript.transcript_max_age_seconds` | `300` | Maximum age of the transcript file Compass will read the prior turn from. |
 | `skip_patterns.reply_to_question.enabled` | `true` | Enables the symbolic skip layer. When disabled, every write that passes the trigger gate reaches the LLM evaluator. |
 | `max_checks_per_turn` | `3` | Per-turn evaluation budget. Writes beyond this skip with reason `turn_budget_exhausted`. |
 | `min_context_chars` | `80` | Minimum sanitized context length. Shorter context skips with reason `insufficient_context`. |

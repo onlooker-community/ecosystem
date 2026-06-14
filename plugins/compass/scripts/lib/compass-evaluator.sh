@@ -1,20 +1,22 @@
 #!/usr/bin/env bash
-# N=5 parallel Haiku evaluator for Compass.
+# N=5 parallel `claude -p` evaluator for Compass.
 #
-# Launches N independent evaluator calls, aggregates scores, and returns
-# a decision (pass/fail) with confidence and stddev.
+# Launches N independent evaluator calls via `claude -p --max-turns 1`,
+# aggregates scores, and returns a decision (pass / fail / error) with
+# confidence and stddev.
 #
 # Exposes:
 #   compass_evaluate <tool_name> <file_path> <operation> \
 #                    <prior_turn> <context_excerpt> <session_id>
 #
-# Exits 0 if confidence >= threshold AND stddev <= stddev_threshold.
-# Exits 1 if confidence < threshold OR stddev > stddev_threshold (block).
-# Exits 2 on evaluator error (respects error_policy).
-#
 # Writes a JSON result object to stdout:
 #   {"decision":"pass|fail|error","confidence":<f>,"stddev":<f>,
 #    "primary_concern":"<str>","rationale":"<str>","sample_count":<n>}
+#
+# Exit codes:
+#   0  pass (confidence >= threshold AND stddev <= stddev_threshold)
+#   1  fail (block)
+#   2  error (respects error_policy)
 
 _COMPASS_EVAL_PROMPT_NO_PRIOR='You are evaluating whether a pending write operation has sufficient intent clarity.
 
@@ -78,87 +80,65 @@ path: FILE_PATH_PLACEHOLDER
 operation: OPERATION_PLACEHOLDER
 </tool_input>'
 
-# Run a single evaluator call. Writes JSON to a temp file at $output_file.
+# Strip leading/trailing markdown fences a model occasionally emits.
+_compass_strip_fences() {
+	printf '%s' "$1" | sed -e 's/^```json//' -e 's/^```//' -e 's/```$//'
+}
+
+# Run a single evaluator call via `claude -p`. Writes JSON to $output_file.
 # $1 — prompt text
 # $2 — model
-# $3 — temperature (as string, e.g. "0.3")
-# $4 — max_output_tokens
-# $5 — output file path
-# $6 — API key env var name (default: ANTHROPIC_API_KEY)
+# $3 — timeout (seconds)
+# $4 — output file path
 _compass_run_single_eval() {
 	local prompt="$1"
 	local model="$2"
-	local temperature="$3"
-	local max_tokens="$4"
-	local output_file="$5"
-	local api_key_var="${6:-ANTHROPIC_API_KEY}"
-	local api_key="${!api_key_var:-}"
+	local timeout_secs="$3"
+	local output_file="$4"
 
-	[[ -z "$api_key" ]] && { printf '{"error":"no_api_key"}' > "$output_file"; return 1; }
-
-	local request_body
-	request_body=$(jq -n \
-		--arg model "$model" \
-		--argjson temp "$temperature" \
-		--argjson max_tokens "$max_tokens" \
-		--arg prompt "$prompt" \
-		'{
-			model: $model,
-			max_tokens: $max_tokens,
-			temperature: $temp,
-			messages: [{"role": "user", "content": $prompt}]
-		}' 2>/dev/null) || { printf '{"error":"request_build_failed"}' > "$output_file"; return 1; }
-
-	local http_response http_code response_body
-	http_response=$(curl -s -w '\n%{http_code}' \
-		-X POST "https://api.anthropic.com/v1/messages" \
-		-H "x-api-key: ${api_key}" \
-		-H "anthropic-version: 2023-06-01" \
-		-H "content-type: application/json" \
-		-d "$request_body" \
-		--max-time 15 \
-		2>/dev/null) || { printf '{"error":"curl_failed"}' > "$output_file"; return 1; }
-
-	http_code=$(printf '%s' "$http_response" | tail -n1)
-	response_body=$(printf '%s' "$http_response" | head -n -1)
-
-	if [[ "$http_code" == "429" ]]; then
-		sleep 2
-		http_response=$(curl -s -w '\n%{http_code}' \
-			-X POST "https://api.anthropic.com/v1/messages" \
-			-H "x-api-key: ${api_key}" \
-			-H "anthropic-version: 2023-06-01" \
-			-H "content-type: application/json" \
-			-d "$request_body" \
-			--max-time 15 \
-			2>/dev/null) || { printf '{"error":"curl_failed_retry"}' > "$output_file"; return 1; }
-		http_code=$(printf '%s' "$http_response" | tail -n1)
-		response_body=$(printf '%s' "$http_response" | head -n -1)
-	fi
-
-	if [[ "$http_code" != "200" ]]; then
-		printf '{"error":"http_%s"}' "$http_code" > "$output_file"
+	if ! command -v claude >/dev/null 2>&1; then
+		printf '{"error":"claude_cli_missing"}' > "$output_file"
 		return 1
 	fi
 
-	local content
-	content=$(printf '%s' "$response_body" | jq -r '.content[0].text // empty' 2>/dev/null) || {
-		printf '{"error":"parse_failed"}' > "$output_file"
-		return 1
-	}
+	local prompt_file
+	prompt_file=$(mktemp -t compass-prompt.XXXXXX 2>/dev/null) || prompt_file="/tmp/compass-prompt.$$.${RANDOM}"
+	printf '%s' "$prompt" > "$prompt_file"
 
-	# Validate the model returned parseable JSON with a score field.
+	local args=(-p --max-turns 1)
+	[[ -n "$model" ]] && args+=(--model "$model")
+
+	local response=""
+	if command -v timeout >/dev/null 2>&1; then
+		response=$(COMPASS_NESTED=1 timeout "$timeout_secs" claude "${args[@]}" <"$prompt_file" 2>/dev/null) || response=""
+	elif command -v gtimeout >/dev/null 2>&1; then
+		response=$(COMPASS_NESTED=1 gtimeout "$timeout_secs" claude "${args[@]}" <"$prompt_file" 2>/dev/null) || response=""
+	else
+		response=$(COMPASS_NESTED=1 claude "${args[@]}" <"$prompt_file" 2>/dev/null) || response=""
+	fi
+
+	rm -f "$prompt_file" 2>/dev/null || true
+
+	if [[ -z "$response" ]]; then
+		printf '{"error":"empty_response"}' > "$output_file"
+		return 1
+	fi
+
+	local clean
+	clean=$(_compass_strip_fences "$response")
+
+	# Confirm the model returned a JSON object with a numeric score.
 	local score
-	score=$(printf '%s' "$content" | jq -r '.score // empty' 2>/dev/null) || score=""
+	score=$(printf '%s' "$clean" | jq -r '.score // empty' 2>/dev/null) || score=""
 	if [[ -z "$score" ]]; then
 		printf '{"error":"invalid_json_response"}' > "$output_file"
 		return 1
 	fi
 
-	printf '%s' "$content" > "$output_file"
+	printf '%s' "$clean" > "$output_file"
 }
 
-# Build the evaluator prompt.
+# Build the evaluator prompt by interpolating the data slots.
 _compass_build_prompt() {
 	local prior_turn="$1"
 	local context_excerpt="$2"
@@ -182,7 +162,7 @@ _compass_build_prompt() {
 	printf '%s' "$template"
 }
 
-# Compute mean of space-separated floats.
+# Mean of space-separated floats.
 _compass_mean() {
 	local scores=("$@")
 	local n="${#scores[@]}"
@@ -195,7 +175,7 @@ _compass_mean() {
 	awk "BEGIN {printf \"%.4f\", $sum / $n}" 2>/dev/null || printf '0'
 }
 
-# Compute population stddev of space-separated floats.
+# Population stddev of space-separated floats.
 _compass_stddev() {
 	local scores=("$@")
 	local n="${#scores[@]}"
@@ -213,7 +193,7 @@ _compass_stddev() {
 # Main evaluator entry point.
 # $1 — tool_name
 # $2 — file_path
-# $3 — operation  (write|edit|multi_edit|bash)
+# $3 — operation  (write|edit|multi_edit|bash_write)
 # $4 — prior_turn (may be empty)
 # $5 — context_excerpt
 # $6 — session_id
@@ -225,17 +205,11 @@ compass_evaluate() {
 	local context_excerpt="$5"
 	local session_id="${6:-unknown}"
 
-	local model
+	local model n_samples timeout_secs min_valid
 	model=$(compass_config_get '.compass.evaluator.model')
 	model="${model:-claude-haiku-4-5-20251001}"
-
-	local n_samples temperature max_tokens timeout_secs min_valid
 	n_samples=$(compass_config_get '.compass.evaluator.n')
 	n_samples="${n_samples:-5}"
-	temperature=$(compass_config_get '.compass.evaluator.temperature')
-	temperature="${temperature:-0.3}"
-	max_tokens=$(compass_config_get '.compass.evaluator.max_output_tokens')
-	max_tokens="${max_tokens:-128}"
 	timeout_secs=$(compass_config_get '.compass.evaluator.sample_timeout_seconds')
 	timeout_secs="${timeout_secs:-8}"
 	min_valid=$(compass_config_get '.compass.evaluator.min_valid_samples')
@@ -250,34 +224,22 @@ compass_evaluate() {
 	local prompt
 	prompt=$(_compass_build_prompt "$prior_turn" "$context_excerpt" "$tool_name" "$file_path" "$operation")
 
-	# Launch N parallel eval calls.
 	local tmp_dir
-	tmp_dir=$(mktemp -d -t compass-eval.XXXXXX 2>/dev/null) || tmp_dir="/tmp/compass-eval.$$"
+	tmp_dir=$(mktemp -d -t compass-eval.XXXXXX 2>/dev/null) || tmp_dir="/tmp/compass-eval.$$.${RANDOM}"
 	mkdir -p "$tmp_dir"
 
 	local pids=()
 	local i
 	for (( i=0; i<n_samples; i++ )); do
 		local out_file="${tmp_dir}/sample_${i}.json"
-		(
-			_compass_run_single_eval \
-				"$prompt" "$model" "$temperature" "$max_tokens" "$out_file"
-		) &
+		_compass_run_single_eval \
+			"$prompt" "$model" "$timeout_secs" "$out_file" &
 		pids+=($!)
 	done
 
-	# Collect with timeout watchdog.
-	local deadline=$(( $(date +%s) + timeout_secs ))
 	local pid
 	for pid in "${pids[@]}"; do
-		local now
-		now=$(date +%s)
-		local remaining=$(( deadline - now ))
-		if [[ "$remaining" -gt 0 ]]; then
-			wait "$pid" 2>/dev/null || true
-		else
-			kill "$pid" 2>/dev/null || true
-		fi
+		wait "$pid" 2>/dev/null || true
 	done
 
 	# Aggregate valid scores.
@@ -307,9 +269,7 @@ compass_evaluate() {
 		error_policy="${error_policy:-closed}"
 
 		local decision="error"
-		if [[ "$error_policy" == "open" ]]; then
-			decision="pass"
-		fi
+		[[ "$error_policy" == "open" ]] && decision="pass"
 
 		jq -n \
 			--arg decision "$decision" \

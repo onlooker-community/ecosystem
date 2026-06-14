@@ -1,0 +1,14 @@
+{
+  "name": "inspector",
+  "version": "0.1.0",
+  "description": "Per-edit lint and typecheck gate. Runs the project's configured checks on just the touched file after every Write / Edit / MultiEdit, so the agent sees its own type errors before claiming success. Cheaper than proctor (which runs project-wide verification at Stop); complements assayer (which catches the agent lying about claims). Builds on the Onlooker ecosystem plugin.",
+  "author": {
+    "name": "Onlooker Community",
+    "url": "https://onlooker.dev"
+  },
+  "homepage": "https://onlooker.dev",
+  "repository": "https://github.com/onlooker-community/ecosystem",
+  "license": "MIT",
+  "skills": [],
+  "agents": []
+}
