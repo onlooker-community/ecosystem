@@ -92,21 +92,18 @@ _compass_matches_skip_glob() {
 	local globs_json="$2"
 	[[ -z "$file_path" || -z "$globs_json" ]] && return 1
 
-	# Convert JSON array to bash array and check each pattern.
-	local globs
-	mapfile -t globs < <(printf '%s' "$globs_json" | jq -r '.[]' 2>/dev/null) || return 1
-
-	local glob
-	for glob in "${globs[@]}"; do
-		# Use bash glob matching (extglob not needed for ** — use case).
-		# Convert ** to a catch-all for simple prefix/suffix matching.
-		local pattern="${glob//\*\*/DOUBLE_STAR}"
+	# Bash 3.2 (macOS) lacks mapfile, so stream via read-while.
+	local glob pattern
+	while IFS= read -r glob; do
+		[[ -z "$glob" ]] && continue
+		# Translate ** → .*  and *  → [^/]* for simple prefix/suffix matching.
+		pattern="${glob//\*\*/DOUBLE_STAR}"
 		pattern="${pattern//\*/[^/]*}"
 		pattern="${pattern//DOUBLE_STAR/.*}"
 		if [[ "$file_path" =~ $pattern ]]; then
 			return 0
 		fi
-	done
+	done < <(printf '%s' "$globs_json" | jq -r '.[]' 2>/dev/null)
 	return 1
 }
 
@@ -241,12 +238,13 @@ Choose a path:
 
 # -----------------------------------------------------------------------
 # Main gate function.
-# $1 — tool_name   (Write | Edit | MultiEdit | Bash)
-# $2 — file_path   (may be empty for Bash)
-# $3 — operation   (write | edit | multi_edit | bash_write)
-# $4 — context     (context excerpt or bash command string)
+# $1 — tool_name      (Write | Edit | MultiEdit | Bash)
+# $2 — file_path      (may be empty for Bash)
+# $3 — operation      (write | edit | multi_edit | bash_write)
+# $4 — context        (context excerpt or bash command string)
 # $5 — session_id
 # $6 — cwd
+# $7 — transcript_path (from hook JSON; may be empty)
 # -----------------------------------------------------------------------
 compass_run_gate() {
 	local tool_name="$1"
@@ -255,6 +253,7 @@ compass_run_gate() {
 	local context="$4"
 	local session_id="${5:-unknown}"
 	local cwd="${6:-}"
+	local transcript_path="${7:-}"
 
 	local _allow_exit=0
 	local _block_exit=0
@@ -348,14 +347,12 @@ compass_run_gate() {
 	_compass_increment_turn_count "$session_id" 2>/dev/null || true
 
 	# ---- Read prior assistant turn -----------------------------------
-	local prior_turn_chars_max transcript_max_age
+	local prior_turn_chars_max
 	prior_turn_chars_max=$(compass_config_get '.compass.transcript.prior_turn_chars_max')
 	prior_turn_chars_max="${prior_turn_chars_max:-800}"
-	transcript_max_age=$(compass_config_get '.compass.transcript.transcript_max_age_seconds')
-	transcript_max_age="${transcript_max_age:-300}"
 
 	local prior_turn=""
-	prior_turn=$(compass_read_prior_turn "$session_id" "$prior_turn_chars_max" "$transcript_max_age") \
+	prior_turn=$(compass_read_prior_turn "$transcript_path" "$prior_turn_chars_max") \
 		|| prior_turn=""
 
 	# ---- Symbolic skip layer -----------------------------------------

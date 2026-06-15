@@ -11,6 +11,11 @@
 
 set -uo pipefail
 
+# Recursion guard — must be first.
+# A nested `claude -p` Write would otherwise re-enter the cooldown writer.
+[[ "${COMPASS_NESTED:-}" == "1" ]] && exit 0
+export COMPASS_NESTED=1
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 

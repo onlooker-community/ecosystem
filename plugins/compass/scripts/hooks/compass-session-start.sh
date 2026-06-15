@@ -18,14 +18,6 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-_ECOSYSTEM_ROOT="${ONLOOKER_ECOSYSTEM_ROOT:-}"
-if [[ -z "$_ECOSYSTEM_ROOT" ]]; then
-	_candidate="$(cd "${PLUGIN_ROOT}/../.." 2>/dev/null && pwd)"
-	if [[ -f "${_candidate}/scripts/lib/validate-path.sh" ]]; then
-		_ECOSYSTEM_ROOT="$_candidate"
-	fi
-fi
-
 export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 
 # shellcheck source=../lib/compass-config.sh

@@ -1,0 +1,25 @@
+{
+  "plugin_name": "inspector",
+  "storage_path": "~/.onlooker",
+  "inspector": {
+    "enabled": false,
+    "timeout_seconds_per_check": 10,
+    "total_timeout_seconds": 30,
+    "output_excerpt_max_bytes": 4096,
+    "show_clean_runs": false,
+    "exclude_paths": [
+      "node_modules",
+      ".git",
+      "vendor",
+      ".venv",
+      "dist",
+      ".next",
+      ".nuxt",
+      "build",
+      "__pycache__",
+      "target",
+      "coverage"
+    ],
+    "checks": {}
+  }
+}

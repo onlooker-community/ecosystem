@@ -223,8 +223,7 @@ The re-check is capped at one per intervention. After one re-check, the three pa
       "identity_match": "dir_plus_stem"
     },
     "transcript": {
-      "prior_turn_chars_max": 800,
-      "transcript_max_age_seconds": 300
+      "prior_turn_chars_max": 800
     },
     "skip_patterns": {
       "reply_to_question": {

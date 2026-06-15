@@ -42,13 +42,13 @@ _compass_strip_control_chars() {
 }
 
 # Replace all occurrences of a literal string with [STRIPPED].
+# Uses bash native parameter expansion to avoid the sed delimiter trap —
+# needles like </prior_assistant_turn> contain '/' which breaks sed s///.
 _compass_strip_literal() {
 	local input="$1"
 	local needle="$2"
-	# Use printf + sed; escape needle for BRE (basic regex)
-	local escaped_needle
-	escaped_needle=$(printf '%s' "$needle" | sed 's/[[\.*^$()+?{|]/\\&/g' 2>/dev/null) || escaped_needle="$needle"
-	printf '%s' "$input" | sed "s/${escaped_needle}/[STRIPPED]/g" 2>/dev/null
+	[[ -z "$needle" ]] && { printf '%s' "$input"; return; }
+	printf '%s' "${input//"$needle"/[STRIPPED]}"
 }
 
 # Truncate a string to at most max_chars UTF-8 characters.
