@@ -65,10 +65,10 @@ STUB
 
   # On its first scan the hook has no watermark and falls back to a relative
   # "now - bootstrap_lookback_days" window (default 14 days). Fixtures must be
-  # dated inside that window or the scan sees nothing. Compute a recent
-  # timestamp at runtime — a hardcoded date silently ages out of the window
-  # and turns these tests into a time bomb. One day back keeps a wide margin.
-  FIXTURE_CREATED_AT=$(python3 -c "import datetime; print((datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%SZ'))")
+  # dated inside that window or the scan sees nothing, so date them relative to
+  # now — one day back keeps a wide margin. See relative_iso_days_ago in
+  # test/helpers/setup.bash for why a hardcoded date is a time bomb here.
+  FIXTURE_CREATED_AT=$(relative_iso_days_ago 1)
 }
 
 # Helper: write an archivist artifact for the project.
