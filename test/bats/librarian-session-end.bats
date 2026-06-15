@@ -62,11 +62,18 @@ STUB
   export PATH="${STUB_BIN}:${PATH}"
 
   HOOK="${PLUGIN_ROOT}/scripts/hooks/librarian-session-end.sh"
+
+  # On its first scan the hook has no watermark and falls back to a relative
+  # "now - bootstrap_lookback_days" window (default 14 days). Fixtures must be
+  # dated inside that window or the scan sees nothing. Compute a recent
+  # timestamp at runtime — a hardcoded date silently ages out of the window
+  # and turns these tests into a time bomb. One day back keeps a wide margin.
+  FIXTURE_CREATED_AT=$(python3 -c "import datetime; print((datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%SZ'))")
 }
 
 # Helper: write an archivist artifact for the project.
 _seed_artifact() {
-  local kind="$1" id="$2" summary="$3" detail="$4" created_at="${5:-2026-06-01T12:00:00Z}"
+  local kind="$1" id="$2" summary="$3" detail="$4" created_at="${5:-$FIXTURE_CREATED_AT}"
   local dir="${ARCHIVIST_DIR}/${kind}"
   mkdir -p "$dir"
   jq -n \
