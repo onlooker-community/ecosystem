@@ -14,5 +14,6 @@
   "plugins/historian": "0.2.0",
   "plugins/assayer": "1.0.0",
   "plugins/bursar": "0.1.0",
-  "plugins/lineage": "0.1.0"
+  "plugins/lineage": "0.1.0",
+  "plugins/inspector": "0.1.0"
 }
