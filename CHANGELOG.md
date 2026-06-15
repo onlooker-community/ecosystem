@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.29.0...ecosystem-v0.29.1) (2026-06-15)
+
+
+### Bug Fixes
+
+* **cartographer:** correct typo in release-please bump-patch key :face_with_spiral_eyes: ([#91](https://github.com/onlooker-community/ecosystem/issues/91)) ([dfab160](https://github.com/onlooker-community/ecosystem/commit/dfab1602afda2b6255a72b0975ebab9289d75b8e))
+
 ## [0.29.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.28.1...ecosystem-v0.29.0) (2026-06-15)
 
 
