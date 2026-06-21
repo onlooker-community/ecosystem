@@ -22,7 +22,7 @@ flowchart TB
         echo --> emitter
         cartographer --> emitter
 
-        emitter -->|"schema-validated<br/>event envelope"| log
+        emitter -->|"event envelope<br/>(validated in dev/CI)"| log
         log -.->|"append-only JSONL"| log
     end
 ```
@@ -34,7 +34,7 @@ The `ecosystem` plugin (repo root) is not optional — it provides the infrastru
 | Component | What it does |
 |-----------|-------------|
 | `~/.onlooker/` directory | Shared storage root, created by the Onlooker installer. All plugins store artifacts here under their own sub-path. |
-| `scripts/lib/onlooker-event.mjs` | Canonical event builder. Accepts a JSON payload on stdin, validates it against `@onlooker-community/schema`, and prints the validated envelope to stdout. Callers capture the output and append it to the JSONL log. |
+| `scripts/lib/onlooker-event.mjs` | Canonical event builder. Accepts a JSON payload on stdin and prints a canonical envelope to stdout; callers capture it and append to the JSONL log. **Dependency-free and fail-open**: it validates against `@onlooker-community/schema` only when that package is resolvable (dev/CI) and emits unconditionally otherwise, so a fresh marketplace install — which ships no `node_modules` — never loses telemetry. See [ADR-005](adr/005-runtime-emitter-fails-open.md). |
 | `scripts/lib/onlooker-schema.sh` | Bash convenience wrapper around `onlooker-event.mjs`. Provides `onlooker_event_from_hook` (builds an envelope via `node`) and `onlooker_append_event` (appends a pre-built envelope to the log). Node is still required. |
 | `scripts/lib/validate-path.sh` | Sets canonical `$ONLOOKER_*` environment variables (log path, tracker dirs, etc.) so every hook uses consistent paths. |
 | Session trackers | `SessionStart`, `SessionEnd`, `PreCompact`, `PostCompact`, `PreToolUse`, `PostToolUse`, `UserPromptSubmit`, `TaskCreated`, `TaskCompleted`, `WorktreeCreate`, and `WorktreeRemove` hooks that emit `session.*`, `tool.*`, `turn.*` events for the observability layer. |
