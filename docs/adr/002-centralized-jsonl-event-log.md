@@ -1,7 +1,8 @@
 # ADR-002: Centralized JSONL Event Log with Schema Validation
 
 **Status:** Accepted  
-**Date:** 2026-05-24
+**Date:** 2026-05-24  
+**Amended by:** [ADR-005](005-runtime-emitter-fails-open.md) — runtime validation was moved off the hot path; the emitter now fails open. The "schema validation at write time" rationale below holds only for dev/CI, not installed plugins.
 
 ## Context
 

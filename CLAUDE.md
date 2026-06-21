@@ -73,7 +73,7 @@ See `plugins/compass/docs/adr/001-evaluate-prompts-in-context.md` for the full d
 2. Use `scripts/lib/onlooker-event.mjs` for all event emission — never write directly to the JSONL log.
 3. Store runtime artifacts under `${ONLOOKER_DIR:-$HOME/.onlooker}/<name>/<project-key>/`. Always use `$ONLOOKER_DIR` — never hardcode `~/.onlooker` — so the test suite's isolated temp home is respected.
 4. Derive the project key via `tribunal_project_key` (or equivalent) — first 12 hex chars of SHA256(`remote:<origin-url>`), falling back to SHA256(`root:<repo-root>`) for repos without a remote. See `plugins/tribunal/scripts/lib/tribunal-project-key.sh`.
-5. Register event types in `@onlooker-community/schema` before emitting them (the emitter validates the envelope).
+5. Register event types in `@onlooker-community/schema` before emitting them. The runtime emitter is dependency-free and **fails open**: it validates against the schema package only when that package is resolvable (dev, CI, tests) and emits unconditionally otherwise, because installed marketplace plugins ship no `node_modules`. Schema drift is caught in CI against the published schemas at `schema.onlooker.dev`. See [ADR-005](docs/adr/005-runtime-emitter-fails-open.md).
 6. Fail-soft when `~/.onlooker/` is absent — plugins must not block a session they were not invited to.
 
 ## Development

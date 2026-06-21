@@ -6,20 +6,24 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import {
-  createEvent,
-  SKILL_INVOKED,
-  TASK_COMPLETE,
-  TASK_START,
-  TOOL_AGENT_COMPLETE,
-  TOOL_AGENT_SPAWN,
-  TOOL_FILE_EDIT,
-  TOOL_FILE_READ,
-  TOOL_FILE_WRITE,
-  TOOL_SHELL_EXEC,
-  TOOL_WEB_FETCH,
-  validate,
-} from '@onlooker-community/schema';
+
+// Canonical event-type constants, inlined rather than imported from
+// @onlooker-community/schema so this emitter has ZERO runtime dependencies.
+// Claude Code installs plugins by cloning the marketplace repo and never runs
+// `npm install`, so an installed plugin has no node_modules — a runtime import
+// of the schema package fails with ERR_MODULE_NOT_FOUND and silently kills all
+// telemetry. The full contract still lives in @onlooker-community/schema; it is
+// now a devDependency used to validate emitter output in CI (see tryValidate).
+const SKILL_INVOKED = 'skill.invoked';
+const TASK_START = 'task.start';
+const TASK_COMPLETE = 'task.complete';
+const TOOL_AGENT_COMPLETE = 'tool.agent.complete';
+const TOOL_AGENT_SPAWN = 'tool.agent.spawn';
+const TOOL_FILE_EDIT = 'tool.file.edit';
+const TOOL_FILE_READ = 'tool.file.read';
+const TOOL_FILE_WRITE = 'tool.file.write';
+const TOOL_SHELL_EXEC = 'tool.shell.exec';
+const TOOL_WEB_FETCH = 'tool.web.fetch';
 
 export function ensureMachineId(onlookerDir) {
   const path = join(onlookerDir, 'machine_id');
@@ -55,19 +59,50 @@ export function buildCanonicalEvent({
   cost_usd,
   token_count,
 }) {
-  const event = createEvent({
+  // Envelope assembly inlined from @onlooker-community/schema's createEvent so
+  // emission needs no external package. The schema is the source of truth for
+  // this shape; CI validates against it (see test/node/schema-*.test.mjs).
+  const event = {
+    id: randomUUID(),
+    schema_version: '1.0',
     runtime,
-    adapter_id,
     plugin,
     machine_id: ensureMachineId(onlookerDir),
+    timestamp: new Date().toISOString(),
     session_id,
+    sequence: nextSequence(onlookerDir),
     event_type,
     payload,
-    cost_usd,
-    token_count,
-  });
-  event.sequence = nextSequence(onlookerDir);
+    redacted: false,
+  };
+  if (adapter_id !== undefined) event.adapter_id = adapter_id;
+  if (cost_usd !== undefined) event.cost_usd = cost_usd;
+  if (token_count !== undefined) event.token_count = token_count;
   return event;
+}
+
+/**
+ * Best-effort schema validation.
+ *
+ * @onlooker-community/schema is a devDependency, so it resolves in dev, CI, and
+ * tests — where we DO want emitter output gated against the contract (this is
+ * what the negative tests across the plugins rely on) — but is absent in an
+ * installed marketplace plugin. When it is absent we fail OPEN: build and emit
+ * anyway, so schema drift can never silently kill telemetry the way a hard
+ * runtime dependency did. Drift is caught in CI, which validates emitter output
+ * against the published schemas at https://schema.onlooker.dev.
+ *
+ * Returns { available: false } when no validator is installed, otherwise the
+ * { valid, errors? } result from the schema package.
+ */
+async function tryValidate(event) {
+  let schema;
+  try {
+    schema = await import('@onlooker-community/schema');
+  } catch {
+    return { available: false };
+  }
+  return { available: true, ...schema.validate(event) };
 }
 
 function summarizeText(value, maxLen = 1000) {
@@ -219,11 +254,7 @@ export function mapSkillHookInput(hookInput, options) {
     payload,
   });
 
-  const result = validate(event);
-  if (!result.valid) {
-    return { valid: false, errors: result.errors, event_type: SKILL_INVOKED };
-  }
-  return { valid: true, event: result.event };
+  return { valid: true, event };
 }
 
 /**
@@ -269,11 +300,7 @@ export function mapTaskHookInput(hookInput, options) {
     payload,
   });
 
-  const result = validate(event);
-  if (!result.valid) {
-    return { valid: false, errors: result.errors, event_type: eventType };
-  }
-  return { valid: true, event: result.event };
+  return { valid: true, event };
 }
 
 /**
@@ -322,11 +349,7 @@ export function mapWorktreeHookInput(hookInput, options) {
     payload,
   });
 
-  const result = validate(event);
-  if (!result.valid) {
-    return { valid: false, errors: result.errors, event_type: TOOL_SHELL_EXEC };
-  }
-  return { valid: true, event: result.event };
+  return { valid: true, event };
 }
 
 /**
@@ -444,11 +467,7 @@ export function mapHookInputToCanonical(hookInput, options) {
     payload,
   });
 
-  const result = validate(event);
-  if (!result.valid) {
-    return { valid: false, errors: result.errors, event_type: eventType };
-  }
-  return { valid: true, event: result.event };
+  return { valid: true, event };
 }
 
 function readStdin() {
@@ -468,12 +487,16 @@ async function main() {
   if (command === 'validate') {
     const raw = await readStdin();
     const parsed = JSON.parse(raw || '{}');
-    const result = validate(parsed);
-    if (!result.valid) {
-      console.error(JSON.stringify(result.errors, null, 2));
+    const check = await tryValidate(parsed);
+    if (!check.available) {
+      console.error('@onlooker-community/schema is not installed; cannot validate');
       process.exit(1);
     }
-    console.log(JSON.stringify(result.event));
+    if (!check.valid) {
+      console.error(JSON.stringify(check.errors, null, 2));
+      process.exit(1);
+    }
+    console.log(JSON.stringify(parsed));
     return;
   }
 
@@ -484,8 +507,11 @@ async function main() {
     if (!mapped) {
       process.exit(0);
     }
-    if (!mapped.valid) {
-      console.error(JSON.stringify(mapped.errors, null, 2));
+    // Best-effort: reject when a validator is present (dev/CI), fail open in
+    // installed plugins so the event is still emitted.
+    const check = await tryValidate(mapped.event);
+    if (check.available && !check.valid) {
+      console.error(JSON.stringify(check.errors, null, 2));
       process.exit(1);
     }
     console.log(JSON.stringify(mapped.event));
@@ -509,12 +535,14 @@ async function main() {
       event_type: params.event_type,
       payload: params.payload,
     });
-    const result = validate(event);
-    if (!result.valid) {
-      console.error(JSON.stringify(result.errors, null, 2));
+    // Best-effort: reject when a validator is present (dev/CI), fail open in
+    // installed plugins so the event is still emitted.
+    const check = await tryValidate(event);
+    if (check.available && !check.valid) {
+      console.error(JSON.stringify(check.errors, null, 2));
       process.exit(1);
     }
-    console.log(JSON.stringify(result.event));
+    console.log(JSON.stringify(event));
     return;
   }
 
