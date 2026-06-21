@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.29.1...ecosystem-v0.29.2) (2026-06-21)
+
+
+### Bug Fixes
+
+* **emitter:** make emission dependency-free and fail-open :relieved: ([#99](https://github.com/onlooker-community/ecosystem/issues/99)) ([0dda7f8](https://github.com/onlooker-community/ecosystem/commit/0dda7f803ed2dfa28561bd8d9e4193b2b18e5bbf))
+
 ## [0.29.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.29.0...ecosystem-v0.29.1) (2026-06-15)
 
 
