@@ -21,40 +21,43 @@ bursar_config_load() {
 	local plugin_root="${CLAUDE_PLUGIN_ROOT:-}"
 	local home_dir="${HOME:-}"
 
-	local merged="{}"
-	local file
+	# Read each layer's raw text with the no-fork `$(<file)` builtin (NOT `cat`),
+	# then deep-merge all three layers in a SINGLE jq invocation. The dominant
+	# cost in the SessionEnd hook is jq process startup, not the merge itself, so
+	# this collapses what was one-jq-per-file (up to 6 forks) down to one.
+	local default_txt="" home_txt="" repo_txt=""
+	local default_file="${plugin_root}/config.json"
+	local home_file="${home_dir}/.claude/settings.json"
+	local repo_file=""
+	[[ -n "$repo_root" ]] && repo_file="${repo_root}/.claude/settings.json"
 
-	file="${plugin_root}/config.json"
-	if [[ -f "$file" ]]; then
-		local defaults
-		defaults=$(jq '.' "$file" 2>/dev/null) || defaults="{}"
-		merged=$(jq -n --argjson a "$merged" --argjson b "$defaults" '$a * $b' 2>/dev/null) \
-			|| merged="$defaults"
-	fi
+	[[ -f "$default_file" ]] && default_txt="$(<"$default_file")"
+	[[ -f "$home_file" ]] && home_txt="$(<"$home_file")"
+	[[ -n "$repo_file" && -f "$repo_file" ]] && repo_txt="$(<"$repo_file")"
 
-	local repo_settings=""
-	[[ -n "$repo_root" ]] && repo_settings="${repo_root}/.claude/settings.json"
-
-	for file in "${home_dir}/.claude/settings.json" "$repo_settings"; do
-		[[ -n "$file" && -f "$file" ]] || continue
-		local overlay
-		overlay=$(jq '{ bursar: (.bursar // {}) }' "$file" 2>/dev/null) || continue
-		[[ -z "$overlay" ]] && continue
-		local attempt
-		if attempt=$(jq -n --argjson a "$merged" --argjson b "$overlay" '
-			def deepmerge($a; $b):
-				if ($a|type) == "object" and ($b|type) == "object" then
-					reduce (($a|keys) + ($b|keys) | unique)[] as $k
-						({}; .[$k] = deepmerge($a[$k]; $b[$k]))
-				elif $b == null then $a
-				else $b end;
-			deepmerge($a; $b)
-		' 2>/dev/null) && [[ -n "$attempt" ]]; then
-			merged="$attempt"
-		fi
-	done
-
-	_BURSAR_CONFIG="$merged"
+	# Precedence (latest wins): defaults < home settings < repo settings. The
+	# defaults file is merged whole; settings files contribute only their .bursar
+	# key. `fromjson? // {}` parses each layer defensively — a missing or malformed
+	# file degrades to {} rather than aborting the merge (matches the prior
+	# per-file fallback).
+	_BURSAR_CONFIG=$(jq -n \
+		--arg d "$default_txt" \
+		--arg h "$home_txt" \
+		--arg r "$repo_txt" \
+		'
+		def deepmerge($a; $b):
+			if ($a|type) == "object" and ($b|type) == "object" then
+				reduce (($a|keys) + ($b|keys) | unique)[] as $k
+					({}; .[$k] = deepmerge($a[$k]; $b[$k]))
+			elif $b == null then $a
+			else $b end;
+		($d | fromjson? // {}) as $defaults
+		| (($h | fromjson? // {}) | {bursar: (.bursar // {})}) as $home
+		| (($r | fromjson? // {}) | {bursar: (.bursar // {})}) as $repo
+		| deepmerge(deepmerge($defaults; $home); $repo)
+		' 2>/dev/null) || _BURSAR_CONFIG="{}"
+	[[ -z "$_BURSAR_CONFIG" ]] && _BURSAR_CONFIG="{}"
+	return 0
 }
 
 bursar_config_get() {
