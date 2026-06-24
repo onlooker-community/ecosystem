@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.3](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.29.2...ecosystem-v0.29.3) (2026-06-24)
+
+
+### Performance Improvements
+
+* **bursar:** collapse process forks in SessionEnd hot path :relieved: ([#101](https://github.com/onlooker-community/ecosystem/issues/101)) ([7a426fe](https://github.com/onlooker-community/ecosystem/commit/7a426fe359785eca35ea1ad61523b05fda79e0da))
+
 ## [0.29.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.29.1...ecosystem-v0.29.2) (2026-06-21)
 
 
