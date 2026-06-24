@@ -265,6 +265,43 @@ for ((i = 0; i < KEPT_COUNT; i++)); do
 
 	PROPOSED_COUNT=$((PROPOSED_COUNT + 1))
 
+	# Write a flat artifact JSON for the artifact browser. The proposal file
+	# uses a nested `proposed.*` structure; this flat copy matches the web's
+	# LibrarianContent type so the dashboard can render it directly.
+	ARTIFACT_CONTENT=$(jq -n \
+		--arg type "$MEMORY_TYPE" \
+		--arg title "$TITLE" \
+		--arg body "$BODY" \
+		--argjson classifier_confidence "$CONFIDENCE" \
+		--arg conflict_state "none" \
+		--argjson source_session_ids \
+			"$(if [[ -n "$ARTIFACT_SESSION" ]]; then
+				printf '["%s"]' "$ARTIFACT_SESSION"
+			else
+				printf '[]'
+			fi)" \
+		'{type: $type, title: $title, body: $body,
+		  classifier_confidence: $classifier_confidence,
+		  conflict_state: $conflict_state,
+		  source_session_ids: $source_session_ids}') || ARTIFACT_CONTENT=""
+
+	if [[ -n "$ARTIFACT_CONTENT" ]]; then
+		ARTIFACTS_DIR="$(librarian_project_dir "$PROJECT_KEY")/artifacts"
+		mkdir -p "$ARTIFACTS_DIR" 2>/dev/null || true
+		ARTIFACT_PATH="${ARTIFACTS_DIR}/${PROPOSAL_ID}.json"
+		printf '%s\n' "$ARTIFACT_CONTENT" > "$ARTIFACT_PATH" 2>/dev/null || ARTIFACT_PATH=""
+	fi
+
+	if [[ -n "${ARTIFACT_PATH:-}" ]]; then
+		librarian_emit "onlooker.artifact.ready" "$SESSION_ID" "$(jq -cn \
+			--arg plugin "librarian" \
+			--arg artifact_kind "proposal" \
+			--arg artifact_path "$ARTIFACT_PATH" \
+			--arg artifact_title "$TITLE" \
+			'{plugin: $plugin, artifact_kind: $artifact_kind,
+			  artifact_path: $artifact_path, artifact_title: $artifact_title}')"
+	fi
+
 	librarian_emit "librarian.candidate.proposed" "$SESSION_ID" "$(jq -cn \
 		--arg proposal_id "$PROPOSAL_ID" \
 		--arg memory_type "$MEMORY_TYPE" \

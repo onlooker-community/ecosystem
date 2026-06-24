@@ -225,6 +225,11 @@ scribe_distill() {
 		fi
 	fi
 
+	# Also persist the structured JSON alongside the markdown so the agent
+	# can upload it without re-parsing markdown.
+	local json_path="${output_dir}/${date_str}-${session_short}.json"
+	printf '%s\n' "$intent_json" > "$json_path" 2>/dev/null || true
+
 	# Emit scribe.distill.complete.
 	local payload
 	payload=$(jq -n \
@@ -234,6 +239,17 @@ scribe_distill() {
 		'{session_id: $sid, captures_processed: $cap, artifacts_produced: $art}') || payload=""
 
 	[[ -n "$payload" ]] && scribe_emit_event "scribe.distill.complete" "$payload" || true
+
+	# Emit onlooker.artifact.ready so the agent can upload the structured content.
+	local artifact_payload
+	artifact_payload=$(jq -n \
+		--arg plugin "scribe" \
+		--arg artifact_kind "intent" \
+		--arg artifact_path "$json_path" \
+		--arg artifact_title "Session Intent · $date_str" \
+		'{plugin: $plugin, artifact_kind: $artifact_kind,
+		  artifact_path: $artifact_path, artifact_title: $artifact_title}') || artifact_payload=""
+	[[ -n "$artifact_payload" ]] && scribe_emit_event "onlooker.artifact.ready" "$artifact_payload" || true
 
 	printf '%s' "$output_path"
 }

@@ -248,6 +248,18 @@ counsel_generate_brief() {
 		return 1
 	}
 
+	# Also persist structured JSON alongside the markdown so the agent can
+	# upload full brief content without re-parsing markdown.
+	local json_path="${briefs_dir}/${week_label}.json"
+	local full_brief_json
+	full_brief_json=$(printf '%s' "$brief_json" | jq \
+		--arg ps "$period_start" \
+		--arg pe "$period_end" \
+		--argjson src "$sources_json" \
+		'. + {period_start: $ps, period_end: $pe, sources_consulted: $src}' 2>/dev/null) \
+		|| full_brief_json="$brief_json"
+	printf '%s\n' "$full_brief_json" > "$json_path" 2>/dev/null || true
+
 	# Emit counsel.brief.generated.
 	local rec_count
 	rec_count=$(printf '%s' "$brief_json" | jq '.recommendations | length' 2>/dev/null) || rec_count=0
@@ -267,6 +279,17 @@ counsel_generate_brief() {
 	else
 		printf 'counsel_generate_brief: skipped counsel.brief.generated (no valid period bounds)\n' >&2
 	fi
+
+	# Emit onlooker.artifact.ready so the agent can upload the full brief content.
+	local artifact_payload
+	artifact_payload=$(jq -n \
+		--arg plugin "counsel" \
+		--arg artifact_kind "brief" \
+		--arg artifact_path "$json_path" \
+		--arg artifact_title "Counsel Brief · $week_label" \
+		'{plugin: $plugin, artifact_kind: $artifact_kind,
+		  artifact_path: $artifact_path, artifact_title: $artifact_title}') || artifact_payload=""
+	[[ -n "$artifact_payload" ]] && counsel_emit_event "onlooker.artifact.ready" "$artifact_payload" || true
 
 	printf '%s' "$output_path"
 }
