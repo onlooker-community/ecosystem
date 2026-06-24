@@ -1,6 +1,6 @@
 {
   "name": "bursar",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Multi-session, per-project budget accounting for the Onlooker ecosystem. Rolls each session's spend into a per-project ledger on SessionEnd and surfaces \"this project burned $X this week\" at SessionStart. Where governor regulates a single session, bursar is the cross-session rollup: it reads governor.session.complete off the shared event bus and emits bursar.* events for audit. Named for the officer who keeps the accounts. Builds on the Onlooker ecosystem plugin.",
   "author": {
     "name": "Onlooker Community",
