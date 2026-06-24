@@ -44,6 +44,8 @@ source "${PLUGIN_ROOT}/scripts/lib/archivist-ulid.sh"
 source "${PLUGIN_ROOT}/scripts/lib/archivist-storage.sh"
 # shellcheck source=../lib/archivist-config.sh
 source "${PLUGIN_ROOT}/scripts/lib/archivist-config.sh"
+# shellcheck source=../lib/archivist-events.sh
+CLAUDE_PLUGIN_ROOT="${_ECOSYSTEM_ROOT:-$PLUGIN_ROOT}" source "${PLUGIN_ROOT}/scripts/lib/archivist-events.sh"
 
 # Always approve compaction at exit, no matter what happened above.
 _approve() {
@@ -233,6 +235,38 @@ for KIND_PAIR in "decisions:decision" "dead_ends:dead_end" "open_questions:open_
 			&& WRITE_COUNT=$((WRITE_COUNT + 1))
 	done
 done
+
+# Write an aggregate extract JSON for the artifact browser. This is the
+# single-file representation of everything extracted this compact cycle:
+# decisions, dead ends, and open questions in one document. The session_id
+# doubles as the artifact key so the stable uuid from artifact.FromEvent
+# deduplicates re-uploads of the same session.
+if [[ "$WRITE_COUNT" -gt 0 && -n "$SESSION_ID" ]]; then
+	EXTRACTS_DIR="$(archivist_project_dir "$PROJECT_KEY")/extracts"
+	mkdir -p "$EXTRACTS_DIR" 2>/dev/null || true
+	EXTRACT_PATH="${EXTRACTS_DIR}/${SESSION_ID}.json"
+
+	AGGREGATE=$(jq -n \
+		--argjson decisions "$(printf '%s' "$CLEAN_RESPONSE" | jq '.decisions // []')" \
+		--argjson dead_ends "$(printf '%s' "$CLEAN_RESPONSE" | jq '.dead_ends // []')" \
+		--argjson open_questions "$(printf '%s' "$CLEAN_RESPONSE" | jq '.open_questions // []')" \
+		'{decisions: $decisions, dead_ends: $dead_ends, open_questions: $open_questions}') || AGGREGATE=""
+
+	if [[ -n "$AGGREGATE" ]]; then
+		printf '%s\n' "$AGGREGATE" > "$EXTRACT_PATH" 2>/dev/null || true
+
+		SESSION_SHORT="${SESSION_ID:0:8}"
+		ARTIFACT_PAYLOAD=$(jq -n \
+			--arg plugin "archivist" \
+			--arg artifact_kind "extract" \
+			--arg artifact_path "$EXTRACT_PATH" \
+			--arg artifact_title "Archivist Extract · $SESSION_SHORT" \
+			'{plugin: $plugin, artifact_kind: $artifact_kind,
+			  artifact_path: $artifact_path, artifact_title: $artifact_title}') || ARTIFACT_PAYLOAD=""
+		[[ -n "$ARTIFACT_PAYLOAD" ]] && \
+			archivist_emit_event "onlooker.artifact.ready" "$ARTIFACT_PAYLOAD" || true
+	fi
+fi
 
 _approve "Archivist: wrote ${WRITE_COUNT} artifacts (trigger=${TRIGGER})"
 exit 0
