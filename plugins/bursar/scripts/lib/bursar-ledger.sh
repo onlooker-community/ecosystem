@@ -55,12 +55,13 @@ bursar_ledger_record() {
 	local record="${2:-}"
 	[[ -z "$project_key" || -z "$record" ]] && return 1
 
-	local sid
-	sid=$(printf '%s' "$record" | jq -r '.session_id // empty' 2>/dev/null) || sid=""
-	[[ -z "$sid" ]] && return 1
-
-	local record_compact
-	record_compact=$(printf '%s' "$record" | jq -c . 2>/dev/null) || return 1
+	# Pull the session_id and the compacted record out in a single jq pass:
+	# line 1 is the key, line 2 is the line we will write.
+	local sid record_compact
+	{ IFS= read -r sid; IFS= read -r record_compact; } < <(
+		printf '%s' "$record" | jq -r '.session_id // empty, tojson' 2>/dev/null
+	)
+	[[ -z "$sid" || -z "$record_compact" ]] && return 1
 
 	local dir ledger_path lock_path
 	dir=$(bursar_ledger_dir "$project_key")

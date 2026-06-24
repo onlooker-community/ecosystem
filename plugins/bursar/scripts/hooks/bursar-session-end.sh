@@ -33,10 +33,11 @@ source "${PLUGIN_ROOT}/scripts/lib/bursar-project-key.sh"
 source "${PLUGIN_ROOT}/scripts/lib/bursar-ledger.sh"
 
 INPUT=$(cat)
-SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SESSION_ID=""
-CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 
 _done() { exit 0; }
+
+# Parse session_id and cwd in a single jq pass (one fork, not two).
+{ IFS= read -r SESSION_ID; IFS= read -r CWD; } < <(printf '%s' "$INPUT" | jq -r '.session_id // "", .cwd // ""' 2>/dev/null)
 
 [[ -z "$SESSION_ID" ]] && _done
 
@@ -47,11 +48,13 @@ TRACKER="${ONLOOKER_DIR}/session-trackers/${SESSION_ID}"
 
 # -----------------------------------------------------------------------
 # Resolve project key + cwd: breadcrumb → substrate tracker → live cwd.
+# The breadcrumb (dropped at SessionStart) usually carries both, which lets us
+# skip the git + shasum project-key derivation entirely in the common case.
 # -----------------------------------------------------------------------
 PROJECT_KEY=""
 if [[ -f "$BREADCRUMB" ]]; then
-	PROJECT_KEY=$(jq -r '.project_key // ""' "$BREADCRUMB" 2>/dev/null) || PROJECT_KEY=""
-	[[ -z "$CWD" ]] && CWD=$(jq -r '.cwd // ""' "$BREADCRUMB" 2>/dev/null)
+	{ IFS= read -r PROJECT_KEY; IFS= read -r bc_cwd; } < <(jq -r '.project_key // "", .cwd // ""' "$BREADCRUMB" 2>/dev/null)
+	[[ -z "$CWD" ]] && CWD="$bc_cwd"
 fi
 if [[ -z "$CWD" && -f "$TRACKER" ]]; then
 	CWD=$(jq -r '.cwd // ""' "$TRACKER" 2>/dev/null) || CWD=""
@@ -74,66 +77,74 @@ COST=""
 TOKENS=""
 CALLS=""
 
-# Reads event-log lines on stdin; echoes the latest matching session.complete payload.
-_latest_governor_payload() {
+# Reads event-log lines on stdin; emits one TSV line "cost<TAB>tokens<TAB>calls"
+# for the latest governor.session.complete matching this session (empty if none).
+# grep pre-filters so jq only parses the handful of matching lines, and the
+# field extraction happens in the same jq pass that selects the latest match —
+# replacing the prior select + three separate jq extractions.
+_latest_governor_spend() {
 	grep -F '"governor.session.complete"' 2>/dev/null \
-		| jq -c --arg sid "$SESSION_ID" \
-			'select(.event_type == "governor.session.complete" and .payload.session_id == $sid) | .payload' \
-			2>/dev/null \
-		| tail -n 1
+		| jq -rs --arg sid "$SESSION_ID" '
+			[ .[]
+			  | select(.event_type == "governor.session.complete" and .payload.session_id == $sid)
+			  | .payload ]
+			| if length == 0 then empty
+			  else (.[-1] | [(.total_cost_usd // ""), (.total_tokens // ""), (.total_api_calls // "")] | @tsv)
+			  end' \
+			2>/dev/null
 }
 
 if [[ -f "$LOG" ]]; then
 	# The matching event was emitted seconds ago (governor's final Stop), so it is
 	# almost always near the tail. Scan a recent slice first to keep this hook
 	# fast as the global log grows; fall back to the full file only on a miss.
-	SPEND=$(tail -n 2000 "$LOG" 2>/dev/null | _latest_governor_payload)
-	[[ -z "$SPEND" ]] && SPEND=$(_latest_governor_payload < "$LOG")
+	SPEND=$(tail -n 2000 "$LOG" 2>/dev/null | _latest_governor_spend)
+	[[ -z "$SPEND" ]] && SPEND=$(_latest_governor_spend < "$LOG")
 	if [[ -n "$SPEND" ]]; then
 		GOV_PRESENT="true"
-		COST=$(printf '%s' "$SPEND" | jq -r '.total_cost_usd // empty' 2>/dev/null) || COST=""
-		TOKENS=$(printf '%s' "$SPEND" | jq -r '.total_tokens // empty' 2>/dev/null) || TOKENS=""
-		CALLS=$(printf '%s' "$SPEND" | jq -r '.total_api_calls // empty' 2>/dev/null) || CALLS=""
+		IFS=$'\t' read -r COST TOKENS CALLS <<<"$SPEND"
 	fi
 fi
 
 MODEL=""
 [[ -f "$TRACKER" ]] && MODEL=$(jq -r '.model // ""' "$TRACKER" 2>/dev/null)
 
-# -----------------------------------------------------------------------
-# Build the record and the event payload, attaching spend fields only when
-# governor supplied them.
-# -----------------------------------------------------------------------
-add_fields() {
-	# Echoes the input JSON ($1) with cost/tokens/calls/model merged in.
-	local base="$1"
-	[[ -n "$COST" ]] && base=$(printf '%s' "$base" | jq --argjson v "$COST" '. + {cost_usd: $v}' 2>/dev/null)
-	[[ -n "$TOKENS" ]] && base=$(printf '%s' "$base" | jq --argjson v "$TOKENS" '. + {tokens: $v}' 2>/dev/null)
-	[[ -n "$CALLS" ]] && base=$(printf '%s' "$base" | jq --argjson v "$CALLS" '. + {api_calls: $v}' 2>/dev/null)
-	[[ -n "$MODEL" ]] && base=$(printf '%s' "$base" | jq --arg v "$MODEL" '. + {model: $v}' 2>/dev/null)
-	printf '%s' "$base"
-}
+# One date fork yields both the epoch and the RFC3339 stamp (was two).
+{ IFS= read -r NOW_EPOCH; IFS= read -r NOW_ISO; } < <(date -u +'%s%n%Y-%m-%dT%H:%M:%SZ' 2>/dev/null)
+[[ -z "$NOW_EPOCH" ]] && NOW_EPOCH=0
 
-RECORD=$(jq -n \
-	--arg ts "$(bursar_now_iso)" \
-	--argjson te "$(bursar_now_epoch)" \
+# -----------------------------------------------------------------------
+# Build the ledger record AND the (smaller) event payload in a single jq pass.
+# Spend fields are passed as strings and coerced with tonumber so an empty value
+# is simply omitted — replacing the per-field add_fields() helper that forked a
+# jq for every field, twice. The event payload is the record minus the
+# ledger-only ts/ts_epoch fields.
+# -----------------------------------------------------------------------
+{ IFS= read -r RECORD; IFS= read -r EV; } < <(jq -rn \
+	--arg ts "$NOW_ISO" \
+	--argjson te "$NOW_EPOCH" \
 	--arg sid "$SESSION_ID" \
 	--arg pk "$PROJECT_KEY" \
 	--argjson gp "$GOV_PRESENT" \
-	'{ts: $ts, ts_epoch: $te, session_id: $sid, project_key: $pk, governor_present: $gp}' 2>/dev/null)
-RECORD=$(add_fields "$RECORD")
+	--arg cost "$COST" \
+	--arg tokens "$TOKENS" \
+	--arg calls "$CALLS" \
+	--arg model "$MODEL" \
+	'
+	( {ts: $ts, ts_epoch: $te, session_id: $sid, project_key: $pk, governor_present: $gp}
+	  + (if $cost   != "" then {cost_usd:  ($cost   | tonumber)} else {} end)
+	  + (if $tokens != "" then {tokens:    ($tokens | tonumber)} else {} end)
+	  + (if $calls  != "" then {api_calls: ($calls  | tonumber)} else {} end)
+	  + (if $model  != "" then {model: $model} else {} end)
+	) as $record
+	| ($record | tojson), ($record | del(.ts, .ts_epoch) | tojson)
+	' 2>/dev/null)
 
 # Only claim the session was recorded — and only drop the breadcrumb — once the
 # ledger upsert actually succeeds. A failed write (lock timeout, mv failure)
 # must keep the breadcrumb so the session→project attribution survives for a
 # later attempt rather than being lost behind a false "recorded" event.
 if [[ -n "$RECORD" ]] && bursar_ledger_record "$PROJECT_KEY" "$RECORD"; then
-	EV=$(jq -n \
-		--arg pk "$PROJECT_KEY" \
-		--arg sid "$SESSION_ID" \
-		--argjson gp "$GOV_PRESENT" \
-		'{project_key: $pk, session_id: $sid, governor_present: $gp}' 2>/dev/null)
-	EV=$(add_fields "$EV")
 	[[ -n "$EV" ]] && bursar_emit_event "bursar.session.recorded" "$EV" "$SESSION_ID" || true
 
 	rm -f "$BREADCRUMB" 2>/dev/null || true
