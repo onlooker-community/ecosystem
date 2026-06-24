@@ -1,6 +1,6 @@
 {
   "name": "counsel",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Weekly synthesis and recommendations from the full observability stack. Reads all plugin event logs, produces a structured improvement brief, and injects it at session start when the last brief is stale.",
   "author": {
     "name": "Onlooker Community",
@@ -9,6 +9,8 @@
   "homepage": "https://onlooker.dev",
   "repository": "https://github.com/onlooker-community/ecosystem",
   "license": "MIT",
-  "skills": ["./skills/counsel"],
+  "skills": [
+    "./skills/counsel"
+  ],
   "agents": []
 }

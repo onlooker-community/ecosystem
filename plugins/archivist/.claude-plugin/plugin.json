@@ -1,6 +1,6 @@
 {
   "name": "archivist",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Structured session memory across context truncation: extracts decisions, dead ends, and open questions on PreCompact and reinjects the most important items at SessionStart. Builds on the Onlooker ecosystem plugin.",
   "author": {
     "name": "Onlooker Community",
