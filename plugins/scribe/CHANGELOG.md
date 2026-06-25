@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/onlooker-community/ecosystem/compare/scribe-v0.2.1...scribe-v0.3.0) (2026-06-24)
+
+
+### Features
+
+* **plugins:** persist structured JSON and emit onlooker.artifact.ready :outbox_tray: ([#103](https://github.com/onlooker-community/ecosystem/issues/103)) ([9b689a4](https://github.com/onlooker-community/ecosystem/commit/9b689a41aa4bdb481fef93b484e6446da731e8f1))
+
 ## [0.2.1](https://github.com/onlooker-community/ecosystem/compare/scribe-v0.2.0...scribe-v0.2.1) (2026-06-04)
 
 

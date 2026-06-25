@@ -1,6 +1,6 @@
 {
   "name": "librarian",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Consolidation layer between archivist's per-session artifacts and the user's durable typed memory store. Detects which session decisions, dead-ends, and open questions deserve to live across sessions, classifies them into the user/feedback/project/reference types, and queues them as proposals for explicit confirmation. Auto-promotion is opt-in. Builds on the Onlooker ecosystem plugin.",
   "author": {
     "name": "Onlooker Community",
