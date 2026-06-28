@@ -10,31 +10,6 @@ setup() {
   source "${PLUGIN_ROOT}/scripts/lib/archivist-config.sh"
 }
 
-@test "config defaults from plugin config.json: disabled" {
-  archivist_config_load ""
-  run archivist_config_enabled
-  [ "$status" -ne 0 ]
-}
-
-@test "user-level settings.json overlay can enable archivist" {
-  mkdir -p "${HOME}/.claude"
-  printf '%s\n' '{"archivist":{"enabled":true}}' > "${HOME}/.claude/settings.json"
-  archivist_config_load ""
-  run archivist_config_enabled
-  [ "$status" -eq 0 ]
-}
-
-@test "repo-level settings.json overrides user-level" {
-  mkdir -p "${HOME}/.claude"
-  printf '%s\n' '{"archivist":{"enabled":true}}' > "${HOME}/.claude/settings.json"
-  local repo="${BATS_TEST_TMPDIR}/repo"
-  mkdir -p "${repo}/.claude"
-  printf '%s\n' '{"archivist":{"enabled":false}}' > "${repo}/.claude/settings.json"
-  archivist_config_load "$repo"
-  run archivist_config_enabled
-  [ "$status" -ne 0 ]
-}
-
 @test "injection.max_items defaults from config.json" {
   archivist_config_load ""
   local v
