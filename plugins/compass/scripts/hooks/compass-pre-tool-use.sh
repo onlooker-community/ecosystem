@@ -46,10 +46,6 @@ export _HOOK_SESSION_ID="$SESSION_ID"
 
 compass_config_load "$CWD"
 
-if ! compass_config_enabled; then
-	exit 0
-fi
-
 # -----------------------------------------------------------------------
 # Resolve file path and context from tool input.
 # -----------------------------------------------------------------------
