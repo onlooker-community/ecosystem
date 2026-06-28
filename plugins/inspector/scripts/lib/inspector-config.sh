@@ -8,7 +8,6 @@
 #
 # Usage:
 #   inspector_config_load <repo_root>
-#   inspector_config_enabled
 #   inspector_config_get ".inspector.timeout_seconds_per_check"
 #   inspector_config_get_json ".inspector.exclude_paths"
 #   inspector_config_checks_for_extension ".ts"
@@ -52,12 +51,6 @@ inspector_config_get() {
 inspector_config_get_json() {
 	local path="${1:-}"
 	printf '%s' "$_INSPECTOR_CONFIG" | jq -c "$path // empty" 2>/dev/null
-}
-
-inspector_config_enabled() {
-	local v
-	v=$(inspector_config_get '.inspector.enabled')
-	[[ "$v" == "true" ]]
 }
 
 inspector_config_show_clean_runs() {

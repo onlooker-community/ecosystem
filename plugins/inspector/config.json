@@ -2,7 +2,6 @@
   "plugin_name": "inspector",
   "storage_path": "~/.onlooker",
   "inspector": {
-    "enabled": false,
     "timeout_seconds_per_check": 10,
     "total_timeout_seconds": 30,
     "output_excerpt_max_bytes": 4096,

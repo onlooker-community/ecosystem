@@ -51,13 +51,18 @@ checks too. The agent sees this on its next turn.
 
 ## Activation
 
-Inspector ships disabled. Opt in per project (or globally) by adding the
-`inspector` block to `.claude/settings.json`:
+Install the plugin from the marketplace:
+
+```
+/plugin install inspector@onlooker-community
+```
+
+Once installed, inspector is active. Configure it per project (or globally) by
+adding the `inspector` block to `.claude/settings.json`:
 
 ```jsonc
 {
   "inspector": {
-    "enabled": true,
     "checks": {
       ".ts":  [{ "name": "biome",      "kind": "lint",      "argv": ["biome", "check", "${file}"] },
                { "name": "tsc",        "kind": "typecheck", "argv": ["tsc",   "--noEmit"] }],
@@ -87,7 +92,6 @@ A bare argv array (`["shellcheck", "${file}"]`) is also accepted as a shorthand
 
 | Field | Default | Meaning |
 |---|---|---|
-| `enabled` | `false` | Master switch. |
 | `timeout_seconds_per_check` | `10` | Wall-clock cap per check. Exceeded → `inspector.check.skipped` with `reason: "timeout"`. |
 | `total_timeout_seconds` | `30` | Wall-clock cap for the whole run. Remaining checks emit `.skipped` with `reason: "total_budget_exhausted"`. |
 | `output_excerpt_max_bytes` | `4096` | Cap on captured output, both in the event and shown to the agent. Excess is replaced with `…[truncated]`. |
@@ -108,7 +112,7 @@ All events are registered in `@onlooker-community/schema`.
 |---|---|---|
 | `inspector.check.passed` | A check returned exit 0 | `file_path`, `tool_name`, `check_name`, `check_kind`, `argv`, `duration_ms` |
 | `inspector.check.failed` | A check returned non-zero | `exit_code`, `issue_count` (best-effort, may be `null`), `output_excerpt`, `output_truncated` |
-| `inspector.check.skipped` | A check or whole file was not run | `reason`: one of `disabled`, `excluded_path`, `no_extension_match`, `not_in_repo`, `tool_missing`, `timeout`, `total_budget_exhausted` |
+| `inspector.check.skipped` | A check or whole file was not run | `reason`: one of `excluded_path`, `no_extension_match`, `not_in_repo`, `tool_missing`, `timeout`, `total_budget_exhausted` |
 | `inspector.run.completed` | Once per hook fire after all checks | `checks_run`, `checks_passed`, `checks_failed`, `checks_skipped`, `duration_ms` |
 
 Downstream consumers that just want "did this edit produce broken code?" read
