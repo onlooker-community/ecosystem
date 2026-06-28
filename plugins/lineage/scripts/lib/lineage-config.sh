@@ -10,7 +10,6 @@
 #   lineage_config_load <repo_root>     # populates _LINEAGE_CONFIG (JSON)
 #   lineage_config_get <jq-path>        # echoes string value (empty if unset)
 #   lineage_config_get_json <jq-path>   # echoes JSON value (null if unset)
-#   lineage_config_enabled              # 0 if lineage.enabled is true
 #   lineage_config_max_snippet_chars    # echoes the snippet cap (default 4000)
 #   lineage_config_redact_enabled       # 0 unless redact_secrets is false
 #   lineage_config_prompt_source        # echoes the prompt-source strategy
@@ -67,12 +66,6 @@ lineage_config_get() {
 lineage_config_get_json() {
 	local path="$1"
 	printf '%s' "$_LINEAGE_CONFIG" | jq -c "${path}" 2>/dev/null
-}
-
-lineage_config_enabled() {
-	local v
-	v=$(lineage_config_get '.lineage.enabled')
-	[[ "$v" == "true" ]]
 }
 
 lineage_config_max_snippet_chars() {

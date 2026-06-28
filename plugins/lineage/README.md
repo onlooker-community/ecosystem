@@ -49,18 +49,11 @@ the substrate's turn counter.
 
 ## Activation
 
-Lineage is **off by default**. Enable it per-project in `.claude/settings.json`:
+Install the plugin in Claude from the marketplace with:
 
-```json
-{
-  "lineage": {
-    "enabled": true
-  }
-}
 ```
-
-Or globally in `~/.claude/settings.json`. While disabled, the hook skips silently
-and no ledger is written.
+/plugin install lineage@onlooker-community
+```
 
 ## Configuration
 
@@ -69,7 +62,6 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
 ```json
 {
   "lineage": {
-    "enabled": false,
     "max_snippet_chars": 4000,
     "redact_secrets": true,
     "ignore_globs": ["**/.git/**", "**/node_modules/**", "**/dist/**", "**/*.lock"],
@@ -80,7 +72,6 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `enabled` | `false` | Must be `true` for recording, querying, or event emission to run. |
 | `max_snippet_chars` | `4000` | Cap on the added-content snippet stored per change. |
 | `redact_secrets` | `true` | Scrub secret-shaped substrings (AWS/GitHub/Anthropic/OpenAI keys, bearer tokens, KEY=value secrets) before storing a snippet. |
 | `ignore_globs` | `[".git", "node_modules", "dist", "*.lock"]` | Paths matching these are not recorded. Supports `**/<dir>/**` (path segment) and `**/*.<ext>` (suffix) shapes. |
