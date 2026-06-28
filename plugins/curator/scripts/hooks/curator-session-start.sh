@@ -8,7 +8,6 @@
 # Hook contract:
 #   - Always exits 0. Never blocks session start.
 #   - Emits valid hookSpecificOutput JSON even when nothing to inject.
-#   - No-ops when curator.enabled is not true.
 #   - No-ops when no git context, no memory store path, or no checks pass
 #     the rate gate.
 #
@@ -64,11 +63,6 @@ SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SE
 
 REPO_ROOT=$(curator_project_repo_root "$CWD")
 curator_config_load "$REPO_ROOT"
-
-if ! curator_config_enabled; then
-	_emit ""
-	exit 0
-fi
 
 PROJECT_KEY=$(curator_project_key "$CWD")
 if [[ -z "$PROJECT_KEY" ]]; then
