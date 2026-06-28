@@ -43,8 +43,8 @@ _historian_embedder_ollama_timeout() {
 	printf '%s' "$v"
 }
 
-# Returns 0 if the currently-configured embedder is reachable and the
-# backend is something other than "none". A side-effect-free probe.
+# Returns 0 if the currently-configured embedder is reachable AND the
+# target model is installed. A side-effect-free probe.
 historian_embedder_available() {
 	local backend
 	backend=$(_historian_embedder_backend)
@@ -54,12 +54,16 @@ historian_embedder_available() {
 			;;
 		ollama)
 			command -v curl >/dev/null 2>&1 || return 1
-			local host timeout
+			local host model timeout tags
 			host=$(_historian_embedder_ollama_host)
+			model=$(_historian_embedder_ollama_model)
 			timeout=$(_historian_embedder_ollama_timeout)
-			# HEAD `/api/tags` is the cheapest way to confirm the daemon
-			# is up without rendering a payload.
-			curl -fsS --max-time "$timeout" -o /dev/null "${host}/api/tags" 2>/dev/null
+			# Fetch the model list and verify the configured model is present.
+			# An empty models list (ollama running but no models pulled) returns 1.
+			tags=$(curl -fsS --max-time "$timeout" "${host}/api/tags" 2>/dev/null) || return 1
+			printf '%s' "$tags" | jq -e --arg m "$model" \
+				'.models[]? | select(.name == $m or (.name | startswith($m + ":")))' \
+				>/dev/null 2>&1
 			;;
 		*)
 			# fastembed / remote backends not implemented yet — treat as

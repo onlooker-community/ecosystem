@@ -162,10 +162,8 @@ historian_storage_reset_session "$PROJECT_KEY" "$SESSION_ID"
 
 NOW_TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 CHUNKS_INDEXED=0
-KEPT_COUNT=$(printf '%s' "$KEPT" | jq 'length' 2>/dev/null) || KEPT_COUNT=0
 
-for ((i = 0; i < KEPT_COUNT; i++)); do
-	CHUNK=$(printf '%s' "$KEPT" | jq -c ".[$i]")
+while IFS= read -r CHUNK; do
 	[[ -z "$CHUNK" || "$CHUNK" == "null" ]] && continue
 
 	CHUNK_ID=$(historian_ulid)
@@ -203,7 +201,7 @@ for ((i = 0; i < KEPT_COUNT; i++)); do
 				'{ chunk_id: $chunk_id, redaction_count: $redaction_count }')"
 		fi
 	fi
-done
+done < <(printf '%s' "$KEPT" | jq -c '.[]' 2>/dev/null)
 
 # Emit one chunk.dropped event per skip reason summary (caps at the
 # number of unique reasons; per-chunk emission would spam the log).
