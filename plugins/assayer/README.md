@@ -34,17 +34,13 @@ The most **recent** matching command wins: an agent may fail, fix, and re-run, a
 
 ## Activation
 
-Assayer is **off by default** — it calls `claude -p` on every Stop, so it is opt-in. Enable per-project in `.claude/settings.json`:
+Install Assayer from the marketplace:
 
-```json
-{
-  "assayer": {
-    "enabled": true
-  }
-}
+```
+/plugin install assayer@onlooker-community
 ```
 
-Or globally in `~/.claude/settings.json`.
+Once installed, the plugin is active — no additional toggle required.
 
 ## Configuration
 
@@ -53,7 +49,6 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
 ```json
 {
   "assayer": {
-    "enabled": false,
     "evaluation": {
       "model": "claude-haiku-4-5-20251001",
       "timeout_seconds": 60
@@ -67,7 +62,6 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `enabled` | `false` | Must be `true` for any audit to run. |
 | `evaluation.model` | `claude-haiku-4-5-20251001` | Model used for claim extraction. Haiku is fast and cheap; the task is structured and shallow. |
 | `evaluation.timeout_seconds` | `60` | Per-pass wall-clock timeout passed to the `timeout` command. |
 | `max_claims` | `12` | Maximum number of claims to extract from a final message. |
