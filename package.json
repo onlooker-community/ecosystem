@@ -19,7 +19,6 @@
     "onlooker-install": "install.sh"
   },
   "scripts": {
-    "postinstall": "echo '\\n  onlooker-ecosystem installed!\\n  Run: npx onlooker-install typescript\\n  Docs: https://github.com/onlooker-community/ecosystem\\n'",
     "test": "npm run test:bats && npm run test:schema",
     "test:bats": "bats test/bats",
     "test:schema": "node --test test/node/*.test.mjs",
@@ -42,7 +41,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.15",
-    "@onlooker-community/schema": "^2.9.0",
+    "@onlooker-community/schema": "^2.11.0",
     "globals": "^17.6.0",
     "markdownlint-cli": "^0.48.0"
   }
