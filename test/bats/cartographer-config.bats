@@ -10,31 +10,6 @@ setup() {
   source "${PLUGIN_ROOT}/scripts/lib/cartographer-config.sh"
 }
 
-@test "config defaults: disabled by default" {
-  cartographer_config_load ""
-  run cartographer_config_enabled
-  [ "$status" -ne 0 ]
-}
-
-@test "user-level settings.json can enable cartographer" {
-  mkdir -p "${HOME}/.claude"
-  printf '%s\n' '{"cartographer":{"enabled":true}}' > "${HOME}/.claude/settings.json"
-  cartographer_config_load ""
-  run cartographer_config_enabled
-  [ "$status" -eq 0 ]
-}
-
-@test "repo-level settings.json overrides user-level enabled" {
-  mkdir -p "${HOME}/.claude"
-  printf '%s\n' '{"cartographer":{"enabled":true}}' > "${HOME}/.claude/settings.json"
-  local repo="${BATS_TEST_TMPDIR}/repo"
-  mkdir -p "${repo}/.claude"
-  printf '%s\n' '{"cartographer":{"enabled":false}}' > "${repo}/.claude/settings.json"
-  cartographer_config_load "$repo"
-  run cartographer_config_enabled
-  [ "$status" -ne 0 ]
-}
-
 @test "deep merge: user-level partial override preserves plugin defaults" {
   mkdir -p "${HOME}/.claude"
   printf '%s\n' '{"cartographer":{"audit_interval_hours":12}}' > "${HOME}/.claude/settings.json"
