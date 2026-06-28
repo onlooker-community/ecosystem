@@ -14,19 +14,6 @@ setup() {
 	mkdir -p "${REPO}/.claude"
 }
 
-@test "disabled by default (no settings)" {
-	assayer_config_load "$REPO"
-	run assayer_config_enabled
-	[ "$status" -ne 0 ]
-}
-
-@test "enabled when settings opt in" {
-	printf '%s\n' '{"assayer":{"enabled":true}}' >"${REPO}/.claude/settings.json"
-	assayer_config_load "$REPO"
-	run assayer_config_enabled
-	[ "$status" -eq 0 ]
-}
-
 @test "default model is haiku" {
 	assayer_config_load "$REPO"
 	[ "$(assayer_config_model)" = "claude-haiku-4-5-20251001" ]
