@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/onlooker-community/ecosystem/compare/historian-v0.2.0...historian-v0.2.1) (2026-06-28)
+
+
+### Performance Improvements
+
+* **historian:** fix O(n²) chunk loop and embedder false-positive :relieved: ([4ef130a](https://github.com/onlooker-community/ecosystem/commit/4ef130a4c01ec378da5b4d8baeeb7b4fb6059272))
+
 ## [0.2.0](https://github.com/onlooker-community/ecosystem/compare/historian-v0.1.0...historian-v0.2.0) (2026-06-04)
 
 

@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.30.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.30.0...ecosystem-v0.30.1) (2026-06-28)
+
+
+### Bug Fixes
+
+* **historian:** repair CI broken by embedder check + document PR workflow :nail_care: ([#106](https://github.com/onlooker-community/ecosystem/issues/106)) ([02062a2](https://github.com/onlooker-community/ecosystem/commit/02062a21163e084705dae9cf421719b6e5a7b306))
+
+
+### Performance Improvements
+
+* **historian:** fix O(n²) chunk loop and embedder false-positive :relieved: ([4ef130a](https://github.com/onlooker-community/ecosystem/commit/4ef130a4c01ec378da5b4d8baeeb7b4fb6059272))
+
 ## [0.30.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.29.3...ecosystem-v0.30.0) (2026-06-24)
 
 
