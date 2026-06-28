@@ -87,6 +87,16 @@ npm run test:ci       # shellcheck + bats + schema + lint
 
 Tests use an isolated temp home; nothing writes to your real `~/.onlooker/`.
 
+## Git workflow
+
+**Always open a PR — never push directly to `main`.** Even though bypass rights allow direct pushes, this repo uses release-please for automated changelogs and versioning, so every change must travel through a PR to be picked up correctly. CI also runs on PRs before merge, catching failures before they land.
+
+Workflow:
+1. Create a feature branch: `git switch -c <type>/<short-description>`
+2. Commit using `/commit`
+3. Push the branch and open a PR using `/git:gh-pr-create`
+4. Wait for CI to pass before merging
+
 ## Conventions
 
 - All hooks are bash scripts. No Python, no Node entry points in hook scripts (they may shell out to `node` for event emission or heavy lifting).

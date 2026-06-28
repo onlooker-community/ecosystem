@@ -65,6 +65,7 @@ if [[ "${HISTORIAN_STUB_OLLAMA_AVAILABLE:-1}" == "0" ]]; then
 fi
 
 if [[ "$url" == */api/tags ]]; then
+  printf '{"models":[{"name":"nomic-embed-text"}]}'
   exit 0
 fi
 
