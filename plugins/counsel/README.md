@@ -16,7 +16,7 @@ The synthesis pass produces a structured JSON object — `summary`, `patterns`, 
 
 Counsel partitions the event stream by source plugin, recognizing `tribunal`, `echo`, `sentinel`, `warden`, `oracle`, and `meridian` events (everything else maps to a generic `onlooker_events` source). The synthesis prompt focuses on recurring failure modes and blocked gates, prompt regression trends, budget and resource pressure, quality trends over time, and what the team is consistently doing well.
 
-The hook always exits 0 — it never blocks a session from starting. It skips silently when Counsel is disabled, the directory has no project key (non-git), the latest brief is still fresh, or fewer than `capture.min_events` events fall inside the lookback window.
+The hook always exits 0 — it never blocks a session from starting. It skips silently when the directory has no project key (non-git), the latest brief is still fresh, or fewer than `capture.min_events` events fall inside the lookback window.
 
 ## On-demand brief — `/counsel`
 
@@ -32,15 +32,13 @@ The on-demand path bypasses only the staleness gate — output, events, storage 
 
 ## Activation
 
-Counsel is **on by default**. Disable it per-project in `.claude/settings.json` (or globally in `~/.claude/settings.json`):
+Install via the marketplace:
 
-```json
-{
-  "counsel": {
-    "enabled": false
-  }
-}
 ```
+/plugin install counsel@onlooker-community
+```
+
+Installing the plugin enables it. To remove it, uninstall the plugin.
 
 ## Configuration
 
@@ -49,7 +47,6 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
 ```json
 {
   "counsel": {
-    "enabled": true,
     "synthesis_interval_days": 7,
     "lookback_days": 30,
     "evaluator": {
@@ -71,7 +68,6 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `enabled` | `true` | Set to `false` to skip all synthesis and injection. |
 | `synthesis_interval_days` | `7` | Minimum age (in days) of the latest brief before a new one is generated. A brief younger than this is considered fresh and the hook skips. |
 | `lookback_days` | `30` | How far back in the event log to read when synthesizing a brief. |
 | `evaluator.model` | `claude-haiku-4-5-20251001` | Model used for the synthesis pass. Haiku is fast and cheap; upgrade for higher-stakes repos. |

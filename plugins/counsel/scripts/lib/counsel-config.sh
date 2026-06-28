@@ -10,7 +10,6 @@
 #   counsel_config_load <repo_root>    # populates _COUNSEL_CONFIG (JSON)
 #   counsel_config_get <jq-path>       # echoes string value (empty if unset)
 #   counsel_config_get_json <jq-path>  # echoes JSON value (null if unset)
-#   counsel_config_enabled             # 0 if counsel.enabled is true
 
 _COUNSEL_CONFIG="{}"
 
@@ -65,8 +64,3 @@ counsel_config_get_json() {
 	printf '%s' "$_COUNSEL_CONFIG" | jq -c "${path}" 2>/dev/null
 }
 
-counsel_config_enabled() {
-	local v
-	v=$(counsel_config_get '.counsel.enabled')
-	[[ "$v" == "true" ]]
-}

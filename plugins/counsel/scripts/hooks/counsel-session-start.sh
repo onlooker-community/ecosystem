@@ -6,7 +6,6 @@
 # full event log and injects the resulting brief as additionalContext.
 #
 # Skip conditions (all silent):
-#   - counsel.enabled is false
 #   - no project key (non-git directory)
 #   - brief is still fresh
 #   - fewer than min_events events in the lookback window
@@ -59,11 +58,6 @@ export _HOOK_SESSION_ID="$SESSION_ID"
 REPO_ROOT=$(counsel_project_repo_root "$CWD")
 counsel_config_load "$REPO_ROOT"
 
-if ! counsel_config_enabled; then
-	_emit ""
-	exit 0
-fi
-
 PROJECT_KEY=$(counsel_project_key "$CWD")
 if [[ -z "$PROJECT_KEY" ]]; then
 	_emit ""
@@ -100,7 +94,7 @@ CONTEXT="Counsel — weekly improvement brief (auto-generated from your onlooker
 
 ${BRIEF_CONTENT}
 
-(Counsel injected this brief for project key ${PROJECT_KEY}. Set counsel.enabled=false to disable.)"
+(Counsel injected this brief for project key ${PROJECT_KEY}.)"
 
 _emit "$CONTEXT"
 exit 0
