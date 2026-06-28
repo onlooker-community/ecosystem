@@ -1,0 +1,37 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard"
+  ],
+  "labels": ["dependencies"],
+  "schedule": ["before 5am on monday"],
+  "timezone": "UTC",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 5am on the first day of the month"]
+  },
+  "packageRules": [
+    {
+      "description": "Group GitHub Actions updates",
+      "matchManagers": ["github-actions"],
+      "groupName": "GitHub Actions"
+    },
+    {
+      "description": "Group mise tool version updates",
+      "matchManagers": ["mise"],
+      "groupName": "mise tools"
+    },
+    {
+      "description": "Group npm devDependency updates",
+      "matchDepTypes": ["devDependencies"],
+      "groupName": "npm devDependencies"
+    },
+    {
+      "description": "Require dashboard approval for major devDependency bumps",
+      "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
+    }
+  ]
+}
