@@ -11,7 +11,6 @@
 # Hook contract:
 #   - Always exits 0. Never blocks session start.
 #   - Emits valid hookSpecificOutput JSON, even when nothing to say.
-#   - No-ops when librarian.enabled is not true.
 #   - No-ops when there is no project key (no git context).
 
 set -uo pipefail
@@ -58,11 +57,6 @@ CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 
 REPO_ROOT=$(librarian_project_repo_root "$CWD")
 librarian_config_load "$REPO_ROOT"
-
-if ! librarian_config_enabled; then
-	_emit ""
-	exit 0
-fi
 
 PROJECT_KEY=$(librarian_project_key "$CWD")
 if [[ -z "$PROJECT_KEY" ]]; then
