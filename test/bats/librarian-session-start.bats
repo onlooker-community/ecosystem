@@ -29,7 +29,6 @@ setup() {
   LIBRARIAN_DIR="${ONLOOKER_DIR}/librarian/${PROJECT_KEY}"
 
   mkdir -p "${PROJECT_REPO}/.claude"
-  printf '%s\n' '{"librarian":{"enabled":true}}' > "${PROJECT_REPO}/.claude/settings.json"
 
   HOOK="${PLUGIN_ROOT}/scripts/hooks/librarian-session-start.sh"
 }
@@ -122,7 +121,7 @@ _seed_proposal() {
 
 @test "surfacer caps display at max_pending_for_inject + '+'" {
   # Override max to 3 via a project settings overlay.
-  printf '%s\n' '{"librarian":{"enabled":true,"surfacer":{"max_pending_for_inject":3}}}' \
+  printf '%s\n' '{"librarian":{"surfacer":{"max_pending_for_inject":3}}}' \
     > "${PROJECT_REPO}/.claude/settings.json"
   for i in A B C D E; do
     _seed_proposal "01PROPOSALCAP$i$i$i$i$i$i$i$i$i$i$i$i"

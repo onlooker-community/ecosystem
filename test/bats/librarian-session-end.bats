@@ -36,9 +36,7 @@ setup() {
   LIBRARIAN_DIR="${ONLOOKER_DIR}/librarian/${PROJECT_KEY}"
   ONLOOKER_EVENTS_LOG="${ONLOOKER_DIR}/logs/onlooker-events.jsonl"
 
-  # Project-scoped settings.json that enables librarian.
   mkdir -p "${PROJECT_REPO}/.claude"
-  printf '%s\n' '{"librarian":{"enabled":true}}' > "${PROJECT_REPO}/.claude/settings.json"
 
   # Stub `claude` CLI on PATH. Returns a deterministic classifier response
   # based on the artifact's summary contents.
