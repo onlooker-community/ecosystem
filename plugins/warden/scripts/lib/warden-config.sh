@@ -10,7 +10,6 @@
 #   warden_config_load <repo_root>     # populates _WARDEN_CONFIG (JSON)
 #   warden_config_get <jq-path>        # echoes string value (empty if unset)
 #   warden_config_get_json <jq-path>   # echoes JSON value (null if unset)
-#   warden_config_enabled              # 0 if warden.enabled is true
 
 _WARDEN_CONFIG="{}"
 
@@ -70,10 +69,4 @@ warden_config_get() {
 warden_config_get_json() {
 	local path="$1"
 	printf '%s' "$_WARDEN_CONFIG" | jq -c "${path}" 2>/dev/null
-}
-
-warden_config_enabled() {
-	local v
-	v=$(warden_config_get '.warden.enabled')
-	[[ "$v" == "true" ]]
 }
