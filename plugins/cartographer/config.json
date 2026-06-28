@@ -2,7 +2,6 @@
   "plugin_name": "cartographer",
   "storage_path": "~/.onlooker",
   "cartographer": {
-    "enabled": false,
     "audit_interval_hours": 24,
     "phase_timeout_seconds": 60,
     "total_timeout_seconds": 600,
