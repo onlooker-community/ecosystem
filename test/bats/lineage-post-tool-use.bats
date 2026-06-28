@@ -24,8 +24,7 @@ setup() {
 }
 
 _enable() {
-	mkdir -p "${HOME}/.claude"
-	printf '%s\n' '{"lineage":{"enabled":true}}' > "${HOME}/.claude/settings.json"
+	:
 }
 
 _ledger() { printf '%s/lineage/%s/changes.jsonl' "$ONLOOKER_DIR" "$KEY"; }
