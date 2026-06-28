@@ -27,17 +27,11 @@ On `SessionEnd`, bursar scans `~/.onlooker/logs/onlooker-events.jsonl` for the *
 
 ## Activation
 
-Bursar is **off by default**. Enable it per-project in `.claude/settings.json`:
+Install the plugin in Claude from the marketplace with:
 
-```json
-{
-  "bursar": {
-    "enabled": true
-  }
-}
 ```
-
-Or globally in `~/.claude/settings.json`. While disabled, every hook skips silently and no ledger is written.
+/plugin install bursar@onlooker-community
+```
 
 ## Configuration
 
@@ -46,7 +40,6 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
 ```json
 {
   "bursar": {
-    "enabled": false,
     "window": "rolling_7d",
     "week_start": "monday",
     "surface_at_session_start": true,
@@ -57,7 +50,6 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `enabled` | `false` | Must be `true` for any recording, surfacing, or event emission to run. |
 | `window` | `"rolling_7d"` | Rollup window. `"rolling_7d"` sums the trailing 7×24h; `"calendar_week"` sums from the most recent week start. |
 | `week_start` | `"monday"` | First day of the calendar week — `"monday"` or `"sunday"`. Only consulted when `window` is `"calendar_week"`. |
 | `surface_at_session_start` | `true` | When `false`, bursar still records sessions and writes breadcrumbs but prints nothing at `SessionStart`. |
