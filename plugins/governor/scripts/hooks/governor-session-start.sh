@@ -2,11 +2,10 @@
 # Governor SessionStart hook.
 #
 # Fires at every session start. Responsibilities:
-#   1. Skip silently when governor.enabled is false.
-#   2. Create governance storage directories.
-#   3. Sweep stale lock files left by crashed prior sessions.
-#   4. Check global-policy.yaml exists (warn if missing, don't block).
-#   5. Emit governor.lock.stale_cleared for each stale lock removed.
+#   1. Create governance storage directories.
+#   2. Sweep stale lock files left by crashed prior sessions.
+#   3. Check global-policy.yaml exists (warn if missing, don't block).
+#   4. Emit governor.lock.stale_cleared for each stale lock removed.
 #
 # Hook contract:
 #   - Always exits 0. Never blocks SessionStart.
@@ -50,10 +49,6 @@ CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 _done() { exit 0; }
 
 governor_config_load "$CWD"
-
-if ! governor_config_enabled; then
-	_done
-fi
 
 # -----------------------------------------------------------------------
 # 1. Ensure storage directories exist.
