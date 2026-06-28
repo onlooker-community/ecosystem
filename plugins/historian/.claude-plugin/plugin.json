@@ -1,6 +1,6 @@
 {
   "name": "historian",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Episodic memory layer. At SessionEnd, chunks and sanitizes the session transcript and stores chunks under $ONLOOKER_DIR/historian/<project-key>/sessions/ (default $HOME/.onlooker). On UserPromptSubmit, embeds the prompt and performs similarity retrieval over stored chunks to surface relevant past context. Builds on the Onlooker ecosystem plugin.",
   "author": {
     "name": "Onlooker Community",
