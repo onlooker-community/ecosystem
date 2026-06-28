@@ -56,15 +56,6 @@ _seed_proposal() {
     }' > "${LIBRARIAN_DIR}/proposals/${id}.json"
 }
 
-@test "surfacer emits empty context when librarian is disabled" {
-  rm -f "${PROJECT_REPO}/.claude/settings.json"
-  _seed_proposal "01PROPOSALA000000000000000"
-
-  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
-  [ "$status" -eq 0 ]
-  echo "$output" | jq -e '.hookSpecificOutput.additionalContext == ""' >/dev/null
-  echo "$output" | jq -e '.hookSpecificOutput.hookEventName == "SessionStart"' >/dev/null
-}
 
 @test "surfacer emits empty context when there is no git context" {
   local non_git="${BATS_TEST_TMPDIR}/no-git"

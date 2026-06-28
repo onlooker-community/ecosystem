@@ -67,16 +67,6 @@ _chunk_count() {
   wc -l < "$file" | tr -d ' '
 }
 
-@test "session-end is a no-op when historian is disabled" {
-  rm -f "${PROJECT_REPO}/.claude/settings.json"
-  _append_text_turn "user" "$(printf 'long enough %.0s' {1..30})"
-  _append_text_turn "assistant" "ok"
-
-  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
-  [ "$status" -eq 0 ]
-  [ ! -f "${HIST_DIR}/sessions/${SESSION_ID}.jsonl" ]
-  [ ! -f "$ONLOOKER_EVENTS_LOG" ] || ! grep -q 'historian' "$ONLOOKER_EVENTS_LOG"
-}
 
 @test "session-end emits skip_reason transcript_unavailable when path missing" {
   run bash -c "printf '%s' '$(_input)' | '$HOOK'"

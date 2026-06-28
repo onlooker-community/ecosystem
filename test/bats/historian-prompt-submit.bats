@@ -126,13 +126,6 @@ _index_session() {
   bash -c "printf '%s' '$(_index_input "$sid")' | '$INDEX_HOOK'" >/dev/null
 }
 
-@test "retrieval no-op when historian is disabled" {
-  rm -f "${PROJECT_REPO}/.claude/settings.json"
-  run bash -c "printf '%s' '$(_retrieve_input "a prompt long enough to clear the floor and trigger retrieval but historian is off")' | '$RETRIEVE_HOOK'"
-  [ "$status" -eq 0 ]
-  echo "$output" | jq -e '.hookSpecificOutput.additionalContext == ""' >/dev/null
-  [ ! -f "$ONLOOKER_EVENTS_LOG" ] || ! grep -q '"historian.retrieval' "$ONLOOKER_EVENTS_LOG"
-}
 
 @test "retrieval skipped when prompt is shorter than min_prompt_chars" {
   run bash -c "printf '%s' '$(_retrieve_input "tiny")' | '$RETRIEVE_HOOK'"

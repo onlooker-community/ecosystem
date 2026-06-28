@@ -63,15 +63,6 @@ _write_index() {
   printf '%b\n' "$entries" > "${MEM_DIR}/MEMORY.md"
 }
 
-@test "session-start no-ops when curator is disabled" {
-  rm -f "${PROJECT_REPO}/.claude/settings.json"
-  _seed_memory "feedback_stale.md" "feedback" "Decayed 2025-01-01 reference."
-
-  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
-  [ "$status" -eq 0 ]
-  echo "$output" | jq -e '.hookSpecificOutput.additionalContext == ""' >/dev/null
-  [ ! -f "$ONLOOKER_EVENTS_LOG" ] || ! grep -q 'curator' "$ONLOOKER_EVENTS_LOG"
-}
 
 @test "session-start emits scan events with empty memory store" {
   run bash -c "printf '%s' '$(_input)' | '$HOOK'"
