@@ -90,7 +90,7 @@ STUB
 
   mkdir -p "${PROJECT_REPO}/.claude"
   printf '%s\n' \
-    '{"historian":{"enabled":true,"indexing":{"min_transcript_chars_to_index":50,"chunk_target_chars":400,"chunk_overlap_chars":50},"retrieval":{"cooldown_seconds":60,"max_retrievals_per_session":5,"min_prompt_chars":40,"min_similarity":0.55,"max_age_days":365}}}' \
+    '{"historian":{"indexing":{"min_transcript_chars_to_index":50,"chunk_target_chars":400,"chunk_overlap_chars":50},"retrieval":{"cooldown_seconds":60,"max_retrievals_per_session":5,"min_prompt_chars":40,"min_similarity":0.55,"max_age_days":365}}}' \
     > "${PROJECT_REPO}/.claude/settings.json"
 
   INDEX_HOOK="${PLUGIN_ROOT}/scripts/hooks/historian-session-end.sh"
