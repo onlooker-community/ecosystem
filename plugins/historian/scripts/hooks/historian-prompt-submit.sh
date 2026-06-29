@@ -17,7 +17,7 @@
 # Hook contract:
 #   - Always exits 0. Never blocks the prompt.
 #   - Emits valid hookSpecificOutput JSON even when nothing to inject.
-#   - No-ops when historian.enabled is not true OR retrieval is disabled.
+#   - No-ops when retrieval is disabled.
 #   - Lifecycle events: historian.retrieval.started fires when the rate
 #     gate clears and we are about to embed. All outcomes flow through
 #     historian.retrieval.complete with `outcome: surfaced | empty |
@@ -80,11 +80,6 @@ PROMPT=$(printf '%s' "$INPUT" | jq -r '.prompt // .user_message // .message // "
 
 REPO_ROOT=$(historian_project_repo_root "$CWD")
 historian_config_load "$REPO_ROOT"
-
-if ! historian_config_enabled; then
-	_emit_context ""
-	exit 0
-fi
 
 RETRIEVAL_ENABLED=$(historian_config_get '.historian.retrieval.enabled')
 if [[ "$RETRIEVAL_ENABLED" == "false" ]]; then

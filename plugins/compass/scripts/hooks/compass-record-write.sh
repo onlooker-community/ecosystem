@@ -32,10 +32,6 @@ _done() { exit 0; }
 
 compass_config_load "$CWD"
 
-if ! compass_config_enabled; then
-	_done
-fi
-
 [[ -z "$SESSION_ID" ]] && _done
 
 # Extract the file path from the tool output.

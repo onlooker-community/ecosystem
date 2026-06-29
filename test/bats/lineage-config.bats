@@ -10,31 +10,6 @@ setup() {
 	source "${PLUGIN_ROOT}/scripts/lib/lineage-config.sh"
 }
 
-@test "lineage is disabled by default" {
-	lineage_config_load ""
-	run lineage_config_enabled
-	[ "$status" -ne 0 ]
-}
-
-@test "user-level settings.json can enable lineage" {
-	mkdir -p "${HOME}/.claude"
-	printf '%s\n' '{"lineage":{"enabled":true}}' > "${HOME}/.claude/settings.json"
-	lineage_config_load ""
-	run lineage_config_enabled
-	[ "$status" -eq 0 ]
-}
-
-@test "repo-level settings.json overrides user-level" {
-	mkdir -p "${HOME}/.claude"
-	printf '%s\n' '{"lineage":{"enabled":true}}' > "${HOME}/.claude/settings.json"
-	local repo="${BATS_TEST_TMPDIR}/repo"
-	mkdir -p "${repo}/.claude"
-	printf '%s\n' '{"lineage":{"enabled":false}}' > "${repo}/.claude/settings.json"
-	lineage_config_load "$repo"
-	run lineage_config_enabled
-	[ "$status" -ne 0 ]
-}
-
 @test "default max_snippet_chars is 4000" {
 	lineage_config_load ""
 	[ "$(lineage_config_max_snippet_chars)" = "4000" ]

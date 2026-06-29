@@ -59,9 +59,13 @@ scribe_count_turns() {
 	local line
 	while IFS= read -r line; do
 		[[ -z "$line" ]] && continue
-		local role
-		role=$(printf '%s' "$line" | jq -r '.role // empty' 2>/dev/null) || continue
-		[[ "$role" == "user" ]] && count=$((count + 1))
+		local entry_type
+		entry_type=$(printf '%s' "$line" | jq -r '.type // empty' 2>/dev/null) || continue
+		[[ "$entry_type" == "user" ]] || continue
+		# Only count real user prompts (string content), not tool results (array content)
+		local content_type
+		content_type=$(printf '%s' "$line" | jq -r '.message.content | type' 2>/dev/null) || continue
+		[[ "$content_type" == "string" ]] && count=$((count + 1))
 	done < "$transcript_path"
 
 	printf '%s' "$count"
@@ -79,21 +83,21 @@ scribe_extract_intent() {
 
 	local transcript_content
 	transcript_content=$(jq -r '
-		select(.role != null) |
-		if .role == "user" then
+		select(.type == "user" or .type == "assistant") |
+		if .type == "user" then
 			"[User]\n" + (
-				if (.content | type) == "array" then
-					[.content[] | select(.type == "text") | .text] | join("\n")
+				if (.message.content | type) == "array" then
+					[.message.content[] | select(.type == "text") | .text] | join("\n")
 				else
-					(.content // "")
+					(.message.content // "")
 				end
 			)
-		elif .role == "assistant" then
+		elif .type == "assistant" then
 			"[Assistant]\n" + (
-				if (.content | type) == "array" then
-					[.content[] | select(.type == "text") | .text] | join("\n")
+				if (.message.content | type) == "array" then
+					[.message.content[] | select(.type == "text") | .text] | join("\n")
 				else
-					(.content // "")
+					(.message.content // "")
 				end
 			)
 		else empty end

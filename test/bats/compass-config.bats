@@ -10,35 +10,10 @@ setup() {
 	source "${PLUGIN_ROOT}/scripts/lib/compass-config.sh"
 }
 
-@test "compass is disabled by default" {
-	compass_config_load ""
-	run compass_config_enabled
-	[ "$status" -ne 0 ]
-}
-
-@test "user-level settings.json can enable compass" {
-	mkdir -p "${HOME}/.claude"
-	printf '%s\n' '{"compass":{"enabled":true}}' > "${HOME}/.claude/settings.json"
-	compass_config_load ""
-	run compass_config_enabled
-	[ "$status" -eq 0 ]
-}
-
-@test "repo-level settings.json overrides user-level" {
-	mkdir -p "${HOME}/.claude"
-	printf '%s\n' '{"compass":{"enabled":true}}' > "${HOME}/.claude/settings.json"
-	local repo="${BATS_TEST_TMPDIR}/repo"
-	mkdir -p "${repo}/.claude"
-	printf '%s\n' '{"compass":{"enabled":false}}' > "${repo}/.claude/settings.json"
-	compass_config_load "$repo"
-	run compass_config_enabled
-	[ "$status" -ne 0 ]
-}
-
 @test "shipped defaults survive a partial overlay" {
 	mkdir -p "${HOME}/.claude"
 	printf '%s\n' \
-		'{"compass":{"enabled":true,"evaluator":{"n":7}}}' \
+		'{"compass":{"evaluator":{"n":7}}}' \
 		> "${HOME}/.claude/settings.json"
 	compass_config_load ""
 	# Overlay key is picked up.

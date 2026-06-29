@@ -9,7 +9,6 @@
 # Exposes:
 #   archivist_config_load <repo_root>    # populates _ARCHIVIST_CONFIG (JSON)
 #   archivist_config_get <jq-path>       # echoes string value (empty if unset)
-#   archivist_config_enabled             # 0 if archivist.enabled is true
 #
 # Settings overlay only touches the `archivist.*` subtree of settings.json so it
 # coexists with other plugins' configuration.
@@ -56,11 +55,4 @@ archivist_config_load() {
 archivist_config_get() {
 	local path="$1"
 	printf '%s' "$_ARCHIVIST_CONFIG" | jq -r "${path} // empty" 2>/dev/null
-}
-
-# Returns 0 if archivist.enabled is true, 1 otherwise.
-archivist_config_enabled() {
-	local v
-	v=$(archivist_config_get '.archivist.enabled')
-	[[ "$v" == "true" ]]
 }

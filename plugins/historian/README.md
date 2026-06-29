@@ -17,14 +17,10 @@ See [`docs/design.md`](docs/design.md) and [ADR-001](docs/adr/001-local-embeddin
 
 ## Activation
 
-Historian is **off by default**. Enable per-project in `.claude/settings.json`:
+Install via the marketplace:
 
-```json
-{
-  "historian": {
-    "enabled": true
-  }
-}
+```
+/plugin install historian@onlooker-community
 ```
 
 See [`config.json`](config.json) for the full set of tunable defaults.

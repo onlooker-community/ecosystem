@@ -2,8 +2,7 @@
 # Warden SessionStart hook.
 #
 # Fires at every session start. Responsibilities:
-#   1. Skip silently when warden.enabled is false.
-#   2. Ensure the session gate directory exists.
+#   1. Ensure the session gate directory exists.
 #
 # A new session starts with the gate OPEN — the gate is session-scoped because
 # the threat model is untrusted content ingested into THIS session's context.
@@ -33,10 +32,6 @@ CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 _done() { exit 0; }
 
 warden_config_load "$CWD"
-
-if ! warden_config_enabled; then
-	_done
-fi
 
 [[ -z "$SESSION_ID" ]] && {
 	printf 'warden-session-start: no session_id in hook input\n' >&2

@@ -2,9 +2,8 @@
 # Scribe SessionStart hook.
 #
 # Fires at every session start. Responsibilities:
-#   1. Skip silently when scribe.enabled is false.
-#   2. Create storage directories.
-#   3. Initialize session state file:
+#   1. Create storage directories.
+#   2. Initialize session state file:
 #      - captured_prompt: null (populated by scribe-capture.sh on first turn)
 #      - captured_at: null
 #
@@ -29,10 +28,6 @@ CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 _done() { exit 0; }
 
 scribe_config_load "$CWD"
-
-if ! scribe_config_enabled; then
-	_done
-fi
 
 export _HOOK_SESSION_ID="$SESSION_ID"
 

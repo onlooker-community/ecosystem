@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Echo Stop-gate hook.
 #
-# Triggered by Stop. Off by default — gated on echo.enabled in config.
-# When enabled, detects which watched agent files changed in this session,
+# Triggered by Stop. Detects which watched agent files changed in this session,
 # runs a single-judge advisory pass on each, and compares the score against a
 # stored baseline to report improved / degraded / neutral.
 #
@@ -61,7 +60,6 @@ REPO_ROOT=$(echo_project_repo_root "$CWD")
 [[ -z "$REPO_ROOT" ]] && _done
 
 CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" echo_config_load "$REPO_ROOT"
-echo_config_enabled || _done
 
 PROJECT_KEY=$(echo_project_key "$CWD")
 [[ -z "$PROJECT_KEY" ]] && _done

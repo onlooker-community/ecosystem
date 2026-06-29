@@ -50,10 +50,6 @@ _done() { exit 0; }
 
 warden_config_load "$CWD"
 
-if ! warden_config_enabled; then
-	_done
-fi
-
 [[ -z "$SESSION_ID" ]] && _done
 
 # If the gate is already closed, there is nothing more to do — it stays closed

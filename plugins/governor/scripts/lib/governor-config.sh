@@ -10,7 +10,6 @@
 #   governor_config_load <repo_root>     # populates _GOVERNOR_CONFIG (JSON)
 #   governor_config_get <jq-path>        # echoes string value (empty if unset)
 #   governor_config_get_json <jq-path>   # echoes JSON value (null if unset)
-#   governor_config_enabled              # 0 if governor.enabled is true
 #   governor_config_enforcement          # echoes "soft" or "hard"
 
 _GOVERNOR_CONFIG="{}"
@@ -64,12 +63,6 @@ governor_config_get() {
 governor_config_get_json() {
 	local path="$1"
 	printf '%s' "$_GOVERNOR_CONFIG" | jq -c "${path}" 2>/dev/null
-}
-
-governor_config_enabled() {
-	local v
-	v=$(governor_config_get '.governor.enabled')
-	[[ "$v" == "true" ]]
 }
 
 governor_config_enforcement() {

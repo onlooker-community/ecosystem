@@ -15,17 +15,13 @@ Archivist is a sibling plugin to [`ecosystem`](../../) and assumes the Onlooker 
 
 ## Activation
 
-Archivist is **off by default**. Enable per-project in `.claude/settings.json`:
+Install Archivist from the marketplace:
 
-```json
-{
-  "archivist": {
-    "enabled": true
-  }
-}
+```
+/plugin install archivist@onlooker-community
 ```
 
-Or globally in `~/.claude/settings.json`.
+Once installed, the plugin is active automatically — no extra configuration required.
 
 ## Configuration
 
@@ -34,7 +30,6 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
 ```json
 {
   "archivist": {
-    "enabled": false,
     "extraction": {
       "model": "claude-haiku-4-5-20251001",
       "max_output_tokens": 1500,
@@ -52,7 +47,6 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `enabled` | `false` | Must be `true` for any extraction or injection to run. |
 | `extraction.model` | `claude-haiku-4-5-20251001` | Model used for transcript extraction. Haiku is fast and cheap; the extraction prompt is structured and does not require deep reasoning. |
 | `extraction.max_output_tokens` | `1500` | Token ceiling for the extraction response. |
 | `extraction.transcript_tail_chars` | `60000` | How many characters of the transcript tail to feed into extraction. Larger values capture more context at higher cost. |

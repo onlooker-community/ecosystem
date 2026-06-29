@@ -10,30 +10,6 @@ setup() {
 	source "${PLUGIN_ROOT}/scripts/lib/echo-config.sh"
 }
 
-@test "echo is disabled by default" {
-	CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" echo_config_load ""
-	run echo_config_enabled
-	[ "$status" -ne 0 ]
-}
-
-@test "settings.json echo.enabled=true enables echo" {
-	local repo="${BATS_TEST_TMPDIR}/repo"
-	mkdir -p "${repo}/.claude"
-	printf '%s\n' '{"echo":{"enabled":true}}' > "${repo}/.claude/settings.json"
-	CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" echo_config_load "$repo"
-	run echo_config_enabled
-	[ "$status" -eq 0 ]
-}
-
-@test "settings.json echo.enabled=false overrides plugin default" {
-	local repo="${BATS_TEST_TMPDIR}/repo"
-	mkdir -p "${repo}/.claude"
-	printf '%s\n' '{"echo":{"enabled":false}}' > "${repo}/.claude/settings.json"
-	CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" echo_config_load "$repo"
-	run echo_config_enabled
-	[ "$status" -ne 0 ]
-}
-
 @test "default model is claude-haiku-4-5-20251001" {
 	CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" echo_config_load ""
 	local m

@@ -9,7 +9,6 @@
 # Exposes:
 #   curator_config_load <repo_root>    # populates _CURATOR_CONFIG (JSON)
 #   curator_config_get <jq-path>       # echoes string value (empty if unset)
-#   curator_config_enabled             # 0 if curator.enabled is true
 #
 # Settings overlay only touches the `curator.*` subtree of settings.json.
 
@@ -58,10 +57,4 @@ curator_config_get() {
 	# explicit null check so booleans round-trip correctly.
 	printf '%s' "$_CURATOR_CONFIG" \
 		| jq -r "${path} | if . == null then empty else . end" 2>/dev/null
-}
-
-curator_config_enabled() {
-	local v
-	v=$(curator_config_get '.curator.enabled')
-	[[ "$v" == "true" ]]
 }

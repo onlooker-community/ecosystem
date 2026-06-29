@@ -52,15 +52,8 @@ _run_hook() {
 	printf '%s' "$input" | ONLOOKER_DIR="$ONLOOKER_DIR" CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$HOOK"
 }
 
-@test "exits 0 silently when inspector.enabled is false (default)" {
-	run _run_hook "$(_input)"
-	[ "$status" -eq 0 ]
-	[ -z "$output" ]
-	[ ! -f "$ONLOOKER_EVENTS_LOG" ] || [ "$(_event_count inspector.run.completed)" = "0" ]
-}
-
 @test "exits 0 when tool_name is not Write/Edit/MultiEdit" {
-	echo '{"inspector":{"enabled":true,"checks":{".ts":[{"name":"t","kind":"lint","argv":["true"]}]}}}' | _settings
+	echo '{"inspector":{"checks":{".ts":[{"name":"t","kind":"lint","argv":["true"]}]}}}' | _settings
 	run _run_hook "$(_input "$REPO" "Bash")"
 	[ "$status" -eq 0 ]
 	[ -z "$output" ]
@@ -68,7 +61,7 @@ _run_hook() {
 }
 
 @test "recursion guard: INSPECTOR_NESTED=1 causes immediate exit 0" {
-	echo '{"inspector":{"enabled":true,"checks":{".ts":[{"name":"t","kind":"lint","argv":["true"]}]}}}' | _settings
+	echo '{"inspector":{"checks":{".ts":[{"name":"t","kind":"lint","argv":["true"]}]}}}' | _settings
 	run bash -c "printf '%s' '$(_input)' | INSPECTOR_NESTED=1 ONLOOKER_DIR='$ONLOOKER_DIR' CLAUDE_PLUGIN_ROOT='$PLUGIN_ROOT' '$HOOK'"
 	[ "$status" -eq 0 ]
 	[ -z "$output" ]
@@ -76,7 +69,7 @@ _run_hook() {
 }
 
 @test "files in excluded_paths emit a single .skipped event and produce no agent output" {
-	echo '{"inspector":{"enabled":true,"checks":{".ts":[{"name":"t","kind":"lint","argv":["true"]}]}}}' | _settings
+	echo '{"inspector":{"checks":{".ts":[{"name":"t","kind":"lint","argv":["true"]}]}}}' | _settings
 	run _run_hook "$(_input "$REPO" "Write" "${REPO}/node_modules/foo/index.ts")"
 	[ "$status" -eq 0 ]
 	[ -z "$output" ]
@@ -87,7 +80,7 @@ _run_hook() {
 }
 
 @test "extensions with no configured checks emit a single .skipped with no_extension_match" {
-	echo '{"inspector":{"enabled":true,"checks":{".ts":[{"name":"t","kind":"lint","argv":["true"]}]}}}' | _settings
+	echo '{"inspector":{"checks":{".ts":[{"name":"t","kind":"lint","argv":["true"]}]}}}' | _settings
 	run _run_hook "$(_input "$REPO" "Edit" "${REPO}/src/sample.py")"
 	[ "$status" -eq 0 ]
 	[ "$(_event_count inspector.check.skipped)" = "1" ]
@@ -95,7 +88,7 @@ _run_hook() {
 }
 
 @test "a passing check emits .passed and silences agent-facing stdout by default" {
-	echo '{"inspector":{"enabled":true,"checks":{".ts":[{"name":"clean","kind":"lint","argv":["true"]}]}}}' | _settings
+	echo '{"inspector":{"checks":{".ts":[{"name":"clean","kind":"lint","argv":["true"]}]}}}' | _settings
 	run _run_hook "$(_input)"
 	[ "$status" -eq 0 ]
 	[ -z "$output" ]
@@ -104,7 +97,7 @@ _run_hook() {
 }
 
 @test "show_clean_runs surfaces the file header for passing checks" {
-	echo '{"inspector":{"enabled":true,"show_clean_runs":true,"checks":{".ts":[{"name":"clean","kind":"lint","argv":["true"]}]}}}' | _settings
+	echo '{"inspector":{"show_clean_runs":true,"checks":{".ts":[{"name":"clean","kind":"lint","argv":["true"]}]}}}' | _settings
 	run _run_hook "$(_input)"
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"inspector: src/sample.ts"* ]]
@@ -113,7 +106,7 @@ _run_hook() {
 
 @test "a failing check emits .failed with exit_code and surfaces issue lines to the agent" {
 	cat <<'EOF' | _settings
-{"inspector":{"enabled":true,"checks":{".ts":[
+{"inspector":{"checks":{".ts":[
 	{"name":"broken","kind":"lint","argv":["sh","-c","echo 'src/sample.ts:1:1 - Bad'; exit 2"]}
 ]}}}
 EOF
@@ -127,7 +120,7 @@ EOF
 }
 
 @test "a missing tool emits .skipped with tool_missing and produces no agent output" {
-	echo '{"inspector":{"enabled":true,"checks":{".ts":[{"name":"ghost","kind":"lint","argv":["this-tool-does-not-exist"]}]}}}' | _settings
+	echo '{"inspector":{"checks":{".ts":[{"name":"ghost","kind":"lint","argv":["this-tool-does-not-exist"]}]}}}' | _settings
 	run _run_hook "$(_input)"
 	[ "$status" -eq 0 ]
 	[ -z "$output" ]
@@ -137,7 +130,7 @@ EOF
 
 @test "run.completed aggregates pass/fail/skip counts" {
 	cat <<'EOF' | _settings
-{"inspector":{"enabled":true,"checks":{".ts":[
+{"inspector":{"checks":{".ts":[
 	{"name":"clean", "kind":"lint",      "argv":["true"]},
 	{"name":"broken","kind":"typecheck", "argv":["sh","-c","echo 'oops'; exit 1"]},
 	{"name":"ghost", "kind":"lint",      "argv":["this-tool-does-not-exist"]}
@@ -154,7 +147,7 @@ EOF
 }
 
 @test "argv is expanded with the touched file path" {
-	echo '{"inspector":{"enabled":true,"checks":{".ts":[{"name":"echo-file","kind":"lint","argv":["sh","-c","echo $1; test -n \"$1\"","--","${file}"]}]}}}' | _settings
+	echo '{"inspector":{"checks":{".ts":[{"name":"echo-file","kind":"lint","argv":["sh","-c","echo $1; test -n \"$1\"","--","${file}"]}]}}}' | _settings
 	run _run_hook "$(_input)"
 	[ "$status" -eq 0 ]
 	local argv

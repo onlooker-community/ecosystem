@@ -12,7 +12,7 @@
 # Hook contract:
 #   - Always exits 0. Never blocks session start.
 #   - Emits valid hookSpecificOutput JSON, even if there's nothing to inject.
-#   - Skips work if archivist.enabled is not true.
+#   - Skips work if there are no stored artifacts for the current project.
 
 set -uo pipefail
 
@@ -61,11 +61,6 @@ REPO_ROOT=$(archivist_project_repo_root "$CWD")
 PROJECT_KEY=$(archivist_project_key "$CWD")
 
 archivist_config_load "$REPO_ROOT"
-
-if ! archivist_config_enabled; then
-	_emit ""
-	exit 0
-fi
 
 if [[ -z "$PROJECT_KEY" ]]; then
 	_emit ""
@@ -153,7 +148,7 @@ if [[ "$EMITTED" -eq 0 ]]; then
 fi
 
 # Trailer with provenance + how to disable (helps future-you debug).
-RENDERED="${RENDERED}"$'\n\n'"(Archivist injected ${EMITTED}/${TOTAL_ITEMS} items for project key ${PROJECT_KEY}. Set archivist.enabled=false to disable. Source: ${SOURCE}.)"
+RENDERED="${RENDERED}"$'\n\n'"(Archivist injected ${EMITTED}/${TOTAL_ITEMS} items for project key ${PROJECT_KEY}. Source: ${SOURCE}.)"
 
 _emit "$RENDERED"
 exit 0

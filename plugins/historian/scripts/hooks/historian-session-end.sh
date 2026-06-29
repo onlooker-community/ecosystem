@@ -8,7 +8,6 @@
 #
 # Hook contract:
 #   - Always exits 0. Never blocks session shutdown.
-#   - No-ops when historian.enabled is not true.
 #   - No-ops when there is no project key, no transcript path, or the
 #     transcript is shorter than min_transcript_chars_to_index.
 #   - Indexing failures are fail-soft: an emitted historian.indexing.complete
@@ -59,7 +58,6 @@ TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | jq -r '.transcript_path // ""' 2>/dev/n
 
 REPO_ROOT=$(historian_project_repo_root "$CWD")
 historian_config_load "$REPO_ROOT"
-historian_config_enabled || exit 0
 
 PROJECT_KEY=$(historian_project_key "$CWD")
 [[ -z "$PROJECT_KEY" ]] && exit 0

@@ -29,10 +29,7 @@ source "$PLUGIN_ROOT/scripts/lib/lineage-query.sh"
 
 REPO_ROOT=$(lineage_project_repo_root "$(pwd)")
 lineage_config_load "$REPO_ROOT"
-if ! lineage_config_enabled; then
-  echo "Lineage is disabled. Set lineage.enabled=true in .claude/settings.json to enable."
-  exit 0
-fi
+
 PROJECT_KEY=$(lineage_project_key "$(pwd)")
 if [[ -z "$PROJECT_KEY" ]]; then
   echo "No project key — lineage needs a git repository (remote or root) to scope its ledger."

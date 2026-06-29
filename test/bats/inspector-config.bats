@@ -15,19 +15,6 @@ setup() {
 	mkdir -p "${REPO}/.claude"
 }
 
-@test "disabled by default" {
-	inspector_config_load "$REPO"
-	run inspector_config_enabled
-	[ "$status" -ne 0 ]
-}
-
-@test "enabled when settings opt in" {
-	printf '%s\n' '{"inspector":{"enabled":true}}' >"${REPO}/.claude/settings.json"
-	inspector_config_load "$REPO"
-	run inspector_config_enabled
-	[ "$status" -eq 0 ]
-}
-
 @test "default timeout_seconds_per_check is 10" {
 	inspector_config_load "$REPO"
 	[ "$(inspector_config_timeout_per_check)" = "10" ]

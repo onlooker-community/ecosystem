@@ -10,8 +10,8 @@
 #   bursar_config_load <repo_root>     # populates _BURSAR_CONFIG (JSON)
 #   bursar_config_get <jq-path>        # echoes string value (empty if unset)
 #   bursar_config_get_json <jq-path>   # echoes JSON value (null if unset)
-#   bursar_config_enabled              # 0 if bursar.enabled is true
 #   bursar_config_window               # echoes "rolling_7d" or "calendar_week"
+#   bursar_config_surface_enabled      # 0 if bursar.surface_at_session_start is true
 #   bursar_config_week_start           # echoes "monday" or "sunday"
 
 _BURSAR_CONFIG="{}"
@@ -68,12 +68,6 @@ bursar_config_get() {
 bursar_config_get_json() {
 	local path="$1"
 	printf '%s' "$_BURSAR_CONFIG" | jq -c "${path}" 2>/dev/null
-}
-
-bursar_config_enabled() {
-	local v
-	v=$(bursar_config_get '.bursar.enabled')
-	[[ "$v" == "true" ]]
 }
 
 bursar_config_surface_enabled() {

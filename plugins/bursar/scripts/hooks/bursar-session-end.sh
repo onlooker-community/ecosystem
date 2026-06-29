@@ -2,14 +2,13 @@
 # Bursar SessionEnd hook.
 #
 # Fires when a session ends. Responsibilities:
-#   1. Skip silently when bursar.enabled is false.
-#   2. Resolve the project key for the ending session (breadcrumb first, then
+#   1. Resolve the project key for the ending session (breadcrumb first, then
 #      the substrate session-tracker cwd, then the current cwd).
-#   3. Read this session's spend from the shared event bus — the latest
+#   2. Read this session's spend from the shared event bus — the latest
 #      governor.session.complete for this session_id. When governor is absent
 #      the session is still recorded, with cost unknown (governor_present:false).
-#   4. Upsert the session's spend into the per-project rollup ledger.
-#   5. Emit bursar.session.recorded and drop the breadcrumb.
+#   3. Upsert the session's spend into the per-project rollup ledger.
+#   4. Emit bursar.session.recorded and drop the breadcrumb.
 #
 # Hook contract:
 #   - Always exits 0. Never blocks session termination.
@@ -62,7 +61,6 @@ fi
 [[ -z "$CWD" ]] && CWD="$(pwd)"
 
 bursar_config_load "$CWD"
-bursar_config_enabled || _done
 
 [[ -z "$PROJECT_KEY" ]] && PROJECT_KEY=$(bursar_project_key "$CWD")
 [[ -z "$PROJECT_KEY" ]] && _done

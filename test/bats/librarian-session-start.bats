@@ -29,7 +29,6 @@ setup() {
   LIBRARIAN_DIR="${ONLOOKER_DIR}/librarian/${PROJECT_KEY}"
 
   mkdir -p "${PROJECT_REPO}/.claude"
-  printf '%s\n' '{"librarian":{"enabled":true}}' > "${PROJECT_REPO}/.claude/settings.json"
 
   HOOK="${PLUGIN_ROOT}/scripts/hooks/librarian-session-start.sh"
 }
@@ -57,15 +56,6 @@ _seed_proposal() {
     }' > "${LIBRARIAN_DIR}/proposals/${id}.json"
 }
 
-@test "surfacer emits empty context when librarian is disabled" {
-  rm -f "${PROJECT_REPO}/.claude/settings.json"
-  _seed_proposal "01PROPOSALA000000000000000"
-
-  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
-  [ "$status" -eq 0 ]
-  echo "$output" | jq -e '.hookSpecificOutput.additionalContext == ""' >/dev/null
-  echo "$output" | jq -e '.hookSpecificOutput.hookEventName == "SessionStart"' >/dev/null
-}
 
 @test "surfacer emits empty context when there is no git context" {
   local non_git="${BATS_TEST_TMPDIR}/no-git"
@@ -122,7 +112,7 @@ _seed_proposal() {
 
 @test "surfacer caps display at max_pending_for_inject + '+'" {
   # Override max to 3 via a project settings overlay.
-  printf '%s\n' '{"librarian":{"enabled":true,"surfacer":{"max_pending_for_inject":3}}}' \
+  printf '%s\n' '{"librarian":{"surfacer":{"max_pending_for_inject":3}}}' \
     > "${PROJECT_REPO}/.claude/settings.json"
   for i in A B C D E; do
     _seed_proposal "01PROPOSALCAP$i$i$i$i$i$i$i$i$i$i$i$i"

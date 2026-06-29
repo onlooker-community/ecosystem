@@ -34,7 +34,7 @@ setup() {
   SESSION_ID="sess-hist-test"
 
   mkdir -p "${PROJECT_REPO}/.claude"
-  printf '%s\n' '{"historian":{"enabled":true,"indexing":{"min_transcript_chars_to_index":50,"chunk_target_chars":400,"chunk_overlap_chars":50}}}' \
+  printf '%s\n' '{"historian":{"indexing":{"min_transcript_chars_to_index":50,"chunk_target_chars":400,"chunk_overlap_chars":50}}}' \
     > "${PROJECT_REPO}/.claude/settings.json"
 
   HOOK="${PLUGIN_ROOT}/scripts/hooks/historian-session-end.sh"
@@ -67,16 +67,6 @@ _chunk_count() {
   wc -l < "$file" | tr -d ' '
 }
 
-@test "session-end is a no-op when historian is disabled" {
-  rm -f "${PROJECT_REPO}/.claude/settings.json"
-  _append_text_turn "user" "$(printf 'long enough %.0s' {1..30})"
-  _append_text_turn "assistant" "ok"
-
-  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
-  [ "$status" -eq 0 ]
-  [ ! -f "${HIST_DIR}/sessions/${SESSION_ID}.jsonl" ]
-  [ ! -f "$ONLOOKER_EVENTS_LOG" ] || ! grep -q 'historian' "$ONLOOKER_EVENTS_LOG"
-}
 
 @test "session-end emits skip_reason transcript_unavailable when path missing" {
   run bash -c "printf '%s' '$(_input)' | '$HOOK'"
@@ -164,7 +154,7 @@ _chunk_count() {
 
 @test "session-end drops chunks referencing never_index_paths" {
   printf '%s\n' \
-    '{"historian":{"enabled":true,"indexing":{"min_transcript_chars_to_index":50,"chunk_target_chars":400,"chunk_overlap_chars":50},"sanitization":{"never_index_paths":["restricted/notes.md"]}}}' \
+    '{"historian":{"indexing":{"min_transcript_chars_to_index":50,"chunk_target_chars":400,"chunk_overlap_chars":50},"sanitization":{"never_index_paths":["restricted/notes.md"]}}}' \
     > "${PROJECT_REPO}/.claude/settings.json"
 
   _append_text_turn "user" "$(printf 'first chunk %.0s' {1..30})"
@@ -235,7 +225,7 @@ _chunk_count() {
 
 @test "redact_secret_patterns=false leaves secret-shaped strings untouched" {
   printf '%s\n' \
-    '{"historian":{"enabled":true,"indexing":{"min_transcript_chars_to_index":50,"chunk_target_chars":400,"chunk_overlap_chars":50},"sanitization":{"redact_secret_patterns":false}}}' \
+    '{"historian":{"indexing":{"min_transcript_chars_to_index":50,"chunk_target_chars":400,"chunk_overlap_chars":50},"sanitization":{"redact_secret_patterns":false}}}' \
     > "${PROJECT_REPO}/.claude/settings.json"
 
   # Synthetic AWS-shaped string. Without redaction it should pass through
@@ -254,7 +244,7 @@ _chunk_count() {
 
 @test "drop_skip_marker=false keeps chunks containing the marker" {
   printf '%s\n' \
-    '{"historian":{"enabled":true,"indexing":{"min_transcript_chars_to_index":50,"chunk_target_chars":400,"chunk_overlap_chars":50},"sanitization":{"drop_skip_marker":false}}}' \
+    '{"historian":{"indexing":{"min_transcript_chars_to_index":50,"chunk_target_chars":400,"chunk_overlap_chars":50},"sanitization":{"drop_skip_marker":false}}}' \
     > "${PROJECT_REPO}/.claude/settings.json"
 
   local marker
