@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.31.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.30.1...ecosystem-v0.31.0) (2026-07-03)
+
+
+### Features
+
+* **plugins:** installation enables plugins — remove per-plugin 'enabled' config key ([#108](https://github.com/onlooker-community/ecosystem/issues/108)) ([45e4e6b](https://github.com/onlooker-community/ecosystem/commit/45e4e6bd29a0a7545dbd5007bf3f09600e1be391))
+
 ## [0.30.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.30.0...ecosystem-v0.30.1) (2026-06-28)
 
 
