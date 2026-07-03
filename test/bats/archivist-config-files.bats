@@ -11,8 +11,8 @@ setup_file() {
   [ "$status" -eq 0 ]
 }
 
-@test "archivist config.json has plugin_name and archivist.enabled defaulting to false" {
-  run jq -e '.plugin_name == "archivist" and .archivist.enabled == false' \
+@test "archivist config.json has plugin_name field" {
+  run jq -e '.plugin_name == "archivist"' \
     "${REPO_ROOT}/plugins/archivist/config.json"
   [ "$status" -eq 0 ]
 }

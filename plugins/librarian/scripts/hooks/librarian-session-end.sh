@@ -7,7 +7,6 @@
 #
 # Hook contract:
 #   - Always exits 0. Never blocks session shutdown.
-#   - No-ops when librarian.enabled is not true.
 #   - No-ops when no project key (no git context) or no archivist artifacts.
 #   - Classifier failures degrade gracefully: the affected candidate is
 #     dropped, the rest of the scan proceeds.
@@ -56,7 +55,6 @@ SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SE
 [[ -z "$SESSION_ID" ]] && SESSION_ID="unknown"
 
 librarian_config_load "$(librarian_project_repo_root "$CWD")"
-librarian_config_enabled || exit 0
 
 PROJECT_KEY=$(librarian_project_key "$CWD")
 [[ -z "$PROJECT_KEY" ]] && exit 0

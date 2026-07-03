@@ -47,8 +47,6 @@ TARGET_BASENAME=$(basename "$CANONICAL")
 REPO_ROOT=$(cartographer_project_repo_root "$CWD")
 cartographer_config_load "$REPO_ROOT"
 
-cartographer_config_enabled || exit 0
-
 PROJECT_KEY=$(cartographer_project_key "$CWD")
 [[ -z "$PROJECT_KEY" ]] && exit 0
 

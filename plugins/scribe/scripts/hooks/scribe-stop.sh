@@ -7,7 +7,6 @@
 # ~/.onlooker/scribe/<project_key>/<date>-<session>.md.
 #
 # Skip conditions (all silent):
-#   - scribe.enabled is false
 #   - no transcript_path in hook input, or file is unreadable
 #   - session has fewer turns than scribe.capture.min_turns
 #
@@ -45,10 +44,6 @@ _done() { exit 0; }
 [[ -z "$SESSION_ID" ]] && _done
 
 scribe_config_load "$CWD"
-
-if ! scribe_config_enabled; then
-	_done
-fi
 
 if [[ -z "$TRANSCRIPT_PATH" || ! -f "$TRANSCRIPT_PATH" ]]; then
 	_done

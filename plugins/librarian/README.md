@@ -15,17 +15,13 @@ Librarian is a sibling plugin to [`ecosystem`](../../) and assumes the Onlooker 
 
 ## Activation
 
-Librarian is **off by default**. Enable per-project in `.claude/settings.json`:
+Install Librarian from the marketplace:
 
-```json
-{
-  "librarian": {
-    "enabled": true
-  }
-}
+```
+/plugin install librarian@onlooker-community
 ```
 
-Or globally in `~/.claude/settings.json`. See [`config.json`](config.json) for the full set of tunable defaults.
+Installing the plugin enables it. See [`config.json`](config.json) for the full set of tunable defaults.
 
 ## Storage layout
 

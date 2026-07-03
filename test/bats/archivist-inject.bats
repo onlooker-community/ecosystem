@@ -35,21 +35,9 @@ setup() {
     "updated_at": "2026-05-22T10:00:00Z"
   }' > "${kind_dir}/01TESTTESTTESTTESTTESTTEST.json"
 
-  # Project-scoped settings.json that enables archivist.
-  mkdir -p "${PROJECT_REPO}/.claude"
-  printf '%s\n' '{"archivist":{"enabled":true}}' > "${PROJECT_REPO}/.claude/settings.json"
 }
 
-@test "inject hook is a no-op when archivist is disabled" {
-  rm -f "${PROJECT_REPO}/.claude/settings.json"
-  local input
-  input=$(jq -n --arg cwd "$PROJECT_REPO" '{cwd: $cwd, source: "startup", session_id: "s"}')
-  run bash -c "printf '%s' '$input' | '${PLUGIN_ROOT}/scripts/hooks/archivist-inject.sh'"
-  [ "$status" -eq 0 ]
-  echo "$output" | jq -e '.hookSpecificOutput.additionalContext == ""' >/dev/null
-}
-
-@test "inject hook emits seeded artifact when enabled" {
+@test "inject hook emits seeded artifact" {
   local input
   input=$(jq -n --arg cwd "$PROJECT_REPO" '{cwd: $cwd, source: "startup", session_id: "s"}')
   run bash -c "printf '%s' '$input' | '${PLUGIN_ROOT}/scripts/hooks/archivist-inject.sh'"

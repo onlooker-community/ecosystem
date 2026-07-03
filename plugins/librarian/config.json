@@ -2,7 +2,6 @@
   "plugin_name": "librarian",
   "storage_path": "~/.onlooker",
   "librarian": {
-    "enabled": false,
     "auto_promote": false,
     "auto_promote_threshold": 0.85,
     "memory_store_path": "${HOME}/.claude/projects/${CLAUDE_PROJECT_ENCODED}/memory",

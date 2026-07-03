@@ -47,10 +47,6 @@ export _HOOK_SESSION_ID="$SESSION_ID"
 
 compass_config_load "$CWD"
 
-if ! compass_config_enabled; then
-	exit 0
-fi
-
 [[ -z "$COMMAND" ]] && exit 0
 
 # -----------------------------------------------------------------------

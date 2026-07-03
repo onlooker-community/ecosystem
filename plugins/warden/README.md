@@ -36,18 +36,11 @@ Clean content (no signature) never reaches the model. Set `escalation.enabled: f
 
 ## Activation
 
-Warden is **off by default**. Enable per-project in `.claude/settings.json`:
+Install the plugin in Claude from the marketplace with:
 
-```json
-{
-  "warden": {
-    "enabled": true
-  }
-}
 ```
-
-Or globally in `~/.claude/settings.json`.
-
+/plugin install warden@onlooker-community
+```
 ## Configuration
 
 All keys are optional. Unset keys fall back to the plugin's `config.json` defaults.
@@ -55,7 +48,6 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
 ```json
 {
   "warden": {
-    "enabled": false,
     "scan": {
       "sources": ["web_fetch", "file_read"],
       "max_content_chars": 20000,
@@ -88,7 +80,6 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `enabled` | `false` | Must be `true` for any scanning or gating to run. |
 | `scan.sources` | `["web_fetch", "file_read"]` | Which ingestion sources to scan. Matches the schema's `source_type` enum. |
 | `scan.max_content_chars` | `20000` | Length cap on the content fed into detection. |
 | `scan.skip_globs` | lockfiles, `node_modules`, `.git`, `dist`, `build`, … | Globs whose reads are not scanned. |

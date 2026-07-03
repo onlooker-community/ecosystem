@@ -34,7 +34,13 @@ The gate uses `majority` policy with `weighted_mean` aggregation, so one strong 
 
 ## Configuration
 
-Tribunal is enabled by default; the Stop hook is opt-in. Override per-project in your project's `.claude/settings.json`:
+Install the plugin in Claude from the marketplace with:
+
+```
+/plugin install tribunal@onlooker-community
+```
+
+The Stop hook is opt-in. Override per-project in your project's `.claude/settings.json`:
 
 ```json
 {

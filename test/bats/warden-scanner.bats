@@ -12,7 +12,7 @@ setup() {
 	export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 
 	mkdir -p "${HOME}/.claude"
-	printf '%s\n' '{"warden":{"enabled":true,"escalation":{"enabled":false}}}' > "${HOME}/.claude/settings.json"
+	printf '%s\n' '{"warden":{"escalation":{"enabled":false}}}' > "${HOME}/.claude/settings.json"
 
 	# shellcheck disable=SC1091
 	source "${PLUGIN_ROOT}/scripts/lib/warden-config.sh"

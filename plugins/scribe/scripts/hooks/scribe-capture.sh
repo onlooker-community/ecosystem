@@ -33,10 +33,6 @@ _done() { exit 0; }
 
 scribe_config_load "$CWD"
 
-if ! scribe_config_enabled; then
-	_done
-fi
-
 ONLOOKER_DIR="${ONLOOKER_DIR:-${HOME}/.onlooker}"
 STATE_FILE="${ONLOOKER_DIR}/scribe/sessions/${SESSION_ID}.json"
 

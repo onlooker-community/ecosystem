@@ -8,7 +8,6 @@
 #
 # Usage:
 #   cartographer_config_load <repo_root>
-#   cartographer_config_get ".cartographer.enabled"
 #   cartographer_config_get_json ".cartographer.exclude_paths"
 
 _CARTOGRAPHER_CONFIG=""
@@ -50,12 +49,6 @@ cartographer_config_get() {
 cartographer_config_get_json() {
 	local path="${1:-}"
 	printf '%s' "$_CARTOGRAPHER_CONFIG" | jq -c "$path // empty" 2>/dev/null
-}
-
-cartographer_config_enabled() {
-	local v
-	v=$(cartographer_config_get '.cartographer.enabled')
-	[[ "$v" == "true" ]]
 }
 
 cartographer_config_model_extraction() {

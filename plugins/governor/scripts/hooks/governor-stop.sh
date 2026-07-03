@@ -6,7 +6,6 @@
 #
 # Hook contract:
 #   - Always exits 0. Never blocks Stop.
-#   - Skips silently when governor.enabled is false.
 #   - Errors from ledger reads are swallowed; emits best-effort totals.
 
 set -uo pipefail
@@ -50,10 +49,6 @@ SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SE
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 
 governor_config_load "$CWD"
-
-if ! governor_config_enabled; then
-	_done
-fi
 
 # -----------------------------------------------------------------------
 # Read session totals from the ledger.

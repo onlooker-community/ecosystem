@@ -1,14 +1,8 @@
 #!/usr/bin/env bash
 # Tribunal Stop-gate hook.
 #
-# Triggered by Stop. Off by default — gated on tribunal.stop_hook.enabled in
-# config. When enabled, runs a single-judge advisory pass on the just-finished
-# session's last turn and writes a verdict for review on the next session.
-#
-# Why advisory only: by the time Stop fires the main agent loop has already
-# ended. We cannot retry the Actor or re-run the work. The hook records what
-# the Standard Judge would have said so a human (or a follow-up SessionStart
-# hook in v0.2) can see whether the turn would have passed the gate.
+# Triggered by Stop. 
+# runs a single-judge advisory pass on the just-finished session's last turn and writes a verdict for review on the next session.
 #
 # Hook contract:
 #   - Always exits 0. Never blocks Stop.
@@ -64,10 +58,6 @@ _done() {
 REPO_ROOT=$(tribunal_project_repo_root "$CWD")
 tribunal_config_load "$REPO_ROOT"
 
-if ! tribunal_config_stop_hook_enabled; then
-	_done
-fi
-
 PROJECT_KEY=$(tribunal_project_key "$CWD")
 if [[ -z "$PROJECT_KEY" || -z "$REPO_ROOT" ]]; then
 	_done
@@ -77,8 +67,7 @@ if [[ -z "$TRANSCRIPT_PATH" || ! -f "$TRANSCRIPT_PATH" ]]; then
 	_done
 fi
 
-# Skip if no files were modified since the last commit AND the user enabled
-# skip_if_no_file_changes (default true).
+# Skip if no files were modified since the last commit AND skip_if_no_file_changes is true.
 SKIP_IF_CLEAN=$(tribunal_config_get '.tribunal.stop_hook.skip_if_no_file_changes')
 if [[ "$SKIP_IF_CLEAN" == "true" ]]; then
 	if git -C "$REPO_ROOT" diff --quiet 2>/dev/null && git -C "$REPO_ROOT" diff --cached --quiet 2>/dev/null; then

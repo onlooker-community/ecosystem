@@ -14,21 +14,15 @@ Scribe is a sibling plugin to [`ecosystem`](../../) and assumes the Onlooker obs
 | `UserPromptSubmit` | On the first turn of a session (when `captured_prompt` is still null), stores the prompt text — truncated to `capture.prompt_max_chars` — as the problem-statement seed. Subsequent turns are ignored, since the full transcript is available at Stop time. |
 | `Stop` | Reads the full session transcript, runs a single Haiku extraction pass via `claude -p` to identify the problem, decisions, tradeoffs, constraints, and out-of-scope items, formats the result as a Markdown intent document, and writes it under `~/.onlooker/scribe/<project-key>/`. Emits `scribe.distill.complete`. |
 
-The Stop hook silently skips when the session has fewer than `capture.min_turns` user turns, when `scribe.enabled` is false, or when no readable `transcript_path` is present in the hook input. Every hook always exits 0 — Scribe never blocks a session.
+The Stop hook silently skips when the session has fewer than `capture.min_turns` user turns or when no readable `transcript_path` is present in the hook input. Every hook always exits 0 — Scribe never blocks a session.
 
 ## Activation
 
-Scribe is **on by default**. Disable it per-project in `.claude/settings.json`:
+Install the plugin in Claude from the marketplace with:
 
-```json
-{
-  "scribe": {
-    "enabled": false
-  }
-}
 ```
-
-Or globally in `~/.claude/settings.json`.
+/plugin install scribe@onlooker-community
+```
 
 ## Configuration
 
@@ -37,7 +31,6 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
 ```json
 {
   "scribe": {
-    "enabled": true,
     "evaluator": {
       "model": "claude-haiku-4-5-20251001",
       "timeout": 60,
@@ -59,7 +52,6 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `enabled` | `true` | Must be `true` for any capture or distillation to run. |
 | `evaluator.model` | `claude-haiku-4-5-20251001` | Model used for the intent-extraction pass. Haiku is fast and cheap; the extraction prompt is structured and does not require deep reasoning. |
 | `evaluator.timeout` | `60` | Wall-clock timeout in seconds passed to the `timeout` command around the `claude -p` call. |
 | `evaluator.max_tokens` | `2048` | Token ceiling for the extraction response. |

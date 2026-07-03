@@ -18,7 +18,6 @@
 #   - Exit 0 always.
 #   - To block: write {"decision": "block", "reason": "..."} to stdout.
 #   - To allow: write nothing (or {"decision": "allow"}) to stdout.
-#   - Skips silently when governor.enabled is false.
 
 set -uo pipefail
 
@@ -69,10 +68,6 @@ SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SE
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 
 governor_config_load "$CWD"
-
-if ! governor_config_enabled; then
-	_allow
-fi
 
 # -----------------------------------------------------------------------
 # Read config.

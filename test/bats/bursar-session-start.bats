@@ -25,11 +25,6 @@ setup() {
 	SID="bats-start-001"
 }
 
-_enable() {
-	mkdir -p "${HOME}/.claude"
-	printf '%s\n' '{"bursar":{"enabled":true}}' > "${HOME}/.claude/settings.json"
-}
-
 _seed_ledger() {
 	# One recent recorded session with cost.
 	local dir="${ONLOOKER_DIR}/bursar/projects/${KEY}"
@@ -48,14 +43,7 @@ _run_hook() {
 	run bash "$HOOK" < "${BATS_TEST_TMPDIR}/in.json"
 }
 
-@test "produces no output when bursar is disabled" {
-	_run_hook
-	[ "$status" -eq 0 ]
-	[ -z "$output" ]
-}
-
 @test "writes a breadcrumb carrying the project key" {
-	_enable
 	_run_hook
 	[ "$status" -eq 0 ]
 	local bc="${ONLOOKER_DIR}/bursar/sessions/${SID}.json"
@@ -64,14 +52,12 @@ _run_hook() {
 }
 
 @test "surfaces no additionalContext when the window is empty" {
-	_enable
 	_run_hook
 	[ "$status" -eq 0 ]
 	[[ "$output" != *"hookSpecificOutput"* ]]
 }
 
 @test "emits bursar.rollup.skipped when there is no data" {
-	_enable
 	_run_hook
 	run grep -c '"event_type":"bursar.rollup.skipped"' "$ONLOOKER_EVENTS_LOG"
 	[ "$status" -eq 0 ]
@@ -79,7 +65,6 @@ _run_hook() {
 }
 
 @test "surfaces the burned total as SessionStart additionalContext" {
-	_enable
 	_seed_ledger
 	_run_hook
 	[ "$status" -eq 0 ]
@@ -89,7 +74,6 @@ _run_hook() {
 }
 
 @test "reports a tracked \$0.00 total without nudging to enable governor" {
-	_enable
 	# governor present, but the window's cost is legitimately zero
 	local dir="${ONLOOKER_DIR}/bursar/projects/${KEY}"
 	mkdir -p "$dir"
@@ -106,7 +90,6 @@ _run_hook() {
 }
 
 @test "emits bursar.rollup.surfaced when data exists" {
-	_enable
 	_seed_ledger
 	_run_hook
 	run grep -c '"event_type":"bursar.rollup.surfaced"' "$ONLOOKER_EVENTS_LOG"
@@ -116,7 +99,7 @@ _run_hook() {
 
 @test "stays silent at the surface step but still records the breadcrumb when surfacing is disabled" {
 	mkdir -p "${HOME}/.claude"
-	printf '%s\n' '{"bursar":{"enabled":true,"surface_at_session_start":false}}' \
+	printf '%s\n' '{"bursar":{"surface_at_session_start":false}}' \
 		> "${HOME}/.claude/settings.json"
 	_seed_ledger
 	_run_hook

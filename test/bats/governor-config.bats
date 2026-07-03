@@ -10,31 +10,6 @@ setup() {
 	source "${PLUGIN_ROOT}/scripts/lib/governor-config.sh"
 }
 
-@test "governor is disabled by default" {
-	governor_config_load ""
-	run governor_config_enabled
-	[ "$status" -ne 0 ]
-}
-
-@test "user-level settings.json can enable governor" {
-	mkdir -p "${HOME}/.claude"
-	printf '%s\n' '{"governor":{"enabled":true}}' > "${HOME}/.claude/settings.json"
-	governor_config_load ""
-	run governor_config_enabled
-	[ "$status" -eq 0 ]
-}
-
-@test "repo-level settings.json overrides user-level" {
-	mkdir -p "${HOME}/.claude"
-	printf '%s\n' '{"governor":{"enabled":true}}' > "${HOME}/.claude/settings.json"
-	local repo="${BATS_TEST_TMPDIR}/repo"
-	mkdir -p "${repo}/.claude"
-	printf '%s\n' '{"governor":{"enabled":false}}' > "${repo}/.claude/settings.json"
-	governor_config_load "$repo"
-	run governor_config_enabled
-	[ "$status" -ne 0 ]
-}
-
 @test "default enforcement is soft" {
 	governor_config_load ""
 	local v
@@ -93,14 +68,3 @@ setup() {
 	[ -z "$v" ]
 }
 
-@test "empty repo_root does not load /.claude/settings.json" {
-	# Place a settings.json at the absolute root path that an empty repo_root would produce.
-	# On a real machine this won't exist, but in CI it might; the guard should skip it.
-	# We verify that a file at / does not influence config by confirming the default holds.
-	governor_config_load ""
-	run governor_config_enabled
-	# Default is disabled — if /.claude/settings.json were loaded with {enabled:true}
-	# this would fail. We can't plant a file at / in tests, so we assert the default
-	# is intact (regression guard rather than direct injection test).
-	[ "$status" -ne 0 ]
-}

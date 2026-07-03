@@ -61,12 +61,6 @@ echo_config_get_json() {
 	fi
 }
 
-echo_config_enabled() {
-	local val
-	val=$(echo_config_get '.enabled')
-	[[ "$val" == "true" ]]
-}
-
 echo_config_model() {
 	local val
 	val=$(echo_config_get '.evaluation.model')

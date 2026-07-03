@@ -31,11 +31,6 @@ source "$PLUGIN_ROOT/scripts/lib/counsel-brief.sh"
 REPO_ROOT=$(counsel_project_repo_root "$(pwd)")
 counsel_config_load "$REPO_ROOT"
 
-if ! counsel_config_enabled; then
-  echo "Counsel is disabled. Set counsel.enabled=true in .claude/settings.json to enable."
-  exit 0
-fi
-
 PROJECT_KEY=$(counsel_project_key "$(pwd)")
 if [[ -z "$PROJECT_KEY" ]]; then
   echo "No project key — Counsel needs a git repository (remote or root) to scope briefs. Skipping."

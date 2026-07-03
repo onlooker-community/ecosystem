@@ -1,6 +1,5 @@
 {
   "scribe": {
-    "enabled": true,
     "evaluator": {
       "model": "claude-haiku-4-5-20251001",
       "timeout": 60,

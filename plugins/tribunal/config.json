@@ -2,7 +2,6 @@
   "plugin_name": "tribunal",
   "storage_path": "~/.onlooker",
   "tribunal": {
-    "enabled": true,
     "stop_hook": {
       "enabled": false,
       "skip_if_no_file_changes": true

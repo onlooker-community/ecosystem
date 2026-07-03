@@ -2,8 +2,7 @@
 # Compass SessionStart hook.
 #
 # Fires at every session start. Responsibilities:
-#   1. Skip silently when compass.enabled is false.
-#   2. Create storage directories.
+#   1. Create storage directories.
 #   3. Initialize session state file:
 #      - turn_check_count: 0
 #      - cooldown table: empty
@@ -32,10 +31,6 @@ CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 _done() { exit 0; }
 
 compass_config_load "$CWD"
-
-if ! compass_config_enabled; then
-	_done
-fi
 
 export _HOOK_SESSION_ID="$SESSION_ID"
 

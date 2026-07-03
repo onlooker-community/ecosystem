@@ -1,6 +1,5 @@
 {
   "counsel": {
-    "enabled": true,
     "synthesis_interval_days": 7,
     "lookback_days": 30,
     "evaluator": {

@@ -2,7 +2,7 @@
 
 # Exercises the Assayer Stop hook's gating behavior. Does not invoke claude -p
 # (the hook bails before the extraction step when preconditions fail).
-# Verifies: disabled-by-default, no-git, recursion guard, no-transcript, and
+# Verifies: no-git, recursion guard, no-transcript, and
 # stdout silence (advisory hook must never block Stop).
 
 setup() {
@@ -30,14 +30,6 @@ _make_input() {
 		'{cwd: $cwd, session_id: $sid, transcript_path: $tp}'
 }
 
-@test "exits 0 silently when assayer.enabled is false (default)" {
-	local input
-	input=$(_make_input)
-	run bash -c "printf '%s' '$input' | ONLOOKER_DIR='$ONLOOKER_DIR' '$HOOK'"
-	[ "$status" -eq 0 ]
-	[ -z "$output" ]
-}
-
 @test "exits 0 when cwd is not a git repo" {
 	local non_repo="${BATS_TEST_TMPDIR}/not-a-repo"
 	mkdir -p "$non_repo"
@@ -48,8 +40,6 @@ _make_input() {
 }
 
 @test "recursion guard: ASSAYER_NESTED=1 causes immediate exit 0" {
-	mkdir -p "${REPO}/.claude"
-	printf '%s\n' '{"assayer":{"enabled":true}}' >"${REPO}/.claude/settings.json"
 	local input
 	input=$(_make_input)
 	run bash -c "printf '%s' '$input' | ASSAYER_NESTED=1 ONLOOKER_DIR='$ONLOOKER_DIR' '$HOOK'"
@@ -57,9 +47,7 @@ _make_input() {
 	[ -z "$output" ]
 }
 
-@test "exits 0 when enabled but transcript is missing" {
-	mkdir -p "${REPO}/.claude"
-	printf '%s\n' '{"assayer":{"enabled":true}}' >"${REPO}/.claude/settings.json"
+@test "exits 0 when transcript is missing" {
 	local input
 	input=$(_make_input "$REPO" "test-session" "${BATS_TEST_TMPDIR}/nope.jsonl")
 	run bash -c "printf '%s' '$input' | ONLOOKER_DIR='$ONLOOKER_DIR' '$HOOK'"
@@ -67,9 +55,7 @@ _make_input() {
 	[ -z "$output" ]
 }
 
-@test "exits 0 when enabled but final message is empty" {
-	mkdir -p "${REPO}/.claude"
-	printf '%s\n' '{"assayer":{"enabled":true}}' >"${REPO}/.claude/settings.json"
+@test "exits 0 when final message is empty" {
 	# Transcript with no assistant text turn.
 	local empty_transcript="${BATS_TEST_TMPDIR}/empty.jsonl"
 	printf '%s\n' '{"type":"user","message":{"content":[{"type":"text","text":"hi"}]}}' >"$empty_transcript"

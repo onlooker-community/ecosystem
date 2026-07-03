@@ -10,7 +10,6 @@
 #   compass_config_load <repo_root>     # populates _COMPASS_CONFIG (JSON)
 #   compass_config_get <jq-path>        # echoes string value (empty if unset)
 #   compass_config_get_json <jq-path>   # echoes JSON value (null if unset)
-#   compass_config_enabled              # 0 if compass.enabled is true
 
 _COMPASS_CONFIG="{}"
 
@@ -63,10 +62,4 @@ compass_config_get() {
 compass_config_get_json() {
 	local path="$1"
 	printf '%s' "$_COMPASS_CONFIG" | jq -c "${path}" 2>/dev/null
-}
-
-compass_config_enabled() {
-	local v
-	v=$(compass_config_get '.compass.enabled')
-	[[ "$v" == "true" ]]
 }

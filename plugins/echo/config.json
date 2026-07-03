@@ -2,7 +2,6 @@
   "plugin_name": "echo",
   "storage_path": "~/.onlooker",
   "echo": {
-    "enabled": false,
     "watch_paths": ["plugins/*/agents/*.md"],
     "exclude_paths": [],
     "drift_threshold": 0.05,

@@ -25,9 +25,7 @@ setup() {
 	# shellcheck disable=SC1091
 	source "${PLUGIN_ROOT}/scripts/lib/compass-gate.sh"
 
-	# Enable compass and load config.
-	mkdir -p "${HOME}/.claude"
-	printf '%s\n' '{"compass":{"enabled":true}}' > "${HOME}/.claude/settings.json"
+	# Load config.
 	compass_config_load ""
 
 	# Seed a session-state file so the gate's state lookups succeed.

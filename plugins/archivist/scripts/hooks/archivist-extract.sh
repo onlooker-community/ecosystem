@@ -8,7 +8,6 @@
 #
 # Hook contract:
 #   - Always exits 0 and approves compaction. Never blocks.
-#   - Skips work if archivist.enabled is not true.
 #   - Skips work if there is no git context (no project key).
 #   - Errors from `claude -p` are swallowed; the worst case is "no new memory
 #     for this compact", never "compaction failed".
@@ -68,11 +67,6 @@ PROJECT_KEY=$(archivist_project_key "$CWD")
 # Config requires repo_root to scan settings.json overlay; load anyway with
 # best-effort empty fallback.
 archivist_config_load "$REPO_ROOT"
-
-if ! archivist_config_enabled; then
-	_approve "Archivist disabled (skip extraction)"
-	exit 0
-fi
 
 if [[ -z "$PROJECT_KEY" || -z "$REPO_ROOT" ]]; then
 	_approve "Archivist: no git context, nothing to extract"

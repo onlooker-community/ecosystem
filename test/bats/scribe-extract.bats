@@ -34,10 +34,10 @@ setup() {
 @test "count_turns counts only user-role entries" {
   local f="${BATS_TEST_TMPDIR}/transcript.jsonl"
   printf '%s\n' \
-    '{"role":"user","content":"hello"}' \
-    '{"role":"assistant","content":"hi"}' \
-    '{"role":"user","content":"thanks"}' \
-    '{"role":"assistant","content":"sure"}' \
+    '{"type":"user","message":{"role":"user","content":"hello"}}' \
+    '{"type":"assistant","message":{"role":"assistant","content":"hi"}}' \
+    '{"type":"user","message":{"role":"user","content":"thanks"}}' \
+    '{"type":"assistant","message":{"role":"assistant","content":"sure"}}' \
     > "$f"
   run scribe_count_turns "$f"
   [ "$status" -eq 0 ]
@@ -47,9 +47,9 @@ setup() {
 @test "count_turns skips blank lines" {
   local f="${BATS_TEST_TMPDIR}/sparse.jsonl"
   printf '%s\n' \
-    '{"role":"user","content":"a"}' \
+    '{"type":"user","message":{"role":"user","content":"a"}}' \
     '' \
-    '{"role":"user","content":"b"}' \
+    '{"type":"user","message":{"role":"user","content":"b"}}' \
     > "$f"
   run scribe_count_turns "$f"
   [ "$status" -eq 0 ]

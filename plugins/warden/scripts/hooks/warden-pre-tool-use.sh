@@ -35,10 +35,6 @@ export _HOOK_SESSION_ID="$SESSION_ID"
 
 warden_config_load "$CWD"
 
-if ! warden_config_enabled; then
-	exit 0
-fi
-
 [[ -z "$SESSION_ID" ]] && exit 0
 
 # Gate open → allow silently.

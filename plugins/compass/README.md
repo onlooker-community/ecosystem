@@ -38,17 +38,13 @@ The default `error_policy` is `closed`: when fewer than `evaluator.min_valid_sam
 
 ## Activation
 
-Compass is **off by default**. Enable per-project in `.claude/settings.json`:
+Install Compass from the marketplace:
 
-```json
-{
-  "compass": {
-    "enabled": true
-  }
-}
+```
+/plugin install compass@onlooker-community
 ```
 
-Or globally in `~/.claude/settings.json`.
+Compass activates as soon as it is installed — no additional configuration is required.
 
 ## Configuration
 
@@ -57,7 +53,6 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
 ```json
 {
   "compass": {
-    "enabled": false,
     "evaluator": {
       "model": "claude-haiku-4-5-20251001",
       "n": 5,
@@ -102,7 +97,6 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `enabled` | `false` | Must be `true` for any evaluation to run. |
 | `evaluator.model` | `claude-haiku-4-5-20251001` | Model used for each evaluation sample. Haiku is fast and cheap; the convergence prompt does not require deep reasoning. |
 | `evaluator.n` | `5` | Number of parallel evaluation samples launched per check. |
 | `evaluator.temperature` | `0.3` | Sampling temperature. The noise floor at `n=5`, `temperature=0.3` is ~0.62–0.65 for unambiguous tasks, which informs the `confidence_threshold` default. |

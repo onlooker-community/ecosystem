@@ -2,7 +2,6 @@
   "plugin_name": "curator",
   "storage_path": "~/.onlooker",
   "curator": {
-    "enabled": false,
     "memory_store_path": "${HOME}/.claude/projects/${CLAUDE_PROJECT_ENCODED}/memory",
     "cheap_checks": {
       "enabled": true,

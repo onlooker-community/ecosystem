@@ -20,14 +20,10 @@ The hook always exits 0 — it never blocks a session from ending.
 
 ## Activation
 
-Echo is **off by default**. Enable it per-project in `.claude/settings.json`:
+Install Echo from the marketplace and it is active immediately:
 
-```json
-{
-  "echo": {
-    "enabled": true
-  }
-}
+```
+/plugin install echo@onlooker-community
 ```
 
 ## Configuration
@@ -37,7 +33,6 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
 ```json
 {
   "echo": {
-    "enabled": true,
     "watch_paths": ["plugins/*/agents/*.md"],
     "exclude_paths": [],
     "drift_threshold": 0.05,
@@ -51,7 +46,6 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `enabled` | `false` | Must be `true` for any evaluation to run. |
 | `watch_paths` | `["plugins/*/agents/*.md"]` | Glob patterns (relative to repo root) of files to watch. Bash extended glob syntax. |
 | `exclude_paths` | `[]` | Patterns to exclude. `plugins/echo/**` is always excluded regardless of this setting. |
 | `drift_threshold` | `0.05` | Minimum absolute score delta to classify a change as improvement or regression. Deltas below this are reported as neutral. |

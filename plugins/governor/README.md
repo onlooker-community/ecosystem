@@ -42,17 +42,13 @@ The raw estimate is multiplied by `safety_margin` before the gate check. Cost is
 
 ## Activation
 
-Governor is **off by default**. Enable it per-project in `.claude/settings.json`:
+Install Governor from the marketplace:
 
-```json
-{
-  "governor": {
-    "enabled": true
-  }
-}
+```
+/plugin install governor@onlooker-community
 ```
 
-Or globally in `~/.claude/settings.json`. While disabled, every hook skips silently and no ledger is written.
+Once installed, the plugin is active. No additional configuration is required to enable it.
 
 ## Configuration
 
@@ -61,7 +57,6 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
 ```json
 {
   "governor": {
-    "enabled": false,
     "enforcement": "soft",
     "global_policy_path": "~/.onlooker/governance/global-policy.yaml",
     "session": {
@@ -80,7 +75,6 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `enabled` | `false` | Must be `true` for any tracking, gating, or event emission to run. |
 | `enforcement` | `"soft"` | `"soft"` tracks and emits events but never blocks on a budget overrun; `"hard"` blocks `Task` spawns once the budget is exceeded. A `ceiling_exceeded` overrun blocks in both modes. |
 | `global_policy_path` | `"~/.onlooker/governance/global-policy.yaml"` | Path checked at `SessionStart`. Missing file warns to stderr only — the session runs without a global ceiling. |
 | `session.tokens_default` | `100000` | Per-session token budget. Projecting past this triggers `budget_exceeded`. Overridable per session via the `ONLOOKER_SESSION_BUDGET_TOKENS` environment variable. |

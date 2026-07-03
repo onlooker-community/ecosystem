@@ -36,9 +36,7 @@ setup() {
   LIBRARIAN_DIR="${ONLOOKER_DIR}/librarian/${PROJECT_KEY}"
   ONLOOKER_EVENTS_LOG="${ONLOOKER_DIR}/logs/onlooker-events.jsonl"
 
-  # Project-scoped settings.json that enables librarian.
   mkdir -p "${PROJECT_REPO}/.claude"
-  printf '%s\n' '{"librarian":{"enabled":true}}' > "${PROJECT_REPO}/.claude/settings.json"
 
   # Stub `claude` CLI on PATH. Returns a deterministic classifier response
   # based on the artifact's summary contents.
@@ -92,15 +90,6 @@ _hook_input() {
     '{cwd: $cwd, session_id: $sid, hook_event_name: "SessionEnd"}'
 }
 
-@test "session-end is a no-op when librarian is disabled" {
-  rm -f "${PROJECT_REPO}/.claude/settings.json"
-  run bash -c "printf '%s' '$(_hook_input)' | '$HOOK'"
-  [ "$status" -eq 0 ]
-  # No proposals written.
-  [ ! -d "${LIBRARIAN_DIR}/proposals" ] || [ -z "$(ls -A "${LIBRARIAN_DIR}/proposals" 2>/dev/null)" ]
-  # No events emitted.
-  [ ! -f "$ONLOOKER_EVENTS_LOG" ] || ! grep -q 'librarian' "$ONLOOKER_EVENTS_LOG"
-}
 
 @test "session-end emits empty scan when archivist has nothing" {
   run bash -c "printf '%s' '$(_hook_input)' | '$HOOK'"

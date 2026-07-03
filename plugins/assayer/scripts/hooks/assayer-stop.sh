@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Assayer Stop hook.
 #
-# Triggered by Stop. Off by default — gated on assayer.enabled in config.
-# When enabled, it reads the just-finished session's transcript, extracts the
+# Triggered by Stop. Reads the just-finished session's transcript, extracts the
 # agent's testable success claims from its final message, and cross-checks each
 # against the actual Bash command results in the same transcript. Each claim is
 # classified corroborated / contradicted / unverified and emitted as an event.
@@ -72,7 +71,6 @@ REPO_ROOT=$(assayer_project_repo_root "$CWD")
 [[ -z "$REPO_ROOT" ]] && _done
 
 CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" assayer_config_load "$REPO_ROOT"
-assayer_config_enabled || _done
 
 PROJECT_KEY=$(assayer_project_key "$CWD")
 [[ -z "$PROJECT_KEY" ]] && _done

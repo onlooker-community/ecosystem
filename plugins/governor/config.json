@@ -2,7 +2,6 @@
   "plugin_name": "governor",
   "storage_path": "~/.onlooker",
   "governor": {
-    "enabled": false,
     "enforcement": "soft",
     "global_policy_path": "~/.onlooker/governance/global-policy.yaml",
     "session": {

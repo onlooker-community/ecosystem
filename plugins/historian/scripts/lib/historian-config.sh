@@ -9,7 +9,6 @@
 # Exposes:
 #   historian_config_load <repo_root>    # populates _HISTORIAN_CONFIG (JSON)
 #   historian_config_get <jq-path>       # echoes string value (empty if unset)
-#   historian_config_enabled             # 0 if historian.enabled is true
 #
 # Settings overlay only touches the `historian.*` subtree of settings.json.
 
@@ -59,8 +58,3 @@ historian_config_get() {
 		| jq -r "${path} | if . == null then empty else . end" 2>/dev/null
 }
 
-historian_config_enabled() {
-	local v
-	v=$(historian_config_get '.historian.enabled')
-	[[ "$v" == "true" ]]
-}

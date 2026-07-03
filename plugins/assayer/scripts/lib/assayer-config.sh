@@ -51,12 +51,6 @@ assayer_config_get() {
 	fi
 }
 
-assayer_config_enabled() {
-	local val
-	val=$(assayer_config_get '.enabled')
-	[[ "$val" == "true" ]]
-}
-
 assayer_config_model() {
 	local val
 	val=$(assayer_config_get '.evaluation.model')

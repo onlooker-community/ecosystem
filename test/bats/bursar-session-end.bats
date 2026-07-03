@@ -16,11 +16,6 @@ setup() {
 	PK="projendabcd12"
 }
 
-_enable() {
-	mkdir -p "${HOME}/.claude"
-	printf '%s\n' '{"bursar":{"enabled":true}}' > "${HOME}/.claude/settings.json"
-}
-
 _breadcrumb() {
 	local dir="${ONLOOKER_DIR}/bursar/sessions"
 	mkdir -p "$dir"
@@ -44,7 +39,6 @@ _run_hook() {
 }
 
 @test "records a session's spend from governor.session.complete" {
-	_enable
 	_breadcrumb
 	_seed_governor_event
 	_run_hook
@@ -62,7 +56,6 @@ _run_hook() {
 }
 
 @test "removes the breadcrumb after recording" {
-	_enable
 	_breadcrumb
 	_seed_governor_event
 	_run_hook
@@ -70,7 +63,6 @@ _run_hook() {
 }
 
 @test "degrades to governor_present:false when no governor event exists" {
-	_enable
 	_breadcrumb
 	# no governor.session.complete seeded
 	_run_hook
@@ -84,7 +76,6 @@ _run_hook() {
 }
 
 @test "is idempotent across a repeated SessionEnd" {
-	_enable
 	_breadcrumb
 	_seed_governor_event
 	_run_hook
@@ -94,17 +85,7 @@ _run_hook() {
 	[ "$(wc -l < "$(_ledger_path)")" -eq 1 ]
 }
 
-@test "writes nothing when bursar is disabled" {
-	# bursar disabled (no settings written)
-	_breadcrumb
-	_seed_governor_event
-	_run_hook
-	[ "$status" -eq 0 ]
-	[ ! -d "${ONLOOKER_DIR}/bursar/projects" ]
-}
-
 @test "keeps the breadcrumb and emits nothing when the ledger write fails" {
-	_enable
 	_breadcrumb
 	_seed_governor_event
 	# Force bursar_ledger_record to fail: a file where the projects dir must go,
@@ -121,7 +102,6 @@ _run_hook() {
 }
 
 @test "emits bursar.session.recorded" {
-	_enable
 	_breadcrumb
 	_seed_governor_event
 	_run_hook

@@ -10,31 +10,6 @@ setup() {
 	source "${PLUGIN_ROOT}/scripts/lib/warden-config.sh"
 }
 
-@test "warden is disabled by default" {
-	warden_config_load ""
-	run warden_config_enabled
-	[ "$status" -ne 0 ]
-}
-
-@test "user-level settings.json can enable warden" {
-	mkdir -p "${HOME}/.claude"
-	printf '%s\n' '{"warden":{"enabled":true}}' > "${HOME}/.claude/settings.json"
-	warden_config_load ""
-	run warden_config_enabled
-	[ "$status" -eq 0 ]
-}
-
-@test "repo-level settings.json overrides user-level" {
-	mkdir -p "${HOME}/.claude"
-	printf '%s\n' '{"warden":{"enabled":true}}' > "${HOME}/.claude/settings.json"
-	local repo="${BATS_TEST_TMPDIR}/repo"
-	mkdir -p "${repo}/.claude"
-	printf '%s\n' '{"warden":{"enabled":false}}' > "${repo}/.claude/settings.json"
-	warden_config_load "$repo"
-	run warden_config_enabled
-	[ "$status" -ne 0 ]
-}
-
 @test "defaults are preserved when an overlay sets only some keys" {
 	mkdir -p "${HOME}/.claude"
 	printf '%s\n' '{"warden":{"enabled":true,"escalation":{"enabled":false}}}' > "${HOME}/.claude/settings.json"

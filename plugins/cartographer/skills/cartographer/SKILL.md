@@ -26,11 +26,6 @@ Load config and resolve project context:
 REPO_ROOT=$(cartographer_project_repo_root "$(pwd)")
 cartographer_config_load "$REPO_ROOT"
 
-if ! cartographer_config_enabled; then
-  echo "Cartographer is disabled. Set cartographer.enabled=true in .claude/settings.json to enable."
-  exit 0
-fi
-
 PROJECT_KEY=$(cartographer_project_key "$(pwd)")
 CARTOGRAPHER_DIR="${ONLOOKER_DIR:-$HOME/.onlooker}/cartographer/$PROJECT_KEY"
 mkdir -p "$CARTOGRAPHER_DIR"

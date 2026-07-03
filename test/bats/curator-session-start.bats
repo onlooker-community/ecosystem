@@ -38,7 +38,6 @@ setup() {
   jq -n --arg path "$MEM_DIR" \
     '{
       curator: {
-        enabled: true,
         memory_store_path: $path,
         date_check: { date_grace_period_days: 7 }
       }
@@ -64,15 +63,6 @@ _write_index() {
   printf '%b\n' "$entries" > "${MEM_DIR}/MEMORY.md"
 }
 
-@test "session-start no-ops when curator is disabled" {
-  rm -f "${PROJECT_REPO}/.claude/settings.json"
-  _seed_memory "feedback_stale.md" "feedback" "Decayed 2025-01-01 reference."
-
-  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
-  [ "$status" -eq 0 ]
-  echo "$output" | jq -e '.hookSpecificOutput.additionalContext == ""' >/dev/null
-  [ ! -f "$ONLOOKER_EVENTS_LOG" ] || ! grep -q 'curator' "$ONLOOKER_EVENTS_LOG"
-}
 
 @test "session-start emits scan events with empty memory store" {
   run bash -c "printf '%s' '$(_input)' | '$HOOK'"
@@ -273,7 +263,7 @@ BODY
 
 @test "cheap_checks.enabled=false skips the scan and emits skip_reason disabled" {
   printf '%s\n' \
-    '{"curator":{"enabled":true,"memory_store_path":"'"$MEM_DIR"'","cheap_checks":{"enabled":false}}}' \
+    '{"curator":{"memory_store_path":"'"$MEM_DIR"'","cheap_checks":{"enabled":false}}}' \
     > "${PROJECT_REPO}/.claude/settings.json"
 
   _seed_memory "project_stale.md" "project" "Decayed 2025-01-01"
@@ -295,7 +285,7 @@ BODY
 
 @test "surfacer truncates context past max_pointer_chars" {
   printf '%s\n' \
-    '{"curator":{"enabled":true,"memory_store_path":"'"$MEM_DIR"'","surfacer":{"max_pointer_chars":40}}}' \
+    '{"curator":{"memory_store_path":"'"$MEM_DIR"'","surfacer":{"max_pointer_chars":40}}}' \
     > "${PROJECT_REPO}/.claude/settings.json"
 
   _seed_memory "project_a.md" "project" "Date 2025-01-01"

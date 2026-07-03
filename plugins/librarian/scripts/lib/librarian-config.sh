@@ -9,7 +9,6 @@
 # Exposes:
 #   librarian_config_load <repo_root>    # populates _LIBRARIAN_CONFIG (JSON)
 #   librarian_config_get <jq-path>       # echoes string value (empty if unset)
-#   librarian_config_enabled             # 0 if librarian.enabled is true
 #   librarian_config_auto_promote        # 0 if librarian.auto_promote is true
 #
 # Settings overlay only touches the `librarian.*` subtree of settings.json so
@@ -57,13 +56,6 @@ librarian_config_load() {
 librarian_config_get() {
 	local path="$1"
 	printf '%s' "$_LIBRARIAN_CONFIG" | jq -r "${path} // empty" 2>/dev/null
-}
-
-# Returns 0 if librarian.enabled is true, 1 otherwise.
-librarian_config_enabled() {
-	local v
-	v=$(librarian_config_get '.librarian.enabled')
-	[[ "$v" == "true" ]]
 }
 
 # Returns 0 if librarian.auto_promote is true, 1 otherwise.

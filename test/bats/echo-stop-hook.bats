@@ -26,14 +26,6 @@ _make_input() {
 	jq -n --arg cwd "$cwd" --arg sid "$sid" '{cwd: $cwd, session_id: $sid}'
 }
 
-@test "hook exits 0 silently when echo.enabled is false (default)" {
-	local input
-	input=$(_make_input)
-	run bash -c "printf '%s' '$input' | ONLOOKER_DIR='$ONLOOKER_DIR' '$HOOK'"
-	[ "$status" -eq 0 ]
-	[ -z "$output" ]
-}
-
 @test "hook exits 0 when cwd is not a git repo" {
 	local non_repo="${BATS_TEST_TMPDIR}/not-a-repo"
 	mkdir -p "$non_repo"
@@ -43,9 +35,7 @@ _make_input() {
 	[ "$status" -eq 0 ]
 }
 
-@test "hook exits 0 when enabled but no watched files changed" {
-	mkdir -p "${REPO}/.claude"
-	printf '%s\n' '{"echo":{"enabled":true}}' > "${REPO}/.claude/settings.json"
+@test "hook exits 0 when no watched files changed" {
 	local input
 	input=$(_make_input)
 	run bash -c "printf '%s' '$input' | ONLOOKER_DIR='$ONLOOKER_DIR' '$HOOK'"
@@ -54,8 +44,6 @@ _make_input() {
 }
 
 @test "recursion guard: ECHO_NESTED=1 causes immediate exit 0" {
-	mkdir -p "${REPO}/.claude"
-	printf '%s\n' '{"echo":{"enabled":true}}' > "${REPO}/.claude/settings.json"
 	local input
 	input=$(_make_input)
 	# Export ECHO_NESTED into the subshell that runs the hook.
@@ -74,7 +62,7 @@ _make_input() {
 
 @test "untracked watched file is detected when enabled and claude missing" {
 	mkdir -p "${REPO}/.claude" "${REPO}/plugins/myplugin/agents"
-	printf '%s\n' '{"echo":{"enabled":true,"watch_paths":["plugins/*/agents/*.md"]}}' \
+	printf '%s\n' '{"echo":{"watch_paths":["plugins/*/agents/*.md"]}}' \
 		> "${REPO}/.claude/settings.json"
 	printf '%s\n' '# New agent' > "${REPO}/plugins/myplugin/agents/new-agent.md"
 	local input
@@ -88,7 +76,7 @@ _make_input() {
 
 @test "files under plugins/echo are excluded even if they match watch_paths" {
 	mkdir -p "${REPO}/.claude" "${REPO}/plugins/echo/agents"
-	printf '%s\n' '{"echo":{"enabled":true,"watch_paths":["plugins/*/agents/*.md"]}}' \
+	printf '%s\n' '{"echo":{"watch_paths":["plugins/*/agents/*.md"]}}' \
 		> "${REPO}/.claude/settings.json"
 	printf '%s\n' '# Echo self' > "${REPO}/plugins/echo/agents/self.md"
 	local input

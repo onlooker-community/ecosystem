@@ -10,7 +10,6 @@
 #   tribunal_config_load <repo_root>       # populates _TRIBUNAL_CONFIG (JSON)
 #   tribunal_config_get <jq-path>          # echoes string value (empty if unset)
 #   tribunal_config_get_json <jq-path>     # echoes JSON value (null if unset)
-#   tribunal_config_enabled                # 0 if tribunal.enabled is true
 #   tribunal_config_stop_hook_enabled      # 0 if tribunal.stop_hook.enabled is true
 #   tribunal_config_judge_model <judge_type>
 #                                          # echoes per-judge-type model override,
@@ -71,13 +70,6 @@ tribunal_config_get() {
 tribunal_config_get_json() {
 	local path="$1"
 	printf '%s' "$_TRIBUNAL_CONFIG" | jq -c "${path}" 2>/dev/null
-}
-
-# Returns 0 if tribunal.enabled is true.
-tribunal_config_enabled() {
-	local v
-	v=$(tribunal_config_get '.tribunal.enabled')
-	[[ "$v" == "true" ]]
 }
 
 # Returns 0 if tribunal.stop_hook.enabled is true. Default is false.

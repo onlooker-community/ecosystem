@@ -2,7 +2,6 @@
   "plugin_name": "historian",
   "storage_path": "~/.onlooker",
   "historian": {
-    "enabled": false,
     "indexing": {
       "trigger": "SessionEnd",
       "min_transcript_chars_to_index": 1200,

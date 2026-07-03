@@ -24,8 +24,7 @@ setup() {
 }
 
 _enable() {
-	mkdir -p "${HOME}/.claude"
-	printf '%s\n' '{"lineage":{"enabled":true}}' > "${HOME}/.claude/settings.json"
+	:
 }
 
 _ledger() { printf '%s/lineage/%s/changes.jsonl' "$ONLOOKER_DIR" "$KEY"; }
@@ -77,11 +76,6 @@ _run() {
 	[ "$(jq -rs '.[0].turn' "$(_ledger)")" = "7" ]
 }
 
-@test "writes nothing when lineage is disabled" {
-	_run Edit "${REPO}/foo.py" "$(jq -nc --arg f "${REPO}/foo.py" '{file_path:$f, old_string:"a", new_string:"b"}')"
-	[ "$status" -eq 0 ]
-	[ ! -d "${ONLOOKER_DIR}/lineage" ]
-}
 
 @test "skips paths matching ignore_globs" {
 	_enable

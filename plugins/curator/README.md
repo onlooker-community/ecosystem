@@ -16,17 +16,7 @@ Curator is a sibling plugin to [`ecosystem`](../../) and assumes the Onlooker ob
 
 ## Activation
 
-Curator is **off by default**. Enable per-project in `.claude/settings.json`:
-
-```json
-{
-  "curator": {
-    "enabled": true
-  }
-}
-```
-
-Or globally in `~/.claude/settings.json`. See [`config.json`](config.json) for the full set of tunable defaults.
+Install Curator with `/plugin install curator@onlooker-community` — installing the plugin enables it. See [`config.json`](config.json) for the full set of tunable defaults.
 
 ## Storage layout
 

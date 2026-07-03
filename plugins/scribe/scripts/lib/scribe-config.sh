@@ -10,7 +10,6 @@
 #   scribe_config_load <repo_root>     # populates _SCRIBE_CONFIG (JSON)
 #   scribe_config_get <jq-path>        # echoes string value (empty if unset)
 #   scribe_config_get_json <jq-path>   # echoes JSON value (null if unset)
-#   scribe_config_enabled              # 0 if scribe.enabled is true
 
 _SCRIBE_CONFIG="{}"
 
@@ -63,10 +62,4 @@ scribe_config_get() {
 scribe_config_get_json() {
 	local path="$1"
 	printf '%s' "$_SCRIBE_CONFIG" | jq -c "${path}" 2>/dev/null
-}
-
-scribe_config_enabled() {
-	local v
-	v=$(scribe_config_get '.scribe.enabled')
-	[[ "$v" == "true" ]]
 }

@@ -2,14 +2,13 @@
 # Bursar SessionStart hook.
 #
 # Fires at every session start. Responsibilities:
-#   1. Skip silently when bursar.enabled is false.
-#   2. Derive the project key from the session cwd and stash a breadcrumb
+#   1. Derive the project key from the session cwd and stash a breadcrumb
 #      (project_key + cwd) so SessionEnd can attribute spend even though the
 #      SessionEnd payload only reliably carries session_id.
-#   3. Surface "this project burned $X this week" by summing the per-project
+#   2. Surface "this project burned $X this week" by summing the per-project
 #      ledger over the configured window and emitting it as SessionStart
 #      additionalContext.
-#   4. Emit bursar.rollup.surfaced (or bursar.rollup.skipped) for audit.
+#   3. Emit bursar.rollup.surfaced (or bursar.rollup.skipped) for audit.
 #
 # Hook contract:
 #   - Always exits 0. Never blocks SessionStart.
@@ -39,7 +38,6 @@ CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 _done() { exit 0; }
 
 bursar_config_load "$CWD"
-bursar_config_enabled || _done
 
 [[ -z "$CWD" ]] && CWD="$(pwd)"
 PROJECT_KEY=$(bursar_project_key "$CWD")

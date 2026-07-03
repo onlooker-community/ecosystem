@@ -2,7 +2,6 @@
   "plugin_name": "warden",
   "storage_path": "~/.onlooker",
   "warden": {
-    "enabled": false,
     "scan": {
       "sources": ["web_fetch", "file_read"],
       "max_content_chars": 20000,

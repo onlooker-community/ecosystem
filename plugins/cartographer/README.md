@@ -21,17 +21,11 @@ Cartographer is part of the Onlooker ecosystem monorepo. It requires the ecosyst
 
 ## Activation
 
-Cartographer is **disabled by default**. Enable it per-project in `.claude/settings.json`:
+Install Cartographer from the marketplace and it runs automatically:
 
-```json
-{
-  "cartographer": {
-    "enabled": true
-  }
-}
 ```
-
-Or globally in `~/.claude/settings.json` to audit all projects.
+/plugin install cartographer@onlooker-community
+```
 
 ## Usage
 
@@ -59,7 +53,6 @@ All options are optional. Defaults shown:
 ```json
 {
   "cartographer": {
-    "enabled": false,
     "audit_interval_hours": 24,
     "phase_timeout_seconds": 60,
     "total_timeout_seconds": 600,

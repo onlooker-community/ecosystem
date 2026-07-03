@@ -48,7 +48,6 @@ esac
 [[ -z "$CWD" ]] && CWD="$(pwd)"
 REPO_ROOT=$(lineage_project_repo_root "$CWD")
 lineage_config_load "$REPO_ROOT"
-lineage_config_enabled || _done
 
 PROJECT_KEY=$(lineage_project_key "$CWD")
 [[ -z "$PROJECT_KEY" ]] && _done
