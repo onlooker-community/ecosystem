@@ -275,7 +275,13 @@ for ((i = 0; i < KEPT_COUNT; i++)); do
 	[[ -z "$MERGE_THRESHOLD" || "$MERGE_THRESHOLD" == "null" ]] && MERGE_THRESHOLD="0.45"
 
 	CONFLICT_RESULT=$(librarian_conflict_scan "$TEMP_PROPOSAL" "$MEMORY_STORE_PATH" \
-		"$DUP_THRESHOLD" "$MERGE_THRESHOLD")
+		"$DUP_THRESHOLD" "$MERGE_THRESHOLD" 2>/dev/null)
+
+	# Ensure we have valid JSON; fall back to "none" if scan fails.
+	if [[ -z "$CONFLICT_RESULT" ]] || ! printf '%s' "$CONFLICT_RESULT" | jq -e '.' >/dev/null 2>&1; then
+		CONFLICT_RESULT='{"conflict_state":"none","conflict_with":[]}'
+	fi
+
 	CONFLICT_STATE=$(printf '%s' "$CONFLICT_RESULT" | jq -r '.conflict_state // "none"')
 	CONFLICT_WITH=$(printf '%s' "$CONFLICT_RESULT" | jq -c '.conflict_with // []')
 
