@@ -8,7 +8,7 @@ Compass plugin emits three event types that are **not registered** in the `@onlo
 - `compass.check.failed` — alignment check failed; write blocked
 - `compass.check.skipped` — check gate matched; write proceeds unverified
 
-These events are documented in `plugins/compass/README.md` and implemented in `plugins/compass/scripts/lib/compass-gate.sh`, but they are missing from the schema's event_type enum at https://schema.onlooker.dev/schemas/event.v1.json.
+These events are documented in `plugins/compass/README.md` and implemented in `plugins/compass/scripts/lib/compass-gate.sh`, but they are missing from the schema's event_type enum at <https://schema.onlooker.dev/schemas/event.v1.json>.
 
 ## Current Behavior
 
