@@ -26,6 +26,12 @@ _assayer_event_js_path() {
 			return 0
 		}
 	done
+	# Glob-discover the ecosystem plugin under the shared plugin cache parent;
+	# works regardless of which ecosystem version is installed.
+	local mjs
+	for mjs in "${plugin_root}/../../ecosystem/"*/scripts/lib/onlooker-event.mjs; do
+		[[ -f "$mjs" ]] && { printf '%s' "$mjs"; return 0; }
+	done
 	return 1
 }
 

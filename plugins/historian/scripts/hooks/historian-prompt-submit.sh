@@ -38,6 +38,16 @@ if [[ -z "$_ECOSYSTEM_ROOT" ]]; then
 		_ECOSYSTEM_ROOT="$_candidate"
 	fi
 fi
+# Glob-discover the ecosystem plugin under the shared plugin cache parent;
+# works regardless of which ecosystem version is installed.
+if [[ -z "$_ECOSYSTEM_ROOT" ]]; then
+	for _candidate in "${PLUGIN_ROOT}/../../ecosystem/"*/scripts/lib/validate-path.sh; do
+		if [[ -f "$_candidate" ]]; then
+			_ECOSYSTEM_ROOT="$(cd "$(dirname "$(dirname "$_candidate")")" && pwd)"
+			break
+		fi
+	done
+fi
 if [[ -n "$_ECOSYSTEM_ROOT" && -f "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.sh" ]]; then
 	# shellcheck disable=SC1091
 	CLAUDE_PLUGIN_ROOT="$_ECOSYSTEM_ROOT" source "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.sh"

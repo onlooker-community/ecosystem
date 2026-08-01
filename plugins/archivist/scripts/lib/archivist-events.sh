@@ -25,6 +25,12 @@ _archivist_event_js_path() {
 	for c in "${candidates[@]}"; do
 		[[ -f "$c" ]] && { printf '%s' "$c"; return 0; }
 	done
+	# Glob-discover the ecosystem plugin under the shared plugin cache parent;
+	# works regardless of which ecosystem version is installed.
+	local mjs
+	for mjs in "${plugin_root}/../../ecosystem/"*/scripts/lib/onlooker-event.mjs; do
+		[[ -f "$mjs" ]] && { printf '%s' "$mjs"; return 0; }
+	done
 	return 1
 }
 
