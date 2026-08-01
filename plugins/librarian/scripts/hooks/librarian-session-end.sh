@@ -57,6 +57,8 @@ source "${PLUGIN_ROOT}/scripts/lib/librarian-archivist-reader.sh"
 source "${PLUGIN_ROOT}/scripts/lib/librarian-durability.sh"
 # shellcheck source=../lib/librarian-classifier.sh
 source "${PLUGIN_ROOT}/scripts/lib/librarian-classifier.sh"
+# shellcheck source=../lib/librarian-conflict-detector.sh
+source "${PLUGIN_ROOT}/scripts/lib/librarian-conflict-detector.sh"
 
 INPUT=$(cat 2>/dev/null || true)
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
@@ -232,13 +234,61 @@ for ((i = 0; i < KEPT_COUNT; i++)); do
 		continue
 	fi
 
-	# Build and persist the proposal. Conflict detection against the user's
-	# memory store is deferred to a follow-up commit; everything ships as
-	# conflict_state: "none" for now.
+	# Build and persist the proposal. Detect conflicts against the user's
+	# memory store before writing.
 	PROPOSAL_ID=$(librarian_ulid)
 	FILENAME=$(librarian_classifier_filename "$MEMORY_TYPE" "$TITLE")
 	ARTIFACT_ID=$(printf '%s' "$ARTIFACT" | jq -r '.id // ""')
 	ARTIFACT_SESSION=$(printf '%s' "$ARTIFACT" | jq -r '.session_id // ""')
+
+	# Resolve the typed memory store path for this project.
+	MEMORY_STORE_PATH=$(librarian_config_get '.librarian.memory_store_path')
+	[[ -z "$MEMORY_STORE_PATH" || "$MEMORY_STORE_PATH" == "null" ]] && \
+		MEMORY_STORE_PATH='${HOME}/.claude/projects/${CLAUDE_PROJECT_ENCODED}/memory'
+
+	# Expand env vars in the path.
+	MEMORY_STORE_PATH=$(eval echo "$MEMORY_STORE_PATH")
+
+	# Build a temporary proposal for conflict detection.
+	TEMP_PROPOSAL=$(jq -n \
+		--arg id "$PROPOSAL_ID" \
+		--arg memory_type "$MEMORY_TYPE" \
+		--arg filename "$FILENAME" \
+		--arg title "$TITLE" \
+		--arg body "$BODY" \
+		--argjson classifier_confidence "$CONFIDENCE" \
+		'{
+			id: $id,
+			proposed: {
+				type: $memory_type,
+				filename: $filename,
+				title: $title,
+				body: $body,
+				classifier_confidence: $classifier_confidence
+			}
+		}')
+
+	# Detect conflicts against existing memories.
+	DUP_THRESHOLD=$(librarian_config_get '.librarian.conflict.duplicate_threshold')
+	[[ -z "$DUP_THRESHOLD" || "$DUP_THRESHOLD" == "null" ]] && DUP_THRESHOLD="0.7"
+	MERGE_THRESHOLD=$(librarian_config_get '.librarian.conflict.merge_candidate_threshold')
+	[[ -z "$MERGE_THRESHOLD" || "$MERGE_THRESHOLD" == "null" ]] && MERGE_THRESHOLD="0.45"
+
+	CONFLICT_RESULT=$(librarian_conflict_scan "$TEMP_PROPOSAL" "$MEMORY_STORE_PATH" \
+		"$DUP_THRESHOLD" "$MERGE_THRESHOLD")
+	CONFLICT_STATE=$(printf '%s' "$CONFLICT_RESULT" | jq -r '.conflict_state // "none"')
+	CONFLICT_WITH=$(printf '%s' "$CONFLICT_RESULT" | jq -c '.conflict_with // []')
+
+	# Silently drop duplicates — no proposal written.
+	if [[ "$CONFLICT_STATE" == "duplicate" ]]; then
+		POST_CLASSIFIER_DROPPED=$((POST_CLASSIFIER_DROPPED + 1))
+		librarian_emit "librarian.candidate.dropped" "$SESSION_ID" "$(jq -cn \
+			--arg reason "duplicate" \
+			--arg src "$ARTIFACT_ID" \
+			'{ reason: $reason, source_artifact_id: (if $src == "" then null else $src end) }
+			 | with_entries(select(.value != null))')"
+		continue
+	fi
 
 	PROPOSAL_JSON=$(jq -n \
 		--arg id "$PROPOSAL_ID" \
@@ -248,7 +298,8 @@ for ((i = 0; i < KEPT_COUNT; i++)); do
 		--arg title "$TITLE" \
 		--arg body "$BODY" \
 		--argjson classifier_confidence "$CONFIDENCE" \
-		--arg conflict_state "none" \
+		--arg conflict_state "$CONFLICT_STATE" \
+		--argjson conflict_with "$CONFLICT_WITH" \
 		--arg artifact_id "$ARTIFACT_ID" \
 		--arg artifact_session "$ARTIFACT_SESSION" \
 		'{
@@ -264,7 +315,7 @@ for ((i = 0; i < KEPT_COUNT; i++)); do
 				classifier_confidence: $classifier_confidence
 			},
 			conflict_state: $conflict_state,
-			conflict_with: [],
+			conflict_with: $conflict_with,
 			status: "pending"
 		}')
 
@@ -314,13 +365,15 @@ for ((i = 0; i < KEPT_COUNT; i++)); do
 		--arg proposal_id "$PROPOSAL_ID" \
 		--arg memory_type "$MEMORY_TYPE" \
 		--argjson classifier_confidence "$CONFIDENCE" \
-		--arg conflict_state "none" \
+		--arg conflict_state "$CONFLICT_STATE" \
+		--argjson conflict_with "$CONFLICT_WITH" \
 		--arg src "$ARTIFACT_ID" \
 		'{
 			proposal_id: $proposal_id,
 			memory_type: $memory_type,
 			classifier_confidence: $classifier_confidence,
 			conflict_state: $conflict_state,
+			conflict_with: $conflict_with,
 			source_artifact_ids: (if $src == "" then [] else [$src] end)
 		}')"
 done
