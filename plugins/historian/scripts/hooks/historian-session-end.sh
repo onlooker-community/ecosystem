@@ -37,7 +37,8 @@ if [[ -z "$_ECOSYSTEM_ROOT" ]]; then
 fi
 if [[ -n "$_ECOSYSTEM_ROOT" && -f "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.sh" ]]; then
 	# shellcheck disable=SC1091
-	CLAUDE_PLUGIN_ROOT="$_ECOSYSTEM_ROOT" source "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.sh"
+	export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
+	source "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.sh"
 fi
 
 # shellcheck source=../lib/historian-config.sh
