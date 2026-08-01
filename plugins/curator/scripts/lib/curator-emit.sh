@@ -16,6 +16,16 @@ _curator_resolve_event_js() {
 			ecosystem_root="$candidate"
 		fi
 	fi
+	# Glob-discover the ecosystem plugin under the shared plugin cache parent;
+	# works regardless of which ecosystem version is installed.
+	if [[ -z "$ecosystem_root" ]]; then
+		for candidate in "${plugin_root}/../../ecosystem/"*/scripts/lib/onlooker-event.mjs; do
+			if [[ -f "$candidate" ]]; then
+				ecosystem_root="$(cd "$(dirname "$(dirname "$candidate")")" && pwd)"
+				break
+			fi
+		done
+	fi
 
 	if [[ -n "$ecosystem_root" ]]; then
 		printf '%s/scripts/lib/onlooker-event.mjs' "$ecosystem_root"
