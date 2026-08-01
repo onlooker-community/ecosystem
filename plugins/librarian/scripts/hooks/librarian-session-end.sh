@@ -249,51 +249,58 @@ for ((i = 0; i < KEPT_COUNT; i++)); do
 	# Expand env vars in the path.
 	MEMORY_STORE_PATH=$(eval echo "$MEMORY_STORE_PATH")
 
-	# Build a temporary proposal for conflict detection.
-	TEMP_PROPOSAL=$(jq -n \
-		--arg id "$PROPOSAL_ID" \
-		--arg memory_type "$MEMORY_TYPE" \
-		--arg filename "$FILENAME" \
-		--arg title "$TITLE" \
-		--arg body "$BODY" \
-		--argjson classifier_confidence "$CONFIDENCE" \
-		'{
-			id: $id,
-			proposed: {
-				type: $memory_type,
-				filename: $filename,
-				title: $title,
-				body: $body,
-				classifier_confidence: $classifier_confidence
-			}
-		}')
+	# Initialize conflict state; will scan if memory dir exists.
+	CONFLICT_STATE="none"
+	CONFLICT_WITH="[]"
 
-	# Detect conflicts against existing memories.
-	DUP_THRESHOLD=$(librarian_config_get '.librarian.conflict.duplicate_threshold')
-	[[ -z "$DUP_THRESHOLD" || "$DUP_THRESHOLD" == "null" ]] && DUP_THRESHOLD="0.7"
-	MERGE_THRESHOLD=$(librarian_config_get '.librarian.conflict.merge_candidate_threshold')
-	[[ -z "$MERGE_THRESHOLD" || "$MERGE_THRESHOLD" == "null" ]] && MERGE_THRESHOLD="0.45"
+	# Detect conflicts against existing memories only if the directory exists.
+	if [[ -d "$MEMORY_STORE_PATH" ]]; then
+		# Build a temporary proposal for conflict detection.
+		TEMP_PROPOSAL=$(jq -n \
+			--arg id "$PROPOSAL_ID" \
+			--arg memory_type "$MEMORY_TYPE" \
+			--arg filename "$FILENAME" \
+			--arg title "$TITLE" \
+			--arg body "$BODY" \
+			--argjson classifier_confidence "$CONFIDENCE" \
+			'{
+				id: $id,
+				proposed: {
+					type: $memory_type,
+					filename: $filename,
+					title: $title,
+					body: $body,
+					classifier_confidence: $classifier_confidence
+				}
+			}')
 
-	CONFLICT_RESULT=$(librarian_conflict_scan "$TEMP_PROPOSAL" "$MEMORY_STORE_PATH" \
-		"$DUP_THRESHOLD" "$MERGE_THRESHOLD" 2>/dev/null)
+		# Detect conflicts against existing memories.
+		DUP_THRESHOLD=$(librarian_config_get '.librarian.conflict.duplicate_threshold')
+		[[ -z "$DUP_THRESHOLD" || "$DUP_THRESHOLD" == "null" ]] && DUP_THRESHOLD="0.7"
+		MERGE_THRESHOLD=$(librarian_config_get '.librarian.conflict.merge_candidate_threshold')
+		[[ -z "$MERGE_THRESHOLD" || "$MERGE_THRESHOLD" == "null" ]] && MERGE_THRESHOLD="0.45"
 
-	# Ensure we have valid JSON; fall back to "none" if scan fails.
-	if [[ -z "$CONFLICT_RESULT" ]] || ! printf '%s' "$CONFLICT_RESULT" | jq -e '.' >/dev/null 2>&1; then
-		CONFLICT_RESULT='{"conflict_state":"none","conflict_with":[]}'
-	fi
+		CONFLICT_RESULT=$(librarian_conflict_scan "$TEMP_PROPOSAL" "$MEMORY_STORE_PATH" \
+			"$DUP_THRESHOLD" "$MERGE_THRESHOLD" 2>/dev/null) || CONFLICT_RESULT=""
 
-	CONFLICT_STATE=$(printf '%s' "$CONFLICT_RESULT" | jq -r '.conflict_state // "none"')
-	CONFLICT_WITH=$(printf '%s' "$CONFLICT_RESULT" | jq -c '.conflict_with // []')
+		# Ensure we have valid JSON; fall back to "none" if scan fails.
+		if [[ -z "$CONFLICT_RESULT" ]] || ! printf '%s' "$CONFLICT_RESULT" | jq -e '.' >/dev/null 2>&1; then
+			CONFLICT_RESULT='{"conflict_state":"none","conflict_with":[]}'
+		fi
 
-	# Silently drop duplicates — no proposal written.
-	if [[ "$CONFLICT_STATE" == "duplicate" ]]; then
-		POST_CLASSIFIER_DROPPED=$((POST_CLASSIFIER_DROPPED + 1))
-		librarian_emit "librarian.candidate.dropped" "$SESSION_ID" "$(jq -cn \
-			--arg reason "duplicate" \
-			--arg src "$ARTIFACT_ID" \
-			'{ reason: $reason, source_artifact_id: (if $src == "" then null else $src end) }
-			 | with_entries(select(.value != null))')"
-		continue
+		CONFLICT_STATE=$(printf '%s' "$CONFLICT_RESULT" | jq -r '.conflict_state // "none"' 2>/dev/null) || CONFLICT_STATE="none"
+		CONFLICT_WITH=$(printf '%s' "$CONFLICT_RESULT" | jq -c '.conflict_with // []' 2>/dev/null) || CONFLICT_WITH="[]"
+
+		# Silently drop duplicates — no proposal written.
+		if [[ "$CONFLICT_STATE" == "duplicate" ]]; then
+			POST_CLASSIFIER_DROPPED=$((POST_CLASSIFIER_DROPPED + 1))
+			librarian_emit "librarian.candidate.dropped" "$SESSION_ID" "$(jq -cn \
+				--arg reason "duplicate" \
+				--arg src "$ARTIFACT_ID" \
+				'{ reason: $reason, source_artifact_id: (if $src == "" then null else $src end) }
+				 | with_entries(select(.value != null))')"
+			continue
+		fi
 	fi
 
 	PROPOSAL_JSON=$(jq -n \
@@ -372,14 +379,12 @@ for ((i = 0; i < KEPT_COUNT; i++)); do
 		--arg memory_type "$MEMORY_TYPE" \
 		--argjson classifier_confidence "$CONFIDENCE" \
 		--arg conflict_state "$CONFLICT_STATE" \
-		--argjson conflict_with "$CONFLICT_WITH" \
 		--arg src "$ARTIFACT_ID" \
 		'{
 			proposal_id: $proposal_id,
 			memory_type: $memory_type,
 			classifier_confidence: $classifier_confidence,
 			conflict_state: $conflict_state,
-			conflict_with: $conflict_with,
 			source_artifact_ids: (if $src == "" then [] else [$src] end)
 		}')"
 done
