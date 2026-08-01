@@ -33,10 +33,10 @@ _librarian_conflict_jaccard() {
 
 	[[ -z "$tokens1" || -z "$tokens2" ]] && { printf '0'; return; }
 
-	python3 << 'PYTHON'
-import sys
-tokens1 = set(sys.argv[1].split())
-tokens2 = set(sys.argv[2].split())
+	TOKENS1="$tokens1" TOKENS2="$tokens2" python3 -c '
+import os
+tokens1 = set(os.environ.get("TOKENS1", "").split())
+tokens2 = set(os.environ.get("TOKENS2", "").split())
 if not tokens1 and not tokens2:
     print(0)
 else:
@@ -44,7 +44,7 @@ else:
     union = len(tokens1 | tokens2)
     similarity = intersection / union if union > 0 else 0
     print(f"{similarity:.2f}")
-PYTHON
+'
 }
 
 # Check for opposing sentiment markers (do/don't, always/never, etc.).
