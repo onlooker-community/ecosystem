@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.0](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.5.0...librarian-v0.6.0) (2026-08-02)
+
+
+### Features
+
+* **librarian:** implement conflict detection for memory promotion scanning ([#115](https://github.com/onlooker-community/ecosystem/issues/115)) ([8699577](https://github.com/onlooker-community/ecosystem/commit/86995773cb44127d915b5aea53aed66c771d8bfb))
+
+
+### Bug Fixes
+
+* librarian conflict detection + bursar rollup lock timeout ([#117](https://github.com/onlooker-community/ecosystem/issues/117)) ([16180a2](https://github.com/onlooker-community/ecosystem/commit/16180a210a6f0561c09b77a2b102849f63f1e730))
+
 ## [0.5.0](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.4.1...librarian-v0.5.0) (2026-08-02)
 
 

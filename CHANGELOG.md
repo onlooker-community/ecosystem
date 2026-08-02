@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.32.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.32.0...ecosystem-v0.32.1) (2026-08-02)
+
+
+### Bug Fixes
+
+* librarian conflict detection + bursar rollup lock timeout ([#117](https://github.com/onlooker-community/ecosystem/issues/117)) ([16180a2](https://github.com/onlooker-community/ecosystem/commit/16180a210a6f0561c09b77a2b102849f63f1e730))
+
 ## [0.32.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.31.2...ecosystem-v0.32.0) (2026-08-02)
 
 
