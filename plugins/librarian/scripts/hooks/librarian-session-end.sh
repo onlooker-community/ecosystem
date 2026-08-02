@@ -60,6 +60,17 @@ source "${PLUGIN_ROOT}/scripts/lib/librarian-classifier.sh"
 # shellcheck source=../lib/librarian-conflict-detector.sh
 source "${PLUGIN_ROOT}/scripts/lib/librarian-conflict-detector.sh"
 
+librarian_now_ms() {
+	local now_ms
+	now_ms=$(python3 - <<'PY' 2>/dev/null
+import time
+print(int(time.time() * 1000))
+PY
+	) || now_ms=""
+	[[ -z "$now_ms" ]] && now_ms=$(( $(date +%s) * 1000 ))
+	printf '%s' "$now_ms"
+}
+
 INPUT=$(cat 2>/dev/null || true)
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SESSION_ID=""
@@ -98,7 +109,7 @@ fi
 # Emit scan.started and load candidate window.
 # ----------------------------------------------------------------------------
 
-SCAN_START_TS_S=$(date +%s)
+SCAN_START_TS_MS=$(librarian_now_ms)
 ARTIFACTS=$(librarian_archivist_load_since "$PROJECT_KEY" "$WATERMARK")
 ARTIFACT_COUNT=$(printf '%s' "$ARTIFACTS" | jq 'length' 2>/dev/null) || ARTIFACT_COUNT=0
 
@@ -114,7 +125,7 @@ librarian_emit "librarian.scan.started" "$SESSION_ID" "$(jq -cn \
 # don't re-walk the same window.
 if [[ "$ARTIFACT_COUNT" == "0" ]]; then
 	librarian_storage_write_last_scan "$PROJECT_KEY" || true
-	DURATION_MS=$(( ($(date +%s) - SCAN_START_TS_S) * 1000 ))
+	DURATION_MS=$(( $(librarian_now_ms) - SCAN_START_TS_MS ))
 	librarian_emit "librarian.scan.complete" "$SESSION_ID" "$(jq -cn \
 		--arg outcome "empty" \
 		--argjson duration_ms "$DURATION_MS" \
@@ -154,6 +165,30 @@ for ((i = 0; i < DROPPED_EMIT_COUNT; i++)); do
 		'{ reason: $drop.reason, source_artifact_id: $drop.artifact_id }
 		 | with_entries(select(.value != null))')"
 done
+
+# ----------------------------------------------------------------------------
+# Runtime budget check: SessionEnd has 1.5s total. If we're running low on time,
+# skip classification to ensure scan.complete can be emitted before CLI timeout.
+# Retained artifacts will be re-scanned on the next session when time permits.
+# ----------------------------------------------------------------------------
+
+ELAPSED_MS=$(( $(librarian_now_ms) - SCAN_START_TS_MS ))
+BUDGET_THRESHOLD_MS=1000
+if [[ "$ELAPSED_MS" -ge "$BUDGET_THRESHOLD_MS" ]]; then
+	librarian_storage_write_last_scan "$PROJECT_KEY" || true
+	DURATION_MS=$(( $(librarian_now_ms) - SCAN_START_TS_MS ))
+	librarian_emit "librarian.scan.complete" "$SESSION_ID" "$(jq -cn \
+		--arg outcome "budget_exceeded" \
+		--argjson duration_ms "$DURATION_MS" \
+		--argjson candidates_proposed 0 \
+		--argjson candidates_dropped "$DROPPED_TOTAL" \
+		--argjson artifact_count_in_window "$ARTIFACT_COUNT" \
+		'{ outcome: $outcome, duration_ms: $duration_ms,
+		   candidates_proposed: $candidates_proposed,
+		   candidates_dropped: $candidates_dropped,
+		   artifact_count_in_window: $artifact_count_in_window }')"
+	exit 0
+fi
 
 # ----------------------------------------------------------------------------
 # Classifier loop — one Haiku call per surviving candidate.
@@ -398,7 +433,7 @@ librarian_storage_write_last_scan "$PROJECT_KEY" || true
 TOTAL_DROPPED=$((DROPPED_TOTAL + POST_CLASSIFIER_DROPPED))
 OUTCOME="ok"
 [[ "$PROPOSED_COUNT" == "0" ]] && OUTCOME="empty"
-DURATION_MS=$(( ($(date +%s) - SCAN_START_TS_S) * 1000 ))
+DURATION_MS=$(( $(librarian_now_ms) - SCAN_START_TS_MS ))
 
 librarian_emit "librarian.scan.complete" "$SESSION_ID" "$(jq -cn \
 	--arg outcome "$OUTCOME" \
