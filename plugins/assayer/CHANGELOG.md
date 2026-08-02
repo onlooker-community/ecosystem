@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2](https://github.com/onlooker-community/ecosystem/compare/assayer-v1.1.1...assayer-v1.1.2) (2026-08-02)
+
+
+### Bug Fixes
+
+* restore config convenience functions & refactor execution plugins to shared loader ([#128](https://github.com/onlooker-community/ecosystem/issues/128)) ([4b3660c](https://github.com/onlooker-community/ecosystem/commit/4b3660c5a8b234187ec1e71c37b63e6a3d305c98))
+
 ## [1.1.1](https://github.com/onlooker-community/ecosystem/compare/assayer-v1.1.0...assayer-v1.1.1) (2026-08-01)
 
 
