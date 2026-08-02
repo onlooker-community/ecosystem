@@ -126,10 +126,10 @@ _governor_ledger_poison() {
 
 # Running total of tokens for a session.
 #
-# Sums only completion records (record_type: "completion"), excluding
-# reservations. This models projected spend: each completed spawn contributes
-# its estimated_tokens once. When actual_tokens are available (from API usage
-# metrics), they replace the estimates.
+# Sums all ledger records:
+#   - reservation records (in-flight projected spend)
+#   - completion records (which may cancel reservations and add actual_tokens)
+#   - legacy records with no record_type
 #
 # Usage: tokens=$(governor_ledger_total_tokens "$session_id")
 governor_ledger_total_tokens() {
@@ -139,11 +139,11 @@ governor_ledger_total_tokens() {
 
 	[[ -f "$ledger_path" ]] || { printf '0'; return 0; }
 
-	jq -s '[.[] | select(.record_type == "completion" or .record_type == nil) | ((.estimated_tokens // 0) + (.actual_tokens // 0))] | add // 0' \
+	jq -s '[.[] | ((.estimated_tokens // 0) + (.actual_tokens // 0))] | add // 0' \
 		"$ledger_path" 2>/dev/null || printf '0'
 }
 
-# Running total of cost for a session (same logic as tokens: completion records only).
+# Running total of cost for a session (same logic as tokens: all records).
 # Usage: cost=$(governor_ledger_total_cost "$session_id")
 governor_ledger_total_cost() {
 	local session_id="${1:-}"
@@ -152,11 +152,11 @@ governor_ledger_total_cost() {
 
 	[[ -f "$ledger_path" ]] || { printf '0'; return 0; }
 
-	jq -s '[.[] | select(.record_type == "completion" or .record_type == nil) | ((.cost_usd_estimated // 0) + (.cost_usd_actual // 0))] | add // 0' \
+	jq -s '[.[] | ((.cost_usd_estimated // 0) + (.cost_usd_actual // 0))] | add // 0' \
 		"$ledger_path" 2>/dev/null || printf '0'
 }
 
-# Count completed Task calls (completion records only, excludes reservations).
+# Count Task calls, excluding reservation records.
 # Usage: calls=$(governor_ledger_call_count "$session_id")
 governor_ledger_call_count() {
 	local session_id="${1:-}"
@@ -165,6 +165,6 @@ governor_ledger_call_count() {
 
 	[[ -f "$ledger_path" ]] || { printf '0'; return 0; }
 
-	jq -s '[.[] | select(.agent_type == "Task" and (.record_type == "completion" or .record_type == nil))] | length' \
+	jq -s '[.[] | select(.agent_type == "Task" and .record_type != "reservation")] | length' \
 		"$ledger_path" 2>/dev/null || printf '0'
 }
