@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/onlooker-community/ecosystem/compare/bursar-v0.2.1...bursar-v0.2.2) (2026-08-02)
+
+
+### Bug Fixes
+
+* librarian conflict detection + bursar rollup lock timeout ([#117](https://github.com/onlooker-community/ecosystem/issues/117)) ([16180a2](https://github.com/onlooker-community/ecosystem/commit/16180a210a6f0561c09b77a2b102849f63f1e730))
+
 ## [0.2.1](https://github.com/onlooker-community/ecosystem/compare/bursar-v0.2.0...bursar-v0.2.1) (2026-08-01)
 
 
