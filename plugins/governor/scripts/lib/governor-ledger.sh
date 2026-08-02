@@ -126,12 +126,10 @@ _governor_ledger_poison() {
 
 # Running total of tokens for a session.
 #
-# Uses the two-phase model: each record contributes
-#   .estimated_tokens + (.actual_tokens // 0)
-#
-# In-flight reservations:  estimated_tokens > 0, no actual_tokens → counts N_est
-# Completed Task records:  estimated_tokens = -N_est, actual_tokens = N_act → counts N_act
-# Net: in-flight estimates + completed actuals.
+# Sums all ledger records:
+#   - reservation records (in-flight projected spend)
+#   - completion records (which may cancel reservations and add actual_tokens)
+#   - legacy records with no record_type
 #
 # Usage: tokens=$(governor_ledger_total_tokens "$session_id")
 governor_ledger_total_tokens() {
@@ -145,7 +143,7 @@ governor_ledger_total_tokens() {
 		"$ledger_path" 2>/dev/null || printf '0'
 }
 
-# Running total of cost for a session (same two-phase logic as tokens).
+# Running total of cost for a session (same logic as tokens: all records).
 # Usage: cost=$(governor_ledger_total_cost "$session_id")
 governor_ledger_total_cost() {
 	local session_id="${1:-}"
@@ -158,7 +156,7 @@ governor_ledger_total_cost() {
 		"$ledger_path" 2>/dev/null || printf '0'
 }
 
-# Count completed Task calls (excludes reservation records).
+# Count Task calls, excluding reservation records.
 # Usage: calls=$(governor_ledger_call_count "$session_id")
 governor_ledger_call_count() {
 	local session_id="${1:-}"
