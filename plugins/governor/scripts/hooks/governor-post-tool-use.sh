@@ -83,19 +83,21 @@ ESTIMATED_COST=$(governor_estimate_cost "$ESTIMATED_TOKENS")
 ESTIMATION_METHOD=$(governor_estimate_method)
 
 # Build the completion ledger record.
-# estimated_tokens is negated to cancel the reservation written by PreToolUse.
-# actual_tokens (when present) complete the two-phase accounting so the running
-# total converges to real spend: N_est + (-N_est) + N_act = N_act.
+# Keep positive estimated_tokens (do not negate) so session totals reflect
+# projected spend. Reservations are recorded with record_type: "reservation";
+# completions are recorded with record_type: "completion". Ledger totals sum
+# only completion records, so each spawn contributes its estimate once.
+# actual_tokens (when present) will eventually replace estimates when API
+# usage metrics become available.
 AGENT_TYPE="${TOOL_NAME:-Task}"
 TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null) || TS="1970-01-01T00:00:00Z"
-NEG_ESTIMATED=$(( -ESTIMATED_TOKENS ))
 
 RECORD=$(jq -n \
 	--arg ts "$TS" \
 	--arg sid "$SESSION_ID" \
 	--arg aid "${CLAUDE_SESSION_ID:-unknown}" \
 	--arg at "$AGENT_TYPE" \
-	--argjson est "$NEG_ESTIMATED" \
+	--argjson est "$ESTIMATED_TOKENS" \
 	--argjson cost "$ESTIMATED_COST" \
 	--argjson dur "$DURATION_MS" \
 	'{
@@ -105,7 +107,8 @@ RECORD=$(jq -n \
 		agent_type: $at,
 		estimated_tokens: $est,
 		cost_usd_estimated: $cost,
-		duration_ms: $dur
+		duration_ms: $dur,
+		record_type: "completion"
 	}' 2>/dev/null) || RECORD="{}"
 
 # Compute actual total once; used for both the ledger record and the event payload.

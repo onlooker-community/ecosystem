@@ -126,12 +126,10 @@ _governor_ledger_poison() {
 
 # Running total of tokens for a session.
 #
-# Uses the two-phase model: each record contributes
-#   .estimated_tokens + (.actual_tokens // 0)
-#
-# In-flight reservations:  estimated_tokens > 0, no actual_tokens → counts N_est
-# Completed Task records:  estimated_tokens = -N_est, actual_tokens = N_act → counts N_act
-# Net: in-flight estimates + completed actuals.
+# Sums only completion records (record_type: "completion"), excluding
+# reservations. This models projected spend: each completed spawn contributes
+# its estimated_tokens once. When actual_tokens are available (from API usage
+# metrics), they replace the estimates.
 #
 # Usage: tokens=$(governor_ledger_total_tokens "$session_id")
 governor_ledger_total_tokens() {
@@ -141,11 +139,11 @@ governor_ledger_total_tokens() {
 
 	[[ -f "$ledger_path" ]] || { printf '0'; return 0; }
 
-	jq -s '[.[] | ((.estimated_tokens // 0) + (.actual_tokens // 0))] | add // 0' \
+	jq -s '[.[] | select(.record_type == "completion" or .record_type == nil) | ((.estimated_tokens // 0) + (.actual_tokens // 0))] | add // 0' \
 		"$ledger_path" 2>/dev/null || printf '0'
 }
 
-# Running total of cost for a session (same two-phase logic as tokens).
+# Running total of cost for a session (same logic as tokens: completion records only).
 # Usage: cost=$(governor_ledger_total_cost "$session_id")
 governor_ledger_total_cost() {
 	local session_id="${1:-}"
@@ -154,11 +152,11 @@ governor_ledger_total_cost() {
 
 	[[ -f "$ledger_path" ]] || { printf '0'; return 0; }
 
-	jq -s '[.[] | ((.cost_usd_estimated // 0) + (.cost_usd_actual // 0))] | add // 0' \
+	jq -s '[.[] | select(.record_type == "completion" or .record_type == nil) | ((.cost_usd_estimated // 0) + (.cost_usd_actual // 0))] | add // 0' \
 		"$ledger_path" 2>/dev/null || printf '0'
 }
 
-# Count completed Task calls (excludes reservation records).
+# Count completed Task calls (completion records only, excludes reservations).
 # Usage: calls=$(governor_ledger_call_count "$session_id")
 governor_ledger_call_count() {
 	local session_id="${1:-}"
@@ -167,6 +165,6 @@ governor_ledger_call_count() {
 
 	[[ -f "$ledger_path" ]] || { printf '0'; return 0; }
 
-	jq -s '[.[] | select(.agent_type == "Task" and .record_type != "reservation")] | length' \
+	jq -s '[.[] | select(.agent_type == "Task" and (.record_type == "completion" or .record_type == nil))] | length' \
 		"$ledger_path" 2>/dev/null || printf '0'
 }
