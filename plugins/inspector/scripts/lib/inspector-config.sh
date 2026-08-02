@@ -1,62 +1,37 @@
 #!/usr/bin/env bash
-# inspector-config.sh — load and query Inspector configuration.
+# Config resolution for inspector.
 #
-# Merges three layers in precedence order (later wins):
-#   1. plugins/inspector/config.json    (plugin defaults)
-#   2. ~/.claude/settings.json          (.inspector subtree)
-#   3. <repo>/.claude/settings.json     (.inspector subtree)
+# Uses the shared config loader from ecosystem. Reads five layers, latest wins:
+#   1. plugins/inspector/config.json (defaults shipped with the plugin)
+#   2. ~/.claude/settings.json
+#   3. ~/.claude/settings.local.json (local overrides user)
+#   4. <repo>/.claude/settings.json
+#   5. <repo>/.claude/settings.local.json (local overrides project)
 #
-# Usage:
-#   inspector_config_load <repo_root>
-#   inspector_config_get ".inspector.timeout_seconds_per_check"
-#   inspector_config_get_json ".inspector.exclude_paths"
-#   inspector_config_checks_for_extension ".ts"
+# Exposes:
+#   inspector_config_load <repo_root>    # populates _inspector_CONFIG (JSON)
+#   inspector_config_get <jq-path>       # echoes string value (empty if unset)
+#   inspector_config_get_json <jq-path>  # echoes JSON value (null if unset)
 
-_INSPECTOR_CONFIG=""
-_INSPECTOR_PLUGIN_CONFIG=""
+# shellcheck source=../../../scripts/lib/config-loader.sh
+source "${PLUGIN_ROOT}/../../scripts/lib/config-loader.sh"
+
+_inspector_CONFIG="{}"
 
 inspector_config_load() {
 	local repo_root="${1:-}"
-	local plugin_dir
-	plugin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-	local plugin_config="$plugin_dir/config.json"
-
-	_INSPECTOR_PLUGIN_CONFIG="{}"
-	if [[ -f "$plugin_config" ]]; then
-		_INSPECTOR_PLUGIN_CONFIG=$(cat "$plugin_config")
-	fi
-
-	local home_settings="{}"
-	if [[ -f "$HOME/.claude/settings.json" ]]; then
-		home_settings=$(cat "$HOME/.claude/settings.json")
-	fi
-
-	local repo_settings="{}"
-	if [[ -n "$repo_root" && -f "$repo_root/.claude/settings.json" ]]; then
-		repo_settings=$(cat "$repo_root/.claude/settings.json")
-	fi
-
-	_INSPECTOR_CONFIG=$(jq -n \
-		--argjson plugin "$_INSPECTOR_PLUGIN_CONFIG" \
-		--argjson home "$home_settings" \
-		--argjson repo "$repo_settings" \
-		'$plugin * {"inspector": (($plugin.inspector // {}) * ($home.inspector // {}) * ($repo.inspector // {}))}')
+	config_load_plugin "inspector" "$repo_root" "_inspector_CONFIG"
+	return 0
 }
 
 inspector_config_get() {
-	local path="${1:-}"
-	printf '%s' "$_INSPECTOR_CONFIG" | jq -r "$path // empty" 2>/dev/null
+	local path="$1"
+	config_get "_inspector_CONFIG" "${path}"
 }
 
 inspector_config_get_json() {
-	local path="${1:-}"
-	printf '%s' "$_INSPECTOR_CONFIG" | jq -c "$path // empty" 2>/dev/null
-}
-
-inspector_config_show_clean_runs() {
-	local v
-	v=$(inspector_config_get '.inspector.show_clean_runs')
-	[[ "$v" == "true" ]]
+	local path="$1"
+	config_get_json "_inspector_CONFIG" "${path}"
 }
 
 inspector_config_timeout_per_check() {
@@ -77,25 +52,26 @@ inspector_config_output_excerpt_max_bytes() {
 	printf '%s' "${v:-4096}"
 }
 
-inspector_config_exclude_paths() {
-	inspector_config_get_json '.inspector.exclude_paths // []'
+inspector_config_show_clean_runs() {
+	local v
+	v=$(inspector_config_get '.inspector.show_clean_runs')
+	[[ "$v" == "true" ]]
 }
 
-# Emits a JSON array of {name, argv, kind} objects for the given file extension
-# (including the leading dot). Returns an empty array when no checks are
-# configured for the extension.
+inspector_config_exclude_paths() {
+	inspector_config_get_json '.inspector.exclude_paths // ["node_modules",".git","vendor",".venv","dist",".next",".nuxt","build","__pycache__","target","coverage"]'
+}
+
 inspector_config_checks_for_extension() {
-	local ext="${1:-}"
-	[[ -z "$ext" ]] && { printf '[]'; return; }
-	printf '%s' "$_INSPECTOR_CONFIG" | jq -c --arg ext "$ext" '
-		(.inspector.checks // {}) as $checks
-		| ($checks[$ext] // [])
-		| map(
-			if type == "array" then
-				{ name: (.[0] // "check"), argv: ., kind: "lint" }
-			else
-				{ name: (.name // "check"), argv: (.argv // []), kind: (.kind // "lint") }
-			end
-		)
-	' 2>/dev/null || printf '[]'
+	local ext="$1"
+	[[ -z "$ext" ]] && { printf '%s\n' "[]"; return 0; }
+	local raw
+	raw=$(inspector_config_get_json ".inspector.checks[\"$ext\"] // []")
+	[[ -z "$raw" ]] && { printf '%s\n' "[]"; return 0; }
+	# Normalize bare argv arrays into objects with name, kind, argv fields
+	printf '%s' "$raw" | jq -c 'map(
+		if type == "array" then
+			{name: .[0], kind: "lint", argv: .}
+		else . end
+	)'
 }

@@ -1,60 +1,35 @@
 #!/usr/bin/env bash
-# Config resolution for Curator.
+# Config resolution for curator.
 #
-# Reads three layers, latest wins:
+# Uses the shared config loader from ecosystem. Reads five layers, latest wins:
 #   1. plugins/curator/config.json (defaults shipped with the plugin)
 #   2. ~/.claude/settings.json
-#   3. <repo>/.claude/settings.json
+#   3. ~/.claude/settings.local.json (local overrides user)
+#   4. <repo>/.claude/settings.json
+#   5. <repo>/.claude/settings.local.json (local overrides project)
 #
 # Exposes:
-#   curator_config_load <repo_root>    # populates _CURATOR_CONFIG (JSON)
+#   curator_config_load <repo_root>    # populates _curator_CONFIG (JSON)
 #   curator_config_get <jq-path>       # echoes string value (empty if unset)
-#
-# Settings overlay only touches the `curator.*` subtree of settings.json.
+#   curator_config_get_json <jq-path>  # echoes JSON value (null if unset)
 
-_CURATOR_CONFIG="{}"
+# shellcheck source=../../../scripts/lib/config-loader.sh
+source "${PLUGIN_ROOT}/../../scripts/lib/config-loader.sh"
+
+_curator_CONFIG="{}"
 
 curator_config_load() {
 	local repo_root="${1:-}"
-	local plugin_root="${CLAUDE_PLUGIN_ROOT:-}"
-	local home_dir="${HOME:-}"
-
-	local merged="{}"
-	local file
-
-	file="${plugin_root}/config.json"
-	if [[ -f "$file" ]]; then
-		local defaults
-		defaults=$(jq '.' "$file" 2>/dev/null) || defaults="{}"
-		merged=$(jq -n --argjson a "$merged" --argjson b "$defaults" '$a * $b' 2>/dev/null) \
-			|| merged="$defaults"
-	fi
-
-	for file in "${home_dir}/.claude/settings.json" "${repo_root}/.claude/settings.json"; do
-		[[ -n "$file" && -f "$file" ]] || continue
-		local overlay
-		overlay=$(jq '{ curator: (.curator // {}) }' "$file" 2>/dev/null) || continue
-		[[ -z "$overlay" ]] && continue
-		merged=$(jq -n --argjson a "$merged" --argjson b "$overlay" '
-			def deepmerge($a; $b):
-				if ($a|type) == "object" and ($b|type) == "object" then
-					reduce (($a|keys) + ($b|keys) | unique)[] as $k
-						({}; .[$k] = deepmerge($a[$k]; $b[$k]))
-				elif $b == null then $a
-				else $b end;
-			deepmerge($a; $b)
-		' 2>/dev/null) || true
-	done
-
-	_CURATOR_CONFIG="$merged"
+	config_load_plugin "curator" "$repo_root" "_curator_CONFIG"
+	return 0
 }
 
 curator_config_get() {
 	local path="$1"
-	# The `// empty` operator treats `false` the same as null, so a
-	# value of `false` would silently disappear and the caller would
-	# misread "explicitly disabled" as "default to enabled". Use an
-	# explicit null check so booleans round-trip correctly.
-	printf '%s' "$_CURATOR_CONFIG" \
-		| jq -r "${path} | if . == null then empty else . end" 2>/dev/null
+	config_get "_curator_CONFIG" "${path}"
+}
+
+curator_config_get_json() {
+	local path="$1"
+	config_get_json "_curator_CONFIG" "${path}"
 }
