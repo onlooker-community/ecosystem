@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.32.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.32.1...ecosystem-v0.32.2) (2026-08-02)
+
+
+### Bug Fixes
+
+* librarian + bursar + governor improvements ([#119](https://github.com/onlooker-community/ecosystem/issues/119)) ([d7cdab5](https://github.com/onlooker-community/ecosystem/commit/d7cdab528ea5181ea35da68fbc5ad2e5b064abea))
+
 ## [0.32.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.32.0...ecosystem-v0.32.1) (2026-08-02)
 
 
