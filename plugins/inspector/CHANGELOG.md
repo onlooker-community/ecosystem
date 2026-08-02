@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/onlooker-community/ecosystem/compare/inspector-v0.3.1...inspector-v0.3.2) (2026-08-02)
+
+
+### Bug Fixes
+
+* restore config convenience functions & refactor execution plugins to shared loader ([#128](https://github.com/onlooker-community/ecosystem/issues/128)) ([4b3660c](https://github.com/onlooker-community/ecosystem/commit/4b3660c5a8b234187ec1e71c37b63e6a3d305c98))
+
 ## [0.3.1](https://github.com/onlooker-community/ecosystem/compare/inspector-v0.3.0...inspector-v0.3.1) (2026-08-01)
 
 
