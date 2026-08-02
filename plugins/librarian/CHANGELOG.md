@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.6.0...librarian-v0.6.1) (2026-08-02)
+
+
+### Bug Fixes
+
+* **hooks:** prevent SessionEnd timeouts causing breadcrumb accumulation ([#121](https://github.com/onlooker-community/ecosystem/issues/121)) ([3c7a409](https://github.com/onlooker-community/ecosystem/commit/3c7a40937aa3ea8c1db85dd0bb3fcc22589bbb49))
+
 ## [0.6.0](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.5.0...librarian-v0.6.0) (2026-08-02)
 
 
