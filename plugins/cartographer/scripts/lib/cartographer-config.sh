@@ -1,54 +1,36 @@
 #!/usr/bin/env bash
 # cartographer-config.sh — load and query Cartographer configuration.
 #
-# Merges three layers in precedence order (later wins):
+# Uses the shared config loader from ecosystem. Merges five layers in precedence order:
 #   1. plugins/cartographer/config.json  (plugin defaults)
 #   2. ~/.claude/settings.json           (.cartographer subtree)
-#   3. <repo>/.claude/settings.json      (.cartographer subtree)
+#   3. ~/.claude/settings.local.json     (.cartographer subtree, local overrides user)
+#   4. <repo>/.claude/settings.json      (.cartographer subtree)
+#   5. <repo>/.claude/settings.local.json (.cartographer subtree, local overrides project)
 #
 # Usage:
 #   cartographer_config_load <repo_root>
 #   cartographer_config_get_json ".cartographer.exclude_paths"
 
+# shellcheck source=../../../scripts/lib/config-loader.sh
+source "${PLUGIN_ROOT}/../../scripts/lib/config-loader.sh"
+
 _CARTOGRAPHER_CONFIG=""
-_CARTOGRAPHER_PLUGIN_CONFIG=""
 
 cartographer_config_load() {
 	local repo_root="${1:-}"
-	local plugin_dir
-	plugin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-	local plugin_config="$plugin_dir/config.json"
-
-	_CARTOGRAPHER_PLUGIN_CONFIG="{}"
-	if [[ -f "$plugin_config" ]]; then
-		_CARTOGRAPHER_PLUGIN_CONFIG=$(cat "$plugin_config")
-	fi
-
-	local home_settings="{}"
-	if [[ -f "$HOME/.claude/settings.json" ]]; then
-		home_settings=$(cat "$HOME/.claude/settings.json")
-	fi
-
-	local repo_settings="{}"
-	if [[ -n "$repo_root" && -f "$repo_root/.claude/settings.json" ]]; then
-		repo_settings=$(cat "$repo_root/.claude/settings.json")
-	fi
-
-	_CARTOGRAPHER_CONFIG=$(jq -n \
-		--argjson plugin "$_CARTOGRAPHER_PLUGIN_CONFIG" \
-		--argjson home "$home_settings" \
-		--argjson repo "$repo_settings" \
-		'$plugin * {"cartographer": (($plugin.cartographer // {}) * ($home.cartographer // {}) * ($repo.cartographer // {}))}')
+	config_load_plugin "cartographer" "$repo_root" "_CARTOGRAPHER_CONFIG"
+	return 0
 }
 
 cartographer_config_get() {
 	local path="${1:-}"
-	printf '%s' "$_CARTOGRAPHER_CONFIG" | jq -r "$path // empty" 2>/dev/null
+	config_get "_CARTOGRAPHER_CONFIG" "${path}"
 }
 
 cartographer_config_get_json() {
 	local path="${1:-}"
-	printf '%s' "$_CARTOGRAPHER_CONFIG" | jq -c "$path // empty" 2>/dev/null
+	config_get_json "_CARTOGRAPHER_CONFIG" "${path}"
 }
 
 cartographer_config_model_extraction() {
