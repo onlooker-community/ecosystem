@@ -35,6 +35,11 @@ INPUT=$(cat)
 
 _done() { exit 0; }
 
+# Emit diagnostic errors to stderr when ledger recording fails.
+_log_error() {
+	printf 'bursar-session-end: %s\n' "$1" >&2
+}
+
 # Parse session_id and cwd in a single jq pass (one fork, not two).
 { IFS= read -r SESSION_ID; IFS= read -r CWD; } < <(printf '%s' "$INPUT" | jq -r '.session_id // "", .cwd // ""' 2>/dev/null)
 
@@ -142,10 +147,18 @@ MODEL=""
 # ledger upsert actually succeeds. A failed write (lock timeout, mv failure)
 # must keep the breadcrumb so the session→project attribution survives for a
 # later attempt rather than being lost behind a false "recorded" event.
-if [[ -n "$RECORD" ]] && bursar_ledger_record "$PROJECT_KEY" "$RECORD"; then
-	[[ -n "$EV" ]] && bursar_emit_event "bursar.session.recorded" "$EV" "$SESSION_ID" || true
-
-	rm -f "$BREADCRUMB" 2>/dev/null || true
+#
+# Use a longer lock timeout (60s) to handle high concurrency: under typical
+# usage, SessionEnd hooks from concurrent sessions compete for the per-project
+# ledger lock. The default 5s timeout is too aggressive with 100+ concurrent
+# sessions, leading to silent recording failures and breadcrumb accumulation.
+if [[ -n "$RECORD" ]]; then
+	if bursar_ledger_record "$PROJECT_KEY" "$RECORD" 60; then
+		[[ -n "$EV" ]] && bursar_emit_event "bursar.session.recorded" "$EV" "$SESSION_ID" || true
+		rm -f "$BREADCRUMB" 2>/dev/null || true
+	else
+		_log_error "ledger_record failed for session $SESSION_ID project $PROJECT_KEY (lock timeout after 60s?). Breadcrumb retained for retry."
+	fi
 fi
 
 _done
