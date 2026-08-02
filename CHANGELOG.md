@@ -1,5 +1,80 @@
 # Changelog
 
+## [0.32.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.31.2...ecosystem-v0.32.0) (2026-08-02)
+
+
+### Features
+
+* add configuration and hooks for agent spawn tracking ([3ef4590](https://github.com/onlooker-community/ecosystem/commit/3ef459006bbbda246604bdd1ffaf9af0a59f9740))
+* add settings.json for plugin configuration ([67fbdfe](https://github.com/onlooker-community/ecosystem/commit/67fbdfe37f067a45801e7d0355c4a533b687f6b2))
+* **archivist:** introduce structured session memory plugin :rocket: ([378fff3](https://github.com/onlooker-community/ecosystem/commit/378fff3c14b40644af45b1a2335992e7b0428160))
+* **assayer:** introduce claim-verification plugin ([#70](https://github.com/onlooker-community/ecosystem/issues/70)) ([1d0500b](https://github.com/onlooker-community/ecosystem/commit/1d0500b64f8cd670d1cfa1ac070182d72696bdfd))
+* **bursar:** introduce multi-session budget rollup plugin ([#81](https://github.com/onlooker-community/ecosystem/issues/81)) ([b11e687](https://github.com/onlooker-community/ecosystem/commit/b11e687744bab70a94025c46c4aaa58fb7ea97f4))
+* **cartographer:** add proactive instruction-file audit plugin :mag: ([#35](https://github.com/onlooker-community/ecosystem/issues/35)) ([387d00a](https://github.com/onlooker-community/ecosystem/commit/387d00ad04da5aae91048254ad0526bb674ed498))
+* **compass:** pre-write intent clarity gate plugin :compass: ([#47](https://github.com/onlooker-community/ecosystem/issues/47)) ([144c2ef](https://github.com/onlooker-community/ecosystem/commit/144c2ef44d28bab3dcec14a9eace7ec76470d090))
+* **counsel:** add /counsel on-demand weekly-review command :rocket: ([#76](https://github.com/onlooker-community/ecosystem/issues/76)) ([8ce951c](https://github.com/onlooker-community/ecosystem/commit/8ce951cd5cb7b173f194f86c2960a31fb0d6889d))
+* **counsel:** weekly observability synthesis and coaching brief :robot: ([#51](https://github.com/onlooker-community/ecosystem/issues/51)) ([6364586](https://github.com/onlooker-community/ecosystem/commit/63645863cf3a1d7bbf0353aacb9b71e4f977dd56))
+* **coverage:** report node + bash coverage on every PR :sparkles: ([cb5d122](https://github.com/onlooker-community/ecosystem/commit/cb5d1221ad20e6257d66b507897dae14549a870f))
+* **curator:** introduce plugin with cheap-tier checks :microscope: ([#57](https://github.com/onlooker-community/ecosystem/issues/57)) ([7f9fa18](https://github.com/onlooker-community/ecosystem/commit/7f9fa18bbde29c8b5bd1eaad185bd4c5595a3762))
+* **echo:** add prompt regression detection plugin ([#32](https://github.com/onlooker-community/ecosystem/issues/32)) ([65274d4](https://github.com/onlooker-community/ecosystem/commit/65274d4d8326950d6c998ca292fed13b1b8c493b))
+* **ecosystem:** emit memory.recalled at SessionStart :link: ([#62](https://github.com/onlooker-community/ecosystem/issues/62)) ([d5876f9](https://github.com/onlooker-community/ecosystem/commit/d5876f9f819165cc07d691d733662b549863b7f5))
+* **governor:** resource governance and budget enforcement plugin :rocket: ([#43](https://github.com/onlooker-community/ecosystem/issues/43)) ([04e6d70](https://github.com/onlooker-community/ecosystem/commit/04e6d7051f27db752bb121d389d65b4d8ade04ad))
+* **historian:** introduce SessionEnd indexing :spiral_notepad: ([#59](https://github.com/onlooker-community/ecosystem/issues/59)) ([dd6c7f6](https://github.com/onlooker-community/ecosystem/commit/dd6c7f6ea872437cab6b16de50838dfc72750c7b))
+* **historian:** retrieval pipeline + ollama embedder :telescope: ([#61](https://github.com/onlooker-community/ecosystem/issues/61)) ([7eae752](https://github.com/onlooker-community/ecosystem/commit/7eae752a288c4678ab093042469f2e65d428f0d9))
+* **hooks:** add PreCompact and PostCompact context compaction trackers ([#15](https://github.com/onlooker-community/ecosystem/issues/15)) ([1ec5632](https://github.com/onlooker-community/ecosystem/commit/1ec5632404676ed8b35d324b79ad71a2e9093505))
+* **hooks:** add SessionStart and SessionEnd session trackers ([#10](https://github.com/onlooker-community/ecosystem/issues/10)) ([a48d680](https://github.com/onlooker-community/ecosystem/commit/a48d680dd24c98e79ef1c0401b07483ecebf9e8b))
+* **hooks:** add TaskCreated and TaskCompleted task lifecycle trackers ([#21](https://github.com/onlooker-community/ecosystem/issues/21)) ([986ffa8](https://github.com/onlooker-community/ecosystem/commit/986ffa84bdd857a464ca0d556671628190ed27bc))
+* **hooks:** add UserPromptSubmit turn and session duration trackers ([#12](https://github.com/onlooker-community/ecosystem/issues/12)) ([cbb7657](https://github.com/onlooker-community/ecosystem/commit/cbb7657979ed144efce506e6b487e037679b9462))
+* **hooks:** add WorktreeCreate and WorktreeRemove lifecycle trackers ([#24](https://github.com/onlooker-community/ecosystem/issues/24)) ([ff55e39](https://github.com/onlooker-community/ecosystem/commit/ff55e397a0c0adc3e76f66aba12c6b237149ad17))
+* **hooks:** emit canonical schema events for tool history :sparkles: ([1e49a24](https://github.com/onlooker-community/ecosystem/commit/1e49a24bfb930942fa477b594395ef352618f574))
+* **hooks:** enrich tool.file.read with read chunking observability ([#25](https://github.com/onlooker-community/ecosystem/issues/25)) ([8eb23c8](https://github.com/onlooker-community/ecosystem/commit/8eb23c8f4f03dfbeb701a30de1fa50c1c8ee48ac))
+* **hooks:** track skill usage via skill.invoked events ([23fff0f](https://github.com/onlooker-community/ecosystem/commit/23fff0f0bfad8ab91788d8c45a0457d099d2e870))
+* **hooks:** track tool call sequence on every PreToolUse :sparkles: ([0ad9546](https://github.com/onlooker-community/ecosystem/commit/0ad95465cc22a237e26115a67814a6e7b2951b1d))
+* **inspector:** ship the per-edit lint/typecheck plugin ([#88](https://github.com/onlooker-community/ecosystem/issues/88)) ([2018243](https://github.com/onlooker-community/ecosystem/commit/201824384abd6a4fc5f4395266924aa413a2ffd1))
+* **librarian:** /librarian review skill closes promotion loop :tada: ([#68](https://github.com/onlooker-community/ecosystem/issues/68)) ([8f3e3db](https://github.com/onlooker-community/ecosystem/commit/8f3e3dbdf6f08dceb0cf61d46281936a4f9954de))
+* **librarian:** implement conflict detection for memory promotion scanning ([#115](https://github.com/onlooker-community/ecosystem/issues/115)) ([8699577](https://github.com/onlooker-community/ecosystem/commit/86995773cb44127d915b5aea53aed66c771d8bfb))
+* **librarian:** land plugin end-to-end with memory layer designs :seedling: ([#55](https://github.com/onlooker-community/ecosystem/issues/55)) ([d4821ef](https://github.com/onlooker-community/ecosystem/commit/d4821efabfeb587e460e898d7db8f92fcc3f2c61))
+* **lineage:** introduce per-change provenance plugin ([#83](https://github.com/onlooker-community/ecosystem/issues/83)) ([86b00d3](https://github.com/onlooker-community/ecosystem/commit/86b00d3d7393e2b63c5b04d60692fc89f202bf6c))
+* **lint:** add marketplace cross-reference linter :nail_care: ([0f48817](https://github.com/onlooker-community/ecosystem/commit/0f488170326659ef1d0b8bd7ae4d207c78a43694))
+* **lint:** add plugin manifest validator :nail_care: ([e12615f](https://github.com/onlooker-community/ecosystem/commit/e12615ff99d43caf59d5e215d882c0acb3352c01))
+* **plugins:** installation enables plugins — remove per-plugin 'enabled' config key ([#108](https://github.com/onlooker-community/ecosystem/issues/108)) ([45e4e6b](https://github.com/onlooker-community/ecosystem/commit/45e4e6bd29a0a7545dbd5007bf3f09600e1be391))
+* **plugins:** persist structured JSON and emit onlooker.artifact.ready :outbox_tray: ([#103](https://github.com/onlooker-community/ecosystem/issues/103)) ([9b689a4](https://github.com/onlooker-community/ecosystem/commit/9b689a41aa4bdb481fef93b484e6446da731e8f1))
+* **prompt-rules:** deterministic regex-triggered guidance injection :relieved: ([#28](https://github.com/onlooker-community/ecosystem/issues/28)) ([662c811](https://github.com/onlooker-community/ecosystem/commit/662c8119657cebc350900f859c43dbaca97d6703))
+* **scribe:** intent documentation from agent activity :pencil2: ([#50](https://github.com/onlooker-community/ecosystem/issues/50)) ([f0a95d1](https://github.com/onlooker-community/ecosystem/commit/f0a95d1058e36d1bb5f0f645964d9e88e8f98b66))
+* **tribunal:** add multi-agent code review plugin :sparkles: ([#30](https://github.com/onlooker-community/ecosystem/issues/30)) ([893f24a](https://github.com/onlooker-community/ecosystem/commit/893f24a8876fdd6ccb5c7dcf2636a7c902e88949))
+* **warden:** untrusted-content gate enforcing the Agents Rule of Two :shield: ([#53](https://github.com/onlooker-community/ecosystem/issues/53)) ([210aa51](https://github.com/onlooker-community/ecosystem/commit/210aa51bff66226a0eec1f17292a2af4ea4ef56a))
+
+
+### Bug Fixes
+
+* **cartographer:** correct typo in release-please bump-patch key :face_with_spiral_eyes: ([#91](https://github.com/onlooker-community/ecosystem/issues/91)) ([dfab160](https://github.com/onlooker-community/ecosystem/commit/dfab1602afda2b6255a72b0975ebab9289d75b8e))
+* **ci:** apply release-please extra-files for Claude plugin manifests ([#17](https://github.com/onlooker-community/ecosystem/issues/17)) ([da9913c](https://github.com/onlooker-community/ecosystem/commit/da9913ca4f7497280edc34f8c64baa903c1e6754))
+* **ci:** checkout release tag before npm publish :relieved: ([bc7bbdc](https://github.com/onlooker-community/ecosystem/commit/bc7bbdc7a886a55ba8f04fe09bfa60043648c766))
+* **ci:** grant id-token write for npm provenance on publish ([c78c9f0](https://github.com/onlooker-community/ecosystem/commit/c78c9f054c1d48ca8a83d0d26b76ce991fffe51b))
+* **ci:** parse release-please paths_released JSON for npm publish ([749e1a0](https://github.com/onlooker-community/ecosystem/commit/749e1a02b563f37f81a8da21fc3f6e10e179314a))
+* **ci:** stop upgrading npm globally before publish ([a7c7a0e](https://github.com/onlooker-community/ecosystem/commit/a7c7a0e1f25aee1bbb75bdd2af130dbc276480a6))
+* **ci:** use HTTPS repository URL for npm provenance ([a7e8927](https://github.com/onlooker-community/ecosystem/commit/a7e89275c5a025a8afee009853265b717091f6ca))
+* **ci:** use paths_released to gate npm publish :rage: ([#37](https://github.com/onlooker-community/ecosystem/issues/37)) ([c62b17f](https://github.com/onlooker-community/ecosystem/commit/c62b17f7e1352cfe260a23c8f48be30f72edbbed))
+* **compass:** resolve MultiEdit file path from the top-level field ([#85](https://github.com/onlooker-community/ecosystem/issues/85)) ([468abaa](https://github.com/onlooker-community/ecosystem/commit/468abaaad4bef59fe4308bd8887dfcf6d633921a))
+* **counsel:** drop unsupported --max-tokens flag from claude synthesis call :relieved: ([#79](https://github.com/onlooker-community/ecosystem/issues/79)) ([ade85ce](https://github.com/onlooker-community/ecosystem/commit/ade85cecb3243781f47e14fea4990ce31e69e8f4))
+* **counsel:** stop pipefail from discarding all events on large logs :relieved: ([#78](https://github.com/onlooker-community/ecosystem/issues/78)) ([638347d](https://github.com/onlooker-community/ecosystem/commit/638347dec3b9df740b7a85c3e475fa2ffe5d054b))
+* **emitter:** make emission dependency-free and fail-open :relieved: ([#99](https://github.com/onlooker-community/ecosystem/issues/99)) ([0dda7f8](https://github.com/onlooker-community/ecosystem/commit/0dda7f803ed2dfa28561bd8d9e4193b2b18e5bbf))
+* **historian:** export CLAUDE_PLUGIN_ROOT so config loads correctly :bug: ([#112](https://github.com/onlooker-community/ecosystem/issues/112)) ([f24b0b4](https://github.com/onlooker-community/ecosystem/commit/f24b0b4375c64385fefd329cd07d8874785002e9))
+* **historian:** repair CI broken by embedder check + document PR workflow :nail_care: ([#106](https://github.com/onlooker-community/ecosystem/issues/106)) ([02062a2](https://github.com/onlooker-community/ecosystem/commit/02062a21163e084705dae9cf421719b6e5a7b306))
+* **hooks:** replace flock with portable mkdir mutex :bug: ([3dffa6f](https://github.com/onlooker-community/ecosystem/commit/3dffa6f5e43ef9f3c117f2406ddd03ce485df1cd))
+* **package:** update repository URL format in package.json ([591ce9f](https://github.com/onlooker-community/ecosystem/commit/591ce9f54dd605ec04ceb77b9dcca40b3e08621e))
+* **plugins:** glob-discover ecosystem root so sub-plugins work from cache :relieved: ([#110](https://github.com/onlooker-community/ecosystem/issues/110)) ([3639240](https://github.com/onlooker-community/ecosystem/commit/3639240383e1b820e5d8ea42639e0b863ef0d90e))
+* **release:** sync marketplace.json out-of-band :relieved: ([0d2a0a3](https://github.com/onlooker-community/ecosystem/commit/0d2a0a38c0c4ee0e400b9a143a4be7904ea3f70a))
+* **scribe:** mark hook scripts executable :relieved: ([#64](https://github.com/onlooker-community/ecosystem/issues/64)) ([05603e5](https://github.com/onlooker-community/ecosystem/commit/05603e56895c009c1435d1712592adbbc4c15e61))
+* **tribunal:** persist all artifacts on every iteration including retries :relieved: ([#41](https://github.com/onlooker-community/ecosystem/issues/41)) ([1636105](https://github.com/onlooker-community/ecosystem/commit/163610535a4ce0fa73c8fb82dc5c6296d2d1065a))
+* vendor portable-lock.sh into cartographer and governor ([#73](https://github.com/onlooker-community/ecosystem/issues/73)) ([ab2c354](https://github.com/onlooker-community/ecosystem/commit/ab2c354b131c26cc642ebb51e84a043dc43cbaa1))
+
+
+### Performance Improvements
+
+* **bursar:** collapse process forks in SessionEnd hot path :relieved: ([#101](https://github.com/onlooker-community/ecosystem/issues/101)) ([7a426fe](https://github.com/onlooker-community/ecosystem/commit/7a426fe359785eca35ea1ad61523b05fda79e0da))
+* **historian:** fix O(n²) chunk loop and embedder false-positive :relieved: ([4ef130a](https://github.com/onlooker-community/ecosystem/commit/4ef130a4c01ec378da5b4d8baeeb7b4fb6059272))
+
 ## [0.31.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.31.1...ecosystem-v0.31.2) (2026-08-01)
 
 
