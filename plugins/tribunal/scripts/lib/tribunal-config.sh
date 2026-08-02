@@ -16,22 +16,22 @@
 # shellcheck source=../../../scripts/lib/config-loader.sh
 source "${PLUGIN_ROOT}/../../scripts/lib/config-loader.sh"
 
-_tribunal_CONFIG="{}"
+_TRIBUNAL_CONFIG="{}"
 
 tribunal_config_load() {
 	local repo_root="${1:-}"
-	config_load_plugin "tribunal" "$repo_root" "_tribunal_CONFIG"
+	config_load_plugin "TRIBUNAL" "$repo_root" "_TRIBUNAL_CONFIG"
 	return 0
 }
 
 tribunal_config_get() {
 	local path="$1"
-	config_get "_tribunal_CONFIG" "${path}"
+	config_get "_TRIBUNAL_CONFIG" "${path}"
 }
 
 tribunal_config_get_json() {
 	local path="$1"
-	config_get_json "_tribunal_CONFIG" "${path}"
+	config_get_json "_TRIBUNAL_CONFIG" "${path}"
 }
 
 tribunal_config_stop_hook_enabled() {
