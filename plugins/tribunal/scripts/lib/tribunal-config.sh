@@ -20,7 +20,7 @@ _TRIBUNAL_CONFIG="{}"
 
 tribunal_config_load() {
 	local repo_root="${1:-}"
-	config_load_plugin "TRIBUNAL" "$repo_root" "_TRIBUNAL_CONFIG"
+	config_load_plugin "tribunal" "$repo_root" "_TRIBUNAL_CONFIG"
 	return 0
 }
 
