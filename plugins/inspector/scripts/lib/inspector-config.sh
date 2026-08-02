@@ -65,5 +65,13 @@ inspector_config_exclude_paths() {
 inspector_config_checks_for_extension() {
 	local ext="$1"
 	[[ -z "$ext" ]] && { printf '%s\n' "[]"; return 0; }
-	inspector_config_get_json ".inspector.checks[\"$ext\"] // []"
+	local raw
+	raw=$(inspector_config_get_json ".inspector.checks[\"$ext\"] // []")
+	[[ -z "$raw" ]] && { printf '%s\n' "[]"; return 0; }
+	# Normalize bare argv arrays into objects with name, kind, argv fields
+	printf '%s' "$raw" | jq -c 'map(
+		if type == "array" then
+			{name: .[0], kind: "lint", argv: .}
+		else . end
+	)'
 }
