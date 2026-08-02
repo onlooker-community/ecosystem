@@ -1,5 +1,5 @@
 {
-  ".": "0.31.1",
+  ".": "0.32.1",
   "plugins/archivist": "0.3.1",
   "plugins/tribunal": "1.1.1",
   "plugins/echo": "0.3.1",
@@ -9,11 +9,11 @@
   "plugins/scribe": "0.4.1",
   "plugins/counsel": "0.5.1",
   "plugins/warden": "0.3.1",
-  "plugins/librarian": "0.4.1",
+  "plugins/librarian": "0.6.0",
   "plugins/curator": "0.2.1",
-  "plugins/historian": "0.3.1",
+  "plugins/historian": "0.3.2",
   "plugins/assayer": "1.1.1",
-  "plugins/bursar": "0.2.1",
+  "plugins/bursar": "0.2.2",
   "plugins/lineage": "0.2.1",
   "plugins/inspector": "0.3.1"
 }

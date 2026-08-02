@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/onlooker-community/ecosystem/compare/historian-v0.3.1...historian-v0.3.2) (2026-08-01)
+
+
+### Bug Fixes
+
+* **historian:** export CLAUDE_PLUGIN_ROOT so config loads correctly :bug: ([#112](https://github.com/onlooker-community/ecosystem/issues/112)) ([f24b0b4](https://github.com/onlooker-community/ecosystem/commit/f24b0b4375c64385fefd329cd07d8874785002e9))
+
 ## [0.3.1](https://github.com/onlooker-community/ecosystem/compare/historian-v0.3.0...historian-v0.3.1) (2026-08-01)
 
 
