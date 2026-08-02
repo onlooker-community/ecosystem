@@ -110,7 +110,14 @@ config_get() {
 
 	# Use indirect expansion to read the variable's value.
 	local config_json="${!config_var}"
-	printf '%s' "$config_json" | jq -r "${path} // empty" 2>/dev/null
+	# NB: do NOT use `${path} // empty` — jq's `//` treats `false` and `0` as
+	# empty, so a false boolean would read back as "" and a true default would
+	# silently flip it. Emit the raw value and map only a literal JSON null to
+	# the empty string.
+	local v
+	v=$(printf '%s' "$config_json" | jq -r "${path}" 2>/dev/null) || return 1
+	[[ "$v" == "null" ]] && v=""
+	printf '%s' "$v"
 }
 
 # Get a JSON value from loaded config.
