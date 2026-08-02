@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/onlooker-community/ecosystem/compare/bursar-v0.2.2...bursar-v0.3.0) (2026-08-02)
+
+
+### Features
+
+* **config:** add shared config loader supporting all five settings layers :sparkles: ([#123](https://github.com/onlooker-community/ecosystem/issues/123)) ([c048b76](https://github.com/onlooker-community/ecosystem/commit/c048b76bee2b39abeb7f1af77181191dd48f9cf5))
+
+
+### Bug Fixes
+
+* **hooks:** prevent SessionEnd timeouts causing breadcrumb accumulation ([#121](https://github.com/onlooker-community/ecosystem/issues/121)) ([3c7a409](https://github.com/onlooker-community/ecosystem/commit/3c7a40937aa3ea8c1db85dd0bb3fcc22589bbb49))
+
 ## [0.2.2](https://github.com/onlooker-community/ecosystem/compare/bursar-v0.2.1...bursar-v0.2.2) (2026-08-02)
 
 
