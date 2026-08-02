@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.4.1...librarian-v0.5.0) (2026-08-02)
+
+
+### Features
+
+* **librarian:** implement conflict detection for memory promotion scanning ([#115](https://github.com/onlooker-community/ecosystem/issues/115)) ([8699577](https://github.com/onlooker-community/ecosystem/commit/86995773cb44127d915b5aea53aed66c771d8bfb))
+
 ## [0.4.1](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.4.0...librarian-v0.4.1) (2026-08-01)
 
 
