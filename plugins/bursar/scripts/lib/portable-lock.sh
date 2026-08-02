@@ -29,23 +29,41 @@
 # Avoid associative arrays so bash 3.2 (macOS default) keeps working.
 
 # Acquire an exclusive lock at LOCKPATH. Returns 0 on success, 1 on timeout.
+# Uses exponential backoff under high contention to reduce cache-line thrashing.
 lock_acquire() {
 	local lockpath="${1:-}"
 	local timeout="${2:-5}"
 	[[ -z "$lockpath" ]] && return 1
 
 	local lockdir="${lockpath}.d"
-	local waited=0
-	# Poll at 10 Hz so a 5s timeout = 50 attempts.
-	local max_iter=$((timeout * 10))
+	local start_time
+	start_time=$(date +%s 2>/dev/null) || start_time=0
+
+	local backoff=10  # Start at 10ms (1/100s)
 	while ! mkdir "$lockdir" 2>/dev/null; do
-		if ((waited >= max_iter)); then
-			return 1
+		# Check timeout using epoch comparison (works on all systems).
+		if ((start_time > 0)); then
+			local now
+			now=$(date +%s 2>/dev/null) || now=0
+			if (( (now - start_time) >= timeout )); then
+				return 1
+			fi
 		fi
-		# `sleep 0.1` works on Linux + macOS; the `|| sleep 1` is a paranoid
-		# fallback for embedded shells that only accept integer seconds.
-		sleep 0.1 2>/dev/null || sleep 1
-		waited=$((waited + 1))
+
+		# Exponential backoff: 10ms → 20ms → 40ms, capped at 100ms to avoid
+		# sleeping too long under sustained high contention. Reduces per-second
+		# mkdir() attempts from 10/sec (10Hz polling) to ~10-30/sec under load.
+		local sleep_ms=$((backoff))
+		if ((sleep_ms > 100)); then
+			sleep_ms=100
+		fi
+
+		# Convert to seconds: `sleep 0.01` is 10ms. Fallback for shells
+		# that only accept integer seconds.
+		awk -v ms="$sleep_ms" 'BEGIN { printf "%.2f\n", ms/1000 }' | \
+			xargs -I {} sleep {} 2>/dev/null || sleep 1
+
+		backoff=$((backoff * 2))
 	done
 	return 0
 }
