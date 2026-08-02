@@ -148,12 +148,13 @@ MODEL=""
 # must keep the breadcrumb so the session→project attribution survives for a
 # later attempt rather than being lost behind a false "recorded" event.
 #
-# Use a longer lock timeout (60s) to handle high concurrency: under typical
-# usage, SessionEnd hooks from concurrent sessions compete for the per-project
-# ledger lock. The default 5s timeout is too aggressive with 100+ concurrent
-# sessions, leading to silent recording failures and breadcrumb accumulation.
+# Use a short lock timeout (1s) to ensure the hook completes within the CLI's
+# 1.5s SessionEnd budget. If the lock is contended, fail fast and retain the
+# breadcrumb for retry on a future session. Retries on subsequent SessionStart
+# will eventually succeed when contention subsides; this prevents the hook from
+# being cancelled mid-execution by the CLI timeout.
 if [[ -n "$RECORD" ]]; then
-	if bursar_ledger_record "$PROJECT_KEY" "$RECORD" 60; then
+	if bursar_ledger_record "$PROJECT_KEY" "$RECORD" 1; then
 		[[ -n "$EV" ]] && bursar_emit_event "bursar.session.recorded" "$EV" "$SESSION_ID" || true
 		rm -f "$BREADCRUMB" 2>/dev/null || true
 	else
