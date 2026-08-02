@@ -33,3 +33,27 @@ assayer_config_get_json() {
 	local path="$1"
 	config_get_json "_assayer_CONFIG" "${path}"
 }
+
+assayer_config_model() {
+	local v
+	v=$(assayer_config_get '.assayer.evaluation.model')
+	printf '%s' "${v:-claude-haiku-4-5-20251001}"
+}
+
+assayer_config_max_claims() {
+	local v
+	v=$(assayer_config_get '.assayer.max_claims')
+	printf '%s' "${v:-12}"
+}
+
+assayer_config_min_confidence() {
+	local v
+	v=$(assayer_config_get '.assayer.min_confidence')
+	printf '%s' "${v:-0.5}"
+}
+
+assayer_config_timeout() {
+	local v
+	v=$(assayer_config_get '.assayer.evaluation.timeout_seconds')
+	printf '%s' "${v:-60}"
+}

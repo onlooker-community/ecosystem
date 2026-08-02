@@ -33,3 +33,25 @@ lineage_config_get_json() {
 	local path="$1"
 	config_get_json "_lineage_CONFIG" "${path}"
 }
+
+lineage_config_max_snippet_chars() {
+	local v
+	v=$(lineage_config_get '.lineage.max_snippet_chars')
+	printf '%s' "${v:-4000}"
+}
+
+lineage_config_redact_enabled() {
+	local v
+	v=$(lineage_config_get '.lineage.redact_secrets')
+	[[ "$v" != "false" ]]
+}
+
+lineage_config_prompt_source() {
+	local v
+	v=$(lineage_config_get '.lineage.prompt_source')
+	printf '%s' "${v:-historian_then_transcript}"
+}
+
+lineage_config_ignore_globs() {
+	lineage_config_get_json '.lineage.ignore_globs // ["**/.git/**","**/node_modules/**","**/dist/**","**/*.lock"]' | jq -r '.[]'
+}

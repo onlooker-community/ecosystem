@@ -33,3 +33,37 @@ inspector_config_get_json() {
 	local path="$1"
 	config_get_json "_inspector_CONFIG" "${path}"
 }
+
+inspector_config_timeout_per_check() {
+	local v
+	v=$(inspector_config_get '.inspector.timeout_seconds_per_check')
+	printf '%s' "${v:-10}"
+}
+
+inspector_config_total_timeout() {
+	local v
+	v=$(inspector_config_get '.inspector.total_timeout_seconds')
+	printf '%s' "${v:-30}"
+}
+
+inspector_config_output_excerpt_max_bytes() {
+	local v
+	v=$(inspector_config_get '.inspector.output_excerpt_max_bytes')
+	printf '%s' "${v:-4096}"
+}
+
+inspector_config_show_clean_runs() {
+	local v
+	v=$(inspector_config_get '.inspector.show_clean_runs')
+	[[ "$v" == "true" ]]
+}
+
+inspector_config_exclude_paths() {
+	inspector_config_get_json '.inspector.exclude_paths // ["node_modules",".git","vendor",".venv","dist",".next",".nuxt","build","__pycache__","target","coverage"]'
+}
+
+inspector_config_checks_for_extension() {
+	local ext="$1"
+	[[ -z "$ext" ]] && { printf '%s\n' "[]"; return 0; }
+	inspector_config_get_json ".inspector.checks[\"$ext\"] // []"
+}

@@ -33,3 +33,23 @@ tribunal_config_get_json() {
 	local path="$1"
 	config_get_json "_tribunal_CONFIG" "${path}"
 }
+
+tribunal_config_stop_hook_enabled() {
+	local v
+	v=$(tribunal_config_get '.tribunal.stop_hook.enabled')
+	[[ "$v" == "true" ]]
+}
+
+tribunal_config_judge_model() {
+	local judge_type="${1:-}"
+	local v
+	if [[ -n "$judge_type" ]]; then
+		v=$(tribunal_config_get ".tribunal.judges.types.\"$judge_type\".model")
+		if [[ -n "$v" ]]; then
+			printf '%s' "$v"
+			return 0
+		fi
+	fi
+	v=$(tribunal_config_get '.tribunal.judges.model')
+	printf '%s' "${v:-claude-opus-4-7}"
+}
