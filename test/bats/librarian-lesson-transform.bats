@@ -228,3 +228,24 @@ _storage_setup() {
   run librarian_lesson_seen "$PROJECT_KEY" "01KZ45MKAM734ZS7JK24D2DK0R"
   [ "$status" -eq 0 ]
 }
+
+@test "seen still finds a declined artifact when declined.jsonl has a truncated trailing line" {
+  _storage_setup
+  librarian_lesson_storage_init "$PROJECT_KEY"
+  librarian_lesson_append_declined "$PROJECT_KEY" "01KZ45MKAM734ZS7JK24D2DK0R" "no_resolution"
+  # Simulate a process killed mid-append: a trailing line that never closed.
+  printf '{"artifact_id":"01KZEAF9EY4C6TTR0V7YFN9VYJ","reason":"trunc' \
+    >> "${LESSONS_DIR}/declined.jsonl"
+  run librarian_lesson_seen "$PROJECT_KEY" "01KZ45MKAM734ZS7JK24D2DK0R"
+  [ "$status" -eq 0 ]
+}
+
+@test "seen still reports a genuinely absent artifact as new when declined.jsonl has a truncated trailing line" {
+  _storage_setup
+  librarian_lesson_storage_init "$PROJECT_KEY"
+  librarian_lesson_append_declined "$PROJECT_KEY" "01KZ45MKAM734ZS7JK24D2DK0R" "no_resolution"
+  printf '{"artifact_id":"01KZEAF9EY4C6TTR0V7YFN9VYJ","reason":"trunc' \
+    >> "${LESSONS_DIR}/declined.jsonl"
+  run librarian_lesson_seen "$PROJECT_KEY" "01KZ45MKGQ7QZWMABQ4H12SHSV"
+  [ "$status" -eq 1 ]
+}

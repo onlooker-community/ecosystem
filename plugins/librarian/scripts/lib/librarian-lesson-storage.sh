@@ -103,8 +103,13 @@ librarian_lesson_seen() {
 	local dir
 	dir=$(librarian_lessons_dir "$key")
 
+	# -R reads each line as a raw string and fromjson? yields nothing for a
+	# line that fails to parse, instead of aborting the whole jq invocation.
+	# Without this, one truncated trailing line (e.g. a process killed
+	# mid-append) makes jq exit 5 for the entire file, and every artifact
+	# declined before that line reads back as "not seen."
 	if [[ -f "$dir/declined.jsonl" ]] \
-		&& jq -e --arg a "$artifact_id" 'select(.artifact_id == $a)' \
+		&& jq -Re --arg a "$artifact_id" 'fromjson? | select(.artifact_id == $a)' \
 			"$dir/declined.jsonl" >/dev/null 2>&1; then
 		return 0
 	fi
