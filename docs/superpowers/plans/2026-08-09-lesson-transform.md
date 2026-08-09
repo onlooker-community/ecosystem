@@ -250,6 +250,13 @@ _artifact() {
   done
 }
 
+@test "valid_range anchors to the whole string, not to a line within it" {
+  # grep would match per line and accept this, diverging from the schema's
+  # ECMA262 pattern, which has no /m flag.
+  run librarian_lesson_valid_range "$(printf '<6\n>=999')"
+  [ "$status" -eq 1 ]
+}
+
 _candidate() {
   jq -cn --argjson versions "$1" --argjson stack "$2" '{
     claim: "Vitest 4 cannot import vite/module-runner on Vite 5",
@@ -290,6 +297,17 @@ _candidate() {
 
 @test "validate_candidate rejects an empty versions object" {
   run librarian_lesson_validate_candidate "$(_candidate '{}' '["vite"]')"
+  [ "$status" -eq 1 ]
+}
+
+@test "validate_candidate rejects an empty-string range" {
+  run librarian_lesson_validate_candidate "$(_candidate '{"vite":""}' '["vite"]')"
+  [ "$status" -eq 1 ]
+}
+
+@test "validate_candidate rejects a range value carrying an embedded newline" {
+  run librarian_lesson_validate_candidate \
+    "$(_candidate "$(jq -cn '{vite: "<6\n>=999"}')" '["vite"]')"
   [ "$status" -eq 1 ]
 }
 
@@ -366,7 +384,12 @@ librarian_lesson_valid_range() {
 	local nonzero='([1-9][0-9]*(\.[0-9]+)?(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*(\.[0-9]+)?|0+\.0+\.[0-9]*[1-9][0-9]*)'
 	local any='[0-9]+(\.[0-9]+)?(\.[0-9]+)?'
 
-	printf '%s' "$r" | grep -qE "^((<|<=|=)${any}|(>|>=)${nonzero}|(>|>=)${any} (<|<=)${any})$"
+	# Use bash's own regex engine, NOT `printf ... | grep -qE`. grep matches
+	# per line, so ^ and $ anchor to line boundaries rather than to the whole
+	# string, and a value like "<6\n>=999" passes because one of its lines
+	# looks valid. The schema's ECMA262 pattern has no /m flag and rejects
+	# that outright, so grep here diverges from the source of truth.
+	[[ "$r" =~ ^((\<|\<=|=)${any}|(\>|\>=)${nonzero}|(\>|\>=)${any}\ (\<|\<=)${any})$ ]]
 }
 
 # Validate a full candidate. Prints nothing on success; prints a reason slug
@@ -409,9 +432,12 @@ librarian_lesson_validate_candidate() {
 	fi
 
 	# Every range must satisfy the vendored pattern.
+	# Do NOT skip empty values here. `jq -r '.versions[]'` over a non-empty
+	# object of strings emits no stray blank lines, so a `continue` on empty
+	# has no defensive purpose — it only lets `{"vite": ""}` validate, which
+	# is exactly the shape a model emits when it could not pin a range down.
 	local range
 	while IFS= read -r range; do
-		[[ -z "$range" ]] && continue
 		librarian_lesson_valid_range "$range" || { printf 'schema_invalid\n' >&2; return 1; }
 	done < <(printf '%s' "$candidate" | jq -r '.applies_to.scope.versions[]' 2>/dev/null)
 
