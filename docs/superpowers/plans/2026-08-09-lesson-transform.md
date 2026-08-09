@@ -555,6 +555,23 @@ _storage_setup() {
   [ "$status" -eq 0 ]
 }
 
+@test "seen survives a truncated trailing line in declined.jsonl" {
+  # What a process kill mid-append leaves behind. One bad line must not make
+  # every previously-declined artifact read as new.
+  _storage_setup
+  librarian_lesson_storage_init "$PROJECT_KEY"
+  librarian_lesson_append_declined "$PROJECT_KEY" "01KZ45MKAM734ZS7JK24D2DK0R" "no_resolution"
+  printf '{"artifact_id":"01KZEAF9EY4C6TTR0V7YFN9VYJ","reason":"trunc' \
+    >> "${LESSONS_DIR}/declined.jsonl"
+
+  run librarian_lesson_seen "$PROJECT_KEY" "01KZ45MKAM734ZS7JK24D2DK0R"
+  [ "$status" -eq 0 ]
+
+  # ...and the repair must not turn every lookup into a hit.
+  run librarian_lesson_seen "$PROJECT_KEY" "01KZ45MKS84KPZQNWC02Z8FE0K"
+  [ "$status" -eq 1 ]
+}
+
 @test "seen finds an artifact already sitting in proposals" {
   _storage_setup
   librarian_lesson_storage_init "$PROJECT_KEY"
@@ -686,8 +703,15 @@ librarian_lesson_seen() {
 	local dir
 	dir=$(librarian_lessons_dir "$key")
 
+	# Read the ledger line by line with `-R` + `fromjson?`, NOT a plain
+	# `jq -e 'select(...)'`. jq parses the file as one stream, so a single
+	# truncated line — the ordinary result of a process kill mid-append —
+	# makes it exit 5 and every previously-declined artifact reads as unseen.
+	# That silently defeats the ledger's purpose and re-pays for judgments
+	# already made. `fromjson?` yields nothing for an unparseable line instead
+	# of poisoning the scan.
 	if [[ -f "$dir/declined.jsonl" ]] \
-		&& jq -e --arg a "$artifact_id" 'select(.artifact_id == $a)' \
+		&& jq -Re --arg a "$artifact_id" 'fromjson? | select(.artifact_id == $a)' \
 			"$dir/declined.jsonl" >/dev/null 2>&1; then
 		return 0
 	fi
