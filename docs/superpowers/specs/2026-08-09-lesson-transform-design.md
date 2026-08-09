@@ -124,10 +124,16 @@ responses: a candidate object, or an explicit refusal carrying a reason
 distinguishable from a failed call.
 
 Config lives in the plugin's `config.json` under
-`librarian.lesson_transform.{model, temperature, max_output_tokens,
-timeout_seconds}`, read via `librarian_config_get` from the caller, with user
-overrides under the plugin namespace key per ADR-004. There is no `enabled`
-flag — that option was removed repo-wide in #108.
+`librarian.lesson_transform.{model, timeout_seconds}`, read via
+`librarian_config_get` from the caller, with user overrides under the plugin
+namespace key per ADR-004. There is no `enabled` flag — that option was removed
+repo-wide in #108.
+
+Two keys only. `claude --help` exposes `--model` and no sampling flags, so
+`temperature` and `max_output_tokens` cannot reach the model through this CLI.
+`librarian-classifier.sh` currently reads both and passes them to a function
+that ignores them — dead config that reads as though it works. Sampling control
+would require moving off `claude -p` to the API, which is a separate decision.
 
 ### 3. Validation
 
@@ -142,8 +148,15 @@ CI only; installed marketplace plugins ship no `node_modules` (ADR-005).
 - **Tests:** assert the `jq` validator and the vendored sub-schema agree over a
   corpus. The parent spec sets this precedent directly — the two mechanisms were
   "proven able to disagree," so they are asserted separately.
-- **CI:** a drift guard fetches the published schema from `schema.onlooker.dev`
-  and compares the vendored copies, matching how schema drift is already caught.
+- **CI:** a drift guard asserts the vendored copies carry recorded provenance
+  (source path and `schema_version: 2`) and have not been edited by hand.
+
+  Note that this is weaker than the guard used for *event* schemas, which
+  compares against `schema.onlooker.dev`. That endpoint currently serves no
+  lesson schema — `lesson.schema.json`, `/`, and `lesson/v2.json` all return
+  404 — so a fetch-and-compare guard is not available yet. When lesson schemas
+  are published, the guard should be upgraded to fetch-and-compare; until then
+  a cross-repo drift can only be caught by a human. Tracked separately.
 
 The version-range pattern is where this earns its keep. The schema accepts `<6`,
 `<=6`, `=6`, `>4`, `>=4`, and two-sided `>=4 <6`. It **rejects** npm-style
