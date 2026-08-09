@@ -42,8 +42,14 @@ librarian_lesson_valid_range() {
 
 	local nonzero='([1-9][0-9]*(\.[0-9]+)?(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*(\.[0-9]+)?|0+\.0+\.[0-9]*[1-9][0-9]*)'
 	local any='[0-9]+(\.[0-9]+)?(\.[0-9]+)?'
+	local pattern="^((<|<=|=)${any}|(>|>=)${nonzero}|(>|>=)${any} (<|<=)${any})$"
 
-	printf '%s' "$r" | grep -qE "^((<|<=|=)${any}|(>|>=)${nonzero}|(>|>=)${any} (<|<=)${any})$"
+	# Use bash's own regex engine rather than grep: grep's ^/$ anchor to line
+	# boundaries, not string boundaries, so a value with an embedded newline
+	# could smuggle a valid line past an otherwise-rejected string. [[ =~ ]]
+	# anchors to the whole string. The pattern must stay unquoted here —
+	# quoting the right-hand side of =~ forces literal string matching.
+	[[ "$r" =~ $pattern ]]
 }
 
 # Validate a full candidate. Prints nothing on success; prints a reason slug
@@ -85,12 +91,17 @@ librarian_lesson_validate_candidate() {
 		return 1
 	fi
 
-	# Every range must satisfy the vendored pattern.
+	# Every range must satisfy the vendored pattern. NUL-delimited, not
+	# newline-delimited: a range value with an embedded newline would
+	# otherwise split into two lines that can each pass individually even
+	# though the single value they came from is not a valid range. Do not
+	# skip empty reads either — jq never emits one for a non-empty object
+	# of strings, so an empty read means the range itself is empty, and
+	# librarian_lesson_valid_range already rejects that.
 	local range
-	while IFS= read -r range; do
-		[[ -z "$range" ]] && continue
+	while IFS= read -r -d '' range; do
 		librarian_lesson_valid_range "$range" || { printf 'schema_invalid\n' >&2; return 1; }
-	done < <(printf '%s' "$candidate" | jq -r '.applies_to.scope.versions[]' 2>/dev/null)
+	done < <(printf '%s' "$candidate" | jq --raw-output0 '.applies_to.scope.versions[]' 2>/dev/null)
 
 	return 0
 }

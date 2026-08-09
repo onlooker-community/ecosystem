@@ -57,6 +57,14 @@ _artifact() {
   done
 }
 
+@test "valid_range rejects a string with an embedded newline containing a valid line" {
+  # grep's ^/$ anchor to line boundaries, not string boundaries; a naive
+  # grep-based check would let a compound string like this slip through
+  # because its second line ("<6") is independently valid.
+  run librarian_lesson_valid_range "$(printf '>=999\n<6')"
+  [ "$status" -eq 1 ]
+}
+
 _candidate() {
   jq -cn --argjson versions "$1" --argjson stack "$2" '{
     claim: "Vitest 4 cannot import vite/module-runner on Vite 5",
@@ -116,5 +124,21 @@ _candidate() {
   candidate=$(_candidate '{"vite":"<6"}' '["vite"]' \
     | jq -c '.applies_to.scope = {kind: "version_independent", justification: "git behavior is stable"}')
   run librarian_lesson_validate_candidate "$candidate"
+  [ "$status" -eq 1 ]
+}
+
+@test "validate_candidate rejects an empty-string range" {
+  run librarian_lesson_validate_candidate \
+    "$(_candidate '{"vite":""}' '["vite"]')"
+  [ "$status" -eq 1 ]
+}
+
+@test "validate_candidate rejects a versions value with an embedded newline" {
+  # A single value like ">=999\n<6" must not be split by a newline-delimited
+  # read into two lines that each pass individually.
+  local newline_range
+  newline_range=$(printf '>=999\n<6')
+  run librarian_lesson_validate_candidate \
+    "$(_candidate "$(jq -cn --arg v "$newline_range" '{vite: $v}')" '["vite"]')"
   [ "$status" -eq 1 ]
 }
