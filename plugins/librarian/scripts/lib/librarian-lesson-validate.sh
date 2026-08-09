@@ -40,7 +40,12 @@ librarian_lesson_valid_range() {
 	local r="${1:-}"
 	[[ -z "$r" ]] && return 1
 
-	local nonzero='([1-9][0-9]*(\.[0-9]+)?(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*(\.[0-9]+)?|0+\.0+\.[0-9]*[1-9][0-9]*)'
+	# The integer-part alternative is [0-9]*[1-9][0-9]*, not [1-9][0-9]*: the
+	# vendored pattern's equivalent is \d*[1-9]\d*, which allows a leading
+	# zero digit (05, 007) as long as some digit is nonzero. [1-9][0-9]* only
+	# permits a nonzero *leading* digit, so it rejects >=05 while the vendored
+	# schema accepts it — a real jq/schema disagreement, not a style choice.
+	local nonzero='([0-9]*[1-9][0-9]*(\.[0-9]+)?(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*(\.[0-9]+)?|0+\.0+\.[0-9]*[1-9][0-9]*)'
 	local any='[0-9]+(\.[0-9]+)?(\.[0-9]+)?'
 	local pattern="^((<|<=|=)${any}|(>|>=)${nonzero}|(>|>=)${any} (<|<=)${any})$"
 
@@ -67,9 +72,23 @@ librarian_lesson_validate_candidate() {
 	# RFC3339 date-time) — a provenance-less artifact (session_id/created_at
 	# stitched in as "") must fail here, not pass through and get buried
 	# permanently once librarian_lesson_seen marks it handled.
+	#
+	# The `keys - [...] | length == 0` checks mirror `additionalProperties:
+	# false` on the vendored `evidence` and `applies_to` sub-schemas
+	# (including the "versioned" scope branch), and the `all(type ==
+	# "string" and length > 0)` checks mirror their array items' `minLength:
+	# 1`. Neither is decorative: without them a model that "helpfully" adds
+	# an extra field, or emits an empty-string array entry, produces a
+	# proposal that passes here but fails ajv against the contract it claims
+	# to satisfy — and lessons are meant to be shared with other people. Each
+	# `keys` call is guarded by a preceding `type == "object"` check in the
+	# same `and` chain: jq's `and` short-circuits left to right, so `keys` on
+	# a missing/non-object value is never reached.
 	if ! printf '%s' "$candidate" | jq -e '
 		(.claim | type) == "string" and (.claim | length) > 0
 		and (.rationale | type) == "string" and (.rationale | length) > 0
+		and (.evidence | type) == "object"
+		and ((.evidence | keys) - ["artifact_ids", "session_ids", "project_key", "observed_at", "resolution"] | length) == 0
 		and (.evidence.artifact_ids | type) == "array" and (.evidence.artifact_ids | length) > 0
 		and (.evidence.artifact_ids | all(type == "string" and test("^[0-9A-HJKMNP-TV-Z]{26}$")))
 		and (.evidence.session_ids | type) == "array" and (.evidence.session_ids | length) > 0
@@ -79,10 +98,16 @@ librarian_lesson_validate_candidate() {
 		and (.evidence.observed_at | type) == "string"
 		and (.evidence.observed_at | test("^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"))
 		and (.evidence.resolution | type) == "string" and (.evidence.resolution | length) > 0
+		and (.applies_to | type) == "object"
+		and ((.applies_to | keys) - ["stack", "scope", "file_patterns", "task_kinds"] | length) == 0
 		and (.applies_to.stack | type) == "array" and (.applies_to.stack | length) > 0
+		and (.applies_to.stack | all(type == "string" and length > 0))
 		and (.applies_to.file_patterns | type) == "array"
+		and (.applies_to.file_patterns | all(type == "string" and length > 0))
 		and (.applies_to.task_kinds | type) == "array"
+		and (.applies_to.task_kinds | all(type == "string" and length > 0))
 		and .applies_to.scope.kind == "versioned"
+		and ((.applies_to.scope | keys) - ["kind", "versions"] | length) == 0
 		and (.applies_to.scope.versions | type) == "object"
 		and (.applies_to.scope.versions | length) > 0
 	' >/dev/null 2>&1; then
