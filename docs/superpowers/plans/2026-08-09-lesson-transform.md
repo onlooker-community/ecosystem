@@ -1089,7 +1089,13 @@ librarian_lesson_transform_one() {
 Run: `bats test/bats/librarian-lesson-transform.bats`
 Expected: all PASS.
 
-Note: `librarian_lesson_transform_one` calls `librarian_config_get`, so the test helper must also source `librarian-config.sh` and call `librarian_config_load "$PROJECT_REPO"`. Add that to `_transform_setup` if the config lookups return empty.
+`_transform_setup` must also source `librarian-config.sh` and call `librarian_config_load "$PROJECT_REPO"` — not conditionally. `librarian_lesson_transform_one` calls `librarian_config_get`, which reads the `_LIBRARIAN_CONFIG` global; without a load that global is `{}` and the model lookup returns empty. The call still succeeds (an empty model just omits `--model`), so skipping the load would leave the config path silently unexercised rather than failing loudly. Add both lines to `_transform_setup`:
+
+```bash
+  # shellcheck disable=SC1091
+  source "${PLUGIN_ROOT}/scripts/lib/librarian-config.sh"
+  librarian_config_load "$PROJECT_REPO"
+```
 
 - [ ] **Step 6: Shellcheck**
 
@@ -1164,26 +1170,37 @@ source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-transform.sh"
 
 - [ ] **Step 4: Run the stage over the filtered artifacts**
 
-The hook already computes `FILTERED` (durability survivors) before the classifier loop. After that loop completes and before the watermark is written, add:
+Iterate `$KEPT`, **not** `$FILTERED`. `librarian_durability_filter` returns an
+object `{kept: [...], dropped: [...]}` (hook line 151); `KEPT` is the array
+extracted from it at line 152, and `KEPT_COUNT` is already computed at line 208.
+Iterating `FILTERED` directly would yield the two arrays, not artifacts.
+
+Match the classifier loop's idiom — a C-style index loop with `jq -c ".[$i]"` —
+rather than introducing a `while read` pattern the file does not use. Use
+distinct variable names so nothing from the classifier loop is clobbered.
+
+Add after the classifier loop completes, before the watermark is written:
 
 ```bash
 # ---------------------------------------------------------------------------
 # Stage 5 — lesson transform.
 #
-# Runs over the same durability-filtered artifacts the classifier saw. Each
-# artifact is independent: a decline or an outage on one never stops the rest.
+# Runs over the same durability survivors the classifier saw. Each artifact is
+# independent: a decline or an outage on one never stops the rest.
 # ---------------------------------------------------------------------------
 LESSON_PROPOSED=0
 LESSON_DECLINED=0
 
-while IFS= read -r _artifact; do
-	[[ -z "$_artifact" ]] && continue
-	_result=$(librarian_lesson_transform_one "$PROJECT_KEY" "$_artifact")
-	case "$_result" in
+for ((li = 0; li < KEPT_COUNT; li++)); do
+	LESSON_ARTIFACT=$(printf '%s' "$KEPT" | jq -c ".[$li]")
+	[[ -z "$LESSON_ARTIFACT" || "$LESSON_ARTIFACT" == "null" ]] && continue
+
+	LESSON_RESULT=$(librarian_lesson_transform_one "$PROJECT_KEY" "$LESSON_ARTIFACT")
+	case "$LESSON_RESULT" in
 		proposed:*) LESSON_PROPOSED=$((LESSON_PROPOSED + 1)) ;;
 		declined:*) LESSON_DECLINED=$((LESSON_DECLINED + 1)) ;;
 	esac
-done < <(printf '%s' "$FILTERED" | jq -c '.[]' 2>/dev/null)
+done
 ```
 
 - [ ] **Step 5: Run the tests**
@@ -1272,19 +1289,19 @@ Expected: FAIL — no matching line in the event log.
 Extend the `case` added in Task 5:
 
 ```bash
-	case "$_result" in
+	case "$LESSON_RESULT" in
 		proposed:*)
 			LESSON_PROPOSED=$((LESSON_PROPOSED + 1))
-			librarian_emit "librarian.lesson.proposed" "$SESSION_ID" "$(jq -n \
-				--arg lesson_id "${_result#proposed:}" \
-				--arg src "$(printf '%s' "$_artifact" | jq -r '.id // ""')" \
+			librarian_emit "librarian.lesson.proposed" "$SESSION_ID" "$(jq -cn \
+				--arg lesson_id "${LESSON_RESULT#proposed:}" \
+				--arg src "$(printf '%s' "$LESSON_ARTIFACT" | jq -r '.id // ""')" \
 				'{ lesson_id: $lesson_id, source_artifact_id: $src }')"
 			;;
 		declined:*)
 			LESSON_DECLINED=$((LESSON_DECLINED + 1))
-			librarian_emit "librarian.lesson.declined" "$SESSION_ID" "$(jq -n \
-				--arg reason "${_result#declined:}" \
-				--arg src "$(printf '%s' "$_artifact" | jq -r '.id // ""')" \
+			librarian_emit "librarian.lesson.declined" "$SESSION_ID" "$(jq -cn \
+				--arg reason "${LESSON_RESULT#declined:}" \
+				--arg src "$(printf '%s' "$LESSON_ARTIFACT" | jq -r '.id // ""')" \
 				'{ reason: $reason, source_artifact_id: $src }')"
 			;;
 	esac
