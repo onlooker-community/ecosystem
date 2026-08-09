@@ -386,3 +386,109 @@ STUB
   [ "$output" = "skipped:seen" ]
   [ "$(wc -l < "${LESSONS_DIR}/declined.jsonl")" -eq 1 ]
 }
+
+# ----------------------------------------------------------------------------
+# Review round 1 fixes: config-driven timeout, tightened provenance
+# validation, prose-tolerant JSON extraction, and the gaps a wrong
+# implementation could slip through undetected.
+# ----------------------------------------------------------------------------
+
+@test "the reason clamp discards a reason slug the model invented" {
+  # Deleting the clamp in librarian_lesson_transform_one lets an arbitrary
+  # model-supplied reason string enter the permanent ledger unchecked.
+  _transform_setup
+  cat > "${STUB_BIN}/claude" <<'STUB'
+#!/usr/bin/env bash
+cat >/dev/null
+printf '%s' '{"eligible":false,"reason":"model_made_this_up"}'
+STUB
+  chmod +x "${STUB_BIN}/claude"
+  art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "Vitest 4.1.9 / Vite 5.x" "module-runner missing in 5.4.21")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
+  [ "$status" -eq 0 ]
+  [ "$output" = "declined:transform_invalid" ]
+  tail -n 1 "${LESSONS_DIR}/declined.jsonl" | jq -e '.reason == "transform_invalid"'
+}
+
+@test "transform_one stitches all four provenance fields, not just versions" {
+  # Swapping session_id/artifact_id or using the wrong timestamp source
+  # passed every other assertion in this file before this test existed.
+  _transform_setup
+  art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "Vitest 4.1.9 / Vite 5.x mismatch" \
+    "Vitest 4.1.9 imports vite/module-runner which is absent in Vite 5.4.21.")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
+  [ "$status" -eq 0 ]
+  [[ "$output" == proposed:* ]]
+  id="${output#proposed:}"
+  jq -e --arg pk "$PROJECT_KEY" '
+    .candidate.evidence.artifact_ids == ["01KZ45MKAM734ZS7JK24D2DK0R"]
+    and .candidate.evidence.session_ids == ["sess-1"]
+    and .candidate.evidence.project_key == $pk
+    and .candidate.evidence.observed_at == "2026-08-03T15:59:48Z"
+  ' "${LESSONS_DIR}/proposals/${id}.json"
+}
+
+@test "build_prompt states there is no version-independent option and forbids npm ranges" {
+  _transform_setup
+  art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "Vitest 4.1.9 / Vite 5.x" "module-runner missing in 5.4.21")
+  prompt=$(librarian_lesson_build_prompt "$art")
+  [[ "$prompt" == *"no version-independent option"* ]]
+  [[ "$prompt" == *'"^5.4.21"'* ]]
+  [[ "$prompt" == *'">=0"'* ]]
+}
+
+@test "transform_one declines a provenance-less artifact instead of writing invalid evidence" {
+  # archivist-extract.sh writes session_id: null when the hook payload
+  # lacked one. That must not silently become evidence.session_ids: [""] in
+  # a written proposal — it must fail validation like any other schema
+  # violation, not get buried as though it had been judged and approved.
+  _transform_setup
+  art=$(jq -cn --arg id "01KZ45MKAM734ZS7JK24D2DK0R" --arg k "$PROJECT_KEY" \
+    '{id: $id, kind: "decision", project_key: $k, session_id: null,
+      created_at: "2026-08-03T15:59:48Z",
+      summary: "Vitest 4.1.9 / Vite 5.x mismatch",
+      detail: "Vitest 4.1.9 imports vite/module-runner which is absent in Vite 5.4.21."}')
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
+  [ "$status" -eq 0 ]
+  [ "$output" = "declined:schema_invalid" ]
+  [ -z "$(ls -A "${LESSONS_DIR}/proposals")" ]
+}
+
+@test "transform_one recovers a candidate wrapped in prose instead of declining it as unparseable" {
+  _transform_setup
+  cat > "${STUB_BIN}/claude" <<'STUB'
+#!/usr/bin/env bash
+cat >/dev/null
+printf '%s' 'Here is the JSON you requested: {"claim":"Vitest 4 cannot import vite/module-runner on Vite 5","rationale":"vite/module-runner ships in Vite 6; Vitest 4 assumes it exists.","evidence":{"resolution":"Pin vitest to 3.x until Vite 6 lands."},"applies_to":{"stack":["vite","vitest"],"scope":{"kind":"versioned","versions":{"vite":"<6","vitest":">=4"}},"file_patterns":[],"task_kinds":[]}} Hope that helps!'
+STUB
+  chmod +x "${STUB_BIN}/claude"
+  art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "Vitest 4.1.9 / Vite 5.x mismatch" \
+    "Vitest 4.1.9 imports vite/module-runner which is absent in Vite 5.4.21.")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
+  [ "$status" -eq 0 ]
+  [[ "$output" == proposed:* ]]
+}
+
+@test "librarian_lesson_call reads timeout_seconds from config instead of hardcoding it" {
+  _transform_setup
+  mkdir -p "${PROJECT_REPO}/.claude"
+  printf '%s\n' '{"librarian":{"lesson_transform":{"timeout_seconds":7}}}' \
+    > "${PROJECT_REPO}/.claude/settings.json"
+  librarian_config_load "$PROJECT_REPO"
+
+  TIMEOUT_CAPTURE="${BATS_TEST_TMPDIR}/timeout-seconds-used"
+  export TIMEOUT_CAPTURE
+  cat > "${STUB_BIN}/timeout" <<'STUB'
+#!/usr/bin/env bash
+printf '%s' "$1" > "${TIMEOUT_CAPTURE}"
+shift
+exec "$@"
+STUB
+  chmod +x "${STUB_BIN}/timeout"
+
+  art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "Vitest 4.1.9 / Vite 5.x mismatch" \
+    "Vitest 4.1.9 imports vite/module-runner which is absent in Vite 5.4.21.")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
+  [ "$status" -eq 0 ]
+  [ "$(cat "$TIMEOUT_CAPTURE")" = "7" ]
+}

@@ -7,9 +7,15 @@
 # stages, so this never produces a schema-complete Lesson and cannot be
 # validated against the full lesson schema.
 #
-# Requires librarian-lesson-validate.sh and librarian-lesson-storage.sh.
+# Requires librarian-lesson-validate.sh, librarian-lesson-storage.sh, and
+# librarian-config.sh (librarian_config_get).
+#
+# Config inputs (read via librarian_config_get from librarian_lesson_call):
+#   librarian.lesson_transform.model              Anthropic model id
+#   librarian.lesson_transform.timeout_seconds    Hard wall-clock ceiling
 
-_LIBRARIAN_LESSON_TIMEOUT_SECONDS="${_LIBRARIAN_LESSON_TIMEOUT_SECONDS:-20}"
+# Fallback when config hasn't been loaded or leaves the key unset.
+_LIBRARIAN_LESSON_DEFAULT_TIMEOUT_SECONDS=20
 
 # Usage: librarian_lesson_build_prompt <artifact_json>
 librarian_lesson_build_prompt() {
@@ -80,6 +86,54 @@ created_at: ${created_at}
 EOF
 }
 
+# Extract the first balanced top-level JSON object from a string that may
+# carry surrounding prose ("Here is the JSON: {...}"). Prints the substring
+# on success, prints nothing and returns 1 on failure. Depth-tracks braces
+# while skipping ones inside string literals (honoring backslash escapes),
+# so a claim like `{"claim": "uses \"quotes\" and { in prose"}` still
+# extracts correctly.
+#
+# Prose wrapping is not the same failure as unparseable output: a model that
+# added a sentence around otherwise-valid JSON would very likely produce
+# clean JSON on a resample, so declining it as transform_invalid would bury
+# a good artifact over formatting noise rather than a real judgment problem.
+#
+# Usage: _librarian_lesson_extract_json_object <text>
+_librarian_lesson_extract_json_object() {
+	local text="$1"
+	local start=-1 depth=0 in_string=0 escape=0
+	local i len ch
+
+	len=${#text}
+	for (( i = 0; i < len; i++ )); do
+		ch="${text:i:1}"
+		if [[ $start -eq -1 ]]; then
+			[[ "$ch" == "{" ]] && { start=$i; depth=1; }
+			continue
+		fi
+		if [[ $escape -eq 1 ]]; then
+			escape=0
+			continue
+		fi
+		case "$ch" in
+			'\') [[ $in_string -eq 1 ]] && escape=1 ;;
+			'"') in_string=$((1 - in_string)) ;;
+			'{') [[ $in_string -eq 0 ]] && depth=$((depth + 1)) ;;
+			'}')
+				if [[ $in_string -eq 0 ]]; then
+					depth=$((depth - 1))
+					if [[ $depth -eq 0 ]]; then
+						printf '%s' "${text:start:i-start+1}"
+						return 0
+					fi
+				fi
+				;;
+		esac
+	done
+
+	return 1
+}
+
 # Call the model. Prints raw output, or empty string on ANY infrastructure
 # failure — missing CLI, timeout, empty response. Empty means "could not
 # judge", which is not a verdict.
@@ -103,12 +157,17 @@ librarian_lesson_call() {
 	local args=(-p --max-turns 1)
 	[[ -n "$model" ]] && args+=(--model "$model")
 
+	local timeout_seconds
+	timeout_seconds=$(librarian_config_get '.librarian.lesson_transform.timeout_seconds' 2>/dev/null)
+	[[ -z "$timeout_seconds" || "$timeout_seconds" == "null" ]] \
+		&& timeout_seconds="$_LIBRARIAN_LESSON_DEFAULT_TIMEOUT_SECONDS"
+
 	local response=""
 	if command -v timeout >/dev/null 2>&1; then
-		response=$(timeout "$_LIBRARIAN_LESSON_TIMEOUT_SECONDS" \
+		response=$(timeout "$timeout_seconds" \
 			claude "${args[@]}" < "$prompt_file" 2>/dev/null) || response=""
 	elif command -v gtimeout >/dev/null 2>&1; then
-		response=$(gtimeout "$_LIBRARIAN_LESSON_TIMEOUT_SECONDS" \
+		response=$(gtimeout "$timeout_seconds" \
 			claude "${args[@]}" < "$prompt_file" 2>/dev/null) || response=""
 	else
 		response=$(claude "${args[@]}" < "$prompt_file" 2>/dev/null) || response=""
@@ -118,7 +177,27 @@ librarian_lesson_call() {
 	trap - EXIT
 
 	[[ -z "$response" ]] && return 0
-	printf '%s' "$response" | sed -e 's/^```json//' -e 's/^```//' -e 's/```$//'
+
+	local cleaned
+	cleaned=$(printf '%s' "$response" | sed -e 's/^```json//' -e 's/^```//' -e 's/```$//')
+
+	# Fast path: the response is already valid JSON on its own.
+	if printf '%s' "$cleaned" | jq -e . >/dev/null 2>&1; then
+		printf '%s' "$cleaned"
+		return 0
+	fi
+
+	# Slow path: pull the first balanced JSON object out of surrounding
+	# prose. Only used when it actually recovers valid JSON — otherwise fall
+	# through to the original text so the unparseable case still declines.
+	local extracted
+	extracted=$(_librarian_lesson_extract_json_object "$cleaned")
+	if [[ -n "$extracted" ]] && printf '%s' "$extracted" | jq -e . >/dev/null 2>&1; then
+		printf '%s' "$extracted"
+		return 0
+	fi
+
+	printf '%s' "$cleaned"
 }
 
 # Transform one artifact. Always exits 0. Prints exactly one of:
