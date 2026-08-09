@@ -142,3 +142,89 @@ _candidate() {
     "$(_candidate "$(jq -cn --arg v "$newline_range" '{vite: $v}')" '["vite"]')"
   [ "$status" -eq 1 ]
 }
+
+# ----------------------------------------------------------------------------
+# Storage: the lessons/ subtree, proposal writes, the declined ledger, and
+# artifact-keyed idempotency.
+# ----------------------------------------------------------------------------
+
+_storage_setup() {
+  # shellcheck disable=SC1091
+  source "${PLUGIN_ROOT}/scripts/lib/librarian-project-key.sh"
+  # shellcheck disable=SC1091
+  source "${PLUGIN_ROOT}/scripts/lib/librarian-ulid.sh"
+  # shellcheck disable=SC1091
+  source "${PLUGIN_ROOT}/scripts/lib/librarian-storage.sh"
+  # shellcheck disable=SC1091
+  source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-storage.sh"
+
+  PROJECT_REPO="${BATS_TEST_TMPDIR}/repo"
+  mkdir -p "$PROJECT_REPO"
+  git -C "$PROJECT_REPO" init -q
+  git -C "$PROJECT_REPO" config user.email t@example.com
+  git -C "$PROJECT_REPO" config user.name "Test"
+  git -C "$PROJECT_REPO" remote add origin git@github.com:org/lesson-fixture.git
+  PROJECT_KEY=$(librarian_project_key "$PROJECT_REPO")
+  [ -n "$PROJECT_KEY" ]
+  LESSONS_DIR="${ONLOOKER_DIR}/librarian/${PROJECT_KEY}/lessons"
+}
+
+@test "storage_init creates the proposals and approved directories" {
+  _storage_setup
+  librarian_lesson_storage_init "$PROJECT_KEY"
+  [ -d "${LESSONS_DIR}/proposals" ]
+  [ -d "${LESSONS_DIR}/approved" ]
+}
+
+@test "write_proposal lands a ULID-keyed file carrying its artifact_id" {
+  _storage_setup
+  librarian_lesson_storage_init "$PROJECT_KEY"
+  candidate=$(jq -cn '{claim: "c", rationale: "r"}')
+  id=$(librarian_lesson_write_proposal "$PROJECT_KEY" "$candidate" "01KZ45MKAM734ZS7JK24D2DK0R")
+  [ -n "$id" ]
+  [ -f "${LESSONS_DIR}/proposals/${id}.json" ]
+  jq -e '.artifact_id == "01KZ45MKAM734ZS7JK24D2DK0R" and .candidate.claim == "c"' \
+    "${LESSONS_DIR}/proposals/${id}.json"
+}
+
+@test "append_declined writes one JSONL line per decline" {
+  _storage_setup
+  librarian_lesson_storage_init "$PROJECT_KEY"
+  librarian_lesson_append_declined "$PROJECT_KEY" "01KZ45MKAM734ZS7JK24D2DK0R" "no_resolution"
+  librarian_lesson_append_declined "$PROJECT_KEY" "01KZEAF9EY4C6TTR0V7YFN9VYJ" "no_versions"
+  [ "$(wc -l < "${LESSONS_DIR}/declined.jsonl")" -eq 2 ]
+  head -n 1 "${LESSONS_DIR}/declined.jsonl" \
+    | jq -e '.artifact_id == "01KZ45MKAM734ZS7JK24D2DK0R" and .reason == "no_resolution"'
+}
+
+@test "seen reports a fresh artifact as new" {
+  _storage_setup
+  librarian_lesson_storage_init "$PROJECT_KEY"
+  run librarian_lesson_seen "$PROJECT_KEY" "01KZ45MKAM734ZS7JK24D2DK0R"
+  [ "$status" -eq 1 ]
+}
+
+@test "seen finds an artifact recorded in declined.jsonl" {
+  _storage_setup
+  librarian_lesson_storage_init "$PROJECT_KEY"
+  librarian_lesson_append_declined "$PROJECT_KEY" "01KZ45MKAM734ZS7JK24D2DK0R" "no_resolution"
+  run librarian_lesson_seen "$PROJECT_KEY" "01KZ45MKAM734ZS7JK24D2DK0R"
+  [ "$status" -eq 0 ]
+}
+
+@test "seen finds an artifact already sitting in proposals" {
+  _storage_setup
+  librarian_lesson_storage_init "$PROJECT_KEY"
+  librarian_lesson_write_proposal "$PROJECT_KEY" "$(jq -cn '{claim: "c"}')" "01KZ45MKAM734ZS7JK24D2DK0R"
+  run librarian_lesson_seen "$PROJECT_KEY" "01KZ45MKAM734ZS7JK24D2DK0R"
+  [ "$status" -eq 0 ]
+}
+
+@test "seen finds an artifact already promoted into the approved pool" {
+  _storage_setup
+  librarian_lesson_storage_init "$PROJECT_KEY"
+  jq -n '{artifact_id: "01KZ45MKAM734ZS7JK24D2DK0R"}' \
+    > "${LESSONS_DIR}/approved/01KZ45MKGQ7QZWMABQ4H12SHSV.json"
+  run librarian_lesson_seen "$PROJECT_KEY" "01KZ45MKAM734ZS7JK24D2DK0R"
+  [ "$status" -eq 0 ]
+}
