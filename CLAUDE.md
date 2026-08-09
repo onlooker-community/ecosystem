@@ -94,7 +94,7 @@ Tests use an isolated temp home; nothing writes to your real `~/.onlooker/`.
 Workflow:
 1. Create a feature branch: `git switch -c <type>/<short-description>`
 2. Commit using `/commit`
-3. Push the branch and open a PR using `/git:gh-pr-create`
+3. Push the branch and open a PR using `/git-workflow:pr`
 4. Wait for CI to pass before merging
 
 ## Conventions
