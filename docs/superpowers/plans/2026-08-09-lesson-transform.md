@@ -383,13 +383,19 @@ librarian_lesson_valid_range() {
 
 	local nonzero='([1-9][0-9]*(\.[0-9]+)?(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*(\.[0-9]+)?|0+\.0+\.[0-9]*[1-9][0-9]*)'
 	local any='[0-9]+(\.[0-9]+)?(\.[0-9]+)?'
+	local pattern="^((<|<=|=)${any}|(>|>=)${nonzero}|(>|>=)${any} (<|<=)${any})$"
 
-	# Use bash's own regex engine, NOT `printf ... | grep -qE`. grep matches
-	# per line, so ^ and $ anchor to line boundaries rather than to the whole
-	# string, and a value like "<6\n>=999" passes because one of its lines
-	# looks valid. The schema's ECMA262 pattern has no /m flag and rejects
-	# that outright, so grep here diverges from the source of truth.
-	[[ "$r" =~ ^((\<|\<=|=)${any}|(\>|\>=)${nonzero}|(\>|\>=)${any}\ (\<|\<=)${any})$ ]]
+	# Use bash's own regex engine rather than grep: grep's ^/$ anchor to line
+	# boundaries, not string boundaries, so a value with an embedded newline
+	# could smuggle a valid line past an otherwise-rejected string. [[ =~ ]]
+	# anchors to the whole string. The pattern must stay unquoted here —
+	# quoting the right-hand side of =~ forces literal string matching.
+	#
+	# Do NOT escape the angle brackets as \< and \>. In GNU/glibc regex those
+	# are word-boundary assertions, not escaped literals, so an inlined
+	# escaped pattern behaves differently on Linux CI than on macOS. Build the
+	# pattern in a variable with plain < and > as above.
+	[[ "$r" =~ $pattern ]]
 }
 
 # Validate a full candidate. Prints nothing on success; prints a reason slug
