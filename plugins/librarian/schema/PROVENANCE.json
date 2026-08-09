@@ -1,0 +1,7 @@
+{
+  "source_repo": "https://github.com/onlooker-community/onlooker",
+  "source_path": "packages/lesson-contract/schema/lesson.schema.json",
+  "schema_version": 2,
+  "extracted": ["properties.evidence", "properties.applies_to"],
+  "note": "Vendored because ajv is unavailable at runtime (ADR-005). Runtime enforcement is jq in librarian-lesson-validate.sh; these files are the source of truth those rules mirror. Upgrade to a fetch-and-compare guard once lesson schemas are published — schema.onlooker.dev serves none today."
+}

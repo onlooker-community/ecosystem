@@ -10,3 +10,6 @@ test/tmp-schema-sequence-isolated/
 *.db
 .beads-credential-key
 .beads/proxieddb/
+
+# Subagent-driven development scratch (ledgers, briefs, review packages)
+.superpowers/

@@ -16,6 +16,10 @@
       "max_output_tokens": 256,
       "min_classifier_confidence": 0.6
     },
+    "lesson_transform": {
+      "model": "claude-haiku-4-5-20251001",
+      "timeout_seconds": 20
+    },
     "durability_filter": {
       "marker_phrases": [
         "always",

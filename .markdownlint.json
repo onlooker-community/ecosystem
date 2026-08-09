@@ -13,5 +13,8 @@
   "MD060": false,
   "MD024": {
     "siblings_only": true
+  },
+  "MD010": {
+    "code_blocks": false
   }
 }
