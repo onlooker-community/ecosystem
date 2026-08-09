@@ -413,28 +413,42 @@ STUB
 @test "transform_one stitches all four provenance fields, not just versions" {
   # Swapping session_id/artifact_id or using the wrong timestamp source
   # passed every other assertion in this file before this test existed.
+  #
+  # The two bare assertions below are chained with && into one statement
+  # rather than left as separate lines: under the macOS system bash (3.2)
+  # that `bats` resolves via `#!/usr/bin/env bash`, a bare `[[ ]]` that
+  # fails and isn't the test's last statement does not abort the test —
+  # only a `&&`/`||` chain's own short-circuited exit status reliably gates
+  # regardless of bash version. See ecosystem-75a.
   _transform_setup
   art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "Vitest 4.1.9 / Vite 5.x mismatch" \
     "Vitest 4.1.9 imports vite/module-runner which is absent in Vite 5.4.21.")
   run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
-  [ "$status" -eq 0 ]
-  [[ "$output" == proposed:* ]]
   id="${output#proposed:}"
-  jq -e --arg pk "$PROJECT_KEY" '
-    .candidate.evidence.artifact_ids == ["01KZ45MKAM734ZS7JK24D2DK0R"]
-    and .candidate.evidence.session_ids == ["sess-1"]
-    and .candidate.evidence.project_key == $pk
-    and .candidate.evidence.observed_at == "2026-08-03T15:59:48Z"
-  ' "${LESSONS_DIR}/proposals/${id}.json"
+  [ "$status" -eq 0 ] \
+    && [[ "$output" == proposed:* ]] \
+    && jq -e --arg pk "$PROJECT_KEY" '
+      .candidate.evidence.artifact_ids == ["01KZ45MKAM734ZS7JK24D2DK0R"]
+      and .candidate.evidence.session_ids == ["sess-1"]
+      and .candidate.evidence.project_key == $pk
+      and .candidate.evidence.observed_at == "2026-08-03T15:59:48Z"
+    ' "${LESSONS_DIR}/proposals/${id}.json"
 }
 
 @test "build_prompt states there is no version-independent option and forbids npm ranges" {
+  # All three checks are chained with && into one statement — see the note
+  # on the provenance-stitching test above: a bare, non-last `[[ ]]` does
+  # not gate the test under the bash 3.2 that `bats` resolves on this
+  # machine. Only the third check was originally last, so deleting the
+  # "no version-independent option" paragraph from build_prompt passed
+  # this test as first written — the check for it ran, failed, and the
+  # failure was silently swallowed.
   _transform_setup
   art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "Vitest 4.1.9 / Vite 5.x" "module-runner missing in 5.4.21")
   prompt=$(librarian_lesson_build_prompt "$art")
-  [[ "$prompt" == *"no version-independent option"* ]]
-  [[ "$prompt" == *'"^5.4.21"'* ]]
-  [[ "$prompt" == *'">=0"'* ]]
+  [[ "$prompt" == *"no version-independent option"* ]] \
+    && [[ "$prompt" == *'"^5.4.21"'* ]] \
+    && [[ "$prompt" == *'">=0"'* ]]
 }
 
 @test "transform_one declines a provenance-less artifact instead of writing invalid evidence" {
@@ -489,6 +503,38 @@ STUB
   art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "Vitest 4.1.9 / Vite 5.x mismatch" \
     "Vitest 4.1.9 imports vite/module-runner which is absent in Vite 5.4.21.")
   run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
-  [ "$status" -eq 0 ]
-  [ "$(cat "$TIMEOUT_CAPTURE")" = "7" ]
+  [ "$status" -eq 0 ] \
+    && [ "$(cat "$TIMEOUT_CAPTURE")" = "7" ]
+}
+
+@test "a pathologically large response terminates quickly instead of hanging on extraction" {
+  # _librarian_lesson_extract_json_object is a per-character bash scan —
+  # effectively O(n^2) on long input. It runs after the claude call,
+  # uncapped, inside a SessionEnd hook that must not stall session end, and
+  # nothing bounds the model's response size (claude -p has no such flag).
+  # This response has no brace anywhere, so recovery is impossible and the
+  # correct outcome is declined:transform_invalid — the test asserts that
+  # verdict is reached well inside a 5s budget, not just that it's eventually
+  # reached at all. 40k chars is sized to fail loudly (tens of seconds, not
+  # a borderline few) if the bound in librarian_lesson_call is ever removed,
+  # rather than flake near the threshold.
+  _transform_setup
+  cat > "${STUB_BIN}/claude" <<'STUB'
+#!/usr/bin/env bash
+cat >/dev/null
+printf '%s' 'not json, just prose. '
+printf '%*s' 40000 '' | tr ' ' 'x'
+STUB
+  chmod +x "${STUB_BIN}/claude"
+  art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "Vitest 4.1.9 / Vite 5.x mismatch" \
+    "Vitest 4.1.9 imports vite/module-runner which is absent in Vite 5.4.21.")
+
+  start=$(date +%s)
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
+  end=$(date +%s)
+  elapsed=$((end - start))
+
+  [ "$status" -eq 0 ] \
+    && [ "$output" = "declined:transform_invalid" ] \
+    && [ "$elapsed" -lt 5 ]
 }

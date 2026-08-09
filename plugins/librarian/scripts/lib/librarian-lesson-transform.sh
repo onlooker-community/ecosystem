@@ -17,6 +17,17 @@
 # Fallback when config hasn't been loaded or leaves the key unset.
 _LIBRARIAN_LESSON_DEFAULT_TIMEOUT_SECONDS=20
 
+# Cap on how much of a response the JSON-object extractor will scan. The
+# scanner is a per-character bash loop — effectively O(n^2) on long input,
+# since bash string slicing on a long string isn't O(1) per call — and it
+# runs after the claude call, uncapped, inside a SessionEnd hook that must
+# not stall session end. `claude -p` has no output-size flag to bound the
+# response itself, so the bound is enforced here instead. A response that
+# exceeds this without yielding valid JSON in the scanned prefix has not
+# followed the "output ONLY a single JSON object on one line" instruction
+# anyway, so declining it is correct, not just expedient.
+_LIBRARIAN_LESSON_EXTRACT_MAX_CHARS=8192
+
 # Usage: librarian_lesson_build_prompt <artifact_json>
 librarian_lesson_build_prompt() {
 	local artifact="$1"
@@ -188,10 +199,14 @@ librarian_lesson_call() {
 	fi
 
 	# Slow path: pull the first balanced JSON object out of surrounding
-	# prose. Only used when it actually recovers valid JSON — otherwise fall
-	# through to the original text so the unparseable case still declines.
+	# prose. Bounded to a fixed prefix (see _LIBRARIAN_LESSON_EXTRACT_MAX_CHARS)
+	# so a rambling, arbitrarily long response can't turn the O(n^2) scan
+	# into an unbounded stall. Only used when it actually recovers valid
+	# JSON — otherwise fall through to the original text so the
+	# unparseable case still declines.
 	local extracted
-	extracted=$(_librarian_lesson_extract_json_object "$cleaned")
+	extracted=$(_librarian_lesson_extract_json_object \
+		"${cleaned:0:_LIBRARIAN_LESSON_EXTRACT_MAX_CHARS}")
 	if [[ -n "$extracted" ]] && printf '%s' "$extracted" | jq -e . >/dev/null 2>&1; then
 		printf '%s' "$extracted"
 		return 0
