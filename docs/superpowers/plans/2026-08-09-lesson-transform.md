@@ -412,10 +412,13 @@ librarian_lesson_validate_candidate() {
 		(.claim | type) == "string" and (.claim | length) > 0
 		and (.rationale | type) == "string" and (.rationale | length) > 0
 		and (.evidence.artifact_ids | type) == "array" and (.evidence.artifact_ids | length) > 0
+		and ([.evidence.artifact_ids[] | select(test("^[0-9A-HJKMNP-TV-Z]{26}$") | not)] | length) == 0
 		and (.evidence.session_ids | type) == "array" and (.evidence.session_ids | length) > 0
+		and ([.evidence.session_ids[] | select(type != "string" or length == 0)] | length) == 0
 		and (.evidence.project_key | type) == "string"
 		and (.evidence.project_key | test("^[0-9a-f]{12}$"))
 		and (.evidence.observed_at | type) == "string"
+		and (.evidence.observed_at | test("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"))
 		and (.evidence.resolution | type) == "string" and (.evidence.resolution | length) > 0
 		and (.applies_to.stack | type) == "array" and (.applies_to.stack | length) > 0
 		and (.applies_to.file_patterns | type) == "array"
@@ -427,6 +430,16 @@ librarian_lesson_validate_candidate() {
 		printf 'schema_invalid\n' >&2
 		return 1
 	fi
+
+	# The provenance checks above are not decoration. This stage is the sole
+	# producer of evidence.{artifact_ids,session_ids,project_key,observed_at},
+	# and archivist writes `session_id: null` whenever a hook payload lacked
+	# one (archivist-extract.sh). The transform turns that into "", so without
+	# these rules a candidate carrying session_ids: [""] validates here while
+	# violating the vendored schema's minLength: 1 — the proposal lands, the
+	# artifact is marked permanently seen, and the violation only surfaces
+	# downstream. That is the same burial the failure taxonomy exists to
+	# prevent, through a different door.
 
 	# Cross-field rule JSON Schema cannot express: every versions key must
 	# name an entry in stack.
@@ -934,7 +947,16 @@ Expected: the new tests FAIL with `librarian_lesson_transform_one: command not f
 #
 # Requires librarian-lesson-validate.sh and librarian-lesson-storage.sh.
 
-_LIBRARIAN_LESSON_TIMEOUT_SECONDS="${_LIBRARIAN_LESSON_TIMEOUT_SECONDS:-20}"
+# Read from config, never hardcoded. A `timeout_seconds` key that config
+# declares but code ignores is the same dead config this plan cut
+# `temperature` and `max_output_tokens` for — it reads as though it works.
+# Every peer plugin wires this through its own config getter.
+_librarian_lesson_timeout() {
+	local v
+	v=$(librarian_config_get '.librarian.lesson_transform.timeout_seconds')
+	[[ -z "$v" || "$v" == "null" ]] && v=20
+	printf '%s' "$v"
+}
 
 # Usage: librarian_lesson_build_prompt <artifact_json>
 librarian_lesson_build_prompt() {
@@ -1030,10 +1052,10 @@ librarian_lesson_call() {
 
 	local response=""
 	if command -v timeout >/dev/null 2>&1; then
-		response=$(timeout "$_LIBRARIAN_LESSON_TIMEOUT_SECONDS" \
+		response=$(timeout "$(_librarian_lesson_timeout)" \
 			claude "${args[@]}" < "$prompt_file" 2>/dev/null) || response=""
 	elif command -v gtimeout >/dev/null 2>&1; then
-		response=$(gtimeout "$_LIBRARIAN_LESSON_TIMEOUT_SECONDS" \
+		response=$(gtimeout "$(_librarian_lesson_timeout)" \
 			claude "${args[@]}" < "$prompt_file" 2>/dev/null) || response=""
 	else
 		response=$(claude "${args[@]}" < "$prompt_file" 2>/dev/null) || response=""
