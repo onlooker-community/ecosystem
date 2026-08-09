@@ -381,7 +381,12 @@ librarian_lesson_valid_range() {
 	local r="${1:-}"
 	[[ -z "$r" ]] && return 1
 
-	local nonzero='([1-9][0-9]*(\.[0-9]+)?(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*(\.[0-9]+)?|0+\.0+\.[0-9]*[1-9][0-9]*)'
+	# The integer-part alternative is [0-9]*[1-9][0-9]*, not [1-9][0-9]*: the
+	# vendored pattern's equivalent is \d*[1-9]\d*, which allows a leading
+	# zero digit (05, 007) as long as some digit is nonzero. [1-9][0-9]* only
+	# permits a nonzero *leading* digit, so it rejects >=05 while the vendored
+	# schema accepts it — a real jq/schema disagreement, not a style choice.
+	local nonzero='([0-9]*[1-9][0-9]*(\.[0-9]+)?(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*(\.[0-9]+)?|0+\.0+\.[0-9]*[1-9][0-9]*)'
 	local any='[0-9]+(\.[0-9]+)?(\.[0-9]+)?'
 	local pattern="^((<|<=|=)${any}|(>|>=)${nonzero}|(>|>=)${any} (<|<=)${any})$"
 
@@ -407,39 +412,54 @@ librarian_lesson_validate_candidate() {
 	[[ -z "$candidate" ]] && { printf 'schema_invalid\n' >&2; return 1; }
 
 	# Structural shape, including the versioned-only rule and a non-empty
-	# resolution. `versions` must be a non-empty object.
+	# resolution. `versions` must be a non-empty object. artifact_ids,
+	# session_ids, and observed_at are checked against the same patterns as
+	# the vendored lesson-evidence.subschema.json (ULID, non-empty string,
+	# RFC3339 date-time) — a provenance-less artifact (session_id/created_at
+	# stitched in as "") must fail here, not pass through and get buried
+	# permanently once librarian_lesson_seen marks it handled.
+	#
+	# The `keys - [...] | length == 0` checks mirror `additionalProperties:
+	# false` on the vendored `evidence` and `applies_to` sub-schemas
+	# (including the "versioned" scope branch), and the `all(type ==
+	# "string" and length > 0)` checks mirror their array items' `minLength:
+	# 1`. Neither is decorative: without them a model that "helpfully" adds
+	# an extra field, or emits an empty-string array entry, produces a
+	# proposal that passes here but fails ajv against the contract it claims
+	# to satisfy — and lessons are meant to be shared with other people. Each
+	# `keys` call is guarded by a preceding `type == "object"` check in the
+	# same `and` chain: jq's `and` short-circuits left to right, so `keys` on
+	# a missing/non-object value is never reached.
 	if ! printf '%s' "$candidate" | jq -e '
 		(.claim | type) == "string" and (.claim | length) > 0
 		and (.rationale | type) == "string" and (.rationale | length) > 0
+		and (.evidence | type) == "object"
+		and ((.evidence | keys) - ["artifact_ids", "session_ids", "project_key", "observed_at", "resolution"] | length) == 0
 		and (.evidence.artifact_ids | type) == "array" and (.evidence.artifact_ids | length) > 0
-		and ([.evidence.artifact_ids[] | select(test("^[0-9A-HJKMNP-TV-Z]{26}$") | not)] | length) == 0
+		and (.evidence.artifact_ids | all(type == "string" and test("^[0-9A-HJKMNP-TV-Z]{26}$")))
 		and (.evidence.session_ids | type) == "array" and (.evidence.session_ids | length) > 0
-		and ([.evidence.session_ids[] | select(type != "string" or length == 0)] | length) == 0
+		and (.evidence.session_ids | all(type == "string" and length > 0))
 		and (.evidence.project_key | type) == "string"
 		and (.evidence.project_key | test("^[0-9a-f]{12}$"))
 		and (.evidence.observed_at | type) == "string"
-		and (.evidence.observed_at | test("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"))
+		and (.evidence.observed_at | test("^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"))
 		and (.evidence.resolution | type) == "string" and (.evidence.resolution | length) > 0
+		and (.applies_to | type) == "object"
+		and ((.applies_to | keys) - ["stack", "scope", "file_patterns", "task_kinds"] | length) == 0
 		and (.applies_to.stack | type) == "array" and (.applies_to.stack | length) > 0
+		and (.applies_to.stack | all(type == "string" and length > 0))
 		and (.applies_to.file_patterns | type) == "array"
+		and (.applies_to.file_patterns | all(type == "string" and length > 0))
 		and (.applies_to.task_kinds | type) == "array"
+		and (.applies_to.task_kinds | all(type == "string" and length > 0))
 		and .applies_to.scope.kind == "versioned"
+		and ((.applies_to.scope | keys) - ["kind", "versions"] | length) == 0
 		and (.applies_to.scope.versions | type) == "object"
 		and (.applies_to.scope.versions | length) > 0
 	' >/dev/null 2>&1; then
 		printf 'schema_invalid\n' >&2
 		return 1
 	fi
-
-	# The provenance checks above are not decoration. This stage is the sole
-	# producer of evidence.{artifact_ids,session_ids,project_key,observed_at},
-	# and archivist writes `session_id: null` whenever a hook payload lacked
-	# one (archivist-extract.sh). The transform turns that into "", so without
-	# these rules a candidate carrying session_ids: [""] validates here while
-	# violating the vendored schema's minLength: 1 — the proposal lands, the
-	# artifact is marked permanently seen, and the violation only surfaces
-	# downstream. That is the same burial the failure taxonomy exists to
-	# prevent, through a different door.
 
 	# Cross-field rule JSON Schema cannot express: every versions key must
 	# name an entry in stack.
@@ -450,15 +470,17 @@ librarian_lesson_validate_candidate() {
 		return 1
 	fi
 
-	# Every range must satisfy the vendored pattern.
-	# Do NOT skip empty values here. `jq -r '.versions[]'` over a non-empty
-	# object of strings emits no stray blank lines, so a `continue` on empty
-	# has no defensive purpose — it only lets `{"vite": ""}` validate, which
-	# is exactly the shape a model emits when it could not pin a range down.
+	# Every range must satisfy the vendored pattern. NUL-delimited, not
+	# newline-delimited: a range value with an embedded newline would
+	# otherwise split into two lines that can each pass individually even
+	# though the single value they came from is not a valid range. Do not
+	# skip empty reads either — jq never emits one for a non-empty object
+	# of strings, so an empty read means the range itself is empty, and
+	# librarian_lesson_valid_range already rejects that.
 	local range
-	while IFS= read -r range; do
+	while IFS= read -r -d '' range; do
 		librarian_lesson_valid_range "$range" || { printf 'schema_invalid\n' >&2; return 1; }
-	done < <(printf '%s' "$candidate" | jq -r '.applies_to.scope.versions[]' 2>/dev/null)
+	done < <(printf '%s' "$candidate" | jq --raw-output0 '.applies_to.scope.versions[]' 2>/dev/null)
 
 	return 0
 }
@@ -716,15 +738,22 @@ librarian_lesson_seen() {
 	local dir
 	dir=$(librarian_lessons_dir "$key")
 
-	# Read the ledger line by line with `-R` + `fromjson?`, NOT a plain
-	# `jq -e 'select(...)'`. jq parses the file as one stream, so a single
-	# truncated line — the ordinary result of a process kill mid-append —
-	# makes it exit 5 and every previously-declined artifact reads as unseen.
-	# That silently defeats the ledger's purpose and re-pays for judgments
-	# already made. `fromjson?` yields nothing for an unparseable line instead
-	# of poisoning the scan.
+	# -R reads each line as a raw string and fromjson? yields nothing for a
+	# line that fails to parse, instead of aborting the whole jq invocation.
+	# Without this, one truncated trailing line (e.g. a process killed
+	# mid-append) makes jq exit 5 for the entire file, and every artifact
+	# declined before that line reads back as "not seen."
+	#
+	# `objects` after fromjson? is load-bearing, not decorative: fromjson?
+	# only guards the *parse*, not what comes after it in the pipe. A line
+	# that is valid JSON but not an object (a bare `123`, `true`, `"str"`, or
+	# `[1,2,3]`) parses cleanly, then `.artifact_id` indexing on that
+	# non-object errors out the whole jq invocation — the same
+	# every-prior-decline-reads-as-unseen failure the -R/fromjson? guard
+	# above exists to prevent, just reached through a different door.
+	# `objects` filters those values out before `.artifact_id` ever runs.
 	if [[ -f "$dir/declined.jsonl" ]] \
-		&& jq -Re --arg a "$artifact_id" 'fromjson? | select(.artifact_id == $a)' \
+		&& jq -Re --arg a "$artifact_id" 'fromjson? | objects | select(.artifact_id == $a)' \
 			"$dir/declined.jsonl" >/dev/null 2>&1; then
 		return 0
 	fi
@@ -807,6 +836,9 @@ _transform_setup() {
   # shellcheck disable=SC1091
   source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-validate.sh"
   # shellcheck disable=SC1091
+  source "${PLUGIN_ROOT}/scripts/lib/librarian-config.sh"
+  librarian_config_load "$PROJECT_REPO"
+  # shellcheck disable=SC1091
   source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-transform.sh"
   librarian_lesson_storage_init "$PROJECT_KEY"
 
@@ -815,14 +847,18 @@ _transform_setup() {
   cat > "${STUB_BIN}/claude" <<'STUB'
 #!/usr/bin/env bash
 prompt=$(cat)
-if [[ "$prompt" == *"module-runner"* ]]; then
-  printf '%s' '{"claim":"Vitest 4 cannot import vite/module-runner on Vite 5","rationale":"vite/module-runner ships in Vite 6; Vitest 4 assumes it exists.","evidence":{"resolution":"Pin vitest to 3.x until Vite 6 lands."},"applies_to":{"stack":["vite","vitest"],"scope":{"kind":"versioned","versions":{"vite":"<6","vitest":">=4"}},"file_patterns":[],"task_kinds":[]}}'
-elif [[ "$prompt" == *"no-resolution-stub"* ]]; then
+# Stub-selector markers are checked before the generic "module-runner"
+# content match: several fixtures embed real vitest/vite prose (which
+# contains "module-runner") alongside their marker, and the marker names
+# the intended stub behavior.
+if [[ "$prompt" == *"no-resolution-stub"* ]]; then
   printf '%s' '{"eligible":false,"reason":"no_resolution"}'
 elif [[ "$prompt" == *"no-versions-stub"* ]]; then
   printf '%s' '{"eligible":false,"reason":"no_versions"}'
 elif [[ "$prompt" == *"npm-range-stub"* ]]; then
   printf '%s' '{"claim":"c","rationale":"r","evidence":{"resolution":"fix"},"applies_to":{"stack":["vite"],"scope":{"kind":"versioned","versions":{"vite":"^5.4.21"}},"file_patterns":[],"task_kinds":[]}}'
+elif [[ "$prompt" == *"module-runner"* ]]; then
+  printf '%s' '{"claim":"Vitest 4 cannot import vite/module-runner on Vite 5","rationale":"vite/module-runner ships in Vite 6; Vitest 4 assumes it exists.","evidence":{"resolution":"Pin vitest to 3.x until Vite 6 lands."},"applies_to":{"stack":["vite","vitest"],"scope":{"kind":"versioned","versions":{"vite":"<6","vitest":">=4"}},"file_patterns":[],"task_kinds":[]}}'
 else
   printf '%s' 'not json at all'
 fi
@@ -945,18 +981,26 @@ Expected: the new tests FAIL with `librarian_lesson_transform_one: command not f
 # stages, so this never produces a schema-complete Lesson and cannot be
 # validated against the full lesson schema.
 #
-# Requires librarian-lesson-validate.sh and librarian-lesson-storage.sh.
+# Requires librarian-lesson-validate.sh, librarian-lesson-storage.sh, and
+# librarian-config.sh (librarian_config_get).
+#
+# Config inputs (read via librarian_config_get from librarian_lesson_call):
+#   librarian.lesson_transform.model              Anthropic model id
+#   librarian.lesson_transform.timeout_seconds    Hard wall-clock ceiling
 
-# Read from config, never hardcoded. A `timeout_seconds` key that config
-# declares but code ignores is the same dead config this plan cut
-# `temperature` and `max_output_tokens` for — it reads as though it works.
-# Every peer plugin wires this through its own config getter.
-_librarian_lesson_timeout() {
-	local v
-	v=$(librarian_config_get '.librarian.lesson_transform.timeout_seconds')
-	[[ -z "$v" || "$v" == "null" ]] && v=20
-	printf '%s' "$v"
-}
+# Fallback when config hasn't been loaded or leaves the key unset.
+_LIBRARIAN_LESSON_DEFAULT_TIMEOUT_SECONDS=20
+
+# Cap on how much of a response the JSON-object extractor will scan. The
+# scanner is a per-character bash loop — effectively O(n^2) on long input,
+# since bash string slicing on a long string isn't O(1) per call — and it
+# runs after the claude call, uncapped, inside a SessionEnd hook that must
+# not stall session end. `claude -p` has no output-size flag to bound the
+# response itself, so the bound is enforced here instead. A response that
+# exceeds this without yielding valid JSON in the scanned prefix has not
+# followed the "output ONLY a single JSON object on one line" instruction
+# anyway, so declining it is correct, not just expedient.
+_LIBRARIAN_LESSON_EXTRACT_MAX_CHARS=8192
 
 # Usage: librarian_lesson_build_prompt <artifact_json>
 librarian_lesson_build_prompt() {
@@ -995,7 +1039,7 @@ Otherwise output:
   "rationale": "<why the claim follows from the evidence>",
   "evidence": { "resolution": "<what actually resolved it, from the artifact>" },
   "applies_to": {
-    "stack": ["<tool or package name>", ...],
+    "stack": ["<tool or package name>", "<another tool or package name>"],
     "scope": { "kind": "versioned", "versions": { "<stack entry>": "<range>" } },
     "file_patterns": [],
     "task_kinds": []
@@ -1027,6 +1071,54 @@ created_at: ${created_at}
 EOF
 }
 
+# Extract the first balanced top-level JSON object from a string that may
+# carry surrounding prose ("Here is the JSON: {...}"). Prints the substring
+# on success, prints nothing and returns 1 on failure. Depth-tracks braces
+# while skipping ones inside string literals (honoring backslash escapes),
+# so a claim like `{"claim": "uses \"quotes\" and { in prose"}` still
+# extracts correctly.
+#
+# Prose wrapping is not the same failure as unparseable output: a model that
+# added a sentence around otherwise-valid JSON would very likely produce
+# clean JSON on a resample, so declining it as transform_invalid would bury
+# a good artifact over formatting noise rather than a real judgment problem.
+#
+# Usage: _librarian_lesson_extract_json_object <text>
+_librarian_lesson_extract_json_object() {
+	local text="$1"
+	local start=-1 depth=0 in_string=0 escape=0
+	local i len ch
+
+	len=${#text}
+	for (( i = 0; i < len; i++ )); do
+		ch="${text:i:1}"
+		if [[ $start -eq -1 ]]; then
+			[[ "$ch" == "{" ]] && { start=$i; depth=1; }
+			continue
+		fi
+		if [[ $escape -eq 1 ]]; then
+			escape=0
+			continue
+		fi
+		case "$ch" in
+			'\') [[ $in_string -eq 1 ]] && escape=1 ;;
+			'"') in_string=$((1 - in_string)) ;;
+			'{') [[ $in_string -eq 0 ]] && depth=$((depth + 1)) ;;
+			'}')
+				if [[ $in_string -eq 0 ]]; then
+					depth=$((depth - 1))
+					if [[ $depth -eq 0 ]]; then
+						printf '%s' "${text:start:i-start+1}"
+						return 0
+					fi
+				fi
+				;;
+		esac
+	done
+
+	return 1
+}
+
 # Call the model. Prints raw output, or empty string on ANY infrastructure
 # failure — missing CLI, timeout, empty response. Empty means "could not
 # judge", which is not a verdict.
@@ -1050,12 +1142,17 @@ librarian_lesson_call() {
 	local args=(-p --max-turns 1)
 	[[ -n "$model" ]] && args+=(--model "$model")
 
+	local timeout_seconds
+	timeout_seconds=$(librarian_config_get '.librarian.lesson_transform.timeout_seconds' 2>/dev/null)
+	[[ -z "$timeout_seconds" || "$timeout_seconds" == "null" ]] \
+		&& timeout_seconds="$_LIBRARIAN_LESSON_DEFAULT_TIMEOUT_SECONDS"
+
 	local response=""
 	if command -v timeout >/dev/null 2>&1; then
-		response=$(timeout "$(_librarian_lesson_timeout)" \
+		response=$(timeout "$timeout_seconds" \
 			claude "${args[@]}" < "$prompt_file" 2>/dev/null) || response=""
 	elif command -v gtimeout >/dev/null 2>&1; then
-		response=$(gtimeout "$(_librarian_lesson_timeout)" \
+		response=$(gtimeout "$timeout_seconds" \
 			claude "${args[@]}" < "$prompt_file" 2>/dev/null) || response=""
 	else
 		response=$(claude "${args[@]}" < "$prompt_file" 2>/dev/null) || response=""
@@ -1065,7 +1162,31 @@ librarian_lesson_call() {
 	trap - EXIT
 
 	[[ -z "$response" ]] && return 0
-	printf '%s' "$response" | sed -e 's/^```json//' -e 's/^```//' -e 's/```$//'
+
+	local cleaned
+	cleaned=$(printf '%s' "$response" | sed -e 's/^```json//' -e 's/^```//' -e 's/```$//')
+
+	# Fast path: the response is already valid JSON on its own.
+	if printf '%s' "$cleaned" | jq -e . >/dev/null 2>&1; then
+		printf '%s' "$cleaned"
+		return 0
+	fi
+
+	# Slow path: pull the first balanced JSON object out of surrounding
+	# prose. Bounded to a fixed prefix (see _LIBRARIAN_LESSON_EXTRACT_MAX_CHARS)
+	# so a rambling, arbitrarily long response can't turn the O(n^2) scan
+	# into an unbounded stall. Only used when it actually recovers valid
+	# JSON — otherwise fall through to the original text so the
+	# unparseable case still declines.
+	local extracted
+	extracted=$(_librarian_lesson_extract_json_object \
+		"${cleaned:0:_LIBRARIAN_LESSON_EXTRACT_MAX_CHARS}")
+	if [[ -n "$extracted" ]] && printf '%s' "$extracted" | jq -e . >/dev/null 2>&1; then
+		printf '%s' "$extracted"
+		return 0
+	fi
+
+	printf '%s' "$cleaned"
 }
 
 # Transform one artifact. Always exits 0. Prints exactly one of:
@@ -1115,10 +1236,12 @@ librarian_lesson_transform_one() {
 		return 0
 	fi
 
-	# An explicit refusal is a real answer.
-	local eligible reason
-	eligible=$(printf '%s' "$raw" | jq -r '.eligible // empty')
-	if [[ "$eligible" == "false" ]]; then
+	# An explicit refusal is a real answer. Checked with jq -e rather than a
+	# `// empty` string capture: jq's // operator treats JSON `false` as
+	# falsy, same as null, so `.eligible // empty` silently discards a real
+	# `"eligible": false` refusal instead of reporting it.
+	local reason
+	if printf '%s' "$raw" | jq -e '.eligible == false' >/dev/null 2>&1; then
 		reason=$(printf '%s' "$raw" | jq -r '.reason // "transform_invalid"')
 		case "$reason" in
 			no_resolution|no_versions) ;;
@@ -1167,13 +1290,7 @@ librarian_lesson_transform_one() {
 Run: `bats test/bats/librarian-lesson-transform.bats`
 Expected: all PASS.
 
-`_transform_setup` must also source `librarian-config.sh` and call `librarian_config_load "$PROJECT_REPO"` — not conditionally. `librarian_lesson_transform_one` calls `librarian_config_get`, which reads the `_LIBRARIAN_CONFIG` global; without a load that global is `{}` and the model lookup returns empty. The call still succeeds (an empty model just omits `--model`), so skipping the load would leave the config path silently unexercised rather than failing loudly. Add both lines to `_transform_setup`:
-
-```bash
-  # shellcheck disable=SC1091
-  source "${PLUGIN_ROOT}/scripts/lib/librarian-config.sh"
-  librarian_config_load "$PROJECT_REPO"
-```
+`_transform_setup` sources `librarian-config.sh` and calls `librarian_config_load "$PROJECT_REPO"` unconditionally (see Step 2) — not doing so is a real failure mode worth naming: `librarian_lesson_transform_one` calls `librarian_config_get`, which reads the `_LIBRARIAN_CONFIG` global, and without a load that global is `{}` and the model lookup returns empty. The call still succeeds (an empty model just omits `--model`), so skipping the load would leave the config path silently unexercised rather than failing loudly.
 
 - [ ] **Step 6: Shellcheck**
 
