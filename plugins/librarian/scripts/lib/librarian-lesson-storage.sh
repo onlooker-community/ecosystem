@@ -108,8 +108,17 @@ librarian_lesson_seen() {
 	# Without this, one truncated trailing line (e.g. a process killed
 	# mid-append) makes jq exit 5 for the entire file, and every artifact
 	# declined before that line reads back as "not seen."
+	#
+	# `objects` after fromjson? is load-bearing, not decorative: fromjson?
+	# only guards the *parse*, not what comes after it in the pipe. A line
+	# that is valid JSON but not an object (a bare `123`, `true`, `"str"`, or
+	# `[1,2,3]`) parses cleanly, then `.artifact_id` indexing on that
+	# non-object errors out the whole jq invocation — the same
+	# every-prior-decline-reads-as-unseen failure the -R/fromjson? guard
+	# above exists to prevent, just reached through a different door.
+	# `objects` filters those values out before `.artifact_id` ever runs.
 	if [[ -f "$dir/declined.jsonl" ]] \
-		&& jq -Re --arg a "$artifact_id" 'fromjson? | select(.artifact_id == $a)' \
+		&& jq -Re --arg a "$artifact_id" 'fromjson? | objects | select(.artifact_id == $a)' \
 			"$dir/declined.jsonl" >/dev/null 2>&1; then
 		return 0
 	fi

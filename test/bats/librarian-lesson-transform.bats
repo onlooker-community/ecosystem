@@ -240,11 +240,46 @@ _storage_setup() {
   [ "$status" -eq 0 ]
 }
 
-@test "seen still reports a genuinely absent artifact as new when declined.jsonl has a truncated trailing line" {
+@test "seen does not poison its scan on a valid-JSON non-object ledger line" {
+  # fromjson? only guards the *parse* — a line that is valid JSON but not an
+  # object (a bare 123) parses cleanly, then errors on `.artifact_id`
+  # indexing, which aborts the whole jq invocation unless `objects` filters
+  # it out first. That failure mode reads every previously-declined artifact
+  # as unseen, so both directions matter here: a real decline must still be
+  # found despite the poison line, and a genuinely new artifact must not be
+  # swept up as a false match by whatever mechanism tolerates that line.
   _storage_setup
   librarian_lesson_storage_init "$PROJECT_KEY"
   librarian_lesson_append_declined "$PROJECT_KEY" "01KZ45MKAM734ZS7JK24D2DK0R" "no_resolution"
-  printf '{"artifact_id":"01KZEAF9EY4C6TTR0V7YFN9VYJ","reason":"trunc' \
+  printf '123\n' >> "${LESSONS_DIR}/declined.jsonl"
+
+  run librarian_lesson_seen "$PROJECT_KEY" "01KZ45MKAM734ZS7JK24D2DK0R"
+  [ "$status" -eq 0 ]
+
+  run librarian_lesson_seen "$PROJECT_KEY" "01KZ45MKGQ7QZWMABQ4H12SHSV"
+  [ "$status" -eq 1 ]
+}
+
+@test "seen reports a genuinely absent artifact as new, not merely 'the ledger has entries'" {
+  # This is deliberately NOT just "seen returns 1 for an absent id with a
+  # truncated line present" — that formulation cannot discriminate a correct
+  # implementation from a broken one. Whether the truncated line makes jq
+  # error out entirely or jq completes and simply finds no match, the
+  # calling code treats both as "not found" and falls through to the same
+  # answer either way, so a standalone not-found assertion there passes
+  # regardless of which code path produced it.
+  #
+  # What a not-found assertion CAN catch is a false-positive implementation:
+  # one that treats "the ledger is non-empty" or "contains any well-formed
+  # entry" as "seen", instead of checking whether an entry actually matches
+  # this artifact_id. The ledger below carries two genuine, well-formed,
+  # non-matching declines plus the same truncated trailing line, so the only
+  # way this test fails is a false match.
+  _storage_setup
+  librarian_lesson_storage_init "$PROJECT_KEY"
+  librarian_lesson_append_declined "$PROJECT_KEY" "01KZ45MKAM734ZS7JK24D2DK0R" "no_resolution"
+  librarian_lesson_append_declined "$PROJECT_KEY" "01KZEAF9EY4C6TTR0V7YFN9VYJ" "no_versions"
+  printf '{"artifact_id":"01KZ45MKS84KPZQNWC02Z8FE0K","reason":"trunc' \
     >> "${LESSONS_DIR}/declined.jsonl"
   run librarian_lesson_seen "$PROJECT_KEY" "01KZ45MKGQ7QZWMABQ4H12SHSV"
   [ "$status" -eq 1 ]
