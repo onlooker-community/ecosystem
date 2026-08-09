@@ -59,6 +59,12 @@ source "${PLUGIN_ROOT}/scripts/lib/librarian-durability.sh"
 source "${PLUGIN_ROOT}/scripts/lib/librarian-classifier.sh"
 # shellcheck source=../lib/librarian-conflict-detector.sh
 source "${PLUGIN_ROOT}/scripts/lib/librarian-conflict-detector.sh"
+# shellcheck source=../lib/librarian-lesson-validate.sh
+source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-validate.sh"
+# shellcheck source=../lib/librarian-lesson-storage.sh
+source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-storage.sh"
+# shellcheck source=../lib/librarian-lesson-transform.sh
+source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-transform.sh"
 
 librarian_now_ms() {
 	local now_ms
@@ -422,6 +428,26 @@ for ((i = 0; i < KEPT_COUNT; i++)); do
 			conflict_state: $conflict_state,
 			source_artifact_ids: (if $src == "" then [] else [$src] end)
 		}')"
+done
+
+# ---------------------------------------------------------------------------
+# Stage 5 — lesson transform.
+#
+# Runs over the same durability survivors the classifier saw. Each artifact is
+# independent: a decline or an outage on one never stops the rest.
+# ---------------------------------------------------------------------------
+LESSON_PROPOSED=0
+LESSON_DECLINED=0
+
+for ((li = 0; li < KEPT_COUNT; li++)); do
+	LESSON_ARTIFACT=$(printf '%s' "$KEPT" | jq -c ".[$li]")
+	[[ -z "$LESSON_ARTIFACT" || "$LESSON_ARTIFACT" == "null" ]] && continue
+
+	LESSON_RESULT=$(librarian_lesson_transform_one "$PROJECT_KEY" "$LESSON_ARTIFACT")
+	case "$LESSON_RESULT" in
+		proposed:*) LESSON_PROPOSED=$((LESSON_PROPOSED + 1)) ;;
+		declined:*) LESSON_DECLINED=$((LESSON_DECLINED + 1)) ;;
+	esac
 done
 
 # ----------------------------------------------------------------------------

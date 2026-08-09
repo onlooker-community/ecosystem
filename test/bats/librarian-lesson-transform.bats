@@ -538,3 +538,37 @@ STUB
     && [ "$output" = "declined:transform_invalid" ] \
     && [ "$elapsed" -lt 5 ]
 }
+
+# ----------------------------------------------------------------------------
+# SessionEnd wiring: the hook runs the lesson stage over the same durability
+# survivors the classifier saw and lands a proposal on disk.
+# ----------------------------------------------------------------------------
+
+@test "SessionEnd runs the lesson stage and lands a candidate on disk" {
+  _transform_setup
+
+  HOOK="${PLUGIN_ROOT}/scripts/hooks/librarian-session-end.sh"
+  ARCHIVIST_DIR="${ONLOOKER_DIR}/archivist/${PROJECT_KEY}"
+  mkdir -p "${ARCHIVIST_DIR}/decisions"
+
+  created_at=$(relative_iso_days_ago 1)
+  # The detail carries "because" so this fixture clears the durability
+  # filter's marker-phrase gate (plugins/librarian/scripts/lib/
+  # librarian-durability.sh) — a plain version-mismatch summary with no
+  # marker phrase gets dropped as filter_marker_missing before it ever
+  # reaches $KEPT, regardless of whether the lesson stage runs.
+  jq -n --arg id "01KZ45MKAM734ZS7JK24D2DK0R" --arg at "$created_at" --arg k "$PROJECT_KEY" \
+    '{id: $id, kind: "decision", project_key: $k, session_id: "sess-1",
+      created_at: $at, updated_at: $at,
+      summary: "Vitest 4.1.9 / Vite 5.x mismatch, decided to pin",
+      detail: "Vitest 4.1.9 imports vite/module-runner which is absent in Vite 5.4.21, because Vite 6 has not shipped yet.",
+      files: ["packages/db"]}' \
+    > "${ARCHIVIST_DIR}/decisions/01KZ45MKAM734ZS7JK24D2DK0R.json"
+
+  input=$(jq -cn --arg cwd "$PROJECT_REPO" \
+    '{cwd: $cwd, session_id: "sess-1", hook_event_name: "SessionEnd"}')
+  run bash -c "printf '%s' '$input' | '$HOOK'"
+
+  [ "$status" -eq 0 ]
+  [ -n "$(ls -A "${LESSONS_DIR}/proposals" 2>/dev/null)" ]
+}
