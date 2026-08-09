@@ -65,7 +65,7 @@ Otherwise output:
   "rationale": "<why the claim follows from the evidence>",
   "evidence": { "resolution": "<what actually resolved it, from the artifact>" },
   "applies_to": {
-    "stack": ["<tool or package name>", ...],
+    "stack": ["<tool or package name>", "<another tool or package name>"],
     "scope": { "kind": "versioned", "versions": { "<stack entry>": "<range>" } },
     "file_patterns": [],
     "task_kinds": []
