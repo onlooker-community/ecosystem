@@ -249,3 +249,140 @@ _storage_setup() {
   run librarian_lesson_seen "$PROJECT_KEY" "01KZ45MKGQ7QZWMABQ4H12SHSV"
   [ "$status" -eq 1 ]
 }
+
+# ----------------------------------------------------------------------------
+# Transform: prompt building, the `claude -p` call, and orchestration. A
+# stubbed `claude` on PATH stands in for the model.
+# ----------------------------------------------------------------------------
+
+_transform_setup() {
+  _storage_setup
+  # shellcheck disable=SC1091
+  source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-validate.sh"
+  # shellcheck disable=SC1091
+  source "${PLUGIN_ROOT}/scripts/lib/librarian-config.sh"
+  librarian_config_load "$PROJECT_REPO"
+  # shellcheck disable=SC1091
+  source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-transform.sh"
+  librarian_lesson_storage_init "$PROJECT_KEY"
+
+  STUB_BIN="${BATS_TEST_TMPDIR}/bin"
+  mkdir -p "$STUB_BIN"
+  cat > "${STUB_BIN}/claude" <<'STUB'
+#!/usr/bin/env bash
+prompt=$(cat)
+# Stub-selector markers are checked before the generic "module-runner"
+# content match: several fixtures embed real vitest/vite prose (which
+# contains "module-runner") alongside their marker, and the marker names
+# the intended stub behavior.
+if [[ "$prompt" == *"no-resolution-stub"* ]]; then
+  printf '%s' '{"eligible":false,"reason":"no_resolution"}'
+elif [[ "$prompt" == *"no-versions-stub"* ]]; then
+  printf '%s' '{"eligible":false,"reason":"no_versions"}'
+elif [[ "$prompt" == *"npm-range-stub"* ]]; then
+  printf '%s' '{"claim":"c","rationale":"r","evidence":{"resolution":"fix"},"applies_to":{"stack":["vite"],"scope":{"kind":"versioned","versions":{"vite":"^5.4.21"}},"file_patterns":[],"task_kinds":[]}}'
+elif [[ "$prompt" == *"module-runner"* ]]; then
+  printf '%s' '{"claim":"Vitest 4 cannot import vite/module-runner on Vite 5","rationale":"vite/module-runner ships in Vite 6; Vitest 4 assumes it exists.","evidence":{"resolution":"Pin vitest to 3.x until Vite 6 lands."},"applies_to":{"stack":["vite","vitest"],"scope":{"kind":"versioned","versions":{"vite":"<6","vitest":">=4"}},"file_patterns":[],"task_kinds":[]}}'
+else
+  printf '%s' 'not json at all'
+fi
+STUB
+  chmod +x "${STUB_BIN}/claude"
+  export PATH="${STUB_BIN}:${PATH}"
+}
+
+_seed() {
+  jq -cn --arg id "$1" --arg s "$2" --arg d "$3" --arg k "$PROJECT_KEY" \
+    '{id: $id, kind: "decision", project_key: $k, session_id: "sess-1",
+      created_at: "2026-08-03T15:59:48Z", summary: $s, detail: $d}'
+}
+
+@test "transform_one proposes a candidate for a groundable artifact" {
+  _transform_setup
+  art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "Vitest 4.1.9 / Vite 5.x mismatch" \
+    "Vitest 4.1.9 imports vite/module-runner which is absent in Vite 5.4.21.")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
+  [ "$status" -eq 0 ]
+  [[ "$output" == proposed:* ]]
+  id="${output#proposed:}"
+  jq -e '.candidate.applies_to.scope.versions.vite == "<6"
+     and .candidate.applies_to.scope.versions.vitest == ">=4"' \
+    "${LESSONS_DIR}/proposals/${id}.json"
+}
+
+@test "transform_one declines the real vitest artifact for having no resolution" {
+  _transform_setup
+  # The artifact that motivated the pipeline. Its session ended on an open
+  # question — the fix was never found — so it cannot become a lesson.
+  art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" \
+    "no-resolution-stub: Vitest 4.1.9 / Vite 5.x mismatch confirmed as real, blocking bug." \
+    "Running pnpm test reproduces failures. Vitest 4.1.9 attempts to import vite/module-runner which does not exist in Vite 5.4.21.")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
+  [ "$status" -eq 0 ]
+  [ "$output" = "declined:no_resolution" ]
+  tail -n 1 "${LESSONS_DIR}/declined.jsonl" | jq -e '.reason == "no_resolution"'
+}
+
+@test "transform_one declines when the model cannot infer versions" {
+  _transform_setup
+  art=$(_seed "01KZ45MKGQ7QZWMABQ4H12SHSV" "no-versions-stub: 5.4 something" "detail 1.2")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
+  [ "$output" = "declined:no_versions" ]
+}
+
+@test "transform_one declines unparseable model output as transform_invalid" {
+  _transform_setup
+  art=$(_seed "01KZ45MKME229J0QK0690TREAB" "garbage 1.0" "detail 2.0")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
+  [ "$output" = "declined:transform_invalid" ]
+}
+
+@test "transform_one declines an npm-style range as schema_invalid" {
+  _transform_setup
+  art=$(_seed "01KZ45MKS84KPZQNWC02Z8FE0K" "npm-range-stub 5.4" "detail 1.0")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
+  [ "$output" = "declined:schema_invalid" ]
+}
+
+@test "transform_one skips a version-free artifact without touching the ledger" {
+  _transform_setup
+  art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "Prefer functional patterns" "User said so.")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
+  [ "$output" = "skipped:pregate" ]
+  [ ! -f "${LESSONS_DIR}/declined.jsonl" ]
+}
+
+@test "a missing claude CLI is not a verdict and writes nothing" {
+  _transform_setup
+  rm -f "${STUB_BIN}/claude"
+  art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "Vitest 4.1.9 / Vite 5.x mismatch" \
+    "Vitest 4.1.9 imports vite/module-runner absent in Vite 5.4.21.")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
+  [ "$status" -eq 0 ]
+  [ "$output" = "unavailable" ]
+  [ ! -f "${LESSONS_DIR}/declined.jsonl" ]
+  [ -z "$(ls -A "${LESSONS_DIR}/proposals")" ]
+}
+
+@test "an empty model response is not a verdict and writes nothing" {
+  _transform_setup
+  cat > "${STUB_BIN}/claude" <<'STUB'
+#!/usr/bin/env bash
+cat >/dev/null
+printf ''
+STUB
+  chmod +x "${STUB_BIN}/claude"
+  art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "Vitest 4.1.9 / Vite 5.x" "module-runner missing in 5.4.21")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
+  [ "$output" = "unavailable" ]
+  [ ! -f "${LESSONS_DIR}/declined.jsonl" ]
+}
+
+@test "an already-declined artifact is not sent to the model a second time" {
+  _transform_setup
+  librarian_lesson_append_declined "$PROJECT_KEY" "01KZ45MKAM734ZS7JK24D2DK0R" "no_resolution"
+  art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "Vitest 4.1.9 / Vite 5.x" "module-runner missing in 5.4.21")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
+  [ "$output" = "skipped:seen" ]
+  [ "$(wc -l < "${LESSONS_DIR}/declined.jsonl")" -eq 1 ]
+}
