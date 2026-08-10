@@ -1179,7 +1179,21 @@ Expected: all PASS, including the pre-existing ones.
 
 - [ ] **Step 5: Route the skill**
 
-In `plugins/librarian/skills/librarian/SKILL.md`, extend the "Parse the request" section with the `lessons` route, and add a section describing the walk. Keep the existing memory routes untouched.
+**First, fix the sourcing gap — the verbs do not work in production without it.** `librarian-cli.sh` deliberately sources nothing itself; its callers source its dependencies. The skill currently sources five libs (`librarian-config.sh`, `librarian-project-key.sh`, `librarian-storage.sh`, `librarian-emit.sh`, `librarian-cli.sh`) and none of the three lesson libs, so `librarian_cli lessons list` fails with `librarian_lesson_list_pending: command not found`. Verified by sourcing exactly what the skill lists and calling the verb.
+
+Add these three to the skill's source block, before `librarian-cli.sh`:
+
+```bash
+source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-lesson-storage.sh"
+source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-lesson-validate.sh"
+source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-lesson-review.sh"
+```
+
+Order matters: `librarian-lesson-review.sh` calls into both of the others, and `librarian-lesson-storage.sh` needs `librarian-storage.sh` (already sourced above it).
+
+The bats suites pass without this because their setup sources every lib directly — which is exactly why this gap is invisible to per-task tests and has to be closed here.
+
+Then, in `plugins/librarian/skills/librarian/SKILL.md`, extend the "Parse the request" section with the `lessons` route, and add a section describing the walk. Keep the existing memory routes untouched.
 
 ```markdown
 - `lessons`, `lessons review` → **walk the lesson queue** (see below)
