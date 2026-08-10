@@ -90,7 +90,7 @@ seed_start_ms_ago() {
 @test "session_tracker_now_ms returns 13-digit epoch milliseconds" {
   local ms
   ms=$(session_tracker_now_ms)
-  [[ "$ms" =~ ^[0-9]+$ ]]
+  [[ "$ms" =~ ^[0-9]+$ ]] || return 1
   [ "${#ms}" -eq 13 ]
 }
 
@@ -231,7 +231,7 @@ seed_start_ms_ago() {
   seed_start_ms_ago "$sid" 3000
   local dur
   dur=$(session_tracker_duration_ms "$sid")
-  [[ "$dur" =~ ^[0-9]+$ ]]
+  [[ "$dur" =~ ^[0-9]+$ ]] || return 1
   [ "$dur" -ge 3000 ]
 }
 
@@ -285,7 +285,7 @@ seed_start_ms_ago() {
 
   local out
   out=$(session_tracker_build_duration_context "$sid")
-  [[ "$out" == *"turn 3"* ]]
+  [[ "$out" == *"turn 3"* ]] || return 1
   [[ "$out" == *"2m 34s"* ]]
 }
 
@@ -294,7 +294,7 @@ seed_start_ms_ago() {
   rm -f "${ONLOOKER_SESSION_TRACKERS_DIR}/${sid}"
   local out
   out=$(session_tracker_build_duration_context "$sid")
-  [[ "$out" == *"turn 1"* ]]
+  [[ "$out" == *"turn 1"* ]] || return 1
   [[ "$out" == *"0s"* ]]
 }
 

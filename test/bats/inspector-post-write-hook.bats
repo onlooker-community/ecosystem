@@ -100,7 +100,7 @@ _run_hook() {
 	echo '{"inspector":{"show_clean_runs":true,"checks":{".ts":[{"name":"clean","kind":"lint","argv":["true"]}]}}}' | _settings
 	run _run_hook "$(_input)"
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"inspector: src/sample.ts"* ]]
+	[[ "$output" == *"inspector: src/sample.ts"* ]] || return 1
 	[[ "$output" == *"✓ clean"* ]]
 }
 
@@ -112,9 +112,9 @@ _run_hook() {
 EOF
 	run _run_hook "$(_input)"
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"inspector: src/sample.ts"* ]]
-	[[ "$output" == *"✗ broken"* ]]
-	[[ "$output" == *"src/sample.ts:1:1 - Bad"* ]]
+	[[ "$output" == *"inspector: src/sample.ts"* ]] || return 1
+	[[ "$output" == *"✗ broken"* ]] || return 1
+	[[ "$output" == *"src/sample.ts:1:1 - Bad"* ]] || return 1
 	[ "$(_event_count inspector.check.failed)" = "1" ]
 	[ "$(jq -r 'select(.event_type=="inspector.check.failed").payload.exit_code' "$ONLOOKER_EVENTS_LOG")" = "2" ]
 }

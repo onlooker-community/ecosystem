@@ -43,6 +43,6 @@ setup() {
 	lineage_config_load ""
 	run lineage_config_ignore_globs
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"node_modules"* ]]
+	[[ "$output" == *"node_modules"* ]] || return 1
 	[[ "$output" == *".lock"* ]]
 }

@@ -48,7 +48,7 @@ setup() {
 		tribunal_jury_empanel "[\"maintainability\"]" 2>&1
 	'
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"degrading to standard"* ]]
+	[[ "$output" == *"degrading to standard"* ]] || return 1
 	[[ "$output" == *"standard"* ]]
 }
 

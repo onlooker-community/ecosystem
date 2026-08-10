@@ -124,13 +124,13 @@ _seed_proposal() {
   run librarian_cli_list "$PROJECT_REPO"
   [ "$status" -eq 0 ]
   # Header counts only pending entries (2 of 3).
-  [[ "$output" == *"2 pending proposal"* ]]
+  [[ "$output" == *"2 pending proposal"* ]] || return 1
   # Both pending titles surface.
-  [[ "$output" == *"Prefer functional patterns"* ]]
-  [[ "$output" == *"Auth rewrite is compliance"* ]]
+  [[ "$output" == *"Prefer functional patterns"* ]] || return 1
+  [[ "$output" == *"Auth rewrite is compliance"* ]] || return 1
   # Pending rows include full IDs that can be used with show/accept/reject/defer.
-  [[ "$output" == *"01LISTPENDINGA000000000000"* ]]
-  [[ "$output" == *"01LISTPENDINGB000000000000"* ]]
+  [[ "$output" == *"01LISTPENDINGA000000000000"* ]] || return 1
+  [[ "$output" == *"01LISTPENDINGB000000000000"* ]] || return 1
   # Accepted entry does NOT appear in the list output.
   [[ "$output" != *"Already accepted"* ]]
 }
@@ -142,10 +142,10 @@ _seed_proposal() {
 
   run librarian_cli_show "01SHOWPROPOSAL0000000000000" "$PROJECT_REPO"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"01SHOWPROPOSAL0000000000000"* ]]
-  [[ "$output" == *"type:                 feedback"* ]]
-  [[ "$output" == *"filename:             feedback_x.md"* ]]
-  [[ "$output" == *"classifier_confidence: 0.82"* ]]
+  [[ "$output" == *"01SHOWPROPOSAL0000000000000"* ]] || return 1
+  [[ "$output" == *"type:                 feedback"* ]] || return 1
+  [[ "$output" == *"filename:             feedback_x.md"* ]] || return 1
+  [[ "$output" == *"classifier_confidence: 0.82"* ]] || return 1
   [[ "$output" == *"Body of the memory."* ]]
 }
 
@@ -165,7 +165,7 @@ _seed_proposal() {
 
   run librarian_cli_accept "01ACCEPTPROPOSAL000000000000" "$PROJECT_REPO"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"Accepted."* ]]
+  [[ "$output" == *"Accepted."* ]] || return 1
 
   local out_file="${MEM_DIR}/feedback_functional.md"
   [ -f "$out_file" ]
@@ -220,7 +220,7 @@ _seed_proposal() {
 
   run librarian_cli_accept "01ACCEPTUNSAFE00000000000000" "$PROJECT_REPO"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"Failed to write memory file."* ]]
+  [[ "$output" == *"Failed to write memory file."* ]] || return 1
 
   # No memory file written anywhere under MEM_DIR or its parent.
   [ ! -f "${MEM_DIR}/../escape.md" ]
@@ -238,8 +238,8 @@ _seed_proposal() {
 
   run librarian_cli_reject "01REJECTPROPOSAL00000000000" "stale guidance" "$PROJECT_REPO"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"Rejected"* ]]
-  [[ "$output" == *"stale guidance"* ]]
+  [[ "$output" == *"Rejected"* ]] || return 1
+  [[ "$output" == *"stale guidance"* ]] || return 1
 
   # Proposal status now rejected with the reason captured.
   local proposal_path="${LIBRARIAN_DIR}/proposals/01REJECTPROPOSAL00000000000.json"
@@ -268,7 +268,7 @@ _seed_proposal() {
 
   run librarian_cli_defer "01DEFERPROPOSAL000000000000" "$PROJECT_REPO"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"Deferred"* ]]
+  [[ "$output" == *"Deferred"* ]] || return 1
 
   local proposal_path="${LIBRARIAN_DIR}/proposals/01DEFERPROPOSAL000000000000.json"
   jq -e '.status == "pending"' "$proposal_path" >/dev/null
@@ -285,8 +285,8 @@ _seed_proposal() {
 
   run librarian_cli_status "$PROJECT_REPO"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"pending: 1"* ]]
-  [[ "$output" == *"accepted: 1"* ]]
+  [[ "$output" == *"pending: 1"* ]] || return 1
+  [[ "$output" == *"accepted: 1"* ]] || return 1
   [[ "$output" == *"rejected: 1"* ]]
 }
 

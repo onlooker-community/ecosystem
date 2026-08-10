@@ -83,7 +83,7 @@ _seed_proposal() {
   [ "$status" -eq 0 ]
   local ctx
   ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
-  [[ "$ctx" == *"Librarian has 3 pending memory promotion proposals"* ]]
+  [[ "$ctx" == *"Librarian has 3 pending memory promotion proposals"* ]] || return 1
   [[ "$ctx" == *"/librarian review"* ]]
 }
 
@@ -94,7 +94,7 @@ _seed_proposal() {
   [ "$status" -eq 0 ]
   local ctx
   ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
-  [[ "$ctx" == *"Librarian has 1 pending memory promotion proposal"* ]]
+  [[ "$ctx" == *"Librarian has 1 pending memory promotion proposal"* ]] || return 1
   [[ "$ctx" != *"proposals."* ]]
 }
 

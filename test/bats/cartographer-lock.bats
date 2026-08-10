@@ -89,8 +89,8 @@ teardown() {
     cartographer_lock_release '${BATS_TEST_TMPDIR}/x.lock' && echo RELEASE_OK
   "
   [ "$status" -eq 0 ]
-  [[ "$output" == *"SOURCED_OK"* ]]
-  [[ "$output" == *"ACQUIRE_FAILED"* ]]
-  [[ "$output" == *"RELEASE_OK"* ]]
+  [[ "$output" == *"SOURCED_OK"* ]] || return 1
+  [[ "$output" == *"ACQUIRE_FAILED"* ]] || return 1
+  [[ "$output" == *"RELEASE_OK"* ]] || return 1
   [[ "$output" == *"locking disabled"* ]]
 }

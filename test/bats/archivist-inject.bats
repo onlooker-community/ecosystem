@@ -46,7 +46,7 @@ setup() {
   echo "$output" | jq -e '.hookSpecificOutput.hookEventName == "SessionStart"' >/dev/null
   local ctx
   ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
-  [[ "$ctx" == *"use git remote SHA256 as project key"* ]]
+  [[ "$ctx" == *"use git remote SHA256 as project key"* ]] || return 1
   [[ "$ctx" == *"Archivist injected 1"* ]]
 }
 

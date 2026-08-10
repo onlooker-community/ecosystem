@@ -74,7 +74,7 @@ setup() {
   local worktree_path
   worktree_path=$(cat "$input_file" | "${REPO_ROOT}/scripts/hooks/worktree-tracker.sh")
   [ -d "$worktree_path" ]
-  [[ "$worktree_path" == "$(cd "$worktree_path" && pwd -P)" ]]
+  [[ "$worktree_path" == "$(cd "$worktree_path" && pwd -P)" ]] || return 1
   [ -f "$history_file" ]
   tail -n 1 "$history_file" | jq -e '.event_type == "tool.shell.exec"' >/dev/null
 }
@@ -247,7 +247,7 @@ setup() {
 
   local duration
   duration=$(worktree_tracker_duration_ms "$session_id" "$worktree_path")
-  [[ "$duration" =~ ^[0-9]+$ ]]
+  [[ "$duration" =~ ^[0-9]+$ ]] || return 1
   [ "$duration" -ge 1900 ]
 }
 

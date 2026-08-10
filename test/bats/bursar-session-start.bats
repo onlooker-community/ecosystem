@@ -68,8 +68,8 @@ _run_hook() {
 	_seed_ledger
 	_run_hook
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"hookSpecificOutput"* ]]
-	[[ "$output" == *"SessionStart"* ]]
+	[[ "$output" == *"hookSpecificOutput"* ]] || return 1
+	[[ "$output" == *"SessionStart"* ]] || return 1
 	[[ "$output" == *"burned \$0.42"* ]]
 }
 
@@ -85,7 +85,7 @@ _run_hook() {
 		> "${dir}/sessions.jsonl"
 	_run_hook
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"burned \$0.00"* ]]
+	[[ "$output" == *"burned \$0.00"* ]] || return 1
 	[[ "$output" != *"Enable governor"* ]]
 }
 

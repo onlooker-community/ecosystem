@@ -93,8 +93,8 @@ _write_index() {
   # Surfacer rendered the pointer.
   local ctx
   ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
-  [[ "$ctx" == *"Curator: 1 open finding"* ]]
-  [[ "$ctx" == *"date-decayed"* ]]
+  [[ "$ctx" == *"Curator: 1 open finding"* ]] || return 1
+  [[ "$ctx" == *"date-decayed"* ]] || return 1
   [[ "$ctx" == *"/curator review"* ]]
 }
 
@@ -256,7 +256,7 @@ BODY
   [ "$status" -eq 0 ]
   local ctx
   ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
-  [[ "$ctx" == *"2 date-decayed"* ]]
+  [[ "$ctx" == *"2 date-decayed"* ]] || return 1
   # The buggy output would have looked like "1 date-decayed, 1 date-decayed".
   [[ "$ctx" != *"1 date-decayed, 1 date-decayed"* ]]
 }
