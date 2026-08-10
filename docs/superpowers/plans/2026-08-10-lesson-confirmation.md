@@ -979,10 +979,43 @@ librarian_cli_lessons_show() {
 librarian_cli_lessons_confirm() {
 	local lesson_id="${1:-}"
 	local visibility="${2:-}"
-	local justification="${3:-}"
-	local cwd="${4:-}"
+	shift 2 2>/dev/null || true
+
+	# Justification is a NAMED flag, not a positional. With positionals, a
+	# caller supplying cwd while omitting the justification binds the path
+	# into it — and librarian_lesson_confirm treats any non-empty
+	# justification as "rewrite scope to version_independent", so a working
+	# directory would silently flip the scope on the one verb that commits a
+	# lesson toward leaving this machine. Position cannot misparse a flag.
+	local justification="" cwd=""
+	while [ $# -gt 0 ]; do
+		case "$1" in
+			--justification)
+				justification="${2:-}"
+				shift 2 2>/dev/null || shift
+				;;
+			*)
+				cwd="$1"
+				shift
+				;;
+		esac
+	done
+
+	# A justification that is only whitespace is not a justification. Refuse
+	# it here rather than in the validator: the vendored schema's minLength
+	# of 1 counts whitespace, our validator mirrors that faithfully, and the
+	# agreement test exists to keep the two aligned. Guard the input path.
+	case "$justification" in
+		*[![:space:]]*) ;;
+		"") ;;
+		*)
+			printf 'A justification cannot be only whitespace.\n' >&2
+			return 1
+			;;
+	esac
+
 	[[ -z "$lesson_id" || -z "$visibility" ]] && {
-		printf 'usage: librarian_cli lessons confirm <lesson_id> <private|org|public> [justification]\n'
+		printf 'usage: librarian_cli lessons confirm <lesson_id> <private|org|public> [--justification TEXT] [cwd]\n'
 		return 1
 	}
 
