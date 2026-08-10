@@ -376,12 +376,44 @@ librarian_cli_lessons_show() {
 librarian_cli_lessons_confirm() {
 	local lesson_id="${1:-}"
 	local visibility="${2:-}"
-	local justification="${3:-}"
-	local cwd="${4:-}"
 	[[ -z "$lesson_id" || -z "$visibility" ]] && {
-		printf 'usage: librarian_cli lessons confirm <lesson_id> <private|org|public> [justification]\n'
+		printf 'usage: librarian_cli lessons confirm <lesson_id> <private|org|public> [--justification TEXT] [cwd]\n'
 		return 1
 	}
+	shift 2
+
+	# --justification is a named flag, not a position. This is the verb that
+	# commits a lesson toward leaving this machine, so a caller who supplies
+	# cwd but omits justification must never have cwd silently misread as the
+	# justification that flips scope to version_independent.
+	local justification="" justification_given=0 cwd=""
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+			--justification)
+				justification="${2:-}"
+				justification_given=1
+				if [[ $# -ge 2 ]]; then
+					shift 2
+				else
+					shift 1
+				fi
+				;;
+			*)
+				cwd="$1"
+				shift
+				;;
+		esac
+	done
+
+	# A justification that is blank after trimming whitespace is refused
+	# outright rather than silently treated as "no justification supplied" —
+	# the validator's minLength: 1 counts whitespace, so passing it through
+	# would flip scope to version_independent on content nobody actually
+	# wrote.
+	if [[ "$justification_given" -eq 1 ]] && [[ "$justification" =~ ^[[:space:]]*$ ]]; then
+		printf 'justification is blank after trimming whitespace; omit --justification instead of passing an empty value.\n' >&2
+		return 1
+	fi
 
 	local key
 	key=$(_librarian_cli_project_key "$cwd")

@@ -360,10 +360,12 @@ _cli_setup() {
 
 @test "lessons show prints the claim" {
 	_cli_setup
-	id=$(_seed_pending)
+	claim="pin vitest below six to avoid the esm regression"
+	candidate=$(_candidate "$(_versioned)" | jq -c --arg c "$claim" '.claim = $c')
+	id=$(librarian_lesson_write_proposal "$PROJECT_KEY" "$candidate" "01KZ45MKAM734ZS7JK24D2DK0R")
 	run librarian_cli lessons show "$id" "$PROJECT_REPO"
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"c"* ]] || return 1
+	[[ "$output" == *"claim:       ${claim}"* ]] || return 1
 }
 
 @test "lessons confirm requires a visibility argument" {
@@ -377,9 +379,36 @@ _cli_setup() {
 @test "lessons confirm sets status and visibility" {
 	_cli_setup
 	id=$(_seed_pending)
-	run librarian_cli lessons confirm "$id" public "" "$PROJECT_REPO"
+	run librarian_cli lessons confirm "$id" public "$PROJECT_REPO"
 	[ "$status" -eq 0 ]
 	jq -e '.status == "confirmed" and .visibility == "public"' \
+		"${LESSONS_DIR}/proposals/${id}.json" >/dev/null
+}
+
+@test "lessons confirm treats a bare trailing positional as cwd, not justification" {
+	_cli_setup
+	id=$(_seed_pending)
+	run librarian_cli lessons confirm "$id" org "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	jq -e '.status == "confirmed" and .candidate.applies_to.scope.kind == "versioned"' \
+		"${LESSONS_DIR}/proposals/${id}.json" >/dev/null
+}
+
+@test "lessons confirm threads --justification through to a version_independent rewrite" {
+	_cli_setup
+	id=$(_seed_pending)
+	run librarian_cli lessons confirm "$id" org --justification "git behavior is stable across versions." "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	jq -e '.candidate.applies_to.scope.kind == "version_independent"' \
+		"${LESSONS_DIR}/proposals/${id}.json" >/dev/null
+}
+
+@test "lessons confirm refuses a whitespace-only --justification instead of flipping scope" {
+	_cli_setup
+	id=$(_seed_pending)
+	run librarian_cli lessons confirm "$id" org --justification "   " "$PROJECT_REPO"
+	[ "$status" -ne 0 ]
+	jq -e '.status == "pending" and .candidate.applies_to.scope.kind == "versioned"' \
 		"${LESSONS_DIR}/proposals/${id}.json" >/dev/null
 }
 
