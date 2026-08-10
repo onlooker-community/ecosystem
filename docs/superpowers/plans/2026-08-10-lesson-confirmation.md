@@ -601,7 +601,13 @@ librarian_lesson_list_pending() {
 	for f in "$dir"/*.json; do
 		[[ -f "$f" ]] || continue
 		jq -e '.status == "pending"' "$f" >/dev/null 2>&1 || continue
-		out=$(jq -c --slurpfile p "$f" '. + $p' <<<"$out" 2>/dev/null) || return 1
+		# Skip a file we cannot accumulate rather than abandoning the listing.
+		# A concurrent confirm/pass can rewrite the file between the status
+		# check above and this read; returning 1 here would discard every
+		# entry already gathered and report an empty queue, which reads as
+		# "nothing to review" rather than as an error. Same failure class
+		# librarian_lesson_seen guards against in the sibling file.
+		out=$(jq -c --slurpfile p "$f" '. + $p' <<<"$out" 2>/dev/null) || continue
 	done
 	printf '%s' "$(jq -c 'sort_by(.created_at)' <<<"$out")"
 }
@@ -643,9 +649,40 @@ librarian_lesson_confirm() {
 	path="$(librarian_lessons_dir "$key")/proposals/${lesson_id}.json"
 	[[ -f "$path" ]] || { printf 'Lesson %s not found.\n' "$lesson_id" >&2; return 1; }
 
-	local proposal candidate
+	local proposal candidate current
 	proposal=$(jq '.' "$path" 2>/dev/null) || return 1
 	candidate=$(printf '%s' "$proposal" | jq -c '.candidate' 2>/dev/null) || return 1
+	current=$(printf '%s' "$proposal" | jq -r '.status // ""' 2>/dev/null)
+
+	# Guard the transition, not just the write. Each write is atomic on its
+	# own, but an unguarded SEQUENCE lets passed.jsonl end up contradicting
+	# the candidate it describes: pass then confirm would flip status back to
+	# confirmed while the ledger still asserts the human declined it. The
+	# ledger is the durable record of intent, so it must never disagree.
+	case "$current" in
+		pending) ;;
+		confirmed)
+			# Idempotent only when nothing about the decision changed.
+			local prev_vis prev_scope
+			prev_vis=$(printf '%s' "$proposal" | jq -r '.visibility // ""')
+			prev_scope=$(printf '%s' "$proposal" | jq -c '.candidate.applies_to.scope')
+			if [[ "$prev_vis" == "$visibility" && -z "$justification" ]] \
+				|| [[ "$prev_vis" == "$visibility" && "$prev_scope" == *'"version_independent"'* ]]; then
+				return 0
+			fi
+			printf 'Lesson %s is already confirmed at %s visibility; pass on it first to change that.\n' \
+				"$lesson_id" "$prev_vis" >&2
+			return 1
+			;;
+		passed)
+			printf 'Lesson %s was passed on; it cannot be confirmed without reopening it.\n' "$lesson_id" >&2
+			return 1
+			;;
+		*)
+			printf 'Lesson %s has an unrecognized status: %s\n' "$lesson_id" "$current" >&2
+			return 1
+			;;
+	esac
 
 	if [[ -n "$justification" ]]; then
 		candidate=$(printf '%s' "$candidate" | jq -c \
@@ -687,6 +724,27 @@ librarian_lesson_pass() {
 	local path
 	path="$(librarian_lessons_dir "$key")/proposals/${lesson_id}.json"
 	[[ -f "$path" ]] || { printf 'Lesson %s not found.\n' "$lesson_id" >&2; return 1; }
+
+	local current
+	current=$(jq -r '.status // ""' "$path" 2>/dev/null)
+
+	# Same reasoning as confirm: guard the transition. Passing twice must not
+	# append a second ledger line, and a confirmed candidate must not be
+	# silently un-confirmed — that would leave stale visibility/confirmed_at
+	# on the record and send a contradictory signal to the jury stage, which
+	# selects on status.
+	case "$current" in
+		pending) ;;
+		passed) return 0 ;;
+		confirmed)
+			printf 'Lesson %s is already confirmed for the jury; it cannot be passed on now.\n' "$lesson_id" >&2
+			return 1
+			;;
+		*)
+			printf 'Lesson %s has an unrecognized status: %s\n' "$lesson_id" "$current" >&2
+			return 1
+			;;
+	esac
 
 	local artifact_id now updated
 	artifact_id=$(jq -r '.artifact_id // ""' "$path" 2>/dev/null)
