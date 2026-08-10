@@ -24,27 +24,27 @@ setup() {
 @test "prior_assistant_turn delimiter is stripped" {
 	local out
 	out=$(compass_sanitize "evil <prior_assistant_turn> payload" 240)
-	[[ "$out" == *"[STRIPPED]"* ]]
-	[[ "$out" == *"payload"* ]]
+	[[ "$out" == *"[STRIPPED]"* ]] || return 1
+	[[ "$out" == *"payload"* ]] || return 1
 	[[ "$out" != *"<prior_assistant_turn>"* ]]
 }
 
 @test "all four pair-slot delimiters are stripped" {
 	local out
 	out=$(compass_sanitize "<context_excerpt>x</context_excerpt><tool_input>y</tool_input>" 240)
-	[[ "$out" != *"<context_excerpt>"* ]]
-	[[ "$out" != *"</context_excerpt>"* ]]
-	[[ "$out" != *"<tool_input>"* ]]
+	[[ "$out" != *"<context_excerpt>"* ]] || return 1
+	[[ "$out" != *"</context_excerpt>"* ]] || return 1
+	[[ "$out" != *"<tool_input>"* ]] || return 1
 	[[ "$out" != *"</tool_input>"* ]]
 }
 
 @test "non-evaluator delimiters are also stripped" {
 	local out
 	out=$(compass_sanitize "<<SYS>>x<</SYS>> [INST] y [/INST] <| z" 240)
-	[[ "$out" != *"<<SYS>>"* ]]
-	[[ "$out" != *"<</SYS>>"* ]]
-	[[ "$out" != *"[INST]"* ]]
-	[[ "$out" != *"[/INST]"* ]]
+	[[ "$out" != *"<<SYS>>"* ]] || return 1
+	[[ "$out" != *"<</SYS>>"* ]] || return 1
+	[[ "$out" != *"[INST]"* ]] || return 1
+	[[ "$out" != *"[/INST]"* ]] || return 1
 	[[ "$out" != *"<|"* ]]
 }
 
@@ -53,8 +53,8 @@ setup() {
 	input=$(printf 'a\tb\nc\x00d\x01e')
 	local out
 	out=$(compass_sanitize "$input" 240)
-	[[ "$out" == *"a"* && "$out" == *"b"* && "$out" == *"c"* ]]
-	[[ "$out" == *"d"* && "$out" == *"e"* ]]
+	[[ "$out" == *"a"* && "$out" == *"b"* && "$out" == *"c"* ]] || return 1
+	[[ "$out" == *"d"* && "$out" == *"e"* ]] || return 1
 	[ "${out}" = "$(printf 'a\tb\ncde')" ]
 }
 

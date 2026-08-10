@@ -21,7 +21,7 @@ setup() {
 	local tok out
 	tok="sk-ant-$(printf 'a%.0s' $(seq 1 28))"
 	out=$(printf '%s' "key=\"${tok}\"" | lineage_redact 4000 true)
-	[[ "$out" == *"[REDACTED:secret]"* ]]
+	[[ "$out" == *"[REDACTED:secret]"* ]] || return 1
 	[[ "$out" != *"$tok"* ]]
 }
 
@@ -29,7 +29,7 @@ setup() {
 	local tok out
 	tok="ghp_$(printf '0%.0s' $(seq 1 36))"
 	out=$(printf '%s' "$tok" | lineage_redact 4000 true)
-	[[ "$out" == *"[REDACTED:secret]"* ]]
+	[[ "$out" == *"[REDACTED:secret]"* ]] || return 1
 	[[ "$out" != *"$tok"* ]]
 }
 
@@ -37,8 +37,8 @@ setup() {
 	local val out
 	val=$(printf 'x%.0s' $(seq 1 24))
 	out=$(printf '%s' "API_TOKEN=${val}" | lineage_redact 4000 true)
-	[[ "$out" == *"API_TOKEN="* ]]
-	[[ "$out" == *"[REDACTED:secret]"* ]]
+	[[ "$out" == *"API_TOKEN="* ]] || return 1
+	[[ "$out" == *"[REDACTED:secret]"* ]] || return 1
 	[[ "$out" != *"$val"* ]]
 }
 
@@ -52,7 +52,7 @@ setup() {
 @test "content longer than the cap is truncated with a marker" {
 	local out
 	out=$(printf '%s' "abcdefghij" | lineage_redact 4 true)
-	[[ "$out" == "abcd"* ]]
+	[[ "$out" == "abcd"* ]] || return 1
 	[[ "$out" == *"truncated 6 chars"* ]]
 }
 

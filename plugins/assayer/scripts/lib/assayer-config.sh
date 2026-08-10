@@ -57,3 +57,9 @@ assayer_config_timeout() {
 	v=$(assayer_config_get '.assayer.evaluation.timeout_seconds')
 	printf '%s' "${v:-60}"
 }
+
+assayer_config_final_message_chars() {
+	local v
+	v=$(assayer_config_get '.assayer.final_message_chars')
+	printf '%s' "${v:-6000}"
+}

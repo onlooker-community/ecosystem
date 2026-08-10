@@ -157,7 +157,7 @@ _index_session() {
 
   local ctx
   ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
-  [[ "$ctx" == *"Historian: a past chunk looks similar"* ]]
+  [[ "$ctx" == *"Historian: a past chunk looks similar"* ]] || return 1
   [[ "$ctx" == *"redash"* ]]
 
   grep '"event_type":"historian.retrieval.surfaced"' "$ONLOOKER_EVENTS_LOG" \

@@ -160,6 +160,33 @@ _seed_artifact() {
 }
 ```
 
+## Gate every assertion: non-final `[[ ]]` needs `|| return 1`
+
+`bats` resolves `#!/usr/bin/env bash`, which on macOS is the system bash 3.2.
+Under 3.2 a failing **non-final** `[[ ]]` does **not** fail the test body —
+execution continues and the test reports `ok`. Single-bracket `[ ]`, failing
+commands, and failing command substitutions all gate correctly even there; the
+defect is specific to `[[ ]]`. Under bash 5.x (what CI runs) it gates properly,
+so a broken assertion passes locally and only CI would catch it.
+
+Only the **last** assertion in a test body is safe, because a body's exit
+status is its last command. Any `[[ ]]` before that needs explicit gating:
+
+```bash
+@test "example" {
+  [[ "$output" == *"expected"* ]] || return 1   # non-final — must gate
+  [ "$status" -eq 0 ]                            # final — gates on its own
+}
+```
+
+Do **not** "fix" this by swapping to `[ ]`. Most of these assertions rely on
+`[[ ]]`-only behavior — `==` glob patterns, `=~` regex, internal `&&`/`||` —
+and a blanket swap silently changes what they test.
+
+When you add an assertion, break it on purpose once and confirm the test fails.
+A test that passes whether or not the code is correct is worse than no test,
+because it reports coverage that does not exist.
+
 ## Anti-patterns
 
 Don't hand-roll these — each has bitten the suite before:

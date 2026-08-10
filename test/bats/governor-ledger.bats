@@ -91,7 +91,7 @@ _make_completion() {
 @test "governor_ledger_path returns a .jsonl path under ONLOOKER_DIR" {
 	local p
 	p=$(governor_ledger_path "test-session")
-	[[ "$p" == *".jsonl" ]]
+	[[ "$p" == *".jsonl" ]] || return 1
 	[[ "$p" == *"test-session"* ]]
 }
 

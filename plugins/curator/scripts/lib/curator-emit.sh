@@ -39,7 +39,8 @@ _CURATOR_EVENT_JS="${_CURATOR_EVENT_JS:-$(_curator_resolve_event_js)}"
 curator_emit() {
 	local event_type="${1:-}"
 	local session_id="${2:-}"
-	local payload="${3:-{\}}"
+	local payload="${3:-}"
+	[ -z "$payload" ] && payload='{}'
 
 	[[ -z "$event_type" || -z "$session_id" ]] && return 0
 	[[ -z "$_CURATOR_EVENT_JS" || ! -f "$_CURATOR_EVENT_JS" ]] && return 0

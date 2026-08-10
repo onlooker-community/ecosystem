@@ -60,8 +60,8 @@ setup() {
 	EOF
 	local out
 	out=$(compass_read_prior_turn "$t" 800)
-	[[ "$out" == *"[STRIPPED]"* ]]
-	[[ "$out" != *"<prior_assistant_turn>"* ]]
+	[[ "$out" == *"[STRIPPED]"* ]] || return 1
+	[[ "$out" != *"<prior_assistant_turn>"* ]] || return 1
 
 	# Truncation honors max_chars.
 	local short

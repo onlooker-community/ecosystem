@@ -51,7 +51,7 @@ setup() {
   out=$(turn_tracker_summarize_prompt "$long")
   # 200 retained characters + the single-character ellipsis = length 201.
   [ "${#out}" -eq 201 ]
-  [[ "$out" == *… ]]
+  [[ "$out" == *… ]] || return 1
   [ "${out%…}" = "$(printf 'a%.0s' {1..200})" ]
 }
 

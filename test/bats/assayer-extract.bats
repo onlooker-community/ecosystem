@@ -70,7 +70,7 @@ setup() {
 @test "extraction prompt includes the message and the JSON contract" {
 	run assayer_build_extraction_prompt "I ran the tests and they pass." 5
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"I ran the tests and they pass."* ]]
-	[[ "$output" == *"TESTABLE SUCCESS CLAIM"* ]]
+	[[ "$output" == *"I ran the tests and they pass."* ]] || return 1
+	[[ "$output" == *"TESTABLE SUCCESS CLAIM"* ]] || return 1
 	[[ "$output" == *"at most 5 claims"* ]]
 }

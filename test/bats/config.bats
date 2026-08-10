@@ -27,7 +27,7 @@ setup_file() {
 
   local hook_cmd
   hook_cmd=$(jq -r '.hooks.PreToolUse[0].hooks[0].command' "${REPO_ROOT}/hooks/hooks.json")
-  [[ "$hook_cmd" == *tool-sequence-tracker.sh ]]
+  [[ "$hook_cmd" == *tool-sequence-tracker.sh ]] || return 1
 
   local script_path="${hook_cmd//\$CLAUDE_PLUGIN_ROOT/$REPO_ROOT}"
   script_path="${script_path//\"/}"
@@ -41,7 +41,7 @@ setup_file() {
 
   local hook_cmd
   hook_cmd=$(jq -r '.hooks.PreToolUse[1].hooks[0].command' "${REPO_ROOT}/hooks/hooks.json")
-  [[ "$hook_cmd" == *agent-spawn-tracker.sh ]]
+  [[ "$hook_cmd" == *agent-spawn-tracker.sh ]] || return 1
 
   local script_path="${hook_cmd//\$CLAUDE_PLUGIN_ROOT/$REPO_ROOT}"
   script_path="${script_path//\"/}"
@@ -55,7 +55,7 @@ setup_file() {
 
   local hook_cmd
   hook_cmd=$(jq -r '.hooks.PreToolUse[2].hooks[0].command' "${REPO_ROOT}/hooks/hooks.json")
-  [[ "$hook_cmd" == *skill-usage-tracker.sh ]]
+  [[ "$hook_cmd" == *skill-usage-tracker.sh ]] || return 1
 
   local script_path="${hook_cmd//\$CLAUDE_PLUGIN_ROOT/$REPO_ROOT}"
   script_path="${script_path//\"/}"
@@ -78,7 +78,7 @@ setup_file() {
 
   local hook_cmd
   hook_cmd=$(jq -r '.hooks.PostToolUse[0].hooks[0].command' "${REPO_ROOT}/hooks/hooks.json")
-  [[ "$hook_cmd" == *tool-history-tracker.sh ]]
+  [[ "$hook_cmd" == *tool-history-tracker.sh ]] || return 1
 
   local script_path="${hook_cmd//\$CLAUDE_PLUGIN_ROOT/$REPO_ROOT}"
   script_path="${script_path//\"/}"
@@ -103,9 +103,9 @@ setup_file() {
   turn_cmd=$(jq -r '.hooks.UserPromptSubmit[0].hooks[0].command' "${REPO_ROOT}/hooks/hooks.json")
   duration_cmd=$(jq -r '.hooks.UserPromptSubmit[0].hooks[1].command' "${REPO_ROOT}/hooks/hooks.json")
   rule_cmd=$(jq -r '.hooks.UserPromptSubmit[0].hooks[2].command' "${REPO_ROOT}/hooks/hooks.json")
-  [[ "$turn_cmd" == *turn-tracker.sh ]]
-  [[ "$duration_cmd" == *session-duration-tracker.sh ]]
-  [[ "$rule_cmd" == *prompt-rule-injector.sh ]]
+  [[ "$turn_cmd" == *turn-tracker.sh ]] || return 1
+  [[ "$duration_cmd" == *session-duration-tracker.sh ]] || return 1
+  [[ "$rule_cmd" == *prompt-rule-injector.sh ]] || return 1
 
   for hook_cmd in "$turn_cmd" "$duration_cmd" "$rule_cmd"; do
     local script_path="${hook_cmd//\$CLAUDE_PLUGIN_ROOT/$REPO_ROOT}"
@@ -121,7 +121,7 @@ setup_file() {
 
   local hook_cmd
   hook_cmd=$(jq -r '.hooks.SessionStart[0].hooks[0].command' "${REPO_ROOT}/hooks/hooks.json")
-  [[ "$hook_cmd" == *session-start-tracker.sh ]]
+  [[ "$hook_cmd" == *session-start-tracker.sh ]] || return 1
 
   local script_path="${hook_cmd//\$CLAUDE_PLUGIN_ROOT/$REPO_ROOT}"
   script_path="${script_path//\"/}"
@@ -135,7 +135,7 @@ setup_file() {
 
   local hook_cmd
   hook_cmd=$(jq -r '.hooks.PreCompact[0].hooks[0].command' "${REPO_ROOT}/hooks/hooks.json")
-  [[ "$hook_cmd" == *pre-compact-tracker.sh ]]
+  [[ "$hook_cmd" == *pre-compact-tracker.sh ]] || return 1
 
   run jq -e '.hooks.PreCompact[0].matcher == "manual" and .hooks.PreCompact[1].matcher == "auto"' \
     "${REPO_ROOT}/hooks/hooks.json"
@@ -153,7 +153,7 @@ setup_file() {
 
   local hook_cmd
   hook_cmd=$(jq -r '.hooks.PostCompact[0].hooks[0].command' "${REPO_ROOT}/hooks/hooks.json")
-  [[ "$hook_cmd" == *context-compact-tracker.sh ]]
+  [[ "$hook_cmd" == *context-compact-tracker.sh ]] || return 1
 
   local script_path="${hook_cmd//\$CLAUDE_PLUGIN_ROOT/$REPO_ROOT}"
   script_path="${script_path//\"/}"
@@ -167,7 +167,7 @@ setup_file() {
 
   local hook_cmd
   hook_cmd=$(jq -r '.hooks.SessionEnd[0].hooks[0].command' "${REPO_ROOT}/hooks/hooks.json")
-  [[ "$hook_cmd" == *session-end-tracker.sh ]]
+  [[ "$hook_cmd" == *session-end-tracker.sh ]] || return 1
 
   local script_path="${hook_cmd//\$CLAUDE_PLUGIN_ROOT/$REPO_ROOT}"
   script_path="${script_path//\"/}"
@@ -178,7 +178,7 @@ setup_file() {
 @test "hooks.json TaskCreated references task-tracker" {
   local hook_cmd
   hook_cmd=$(jq -r '.hooks.TaskCreated[0].hooks[0].command' "${REPO_ROOT}/hooks/hooks.json")
-  [[ "$hook_cmd" == *task-tracker.sh ]]
+  [[ "$hook_cmd" == *task-tracker.sh ]] || return 1
 
   local script_path="${hook_cmd//\$CLAUDE_PLUGIN_ROOT/$REPO_ROOT}"
   script_path="${script_path//\"/}"
@@ -189,7 +189,7 @@ setup_file() {
 @test "hooks.json TaskCompleted references task-tracker" {
   local hook_cmd
   hook_cmd=$(jq -r '.hooks.TaskCompleted[0].hooks[0].command' "${REPO_ROOT}/hooks/hooks.json")
-  [[ "$hook_cmd" == *task-tracker.sh ]]
+  [[ "$hook_cmd" == *task-tracker.sh ]] || return 1
 
   local script_path="${hook_cmd//\$CLAUDE_PLUGIN_ROOT/$REPO_ROOT}"
   script_path="${script_path//\"/}"
@@ -200,7 +200,7 @@ setup_file() {
 @test "hooks.json WorktreeCreate references worktree-tracker" {
   local hook_cmd
   hook_cmd=$(jq -r '.hooks.WorktreeCreate[0].hooks[0].command' "${REPO_ROOT}/hooks/hooks.json")
-  [[ "$hook_cmd" == *worktree-tracker.sh ]]
+  [[ "$hook_cmd" == *worktree-tracker.sh ]] || return 1
 
   local script_path="${hook_cmd//\$CLAUDE_PLUGIN_ROOT/$REPO_ROOT}"
   script_path="${script_path//\"/}"
@@ -211,7 +211,7 @@ setup_file() {
 @test "hooks.json WorktreeRemove references worktree-tracker" {
   local hook_cmd
   hook_cmd=$(jq -r '.hooks.WorktreeRemove[0].hooks[0].command' "${REPO_ROOT}/hooks/hooks.json")
-  [[ "$hook_cmd" == *worktree-tracker.sh ]]
+  [[ "$hook_cmd" == *worktree-tracker.sh ]] || return 1
 
   local script_path="${hook_cmd//\$CLAUDE_PLUGIN_ROOT/$REPO_ROOT}"
   script_path="${script_path//\"/}"

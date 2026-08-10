@@ -39,7 +39,8 @@ _HISTORIAN_EVENT_JS="${_HISTORIAN_EVENT_JS:-$(_historian_resolve_event_js)}"
 historian_emit() {
 	local event_type="${1:-}"
 	local session_id="${2:-}"
-	local payload="${3:-{\}}"
+	local payload="${3:-}"
+	[ -z "$payload" ] && payload='{}'
 
 	[[ -z "$event_type" || -z "$session_id" ]] && return 0
 	[[ -z "$_HISTORIAN_EVENT_JS" || ! -f "$_HISTORIAN_EVENT_JS" ]] && return 0
