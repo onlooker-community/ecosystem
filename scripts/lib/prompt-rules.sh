@@ -148,7 +148,12 @@ prompt_rules_pattern_matches() {
 prompt_rules_emit() {
   local session_id="${1:-unknown}"
   local event_type="${2:-}"
-  local payload_json="${3:-{\}}"
+  # Default the payload without inlining braces in the expansion. Both
+  # `${3:-{\}}` and `${3:-{}}` are wrong: the first keeps the backslash on
+  # bash 3.2 (macOS system bash), and the second appends a stray `}` to any
+  # payload that IS supplied, on every bash version.
+  local payload_json="${3:-}"
+  [ -z "$payload_json" ] && payload_json='{}'
   [[ -z "$event_type" ]] && return 1
   ensure_file_exists "$ONLOOKER_EVENTS_LOG" || return 1
 

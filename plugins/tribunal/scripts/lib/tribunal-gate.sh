@@ -23,7 +23,8 @@ tribunal_gate_decide() {
 	local verdicts="${2:-[]}"
 	local aggregated_score="${3:-0}"
 	local score_threshold="${4:-0.75}"
-	local meta="${5:-{}}"
+	local meta="${5:-}"
+	[ -z "$meta" ] && meta='{}'
 	local dissent_score="${6:-0}"
 	local dissent_threshold="${7:-0.25}"
 

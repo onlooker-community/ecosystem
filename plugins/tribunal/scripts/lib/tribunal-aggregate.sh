@@ -25,7 +25,9 @@
 tribunal_aggregate() {
 	local method="${1:-mean}"
 	local verdicts="${2:-[]}"
-	local _rubric="${3:-{}}"  # reserved for true weighted_mean once per-criterion scores are threaded
+	# reserved for true weighted_mean once per-criterion scores are threaded
+	local _rubric="${3:-}"
+	[ -z "$_rubric" ] && _rubric='{}'
 	: "$_rubric"
 
 	local count

@@ -50,7 +50,8 @@ _LIBRARIAN_EVENT_JS="${_LIBRARIAN_EVENT_JS:-$(_librarian_resolve_event_js)}"
 librarian_emit() {
 	local event_type="${1:-}"
 	local session_id="${2:-}"
-	local payload="${3:-{\}}"
+	local payload="${3:-}"
+	[ -z "$payload" ] && payload='{}'
 
 	[[ -z "$event_type" || -z "$session_id" ]] && return 0
 	[[ -z "$_LIBRARIAN_EVENT_JS" || ! -f "$_LIBRARIAN_EVENT_JS" ]] && return 0

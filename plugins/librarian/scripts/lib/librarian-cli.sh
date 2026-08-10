@@ -117,7 +117,8 @@ _librarian_cli_set_proposal_status() {
 	local key="$1"
 	local proposal_id="$2"
 	local new_status="$3"
-	local extra_json="${4:-{\}}"
+	local extra_json="${4:-}"
+	[ -z "$extra_json" ] && extra_json='{}'
 	[[ -z "$key" || -z "$proposal_id" || -z "$new_status" ]] && return 1
 
 	local path
