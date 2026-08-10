@@ -62,8 +62,22 @@ librarian_lesson_valid_range() {
 # copy is how the jq rules and the schema drifted apart once already.
 #
 # Composed into a jq program by each validator, which appends its own scope
-# clause. See librarian_lesson_validate_candidate for why the
-# additionalProperties and minLength mirrors are not decorative.
+# clause. artifact_ids, session_ids, and observed_at are checked against the
+# same patterns as the vendored lesson-evidence.subschema.json (ULID,
+# non-empty string, RFC3339 date-time) — a provenance-less artifact
+# (session_id/created_at stitched in as "") must fail here, not pass through
+# and get buried permanently once librarian_lesson_seen marks it handled.
+#
+# The `keys - [...] | length == 0` checks mirror `additionalProperties:
+# false` on the vendored `evidence` and `applies_to` sub-schemas, and the
+# `all(type == "string" and length > 0)` checks mirror their array items'
+# `minLength: 1`. Neither is decorative: without them a model that
+# "helpfully" adds an extra field, or emits an empty-string array entry,
+# produces a proposal that passes here but fails ajv against the contract it
+# claims to satisfy — and lessons are meant to be shared with other people.
+# Each `keys` call is guarded by a preceding `type == "object"` check in the
+# same `and` chain: jq's `and` short-circuits left to right, so `keys` on a
+# missing/non-object value is never reached.
 _LIBRARIAN_LESSON_STRUCTURAL='
 	(.claim | type) == "string" and (.claim | length) > 0
 	and (.rationale | type) == "string" and (.rationale | length) > 0
