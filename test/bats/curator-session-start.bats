@@ -35,10 +35,17 @@ setup() {
   # project settings file.
   MEM_DIR="${TEST_HOME}/.claude/projects/test-project/memory"
   mkdir -p "$MEM_DIR" "${PROJECT_REPO}/.claude"
+  # Pin a generous wall-clock budget. The hook checks
+  # cheap_checks.wall_clock_budget_ms before EACH phase and skips the rest
+  # once it trips, so at the shipped default of 500ms a loaded machine can
+  # blow the budget before the later phases run — the orphan check among
+  # them — and those tests fail intermittently while passing in isolation.
+  # These tests assert what the checks detect, not how fast the host is.
   jq -n --arg path "$MEM_DIR" \
     '{
       curator: {
         memory_store_path: $path,
+        cheap_checks: { wall_clock_budget_ms: 600000 },
         date_check: { date_grace_period_days: 7 }
       }
     }' > "${PROJECT_REPO}/.claude/settings.json"
