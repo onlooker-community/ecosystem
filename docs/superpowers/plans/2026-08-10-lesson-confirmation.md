@@ -150,8 +150,23 @@ In `librarian-lesson-validate.sh`, above `librarian_lesson_validate_candidate`, 
 # copy is how the jq rules and the schema drifted apart once already.
 #
 # Composed into a jq program by each validator, which appends its own scope
-# clause. See librarian_lesson_validate_candidate for why the
-# additionalProperties and minLength mirrors are not decorative.
+# clause.
+#
+# The mirrors below are NOT decorative, and both reasons were learned the
+# hard way — do not delete them as redundant with the schema:
+#
+#   The `keys - [...]` checks mirror `additionalProperties: false` and the
+#   `all(type == "string" and length > 0)` checks mirror the array items'
+#   `minLength: 1`. Without them, a model that "helpfully" adds an extra
+#   field produces a proposal that passes here but fails ajv against the
+#   contract it claims to satisfy — and lessons are shared with other
+#   people, so that lands on someone else's machine.
+#
+#   The ULID, RFC3339 and non-empty-string patterns on evidence exist
+#   because a provenance-less artifact (session_id/created_at stitched in
+#   as "") must fail HERE. If it passes, the proposal is written and
+#   librarian_lesson_seen marks the artifact handled forever — buried
+#   permanently, which is the failure the whole taxonomy exists to prevent.
 _LIBRARIAN_LESSON_STRUCTURAL='
 	(.claim | type) == "string" and (.claim | length) > 0
 	and (.rationale | type) == "string" and (.rationale | length) > 0
