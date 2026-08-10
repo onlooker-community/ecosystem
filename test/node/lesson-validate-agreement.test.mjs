@@ -54,12 +54,11 @@ function schemaAccepts(candidate) {
 
 // Shells out to the real runtime gate rather than reimplementing its logic,
 // so this test tracks the actual function, not a description of it.
-function jqAccepts(candidate) {
-  const result = spawnSync(
-    'bash',
-    ['-c', `source '${VALIDATE_LIB}' && librarian_lesson_validate_candidate "$CANDIDATE_JSON"`],
-    { env: { ...process.env, CANDIDATE_JSON: JSON.stringify(candidate) }, encoding: 'utf8' },
-  );
+function jqAccepts(candidate, fn = 'librarian_lesson_validate_candidate') {
+  const result = spawnSync('bash', ['-c', `source '${VALIDATE_LIB}' && ${fn} "$CANDIDATE_JSON"`], {
+    env: { ...process.env, CANDIDATE_JSON: JSON.stringify(candidate) },
+    encoding: 'utf8',
+  });
   return result.status === 0;
 }
 
@@ -151,4 +150,34 @@ describe('lesson validator / vendored schema agreement', () => {
       assertAgree(`range ${range}`, withRange(range), expected);
     });
   }
+});
+
+describe('confirmed validator', () => {
+  it('agrees with the schema on a well-formed version_independent candidate', () => {
+    const candidate = baseCandidate();
+    candidate.applies_to.scope = {
+      kind: 'version_independent',
+      justification: 'git aborts checkout on a dirty tree regardless of version.',
+    };
+    assert.equal(jqAccepts(candidate, 'librarian_lesson_validate_confirmed'), true);
+    assert.equal(schemaAccepts(candidate), true);
+  });
+
+  it('agrees with the schema in rejecting an empty justification', () => {
+    const candidate = baseCandidate();
+    candidate.applies_to.scope = { kind: 'version_independent', justification: '' };
+    assert.equal(jqAccepts(candidate, 'librarian_lesson_validate_confirmed'), false);
+    assert.equal(schemaAccepts(candidate), false);
+  });
+
+  it('still refuses version_independent through the transform validator', () => {
+    const candidate = baseCandidate();
+    candidate.applies_to.scope = {
+      kind: 'version_independent',
+      justification: 'git aborts checkout on a dirty tree regardless of version.',
+    };
+    // The schema permits this branch; the transform's gate deliberately does not.
+    assert.equal(schemaAccepts(candidate), true);
+    assert.equal(jqAccepts(candidate), false);
+  });
 });
