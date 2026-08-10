@@ -124,3 +124,37 @@ _seed_proposal() {
   ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
   [[ "$ctx" == *"Librarian has 3+ pending memory promotion proposals"* ]]
 }
+
+@test "session-start surfaces a pending lesson count as its own line" {
+	# Reuse this file's existing project/hook setup, then seed one pending
+	# lesson through the storage lib.
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-storage.sh"
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-ulid.sh"
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-storage.sh"
+	librarian_lesson_storage_init "$PROJECT_KEY"
+	librarian_lesson_write_proposal "$PROJECT_KEY" \
+		"$(jq -cn '{claim: "c", rationale: "r"}')" "01KZ45MKAM734ZS7JK24D2DK0R" >/dev/null
+
+	run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"lesson"* ]] || return 1
+}
+
+@test "session-start surfaces lessons even with zero memory proposals" {
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-storage.sh"
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-ulid.sh"
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-storage.sh"
+	librarian_lesson_storage_init "$PROJECT_KEY"
+	librarian_lesson_write_proposal "$PROJECT_KEY" \
+		"$(jq -cn '{claim: "c", rationale: "r"}')" "01KZ45MKAM734ZS7JK24D2DK0R" >/dev/null
+
+	run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"lesson"* ]] || return 1
+}
