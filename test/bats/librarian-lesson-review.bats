@@ -231,3 +231,65 @@ _seed_pending() {
 	run librarian_lesson_list_pending "$PROJECT_KEY"
 	printf '%s' "$output" | jq -e --arg c "$c" 'length == 1 and .[0].id == $c' >/dev/null
 }
+
+@test "confirming an already-confirmed lesson with the same visibility succeeds and does not write twice" {
+	_review_setup
+	id=$(_seed_pending)
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "org"
+	before=$(cat "${LESSONS_DIR}/proposals/${id}.json")
+	run librarian_lesson_confirm "$PROJECT_KEY" "$id" "org"
+	[ "$status" -eq 0 ]
+	after=$(cat "${LESSONS_DIR}/proposals/${id}.json")
+	[ "$before" = "$after" ]
+}
+
+@test "confirming an already-confirmed lesson with a different visibility is refused" {
+	_review_setup
+	id=$(_seed_pending)
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "org"
+	run librarian_lesson_confirm "$PROJECT_KEY" "$id" "public"
+	[ "$status" -ne 0 ]
+	jq -e '.status == "confirmed" and .visibility == "org"' \
+		"${LESSONS_DIR}/proposals/${id}.json" >/dev/null
+}
+
+@test "confirming a passed lesson is refused" {
+	_review_setup
+	id=$(_seed_pending)
+	librarian_lesson_pass "$PROJECT_KEY" "$id"
+	run librarian_lesson_confirm "$PROJECT_KEY" "$id" "org"
+	[ "$status" -ne 0 ]
+	jq -e '.status == "passed"' "${LESSONS_DIR}/proposals/${id}.json" >/dev/null
+}
+
+@test "passing an already-passed lesson does not append a second ledger line" {
+	_review_setup
+	id=$(_seed_pending)
+	librarian_lesson_pass "$PROJECT_KEY" "$id" "not worth sharing"
+	run librarian_lesson_pass "$PROJECT_KEY" "$id" "still not worth sharing"
+	[ "$status" -eq 0 ]
+	[ "$(wc -l < "${LESSONS_DIR}/passed.jsonl")" -eq 1 ]
+	tail -n 1 "${LESSONS_DIR}/passed.jsonl" \
+		| jq -e --arg id "$id" '.lesson_id == $id and .reason == "not worth sharing"' >/dev/null
+}
+
+@test "passing a confirmed lesson is refused" {
+	_review_setup
+	id=$(_seed_pending)
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "org"
+	run librarian_lesson_pass "$PROJECT_KEY" "$id"
+	[ "$status" -ne 0 ]
+	jq -e '.status == "confirmed"' "${LESSONS_DIR}/proposals/${id}.json" >/dev/null
+	[ ! -f "${LESSONS_DIR}/passed.jsonl" ]
+}
+
+@test "list_pending still returns the good entries when the directory also contains a truncated file, a bare-number file, and an empty file" {
+	_review_setup
+	id=$(_seed_pending)
+	printf '{"id":"bad","status":"pending"' > "${LESSONS_DIR}/proposals/truncated.json"
+	printf '123' > "${LESSONS_DIR}/proposals/barenum.json"
+	: > "${LESSONS_DIR}/proposals/empty.json"
+	run librarian_lesson_list_pending "$PROJECT_KEY"
+	[ "$status" -eq 0 ]
+	printf '%s' "$output" | jq -e --arg id "$id" 'length == 1 and .[0].id == $id' >/dev/null
+}

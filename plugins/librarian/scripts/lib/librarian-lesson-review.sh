@@ -17,6 +17,14 @@ librarian_lesson_passed_path() {
 }
 
 # Print pending proposals as a JSON array, oldest first. Prints [] when none.
+#
+# A malformed or racing file must shrink the result, never erase it: a
+# truncated write, a bare-value file, or a confirm/pass rewriting the file
+# mid-read all read as "that entry is missing" here, not as an error that
+# discards every proposal already gathered. `select(type == "object" and
+# ...)` folds the parse guard and the pending check into a single read of
+# each file, the same shape librarian_lesson_seen uses for the same reason.
+#
 # Usage: librarian_lesson_list_pending <key>
 librarian_lesson_list_pending() {
 	local key="$1"
@@ -26,12 +34,18 @@ librarian_lesson_list_pending() {
 	dir="$(librarian_lessons_dir "$key")/proposals"
 	[[ -d "$dir" ]] || { printf '[]'; return 0; }
 
-	local f out
+	local f out entry merged
 	out='[]'
 	for f in "$dir"/*.json; do
 		[[ -f "$f" ]] || continue
-		jq -e '.status == "pending"' "$f" >/dev/null 2>&1 || continue
-		out=$(jq -c --slurpfile p "$f" '. + $p' <<<"$out" 2>/dev/null) || return 1
+		entry=$(jq -c 'select(type == "object" and .status == "pending")' "$f" 2>/dev/null)
+		[[ -z "$entry" ]] && continue
+		# Merge into a separate variable, not directly into $out: `out=$(cmd)
+		# || continue` still assigns $out to cmd's (possibly empty) stdout
+		# before the `||` is ever evaluated, so a failed merge would silently
+		# wipe everything already gathered even with `continue` guarding it.
+		merged=$(jq -c --argjson e "$entry" '. + [$e]' <<<"$out" 2>/dev/null) || continue
+		out="$merged"
 	done
 	printf '%s' "$(jq -c 'sort_by(.created_at)' <<<"$out")"
 }
@@ -73,15 +87,45 @@ librarian_lesson_confirm() {
 	path="$(librarian_lessons_dir "$key")/proposals/${lesson_id}.json"
 	[[ -f "$path" ]] || { printf 'Lesson %s not found.\n' "$lesson_id" >&2; return 1; }
 
-	local proposal candidate
+	local proposal candidate current_status
 	proposal=$(jq '.' "$path" 2>/dev/null) || return 1
 	candidate=$(printf '%s' "$proposal" | jq -c '.candidate' 2>/dev/null) || return 1
+	current_status=$(printf '%s' "$proposal" | jq -r '.status // ""' 2>/dev/null)
 
 	if [[ -n "$justification" ]]; then
 		candidate=$(printf '%s' "$candidate" | jq -c \
 			--arg j "$justification" \
 			'.applies_to.scope = {kind: "version_independent", justification: $j}' 2>/dev/null) || return 1
 	fi
+
+	# Guard the transition, not just the write. Each write below is already
+	# atomic (one merged jq expression, one write), but an unguarded SEQUENCE
+	# is where a passed candidate could be flipped back to confirmed while
+	# passed.jsonl still asserts the human declined it — the durable record
+	# of intent disagreeing with the candidate it describes.
+	case "$current_status" in
+		pending) ;;
+		confirmed)
+			# Idempotent only when the repeat asks for exactly what is
+			# already recorded; anything else is a contradictory flip.
+			if printf '%s' "$proposal" | jq -e \
+				--arg v "$visibility" --argjson c "$candidate" \
+				'.visibility == $v and .candidate == $c' >/dev/null 2>&1; then
+				return 0
+			fi
+			printf 'Lesson %s is already confirmed; visibility or scope differs from the request.\n' \
+				"$lesson_id" >&2
+			return 1
+			;;
+		passed)
+			printf 'Lesson %s was passed on; it cannot be confirmed.\n' "$lesson_id" >&2
+			return 1
+			;;
+		*)
+			printf 'Lesson %s has an unrecognized status: %s\n' "$lesson_id" "$current_status" >&2
+			return 1
+			;;
+	esac
 
 	librarian_lesson_validate_confirmed "$candidate" 2>/dev/null || {
 		printf 'Candidate does not validate; not confirmed.\n' >&2
@@ -117,6 +161,27 @@ librarian_lesson_pass() {
 	local path
 	path="$(librarian_lessons_dir "$key")/proposals/${lesson_id}.json"
 	[[ -f "$path" ]] || { printf 'Lesson %s not found.\n' "$lesson_id" >&2; return 1; }
+
+	local current_status
+	current_status=$(jq -r '.status // ""' "$path" 2>/dev/null)
+
+	# Same reasoning as confirm: guard the transition. Passing twice must not
+	# append a second ledger line, and a confirmed candidate must not be
+	# silently un-confirmed — that would leave stale visibility/confirmed_at
+	# behind and send a contradictory signal to the stages that select on
+	# status downstream.
+	case "$current_status" in
+		pending) ;;
+		passed) return 0 ;;
+		confirmed)
+			printf 'Lesson %s is confirmed for the jury; it cannot be passed on now.\n' "$lesson_id" >&2
+			return 1
+			;;
+		*)
+			printf 'Lesson %s has an unrecognized status: %s\n' "$lesson_id" "$current_status" >&2
+			return 1
+			;;
+	esac
 
 	local artifact_id now updated
 	artifact_id=$(jq -r '.artifact_id // ""' "$path" 2>/dev/null)
