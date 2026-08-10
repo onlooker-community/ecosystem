@@ -293,3 +293,42 @@ _seed_pending() {
 	[ "$status" -eq 0 ]
 	printf '%s' "$output" | jq -e --arg id "$id" 'length == 1 and .[0].id == $id' >/dev/null
 }
+
+@test "confirming with a justification stores scope with exactly kind and justification, no versions key surviving" {
+	_review_setup
+	id=$(_seed_pending)
+	run librarian_lesson_confirm "$PROJECT_KEY" "$id" "org" "git behavior is stable across versions."
+	[ "$status" -eq 0 ]
+	jq -e '.candidate.applies_to.scope | keys == ["justification", "kind"]' \
+		"${LESSONS_DIR}/proposals/${id}.json" >/dev/null
+}
+
+@test "the stored candidate still passes the confirmed validator after a version_independent confirm" {
+	_review_setup
+	id=$(_seed_pending)
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "org" "git behavior is stable across versions."
+	stored=$(jq -c '.candidate' "${LESSONS_DIR}/proposals/${id}.json")
+	run librarian_lesson_validate_confirmed "$stored"
+	[ "$status" -eq 0 ]
+}
+
+@test "an identical repeat confirm with a justification is idempotent and succeeds" {
+	_review_setup
+	id=$(_seed_pending)
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "org" "git behavior is stable across versions."
+	before=$(cat "${LESSONS_DIR}/proposals/${id}.json")
+	run librarian_lesson_confirm "$PROJECT_KEY" "$id" "org" "git behavior is stable across versions."
+	[ "$status" -eq 0 ]
+	after=$(cat "${LESSONS_DIR}/proposals/${id}.json")
+	[ "$before" = "$after" ]
+}
+
+@test "a repeat confirm with a different justification is refused" {
+	_review_setup
+	id=$(_seed_pending)
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "org" "git behavior is stable across versions."
+	run librarian_lesson_confirm "$PROJECT_KEY" "$id" "org" "a completely different justification."
+	[ "$status" -ne 0 ]
+	jq -e '.candidate.applies_to.scope.justification == "git behavior is stable across versions."' \
+		"${LESSONS_DIR}/proposals/${id}.json" >/dev/null
+}
