@@ -994,6 +994,17 @@ librarian_cli_lessons_confirm() {
 				justification="${2:-}"
 				shift 2 2>/dev/null || shift
 				;;
+			--*)
+				# Reject an unrecognized flag rather than absorbing it as a
+				# cwd candidate. A typo like --justifcation would otherwise be
+				# swallowed, the lesson would confirm with an empty
+				# justification and exit 0 with no diagnostic, and the retry
+				# with the correct spelling would then be refused by the
+				# status guard — leaving a wrong state the CLI has no verb to
+				# undo. Nothing legitimate here begins with --.
+				printf 'unknown option: %s\n' "$1" >&2
+				return 1
+				;;
 			*)
 				cwd="$1"
 				shift
