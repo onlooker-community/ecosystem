@@ -997,7 +997,7 @@ Read `test/bats/librarian-session-start.bats` first and reuse its existing setup
 	librarian_lesson_write_proposal "$PROJECT_KEY" \
 		"$(jq -cn '{claim: "c", rationale: "r"}')" "01KZ45MKAM734ZS7JK24D2DK0R" >/dev/null
 
-	run bash -c "printf '%s' '$(_hook_input)' | '$HOOK'"
+	run bash -c "printf '%s' '$(_input)' | '$HOOK'"
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"lesson"* ]] || return 1
 }
@@ -1077,7 +1077,7 @@ Add a second test covering the trap, since it is the failure a reviewer would mo
 	librarian_lesson_write_proposal "$PROJECT_KEY" \
 		"$(jq -cn '{claim: "c", rationale: "r"}')" "01KZ45MKAM734ZS7JK24D2DK0R" >/dev/null
 
-	run bash -c "printf '%s' '$(_hook_input)' | '$HOOK'"
+	run bash -c "printf '%s' '$(_input)' | '$HOOK'"
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"lesson"* ]] || return 1
 }
