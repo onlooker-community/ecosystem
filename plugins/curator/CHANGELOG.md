@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3](https://github.com/onlooker-community/ecosystem/compare/curator-v0.2.2...curator-v0.2.3) (2026-08-10)
+
+
+### Bug Fixes
+
+* make the local bats suite tell the truth :mag: ([#135](https://github.com/onlooker-community/ecosystem/issues/135)) ([f0763e0](https://github.com/onlooker-community/ecosystem/commit/f0763e09f3caf2d39c89f28befd12567af0af845))
+
 ## [0.2.2](https://github.com/onlooker-community/ecosystem/compare/curator-v0.2.1...curator-v0.2.2) (2026-08-02)
 
 
