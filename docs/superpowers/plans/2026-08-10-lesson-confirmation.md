@@ -603,11 +603,19 @@ librarian_lesson_list_pending() {
 		jq -e '.status == "pending"' "$f" >/dev/null 2>&1 || continue
 		# Skip a file we cannot accumulate rather than abandoning the listing.
 		# A concurrent confirm/pass can rewrite the file between the status
-		# check above and this read; returning 1 here would discard every
-		# entry already gathered and report an empty queue, which reads as
-		# "nothing to review" rather than as an error. Same failure class
-		# librarian_lesson_seen guards against in the sibling file.
-		out=$(jq -c --slurpfile p "$f" '. + $p' <<<"$out" 2>/dev/null) || continue
+		# check above and this read; discarding everything gathered so far
+		# would report an empty queue, which reads as "nothing to review"
+		# rather than as an error. Same failure class librarian_lesson_seen
+		# guards against in the sibling file.
+		#
+		# `out=$(cmd) || continue` does NOT work here: the assignment happens
+		# and clobbers $out to empty stdout BEFORE `||` is evaluated, so the
+		# accumulator is already wiped by the time `continue` runs. Merge into
+		# a temp and promote only on success.
+		local merged
+		if merged=$(jq -c --slurpfile p "$f" '. + $p' <<<"$out" 2>/dev/null); then
+			out="$merged"
+		fi
 	done
 	printf '%s' "$(jq -c 'sort_by(.created_at)' <<<"$out")"
 }
