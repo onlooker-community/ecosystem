@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.34.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.33.1...ecosystem-v0.34.0) (2026-08-09)
+
+
+### Features
+
+* **librarian:** transform artifacts into shareable lesson candidates :microscope: ([#132](https://github.com/onlooker-community/ecosystem/issues/132)) ([48adbc7](https://github.com/onlooker-community/ecosystem/commit/48adbc7ec572b96b47f1be5f92810088c98702c6))
+
 ## [0.33.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.33.0...ecosystem-v0.33.1) (2026-08-02)
 
 
