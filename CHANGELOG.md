@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.34.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.34.0...ecosystem-v0.34.1) (2026-08-10)
+
+
+### Bug Fixes
+
+* make the local bats suite tell the truth :mag: ([#135](https://github.com/onlooker-community/ecosystem/issues/135)) ([f0763e0](https://github.com/onlooker-community/ecosystem/commit/f0763e09f3caf2d39c89f28befd12567af0af845))
+
 ## [0.34.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.33.1...ecosystem-v0.34.0) (2026-08-09)
 
 
