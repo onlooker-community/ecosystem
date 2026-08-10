@@ -705,9 +705,17 @@ librarian_lesson_confirm() {
 
 	local now updated
 	now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+	# Assign .candidate rather than folding it into the `*` merge. jq's `*` is
+	# RECURSIVE: `. * {candidate: $c}` merges the new candidate into the stored
+	# one instead of replacing it. When a confirm rewrites scope to
+	# version_independent, the fresh scope is {kind, justification} but merging
+	# it over the stored {kind, versions} leaves all three keys — a candidate
+	# that fails librarian_lesson_validate_confirmed, since that branch permits
+	# only kind and justification. It would then be handed to the jury stage,
+	# which reads exactly this field.
 	updated=$(printf '%s' "$proposal" | jq \
 		--arg v "$visibility" --arg t "$now" --argjson c "$candidate" \
-		'. * {status: "confirmed", visibility: $v, confirmed_at: $t, candidate: $c}' 2>/dev/null) || return 1
+		'. * {status: "confirmed", visibility: $v, confirmed_at: $t} | .candidate = $c' 2>/dev/null) || return 1
 	[[ -z "$updated" || "$updated" == "null" ]] && return 1
 	printf '%s\n' "$updated" > "$path"
 }
