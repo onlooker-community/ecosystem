@@ -398,6 +398,17 @@ librarian_cli_lessons_confirm() {
 					shift 1
 				fi
 				;;
+			--*)
+				# An unrecognized flag must never fall through to the cwd
+				# bucket below: a typo'd --justifcation would otherwise be
+				# swallowed here, its value would land as a plain positional
+				# (misread as cwd, then overwritten by the real trailing
+				# path), and the lesson would confirm with an empty
+				# justification and no diagnostic — a persisted wrong state
+				# this CLI has no verb to undo.
+				printf 'unknown option: %s\n' "$1" >&2
+				return 1
+				;;
 			*)
 				cwd="$1"
 				shift

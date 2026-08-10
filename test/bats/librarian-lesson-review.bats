@@ -412,6 +412,23 @@ _cli_setup() {
 		"${LESSONS_DIR}/proposals/${id}.json" >/dev/null
 }
 
+@test "lessons confirm refuses an unknown flag instead of swallowing it" {
+	_cli_setup
+	id=$(_seed_pending)
+	run librarian_cli lessons confirm "$id" org --foo "$PROJECT_REPO"
+	[ "$status" -ne 0 ]
+	jq -e '.status == "pending"' "${LESSONS_DIR}/proposals/${id}.json" >/dev/null
+}
+
+@test "lessons confirm refuses a typo'd --justifcation instead of confirming with an empty justification" {
+	_cli_setup
+	id=$(_seed_pending)
+	run librarian_cli lessons confirm "$id" org --justifcation "reason" "$PROJECT_REPO"
+	[ "$status" -ne 0 ]
+	jq -e '.status == "pending" and .candidate.applies_to.scope.kind == "versioned"' \
+		"${LESSONS_DIR}/proposals/${id}.json" >/dev/null
+}
+
 @test "lessons pass marks it passed" {
 	_cli_setup
 	id=$(_seed_pending)
