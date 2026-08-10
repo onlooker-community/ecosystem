@@ -98,6 +98,20 @@ librarian_lesson_confirm() {
 			'.applies_to.scope = {kind: "version_independent", justification: $j}' 2>/dev/null) || return 1
 	fi
 
+	# Authoritative guard: check the RESULTING state, not just this call's
+	# input. The check above only catches a justification supplied on THIS
+	# invocation; a candidate that already carries version_independent scope
+	# (proposed that way, or confirmed non-private earlier and now being
+	# reconfirmed at private) would sail past it and write with no jury ever
+	# validating the justification. This check is the one that actually holds
+	# the invariant — the input check above is only a fast path that avoids
+	# reading the file for the common case.
+	if [[ "$visibility" == "private" ]] && printf '%s' "$candidate" \
+		| jq -e '.applies_to.scope.kind == "version_independent"' >/dev/null 2>&1; then
+		printf 'version_independent requires org or public visibility: a private lesson runs no jury, so its justification would go unchecked and the lesson would never expire\n' >&2
+		return 1
+	fi
+
 	# Guard the transition, not just the write. Each write below is already
 	# atomic (one merged jq expression, one write), but an unguarded SEQUENCE
 	# is where a passed candidate could be flipped back to confirmed while

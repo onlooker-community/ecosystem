@@ -440,6 +440,18 @@ librarian_cli_lessons_pass() {
 	local cwd="${3:-}"
 	[[ -z "$lesson_id" ]] && { printf 'usage: librarian_cli lessons pass <lesson_id> [reason]\n'; return 1; }
 
+	# reason and cwd are positional, not flags — but a flag-shaped token here
+	# is almost always a typo for confirm's `--justification` (the likeliest
+	# guess is `--reason`). Reject it rather than silently accepting it as
+	# the literal reason: librarian_lesson_pass writes to the append-only
+	# passed.jsonl ledger with no CLI verb to correct a bad line afterward.
+	case "$reason" in
+		--*) printf 'unknown option: %s\n' "$reason" >&2; return 1 ;;
+	esac
+	case "$cwd" in
+		--*) printf 'unknown option: %s\n' "$cwd" >&2; return 1 ;;
+	esac
+
 	local key
 	key=$(_librarian_cli_project_key "$cwd")
 	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }

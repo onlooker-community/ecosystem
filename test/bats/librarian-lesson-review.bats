@@ -166,6 +166,31 @@ _seed_pending() {
 		"${LESSONS_DIR}/proposals/${id}.json" >/dev/null
 }
 
+@test "confirm refuses a candidate that already carries version_independent scope at private visibility" {
+	_review_setup
+	# Seeded directly with version_independent scope and no justification
+	# argument on this call — librarian_lesson_write_proposal performs no
+	# validation, so this is reachable without going through the input-side
+	# guard at all. The guard must key on the resulting state, not on
+	# whether THIS call passed a justification.
+	id=$(librarian_lesson_write_proposal "$PROJECT_KEY" \
+		"$(_candidate "$(_indep)")" "01KZ45MKAM734ZS7JK24D2DK0R")
+	run librarian_lesson_confirm "$PROJECT_KEY" "$id" "private"
+	[ "$status" -ne 0 ]
+	jq -e '.status == "pending" and .candidate.applies_to.scope.kind == "version_independent"' \
+		"${LESSONS_DIR}/proposals/${id}.json" >/dev/null
+}
+
+@test "confirm accepts a candidate that already carries version_independent scope at org visibility" {
+	_review_setup
+	id=$(librarian_lesson_write_proposal "$PROJECT_KEY" \
+		"$(_candidate "$(_indep)")" "01KZ45MKAM734ZS7JK24D2DK0R")
+	run librarian_lesson_confirm "$PROJECT_KEY" "$id" "org"
+	[ "$status" -eq 0 ]
+	jq -e '.status == "confirmed" and .candidate.applies_to.scope.kind == "version_independent"' \
+		"${LESSONS_DIR}/proposals/${id}.json" >/dev/null
+}
+
 @test "confirm refuses a candidate that fails the confirmed validator" {
 	_review_setup
 	id=$(_seed_pending)
@@ -435,6 +460,34 @@ _cli_setup() {
 	run librarian_cli lessons pass "$id" "" "$PROJECT_REPO"
 	[ "$status" -eq 0 ]
 	jq -e '.status == "passed"' "${LESSONS_DIR}/proposals/${id}.json" >/dev/null
+}
+
+@test "lessons pass refuses a flag-shaped reason instead of storing it literally" {
+	_cli_setup
+	id=$(_seed_pending)
+	# The likeliest typo for confirm's --justification. Positionally this
+	# would otherwise land as the literal reason, with cwd falling back to
+	# $(pwd) — and passed.jsonl is append-only, so a bad reason here has no
+	# CLI path back (see librarian_lesson_pass's `passed) return 0` guard).
+	# cd into PROJECT_REPO first so a missing guard would actually resolve a
+	# real project key via the $(pwd) fallback, the same way the reported
+	# bug does — running this from an arbitrary bats tmpdir would mask a
+	# missing guard behind an unrelated "project key not found".
+	cd "$PROJECT_REPO" || return 1
+	run librarian_cli lessons pass "$id" --reason
+	[ "$status" -ne 0 ]
+	jq -e '.status == "pending"' "${LESSONS_DIR}/proposals/${id}.json" >/dev/null
+	[ ! -f "${LESSONS_DIR}/passed.jsonl" ]
+}
+
+@test "lessons pass still works with a real reason and an explicit cwd" {
+	_cli_setup
+	id=$(_seed_pending)
+	run librarian_cli lessons pass "$id" "a real reason" "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	jq -e '.status == "passed"' "${LESSONS_DIR}/proposals/${id}.json" >/dev/null
+	tail -n 1 "${LESSONS_DIR}/passed.jsonl" \
+		| jq -e --arg id "$id" '.lesson_id == $id and .reason == "a real reason"' >/dev/null
 }
 
 @test "lessons defer leaves it pending" {
