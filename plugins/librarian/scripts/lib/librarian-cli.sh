@@ -18,7 +18,9 @@
 # bullet line, and the file is created if it doesn't exist.
 #
 # Depends on (sourced by the caller): librarian-config.sh,
-# librarian-project-key.sh, librarian-storage.sh, librarian-emit.sh
+# librarian-project-key.sh, librarian-storage.sh, librarian-emit.sh,
+# librarian-lesson-storage.sh, librarian-lesson-validate.sh,
+# librarian-lesson-review.sh
 
 # ----------------------------------------------------------------------------
 # Project key + memory store path resolution
@@ -325,6 +327,113 @@ librarian_cli_status() {
 	printf 'pending: %s, accepted: %s, rejected: %s\n' "$pending" "$accepted" "$rejected"
 }
 
+# ----------------------------------------------------------------------------
+# Lesson confirmation surface
+#
+# Namespaced under `lessons` and kept apart from the memory verbs on purpose.
+# Accepting a memory writes a file on this machine; confirming a lesson commits
+# it toward leaving this machine, irreversibly once synced. Those two decisions
+# should not sit one keystroke apart.
+# ----------------------------------------------------------------------------
+
+librarian_cli_lessons_list() {
+	local cwd="${1:-}"
+	local key pending
+	key=$(_librarian_cli_project_key "$cwd")
+	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
+	pending=$(librarian_lesson_list_pending "$key")
+
+	if [[ "$(printf '%s' "$pending" | jq 'length')" -eq 0 ]]; then
+		printf 'No pending lessons.\n'
+		return 0
+	fi
+	printf '%s' "$pending" | jq -r '.[] | "\(.id)  \(.candidate.claim)"'
+}
+
+librarian_cli_lessons_show() {
+	local lesson_id="${1:-}"
+	local cwd="${2:-}"
+	[[ -z "$lesson_id" ]] && { printf 'usage: librarian_cli lessons show <lesson_id>\n'; return 1; }
+
+	local key path
+	key=$(_librarian_cli_project_key "$cwd")
+	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
+	path="$(librarian_lessons_dir "$key")/proposals/${lesson_id}.json"
+	[[ -f "$path" ]] || { printf 'Lesson %s not found.\n' "$lesson_id"; return 1; }
+
+	jq -r '
+		"id:          \(.id)",
+		"status:      \(.status)",
+		"artifact:    \(.artifact_id)",
+		"claim:       \(.candidate.claim)",
+		"rationale:   \(.candidate.rationale)",
+		"resolution:  \(.candidate.evidence.resolution)",
+		"stack:       \(.candidate.applies_to.stack | join(", "))",
+		"scope:       \(.candidate.applies_to.scope | tojson)"
+	' "$path"
+}
+
+librarian_cli_lessons_confirm() {
+	local lesson_id="${1:-}"
+	local visibility="${2:-}"
+	local justification="${3:-}"
+	local cwd="${4:-}"
+	[[ -z "$lesson_id" || -z "$visibility" ]] && {
+		printf 'usage: librarian_cli lessons confirm <lesson_id> <private|org|public> [justification]\n'
+		return 1
+	}
+
+	local key
+	key=$(_librarian_cli_project_key "$cwd")
+	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
+
+	librarian_lesson_confirm "$key" "$lesson_id" "$visibility" "$justification" || return 1
+	printf 'Confirmed %s at %s visibility.\n' "$lesson_id" "$visibility"
+}
+
+librarian_cli_lessons_pass() {
+	local lesson_id="${1:-}"
+	local reason="${2:-}"
+	local cwd="${3:-}"
+	[[ -z "$lesson_id" ]] && { printf 'usage: librarian_cli lessons pass <lesson_id> [reason]\n'; return 1; }
+
+	local key
+	key=$(_librarian_cli_project_key "$cwd")
+	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
+
+	librarian_lesson_pass "$key" "$lesson_id" "$reason" || return 1
+	printf 'Passed on %s.\n' "$lesson_id"
+}
+
+librarian_cli_lessons_defer() {
+	local lesson_id="${1:-}"
+	[[ -z "$lesson_id" ]] && { printf 'usage: librarian_cli lessons defer <lesson_id>\n'; return 1; }
+	printf 'Deferred %s; it stays in the queue.\n' "$lesson_id"
+}
+
+librarian_cli_lessons_status() {
+	local cwd="${1:-}"
+	local key pending
+	key=$(_librarian_cli_project_key "$cwd")
+	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
+	pending=$(librarian_lesson_list_pending "$key")
+	printf 'lessons pending: %s\n' "$(printf '%s' "$pending" | jq 'length')"
+}
+
+librarian_cli_lessons() {
+	local verb="${1:-list}"
+	shift || true
+	case "$verb" in
+		list) librarian_cli_lessons_list "$@" ;;
+		show) librarian_cli_lessons_show "$@" ;;
+		confirm) librarian_cli_lessons_confirm "$@" ;;
+		pass) librarian_cli_lessons_pass "$@" ;;
+		defer) librarian_cli_lessons_defer "$@" ;;
+		status) librarian_cli_lessons_status "$@" ;;
+		*) printf 'unknown lessons action: %s\n' "$verb"; return 2 ;;
+	esac
+}
+
 librarian_cli() {
 	local action="${1:-list}"
 	shift || true
@@ -335,6 +444,7 @@ librarian_cli() {
 		reject) librarian_cli_reject "$@" ;;
 		defer) librarian_cli_defer "$@" ;;
 		status) librarian_cli_status "$@" ;;
+		lessons) librarian_cli_lessons "$@" ;;
 		*) printf 'unknown action: %s\n' "$action"; return 2 ;;
 	esac
 }

@@ -332,3 +332,81 @@ _seed_pending() {
 	jq -e '.candidate.applies_to.scope.justification == "git behavior is stable across versions."' \
 		"${LESSONS_DIR}/proposals/${id}.json" >/dev/null
 }
+
+_cli_setup() {
+	_review_setup
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-config.sh"
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-emit.sh"
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-cli.sh"
+}
+
+@test "lessons status reports zero on an empty queue" {
+	_cli_setup
+	run librarian_cli lessons status "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"0"* ]] || return 1
+}
+
+@test "lessons list shows a pending lesson" {
+	_cli_setup
+	id=$(_seed_pending)
+	run librarian_cli lessons list "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"$id"* ]] || return 1
+}
+
+@test "lessons show prints the claim" {
+	_cli_setup
+	id=$(_seed_pending)
+	run librarian_cli lessons show "$id" "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"c"* ]] || return 1
+}
+
+@test "lessons confirm requires a visibility argument" {
+	_cli_setup
+	id=$(_seed_pending)
+	run librarian_cli lessons confirm "$id"
+	[ "$status" -ne 0 ]
+	jq -e '.status == "pending"' "${LESSONS_DIR}/proposals/${id}.json" >/dev/null
+}
+
+@test "lessons confirm sets status and visibility" {
+	_cli_setup
+	id=$(_seed_pending)
+	run librarian_cli lessons confirm "$id" public "" "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	jq -e '.status == "confirmed" and .visibility == "public"' \
+		"${LESSONS_DIR}/proposals/${id}.json" >/dev/null
+}
+
+@test "lessons pass marks it passed" {
+	_cli_setup
+	id=$(_seed_pending)
+	run librarian_cli lessons pass "$id" "" "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	jq -e '.status == "passed"' "${LESSONS_DIR}/proposals/${id}.json" >/dev/null
+}
+
+@test "lessons defer leaves it pending" {
+	_cli_setup
+	id=$(_seed_pending)
+	run librarian_cli lessons defer "$id" "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	jq -e '.status == "pending"' "${LESSONS_DIR}/proposals/${id}.json" >/dev/null
+}
+
+@test "an unknown lessons verb is rejected" {
+	_cli_setup
+	run librarian_cli lessons frobnicate
+	[ "$status" -ne 0 ]
+}
+
+@test "memory verbs are unaffected by the lessons namespace" {
+	_cli_setup
+	run librarian_cli status "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+}
