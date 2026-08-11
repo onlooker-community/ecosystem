@@ -211,24 +211,32 @@ Then extend the write. It currently reads:
 		'. * {status: "confirmed", visibility: $v, confirmed_at: $t} | .candidate = $c' 2>/dev/null) || return 1
 ```
 
-Add the snapshot only when one was taken. Do this with a conditional **inside**
-the jq program rather than an if/else around two near-identical invocations —
-duplicating the whole write to vary one line means a later change to the merge
-has two places to miss:
+Add the snapshot only when one was taken, in two branches rather than one jq
+program with an internal conditional:
 
 ```bash
-	updated=$(printf '%s' "$proposal" | jq \
-		--arg v "$visibility" --arg t "$now" \
-		--argjson c "$candidate" --arg cb "$candidate_before" \
-		'. * {status: "confirmed", visibility: $v, confirmed_at: $t}
-		 | .candidate = $c
-		 | (if $cb != "" then .candidate_before_confirm = ($cb | fromjson) else . end)' \
-		2>/dev/null) || return 1
+	if [[ -n "$candidate_before" ]]; then
+		updated=$(printf '%s' "$proposal" | jq \
+			--arg v "$visibility" --arg t "$now" \
+			--argjson c "$candidate" --argjson cb "$candidate_before" \
+			'. * {status: "confirmed", visibility: $v, confirmed_at: $t}
+			 | .candidate = $c
+			 | .candidate_before_confirm = $cb' 2>/dev/null) || return 1
+	else
+		updated=$(printf '%s' "$proposal" | jq \
+			--arg v "$visibility" --arg t "$now" --argjson c "$candidate" \
+			'. * {status: "confirmed", visibility: $v, confirmed_at: $t}
+			 | .candidate = $c' 2>/dev/null) || return 1
+	fi
 ```
 
-`$cb` is passed with `--arg` (a string), not `--argjson`, precisely so the empty
-case is representable: `--argjson` would reject `""` as invalid JSON. When it is
-non-empty, `fromjson` parses it back into the object it came from.
+The duplication is deliberate and worth its cost. Collapsing it into one program
+means passing the snapshot as `--arg` (a string) so the empty case is
+representable, then recovering it with `fromjson` — and a `fromjson` failure is
+then indistinguishable from a legitimately absent snapshot, because both leave
+the field unset. Two branches keep "empty" a *structural* condition rather than
+a value, so `--argjson` never receives anything but valid JSON, and `unconfirm`
+tests absence with `has()` rather than string-emptiness.
 
 Keep `.candidate = $c` as a plain assignment in both branches. It must not be folded into the `*` merge — `*` is recursive, so merging a `version_independent` scope over a stored `versioned` one leaves the old `versions` key behind and produces a candidate that fails its own validator. That is a bug this pipeline already shipped once.
 
