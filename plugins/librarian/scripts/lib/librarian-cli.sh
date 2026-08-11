@@ -3,6 +3,7 @@
 #
 # Exposes:
 #   librarian_cli list                         # one-line summary + table of pending proposals
+#   librarian_cli lessons list [--confirmed]   # pending lesson queue, or the confirmed ones
 #   librarian_cli show <proposal_id>           # full proposal body + provenance + conflict state
 #   librarian_cli accept <proposal_id>         # write to typed memory store, mark accepted
 #   librarian_cli reject <proposal_id> [reason]  # tombstone + mark rejected
@@ -336,18 +337,40 @@ librarian_cli_status() {
 # should not sit one keystroke apart.
 # ----------------------------------------------------------------------------
 
+# Usage: librarian_cli_lessons_list [--confirmed] [cwd]
+#
+# Bare `list` shows the pending queue the review walk drives. `--confirmed`
+# shows lessons already confirmed and not yet judged, which is otherwise
+# undiscoverable: unconfirm operates only on a `confirmed` lesson, and the
+# pending list by definition never contains one. Without this view a human who
+# confirmed at the wrong visibility last session has no way back to the id.
 librarian_cli_lessons_list() {
-	local cwd="${1:-}"
-	local key pending
+	local status="pending" cwd=""
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+			--confirmed) status="confirmed"; shift ;;
+			--*)
+				# Same contract as the sibling verbs: an unrecognized flag is
+				# refused rather than falling through to the cwd bucket, where
+				# it would resolve no project key and report a path problem the
+				# caller does not have.
+				printf 'unknown option: %s\n' "$1" >&2
+				return 1
+				;;
+			*) cwd="$1"; shift ;;
+		esac
+	done
+
+	local key rows
 	key=$(_librarian_cli_project_key "$cwd")
 	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
-	pending=$(librarian_lesson_list_pending "$key")
+	rows=$(librarian_lesson_list_by_status "$key" "$status")
 
-	if [[ "$(printf '%s' "$pending" | jq 'length')" -eq 0 ]]; then
-		printf 'No pending lessons.\n'
+	if [[ "$(printf '%s' "$rows" | jq 'length')" -eq 0 ]]; then
+		printf 'No %s lessons.\n' "$status"
 		return 0
 	fi
-	printf '%s' "$pending" | jq -r '.[] | "\(.id)  \(.candidate.claim)"'
+	printf '%s' "$rows" | jq -r '.[] | "\(.id)  \(.candidate.claim)"'
 }
 
 librarian_cli_lessons_show() {
@@ -361,9 +384,14 @@ librarian_cli_lessons_show() {
 	path="$(librarian_lessons_dir "$key")/proposals/${lesson_id}.json"
 	[[ -f "$path" ]] || { printf 'Lesson %s not found.\n' "$lesson_id"; return 1; }
 
+	# visibility sits next to status because the two are read together: it is
+	# the field a human needs to check before deciding whether to unconfirm,
+	# and it is only set on a confirmed lesson. A pending one renders `—`
+	# rather than a jq `null`, so the absence reads as "not decided yet".
 	jq -r '
 		"id:          \(.id)",
 		"status:      \(.status)",
+		"visibility:  \(.visibility // "—")",
 		"artifact:    \(.artifact_id)",
 		"claim:       \(.candidate.claim)",
 		"rationale:   \(.candidate.rationale)",

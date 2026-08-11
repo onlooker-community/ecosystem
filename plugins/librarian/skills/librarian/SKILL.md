@@ -18,7 +18,7 @@ Read the user's argument after `/librarian`:
 - `status` → print one-line counts and stop
 - a proposal id (starts with a ULID-shaped string) → jump straight to **show** for that id
 - `lessons`, `lessons review` → **walk the lesson queue** (see below)
-- `lessons list` / `lessons status` → print and stop
+- `lessons list` / `lessons status` → print and stop (`lessons list --confirmed` lists confirmed lessons instead of pending ones)
 
 If the user passes a free-form intent ("clear out the queue", "what's pending?"), map it to `review` or `list` as appropriate.
 
@@ -40,7 +40,7 @@ source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-lesson-review.sh"
 source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-cli.sh"
 
 # action is one of: list | show <id> | accept <id> | reject <id> [reason] | defer <id> | status
-# or: lessons <list|show <id>|confirm <id> <visibility> [--justification TEXT]|pass <id> [reason]|unconfirm <id>|defer <id>|status>
+# or: lessons <list [--confirmed]|show <id>|confirm <id> <visibility> [--justification TEXT]|pass <id> [reason]|unconfirm <id>|defer <id>|status>
 librarian_cli "<action>" "<args...>"
 ```
 
@@ -81,7 +81,9 @@ For `lessons` / `lessons review` (default for the `lessons` route), loop:
 
 A confirm made at the wrong visibility isn't stuck that way — `librarian_cli lessons unconfirm <id>` takes it back, returning the lesson to pending so the user can confirm it again at the right visibility. It only works on a `confirmed` lesson: a `passed` lesson stays passed, because that decision already has its own record and unconfirm won't touch it.
 
-For `lessons list` and `lessons status`, just call `librarian_cli lessons <action>` once and render the output.
+Finding the lesson is its own step, because `lessons list` shows only the pending queue and a confirmed lesson is by definition not in it. The user regretting a confirm is usually back in a later session with the claim in mind and no id, so start from `librarian_cli lessons list --confirmed`, which prints the same `<id>  <claim>` rows for everything confirmed and not yet judged. Then `librarian_cli lessons show <id>` — its `visibility` line is what tells you which tier the lesson currently sits at, and whether unconfirming is what the user actually wants.
+
+For `lessons list`, `lessons list --confirmed`, and `lessons status`, just call `librarian_cli lessons <action>` once and render the output.
 
 ## Safety rules
 

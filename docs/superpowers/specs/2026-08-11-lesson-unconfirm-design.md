@@ -91,6 +91,16 @@ the contract should be consistent across the verb set.
 The `/librarian lessons` skill gains it in the verb table and in the walk,
 described as taking back a confirmation before the jury sees it.
 
+`librarian_cli lessons list` gains a `--confirmed` flag, and
+`lessons show` gains a `visibility` line. Neither was in the original design,
+and without them the verb has no discovery path: `list` prints only pending
+lessons, `unconfirm` operates only on `confirmed` ones, and nothing rendered
+the visibility a lesson sits at. The user story is inherently cross-session — a
+human who confirms at `public` meaning `private` comes back later with the claim
+in mind and no id — so a recovery verb with no way to find its subject is a
+verb nobody can reach. Bare `list` still shows pending; the flag carries the
+same `unknown option:` rejection as the sibling verbs.
+
 ## Events
 
 None, consistent with the rest of this stage. `librarian.lesson.*` is

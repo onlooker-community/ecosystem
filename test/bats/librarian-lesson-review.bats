@@ -122,6 +122,18 @@ _seed_pending() {
 	printf '%s' "$output" | jq -e --arg id "$id" 'length == 1 and .[0].id == $id' >/dev/null
 }
 
+@test "list_by_status selects on the status it is handed, not just pending" {
+	_review_setup
+	a=$(_seed_pending)
+	b=$(_seed_pending)
+	librarian_lesson_confirm "$PROJECT_KEY" "$a" "org"
+	run librarian_lesson_list_by_status "$PROJECT_KEY" "confirmed"
+	[ "$status" -eq 0 ]
+	printf '%s' "$output" \
+		| jq -e --arg a "$a" --arg b "$b" \
+			'length == 1 and .[0].id == $a and .[0].id != $b' >/dev/null
+}
+
 @test "confirm records status and visibility on the proposal" {
 	_review_setup
 	id=$(_seed_pending)
@@ -381,6 +393,58 @@ _cli_setup() {
 	run librarian_cli lessons list "$PROJECT_REPO"
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"$id"* ]] || return 1
+}
+
+@test "lessons list --confirmed shows a confirmed lesson the pending list hides" {
+	_cli_setup
+	id=$(_seed_pending)
+	librarian_cli lessons confirm "$id" public "$PROJECT_REPO" >/dev/null
+
+	run librarian_cli lessons list "$PROJECT_REPO"
+	[[ "$output" == *"No pending lessons."* ]] || return 1
+
+	run librarian_cli lessons list --confirmed "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"$id"* ]] || return 1
+}
+
+@test "lessons list --confirmed reports an empty set of its own" {
+	_cli_setup
+	_seed_pending
+	# A pending lesson exists, so an implementation that ignored the flag
+	# would print that row instead of the empty state.
+	run librarian_cli lessons list --confirmed "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"No confirmed lessons."* ]] || return 1
+}
+
+@test "lessons list rejects an unknown flag instead of reading it as cwd" {
+	_cli_setup
+	_seed_pending
+	cd "$PROJECT_REPO" || return 1
+	run librarian_cli lessons list --passed
+	[ "$status" -ne 0 ]
+	# cd'd into the repo first so the cwd fallback resolves a real key: without
+	# the guard this would print the pending queue and exit 0, not a path error.
+	[[ "$output" == *"unknown option"* && "$output" == *"--passed"* ]] || return 1
+}
+
+@test "lessons show renders the visibility a confirmed lesson sits at" {
+	_cli_setup
+	id=$(_seed_pending)
+	librarian_cli lessons confirm "$id" public "$PROJECT_REPO" >/dev/null
+	run librarian_cli lessons show "$id" "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"visibility:  public"* ]] || return 1
+}
+
+@test "lessons show renders a dash for a pending lesson's visibility" {
+	_cli_setup
+	id=$(_seed_pending)
+	run librarian_cli lessons show "$id" "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"visibility:  —"* ]] || return 1
+	[[ "$output" != *"null"* ]] || return 1
 }
 
 @test "lessons show prints the claim" {
