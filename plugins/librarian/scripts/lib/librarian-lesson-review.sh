@@ -92,7 +92,13 @@ librarian_lesson_confirm() {
 	candidate=$(printf '%s' "$proposal" | jq -c '.candidate' 2>/dev/null) || return 1
 	current_status=$(printf '%s' "$proposal" | jq -r '.status // ""' 2>/dev/null)
 
+	# Snapshot the candidate before the rewrite, so unconfirm can put it back.
+	# Only when we actually rewrite: a plain confirm never touches .candidate,
+	# so a snapshot there would be dead weight that unconfirm has to reason
+	# about. Absence of the field means "nothing was mutated".
+	local candidate_before=""
 	if [[ -n "$justification" ]]; then
+		candidate_before="$candidate"
 		candidate=$(printf '%s' "$candidate" | jq -c \
 			--arg j "$justification" \
 			'.applies_to.scope = {kind: "version_independent", justification: $j}' 2>/dev/null) || return 1
@@ -154,9 +160,74 @@ librarian_lesson_confirm() {
 	# versioned scope's `versions` key alongside the new `justification`,
 	# producing a candidate that fails its own validator's
 	# additionalProperties check on the way out the door.
-	updated=$(printf '%s' "$proposal" | jq \
-		--arg v "$visibility" --arg t "$now" --argjson c "$candidate" \
-		'. * {status: "confirmed", visibility: $v, confirmed_at: $t} | .candidate = $c' 2>/dev/null) || return 1
+	if [[ -n "$candidate_before" ]]; then
+		updated=$(printf '%s' "$proposal" | jq \
+			--arg v "$visibility" --arg t "$now" \
+			--argjson c "$candidate" --argjson cb "$candidate_before" \
+			'. * {status: "confirmed", visibility: $v, confirmed_at: $t}
+			 | .candidate = $c
+			 | .candidate_before_confirm = $cb' 2>/dev/null) || return 1
+	else
+		updated=$(printf '%s' "$proposal" | jq \
+			--arg v "$visibility" --arg t "$now" --argjson c "$candidate" \
+			'. * {status: "confirmed", visibility: $v, confirmed_at: $t}
+			 | .candidate = $c' 2>/dev/null) || return 1
+	fi
+	[[ -z "$updated" || "$updated" == "null" ]] && return 1
+	printf '%s\n' "$updated" > "$path"
+}
+
+# Take back a confirmation, before the jury has seen the lesson.
+#
+# `confirmed` is otherwise terminal: confirm refuses a differing repeat and
+# pass refuses a confirmed lesson. Those guards are correct — they are what
+# keeps passed.jsonl from contradicting the proposal it describes — but they
+# left no way back from confirming at the wrong visibility, and `public` is
+# the tier that leaves this machine.
+#
+# Proceeds ONLY from `confirmed`. Every other status is refused, which is also
+# what makes this forward-safe: when the jury stage introduces a status of its
+# own, this verb refuses it through the catch-all with no change here.
+#
+# Usage: librarian_lesson_unconfirm <key> <lesson_id>
+librarian_lesson_unconfirm() {
+	local key="$1"
+	local lesson_id="$2"
+	[[ -z "$key" || -z "$lesson_id" ]] && return 1
+
+	local path
+	path="$(librarian_lessons_dir "$key")/proposals/${lesson_id}.json"
+	[[ -f "$path" ]] || { printf 'Lesson %s not found.\n' "$lesson_id" >&2; return 1; }
+
+	local current_status
+	current_status=$(jq -r '.status // ""' "$path" 2>/dev/null)
+
+	case "$current_status" in
+		confirmed) ;;
+		pending) return 0 ;;
+		passed)
+			# Passing is a different decision with its own durable record.
+			# Silently moving it back to pending would leave passed.jsonl
+			# asserting a decision the proposal contradicts.
+			printf 'Lesson %s was passed on, not confirmed; unconfirm does not undo that.\n' "$lesson_id" >&2
+			return 1
+			;;
+		*)
+			printf 'Lesson %s has an unrecognized status: %s\n' "$lesson_id" "$current_status" >&2
+			return 1
+			;;
+	esac
+
+	# Restore the pre-confirm candidate when one was snapshotted, and delete
+	# the snapshot either way. A stale snapshot left on a pending proposal is
+	# indistinguishable from a live one at the next confirm, and would
+	# silently revert a later legitimate rewrite.
+	local updated
+	updated=$(jq '
+		(if has("candidate_before_confirm") then .candidate = .candidate_before_confirm else . end)
+		| del(.candidate_before_confirm, .visibility, .confirmed_at)
+		| .status = "pending"
+	' "$path" 2>/dev/null) || return 1
 	[[ -z "$updated" || "$updated" == "null" ]] && return 1
 	printf '%s\n' "$updated" > "$path"
 }

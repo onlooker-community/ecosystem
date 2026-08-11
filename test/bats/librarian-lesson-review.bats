@@ -509,3 +509,122 @@ _cli_setup() {
 	run librarian_cli status "$PROJECT_REPO"
 	[ "$status" -eq 0 ]
 }
+
+@test "confirm without a justification writes no snapshot" {
+	_review_setup
+	id=$(_seed_pending)
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "org"
+	run jq -e 'has("candidate_before_confirm")' "${LESSONS_DIR}/proposals/${id}.json"
+	[ "$status" -ne 0 ]
+}
+
+@test "confirm with a justification snapshots the pre-rewrite candidate" {
+	_review_setup
+	id=$(_seed_pending)
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "org" "git aborts on a dirty tree regardless of version"
+	run jq -e '.candidate_before_confirm.applies_to.scope.kind == "versioned"' \
+		"${LESSONS_DIR}/proposals/${id}.json"
+	[ "$status" -eq 0 ]
+}
+
+@test "unconfirm returns a confirmed lesson to pending and clears the decision" {
+	_review_setup
+	id=$(_seed_pending)
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "public"
+	run librarian_lesson_unconfirm "$PROJECT_KEY" "$id"
+	[ "$status" -eq 0 ]
+	run jq -e '.status == "pending" and (has("visibility") | not) and (has("confirmed_at") | not)' \
+		"${LESSONS_DIR}/proposals/${id}.json"
+	[ "$status" -eq 0 ]
+}
+
+@test "the round trip leaves the proposal byte-identical to its pre-confirm state" {
+	_review_setup
+	id=$(_seed_pending)
+	before="${BATS_TEST_TMPDIR}/before.json"
+	cp "${LESSONS_DIR}/proposals/${id}.json" "$before"
+
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "public" "git behavior is stable across versions"
+	librarian_lesson_unconfirm "$PROJECT_KEY" "$id"
+
+	run diff <(jq -S . "$before") <(jq -S . "${LESSONS_DIR}/proposals/${id}.json")
+	[ "$status" -eq 0 ]
+}
+
+@test "unconfirm restores versioned scope after a justification confirm" {
+	_review_setup
+	id=$(_seed_pending)
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "org" "stable across versions"
+	librarian_lesson_unconfirm "$PROJECT_KEY" "$id"
+	run jq -e '.candidate.applies_to.scope.kind == "versioned"
+	           and (has("candidate_before_confirm") | not)' \
+		"${LESSONS_DIR}/proposals/${id}.json"
+	[ "$status" -eq 0 ]
+}
+
+@test "after unconfirm a fresh confirm at a different visibility succeeds" {
+	_review_setup
+	id=$(_seed_pending)
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "public"
+	librarian_lesson_unconfirm "$PROJECT_KEY" "$id"
+	run librarian_lesson_confirm "$PROJECT_KEY" "$id" "private"
+	[ "$status" -eq 0 ]
+	run jq -e '.status == "confirmed" and .visibility == "private"' \
+		"${LESSONS_DIR}/proposals/${id}.json"
+	[ "$status" -eq 0 ]
+}
+
+@test "unconfirm from pending is a no-op success" {
+	_review_setup
+	id=$(_seed_pending)
+	run librarian_lesson_unconfirm "$PROJECT_KEY" "$id"
+	[ "$status" -eq 0 ]
+	run jq -e '.status == "pending"' "${LESSONS_DIR}/proposals/${id}.json"
+	[ "$status" -eq 0 ]
+}
+
+@test "unconfirm refuses a passed lesson and leaves the ledger untouched" {
+	_review_setup
+	id=$(_seed_pending)
+	librarian_lesson_pass "$PROJECT_KEY" "$id" "not worth sharing"
+	before_lines=$(wc -l < "${LESSONS_DIR}/passed.jsonl")
+
+	run librarian_lesson_unconfirm "$PROJECT_KEY" "$id"
+	[ "$status" -ne 0 ]
+	run jq -e '.status == "passed"' "${LESSONS_DIR}/proposals/${id}.json"
+	[ "$status" -eq 0 ]
+	[ "$(wc -l < "${LESSONS_DIR}/passed.jsonl")" -eq "$before_lines" ]
+}
+
+@test "unconfirm refuses an unrecognized status and names it" {
+	_review_setup
+	id=$(_seed_pending)
+	tmp="${BATS_TEST_TMPDIR}/mut.json"
+	jq '.status = "judging"' "${LESSONS_DIR}/proposals/${id}.json" > "$tmp"
+	mv "$tmp" "${LESSONS_DIR}/proposals/${id}.json"
+
+	run librarian_lesson_unconfirm "$PROJECT_KEY" "$id"
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"judging"* ]] || return 1
+}
+
+@test "unconfirm refuses a lesson that does not exist" {
+	_review_setup
+	run librarian_lesson_unconfirm "$PROJECT_KEY" "01KZNOSUCHLESSON0000000000"
+	[ "$status" -ne 0 ]
+}
+
+@test "unconfirm never invokes a model" {
+	_review_setup
+	stub="${BATS_TEST_TMPDIR}/bin"
+	mkdir -p "$stub"
+	printf '#!/usr/bin/env bash\necho "MODEL WAS INVOKED" >&2\nexit 42\n' > "${stub}/claude"
+	chmod +x "${stub}/claude"
+	PATH="${stub}:${PATH}"
+
+	id=$(_seed_pending)
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "org"
+	run librarian_lesson_unconfirm "$PROJECT_KEY" "$id"
+	[ "$status" -eq 0 ]
+	[[ "$output" != *"MODEL WAS INVOKED"* ]] || return 1
+}
