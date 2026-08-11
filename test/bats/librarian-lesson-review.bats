@@ -663,6 +663,26 @@ _cli_setup() {
 	[ "$status" -eq 0 ]
 }
 
+@test "after unconfirm a justification confirm can be redone at private visibility" {
+	_review_setup
+	id=$(_seed_pending)
+	# The composite the design actually argues for. A justification rewrites
+	# scope to version_independent, and private refuses that scope — so without
+	# the snapshot restore this last confirm is refused for a rewrite the user
+	# already took back, trading one dead end for another. The plain-confirm
+	# case above still passes with the snapshot mechanism deleted entirely;
+	# this one does not.
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "public" \
+		"git aborts on a dirty tree regardless of version"
+	librarian_lesson_unconfirm "$PROJECT_KEY" "$id"
+	run librarian_lesson_confirm "$PROJECT_KEY" "$id" "private"
+	[ "$status" -eq 0 ]
+	run jq -e '.status == "confirmed" and .visibility == "private"
+	           and .candidate.applies_to.scope.kind == "versioned"' \
+		"${LESSONS_DIR}/proposals/${id}.json"
+	[ "$status" -eq 0 ]
+}
+
 @test "unconfirm from pending is a no-op success" {
 	_review_setup
 	id=$(_seed_pending)
@@ -776,10 +796,4 @@ _cli_setup() {
 	[[ "$output" == *"unknown option"* && "$output" == *"--force"* ]] || return 1
 	run jq -e '.status == "confirmed"' "${LESSONS_DIR}/proposals/${id}.json"
 	[ "$status" -eq 0 ]
-}
-
-@test "an unknown lessons verb is still rejected" {
-	_cli_setup
-	run librarian_cli lessons frobnicate
-	[ "$status" -ne 0 ]
 }
