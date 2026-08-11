@@ -518,6 +518,31 @@ _cli_setup() {
 	[ "$status" -ne 0 ]
 }
 
+@test "confirm without a justification clears a snapshot the proposal arrived with" {
+	_review_setup
+	id=$(_seed_pending)
+	# Nothing in the shipped verbs writes this field onto a pending proposal
+	# today, so seed it directly. The invariant unconfirm leans on is "absence
+	# means the candidate was never mutated" — a stale snapshot surviving a
+	# plain confirm would make the next unconfirm silently swap .candidate for
+	# a rewrite that never happened, stranding the user in the dead end this
+	# verb exists to escape.
+	tmp="${BATS_TEST_TMPDIR}/stale.json"
+	jq --argjson cb "$(_candidate "$(_indep)")" '.candidate_before_confirm = $cb' \
+		"${LESSONS_DIR}/proposals/${id}.json" > "$tmp"
+	mv "$tmp" "${LESSONS_DIR}/proposals/${id}.json"
+
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "org"
+	jq -e 'has("candidate_before_confirm") | not' \
+		"${LESSONS_DIR}/proposals/${id}.json" >/dev/null || return 1
+
+	# And the harm it would have caused: unconfirm must find nothing to restore.
+	librarian_lesson_unconfirm "$PROJECT_KEY" "$id"
+	run jq -e '.candidate.applies_to.scope.kind == "versioned"' \
+		"${LESSONS_DIR}/proposals/${id}.json"
+	[ "$status" -eq 0 ]
+}
+
 @test "confirm with a justification snapshots the pre-rewrite candidate" {
 	_review_setup
 	id=$(_seed_pending)

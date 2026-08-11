@@ -168,10 +168,18 @@ librarian_lesson_confirm() {
 			 | .candidate = $c
 			 | .candidate_before_confirm = $cb' 2>/dev/null) || return 1
 	else
+		# No rewrite happened, so there is nothing to snapshot — and any field
+		# already on the proposal is stale by definition. Deleting it holds the
+		# invariant unconfirm relies on ("absence means the candidate was never
+		# mutated") from both ends: without this, a proposal that arrives
+		# carrying the field keeps it through a plain confirm, and the next
+		# unconfirm silently replaces .candidate with a snapshot describing a
+		# rewrite this confirm never performed.
 		updated=$(printf '%s' "$proposal" | jq \
 			--arg v "$visibility" --arg t "$now" --argjson c "$candidate" \
 			'. * {status: "confirmed", visibility: $v, confirmed_at: $t}
-			 | .candidate = $c' 2>/dev/null) || return 1
+			 | .candidate = $c
+			 | del(.candidate_before_confirm)' 2>/dev/null) || return 1
 	fi
 	[[ -z "$updated" || "$updated" == "null" ]] && return 1
 	printf '%s\n' "$updated" > "$path"
