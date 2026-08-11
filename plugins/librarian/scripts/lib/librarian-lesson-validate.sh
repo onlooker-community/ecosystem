@@ -57,6 +57,82 @@ librarian_lesson_valid_range() {
 	[[ "$r" =~ $pattern ]]
 }
 
+# Everything both validators check, excluding the scope branch. Kept in one
+# place because it mirrors the vendored sub-schemas line for line; a second
+# copy is how the jq rules and the schema drifted apart once already.
+#
+# Composed into a jq program by each validator, which appends its own scope
+# clause. artifact_ids, session_ids, and observed_at are checked against the
+# same patterns as the vendored lesson-evidence.subschema.json (ULID,
+# non-empty string, RFC3339 date-time) — a provenance-less artifact
+# (session_id/created_at stitched in as "") must fail here, not pass through
+# and get buried permanently once librarian_lesson_seen marks it handled.
+#
+# The `keys - [...] | length == 0` checks mirror `additionalProperties:
+# false` on the vendored `evidence` and `applies_to` sub-schemas, and the
+# `all(type == "string" and length > 0)` checks mirror their array items'
+# `minLength: 1`. Neither is decorative: without them a model that
+# "helpfully" adds an extra field, or emits an empty-string array entry,
+# produces a proposal that passes here but fails ajv against the contract it
+# claims to satisfy — and lessons are meant to be shared with other people.
+# Each `keys` call is guarded by a preceding `type == "object"` check in the
+# same `and` chain: jq's `and` short-circuits left to right, so `keys` on a
+# missing/non-object value is never reached.
+_LIBRARIAN_LESSON_STRUCTURAL='
+	(.claim | type) == "string" and (.claim | length) > 0
+	and (.rationale | type) == "string" and (.rationale | length) > 0
+	and (.evidence | type) == "object"
+	and ((.evidence | keys) - ["artifact_ids", "session_ids", "project_key", "observed_at", "resolution"] | length) == 0
+	and (.evidence.artifact_ids | type) == "array" and (.evidence.artifact_ids | length) > 0
+	and (.evidence.artifact_ids | all(type == "string" and test("^[0-9A-HJKMNP-TV-Z]{26}$")))
+	and (.evidence.session_ids | type) == "array" and (.evidence.session_ids | length) > 0
+	and (.evidence.session_ids | all(type == "string" and length > 0))
+	and (.evidence.project_key | type) == "string"
+	and (.evidence.project_key | test("^[0-9a-f]{12}$"))
+	and (.evidence.observed_at | type) == "string"
+	and (.evidence.observed_at | test("^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"))
+	and (.evidence.resolution | type) == "string" and (.evidence.resolution | length) > 0
+	and (.applies_to | type) == "object"
+	and ((.applies_to | keys) - ["stack", "scope", "file_patterns", "task_kinds"] | length) == 0
+	and (.applies_to.stack | type) == "array" and (.applies_to.stack | length) > 0
+	and (.applies_to.stack | all(type == "string" and length > 0))
+	and (.applies_to.file_patterns | type) == "array"
+	and (.applies_to.file_patterns | all(type == "string" and length > 0))
+	and (.applies_to.task_kinds | type) == "array"
+	and (.applies_to.task_kinds | all(type == "string" and length > 0))
+'
+
+# The versioned branch, shared by both validators.
+_LIBRARIAN_LESSON_SCOPE_VERSIONED='
+	.applies_to.scope.kind == "versioned"
+	and ((.applies_to.scope | keys) - ["kind", "versions"] | length) == 0
+	and (.applies_to.scope.versions | type) == "object"
+	and (.applies_to.scope.versions | length) > 0
+'
+
+# Checks that only apply to a versioned candidate: the cross-field rule JSON
+# Schema cannot express, and the range pattern on each value.
+#
+# NUL-delimited, not newline-delimited: a range value with an embedded newline
+# would otherwise split into two lines that can each pass individually even
+# though the single value they came from is not a valid range. Do not skip
+# empty reads either — jq never emits one for a non-empty object of strings,
+# so an empty read means the range itself is empty, which is invalid.
+_librarian_lesson_check_versions() {
+	local candidate="$1"
+
+	printf '%s' "$candidate" | jq -e '
+		(.applies_to.scope.versions | keys) - .applies_to.stack | length == 0
+	' >/dev/null 2>&1 || return 1
+
+	local range
+	while IFS= read -r -d '' range; do
+		librarian_lesson_valid_range "$range" || return 1
+	done < <(printf '%s' "$candidate" | jq --raw-output0 '.applies_to.scope.versions[]' 2>/dev/null)
+
+	return 0
+}
+
 # Validate a full candidate. Prints nothing on success; prints a reason slug
 # to stderr on failure.
 #
@@ -65,76 +141,69 @@ librarian_lesson_validate_candidate() {
 	local candidate="${1:-}"
 	[[ -z "$candidate" ]] && { printf 'schema_invalid\n' >&2; return 1; }
 
-	# Structural shape, including the versioned-only rule and a non-empty
-	# resolution. `versions` must be a non-empty object. artifact_ids,
-	# session_ids, and observed_at are checked against the same patterns as
-	# the vendored lesson-evidence.subschema.json (ULID, non-empty string,
-	# RFC3339 date-time) — a provenance-less artifact (session_id/created_at
-	# stitched in as "") must fail here, not pass through and get buried
-	# permanently once librarian_lesson_seen marks it handled.
-	#
-	# The `keys - [...] | length == 0` checks mirror `additionalProperties:
-	# false` on the vendored `evidence` and `applies_to` sub-schemas
-	# (including the "versioned" scope branch), and the `all(type ==
-	# "string" and length > 0)` checks mirror their array items' `minLength:
-	# 1`. Neither is decorative: without them a model that "helpfully" adds
-	# an extra field, or emits an empty-string array entry, produces a
-	# proposal that passes here but fails ajv against the contract it claims
-	# to satisfy — and lessons are meant to be shared with other people. Each
-	# `keys` call is guarded by a preceding `type == "object"` check in the
-	# same `and` chain: jq's `and` short-circuits left to right, so `keys` on
-	# a missing/non-object value is never reached.
-	if ! printf '%s' "$candidate" | jq -e '
-		(.claim | type) == "string" and (.claim | length) > 0
-		and (.rationale | type) == "string" and (.rationale | length) > 0
-		and (.evidence | type) == "object"
-		and ((.evidence | keys) - ["artifact_ids", "session_ids", "project_key", "observed_at", "resolution"] | length) == 0
-		and (.evidence.artifact_ids | type) == "array" and (.evidence.artifact_ids | length) > 0
-		and (.evidence.artifact_ids | all(type == "string" and test("^[0-9A-HJKMNP-TV-Z]{26}$")))
-		and (.evidence.session_ids | type) == "array" and (.evidence.session_ids | length) > 0
-		and (.evidence.session_ids | all(type == "string" and length > 0))
-		and (.evidence.project_key | type) == "string"
-		and (.evidence.project_key | test("^[0-9a-f]{12}$"))
-		and (.evidence.observed_at | type) == "string"
-		and (.evidence.observed_at | test("^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"))
-		and (.evidence.resolution | type) == "string" and (.evidence.resolution | length) > 0
-		and (.applies_to | type) == "object"
-		and ((.applies_to | keys) - ["stack", "scope", "file_patterns", "task_kinds"] | length) == 0
-		and (.applies_to.stack | type) == "array" and (.applies_to.stack | length) > 0
-		and (.applies_to.stack | all(type == "string" and length > 0))
-		and (.applies_to.file_patterns | type) == "array"
-		and (.applies_to.file_patterns | all(type == "string" and length > 0))
-		and (.applies_to.task_kinds | type) == "array"
-		and (.applies_to.task_kinds | all(type == "string" and length > 0))
-		and .applies_to.scope.kind == "versioned"
-		and ((.applies_to.scope | keys) - ["kind", "versions"] | length) == 0
-		and (.applies_to.scope.versions | type) == "object"
-		and (.applies_to.scope.versions | length) > 0
-	' >/dev/null 2>&1; then
+	# versioned ONLY. This is the guarantee that stops the transform minting
+	# lessons that never expire: private lessons run no jury, so nothing
+	# downstream would catch a bad version_independent claim. A human may
+	# assert that branch — see librarian_lesson_validate_confirmed — because
+	# the constraint in the review path forces it to a judged visibility.
+	if ! printf '%s' "$candidate" | jq -e \
+		"${_LIBRARIAN_LESSON_STRUCTURAL} and ${_LIBRARIAN_LESSON_SCOPE_VERSIONED}" \
+		>/dev/null 2>&1; then
 		printf 'schema_invalid\n' >&2
 		return 1
 	fi
 
-	# Cross-field rule JSON Schema cannot express: every versions key must
-	# name an entry in stack.
-	if ! printf '%s' "$candidate" | jq -e '
-		(.applies_to.scope.versions | keys) - .applies_to.stack | length == 0
-	' >/dev/null 2>&1; then
+	_librarian_lesson_check_versions "$candidate" || {
+		printf 'schema_invalid\n' >&2
+		return 1
+	}
+
+	return 0
+}
+
+# Validate a candidate a human has confirmed.
+#
+# Identical to librarian_lesson_validate_candidate except that it also permits
+# the version_independent branch, which requires a non-empty justification.
+#
+# The two are NOT redundant and the difference is not stylistic. They encode
+# different trust: this one bounds what a human may assert AND a jury will then
+# check, because the review path refuses version_independent at private
+# visibility. The transform's validator bounds what a model may assert
+# unsupervised, where nothing downstream would catch a bad claim. Deleting
+# either collapses that distinction.
+#
+# Usage: librarian_lesson_validate_confirmed <candidate_json>
+librarian_lesson_validate_confirmed() {
+	local candidate="${1:-}"
+	[[ -z "$candidate" ]] && { printf 'schema_invalid\n' >&2; return 1; }
+
+	local scope_clause='
+		(
+			('"${_LIBRARIAN_LESSON_SCOPE_VERSIONED}"')
+			or (
+				.applies_to.scope.kind == "version_independent"
+				and ((.applies_to.scope | keys) - ["kind", "justification"] | length) == 0
+				and (.applies_to.scope.justification | type) == "string"
+				and (.applies_to.scope.justification | length) > 0
+			)
+		)
+	'
+
+	if ! printf '%s' "$candidate" | jq -e \
+		"${_LIBRARIAN_LESSON_STRUCTURAL} and ${scope_clause}" \
+		>/dev/null 2>&1; then
 		printf 'schema_invalid\n' >&2
 		return 1
 	fi
 
-	# Every range must satisfy the vendored pattern. NUL-delimited, not
-	# newline-delimited: a range value with an embedded newline would
-	# otherwise split into two lines that can each pass individually even
-	# though the single value they came from is not a valid range. Do not
-	# skip empty reads either — jq never emits one for a non-empty object
-	# of strings, so an empty read means the range itself is empty, and
-	# librarian_lesson_valid_range already rejects that.
-	local range
-	while IFS= read -r -d '' range; do
-		librarian_lesson_valid_range "$range" || { printf 'schema_invalid\n' >&2; return 1; }
-	done < <(printf '%s' "$candidate" | jq --raw-output0 '.applies_to.scope.versions[]' 2>/dev/null)
+	# Range and subset rules apply only to the versioned branch.
+	if printf '%s' "$candidate" | jq -e '.applies_to.scope.kind == "versioned"' >/dev/null 2>&1; then
+		_librarian_lesson_check_versions "$candidate" || {
+			printf 'schema_invalid\n' >&2
+			return 1
+		}
+	fi
 
 	return 0
 }

@@ -46,6 +46,12 @@ source "${PLUGIN_ROOT}/scripts/lib/librarian-config.sh"
 source "${PLUGIN_ROOT}/scripts/lib/librarian-project-key.sh"
 # shellcheck source=../lib/librarian-storage.sh
 source "${PLUGIN_ROOT}/scripts/lib/librarian-storage.sh"
+# shellcheck source=../lib/librarian-lesson-storage.sh
+source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-storage.sh"
+# shellcheck source=../lib/librarian-lesson-validate.sh
+source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-validate.sh"
+# shellcheck source=../lib/librarian-lesson-review.sh
+source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-review.sh"
 
 # Emit hookSpecificOutput with the given additionalContext string. An
 # empty string is fine — the harness sees "nothing to say".
@@ -83,25 +89,49 @@ MAX_PENDING=$(librarian_config_get '.librarian.surfacer.max_pending_for_inject')
 PENDING=$(librarian_storage_count_pending "$PROJECT_KEY")
 [[ -z "$PENDING" || "$PENDING" == "null" ]] && PENDING=0
 
-if [[ "$PENDING" -eq 0 && "$SKIP_WHEN_ZERO" == "true" ]]; then
+LESSON_PENDING=$(librarian_lesson_list_pending "$PROJECT_KEY" | jq 'length' 2>/dev/null) || LESSON_PENDING=0
+[[ -z "$LESSON_PENDING" || "$LESSON_PENDING" == "null" ]] && LESSON_PENDING=0
+
+if [[ "$PENDING" -eq 0 && "$LESSON_PENDING" -eq 0 && "$SKIP_WHEN_ZERO" == "true" ]]; then
 	_emit ""
 	exit 0
 fi
 
-# Cap the surfaced number so a runaway queue doesn't make the pointer
-# itself look alarming. Users still see the truthful count in
-# /librarian review.
-if [[ "$PENDING" -gt "$MAX_PENDING" ]]; then
-	DISPLAY_COUNT="${MAX_PENDING}+"
-else
-	DISPLAY_COUNT="$PENDING"
+# The two queues fill independently, so a lessons-only session (the common
+# case per the trap this hook guards against) must not resurrect the "0
+# pending" memory noise skip_inject_when_zero exists to suppress — only
+# build the memory line when there's something to say or the config opts
+# out of skipping.
+CONTEXT=""
+if [[ "$PENDING" -gt 0 || "$SKIP_WHEN_ZERO" != "true" ]]; then
+	# Cap the surfaced number so a runaway queue doesn't make the pointer
+	# itself look alarming. Users still see the truthful count in
+	# /librarian review.
+	if [[ "$PENDING" -gt "$MAX_PENDING" ]]; then
+		DISPLAY_COUNT="${MAX_PENDING}+"
+	else
+		DISPLAY_COUNT="$PENDING"
+	fi
+
+	NOUN="proposals"
+	[[ "$PENDING" -eq 1 ]] && NOUN="proposal"
+
+	CONTEXT=$(printf 'Librarian has %s pending memory promotion %s. Review with `/librarian review`.' \
+		"$DISPLAY_COUNT" "$NOUN")
 fi
 
-NOUN="proposals"
-[[ "$PENDING" -eq 1 ]] && NOUN="proposal"
+LESSON_LINE=""
+if [[ "$LESSON_PENDING" -gt 0 ]]; then
+	LESSON_LINE=$(printf '%s lesson candidate(s) awaiting confirmation — run /librarian lessons' "$LESSON_PENDING")
+fi
 
-CONTEXT=$(printf 'Librarian has %s pending memory promotion %s. Review with `/librarian review`.' \
-	"$DISPLAY_COUNT" "$NOUN")
+if [[ -n "$LESSON_LINE" ]]; then
+	if [[ -n "$CONTEXT" ]]; then
+		CONTEXT="${CONTEXT}"$'\n'"${LESSON_LINE}"
+	else
+		CONTEXT="$LESSON_LINE"
+	fi
+fi
 
 _emit "$CONTEXT"
 exit 0

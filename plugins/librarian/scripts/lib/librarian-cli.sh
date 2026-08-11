@@ -18,7 +18,9 @@
 # bullet line, and the file is created if it doesn't exist.
 #
 # Depends on (sourced by the caller): librarian-config.sh,
-# librarian-project-key.sh, librarian-storage.sh, librarian-emit.sh
+# librarian-project-key.sh, librarian-storage.sh, librarian-emit.sh,
+# librarian-lesson-storage.sh, librarian-lesson-validate.sh,
+# librarian-lesson-review.sh
 
 # ----------------------------------------------------------------------------
 # Project key + memory store path resolution
@@ -325,6 +327,168 @@ librarian_cli_status() {
 	printf 'pending: %s, accepted: %s, rejected: %s\n' "$pending" "$accepted" "$rejected"
 }
 
+# ----------------------------------------------------------------------------
+# Lesson confirmation surface
+#
+# Namespaced under `lessons` and kept apart from the memory verbs on purpose.
+# Accepting a memory writes a file on this machine; confirming a lesson commits
+# it toward leaving this machine, irreversibly once synced. Those two decisions
+# should not sit one keystroke apart.
+# ----------------------------------------------------------------------------
+
+librarian_cli_lessons_list() {
+	local cwd="${1:-}"
+	local key pending
+	key=$(_librarian_cli_project_key "$cwd")
+	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
+	pending=$(librarian_lesson_list_pending "$key")
+
+	if [[ "$(printf '%s' "$pending" | jq 'length')" -eq 0 ]]; then
+		printf 'No pending lessons.\n'
+		return 0
+	fi
+	printf '%s' "$pending" | jq -r '.[] | "\(.id)  \(.candidate.claim)"'
+}
+
+librarian_cli_lessons_show() {
+	local lesson_id="${1:-}"
+	local cwd="${2:-}"
+	[[ -z "$lesson_id" ]] && { printf 'usage: librarian_cli lessons show <lesson_id>\n'; return 1; }
+
+	local key path
+	key=$(_librarian_cli_project_key "$cwd")
+	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
+	path="$(librarian_lessons_dir "$key")/proposals/${lesson_id}.json"
+	[[ -f "$path" ]] || { printf 'Lesson %s not found.\n' "$lesson_id"; return 1; }
+
+	jq -r '
+		"id:          \(.id)",
+		"status:      \(.status)",
+		"artifact:    \(.artifact_id)",
+		"claim:       \(.candidate.claim)",
+		"rationale:   \(.candidate.rationale)",
+		"resolution:  \(.candidate.evidence.resolution)",
+		"stack:       \(.candidate.applies_to.stack | join(", "))",
+		"scope:       \(.candidate.applies_to.scope | tojson)"
+	' "$path"
+}
+
+librarian_cli_lessons_confirm() {
+	local lesson_id="${1:-}"
+	local visibility="${2:-}"
+	[[ -z "$lesson_id" || -z "$visibility" ]] && {
+		printf 'usage: librarian_cli lessons confirm <lesson_id> <private|org|public> [--justification TEXT] [cwd]\n'
+		return 1
+	}
+	shift 2
+
+	# --justification is a named flag, not a position. This is the verb that
+	# commits a lesson toward leaving this machine, so a caller who supplies
+	# cwd but omits justification must never have cwd silently misread as the
+	# justification that flips scope to version_independent.
+	local justification="" justification_given=0 cwd=""
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+			--justification)
+				justification="${2:-}"
+				justification_given=1
+				if [[ $# -ge 2 ]]; then
+					shift 2
+				else
+					shift 1
+				fi
+				;;
+			--*)
+				# An unrecognized flag must never fall through to the cwd
+				# bucket below: a typo'd --justifcation would otherwise be
+				# swallowed here, its value would land as a plain positional
+				# (misread as cwd, then overwritten by the real trailing
+				# path), and the lesson would confirm with an empty
+				# justification and no diagnostic — a persisted wrong state
+				# this CLI has no verb to undo.
+				printf 'unknown option: %s\n' "$1" >&2
+				return 1
+				;;
+			*)
+				cwd="$1"
+				shift
+				;;
+		esac
+	done
+
+	# A justification that is blank after trimming whitespace is refused
+	# outright rather than silently treated as "no justification supplied" —
+	# the validator's minLength: 1 counts whitespace, so passing it through
+	# would flip scope to version_independent on content nobody actually
+	# wrote.
+	if [[ "$justification_given" -eq 1 ]] && [[ "$justification" =~ ^[[:space:]]*$ ]]; then
+		printf 'justification is blank after trimming whitespace; omit --justification instead of passing an empty value.\n' >&2
+		return 1
+	fi
+
+	local key
+	key=$(_librarian_cli_project_key "$cwd")
+	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
+
+	librarian_lesson_confirm "$key" "$lesson_id" "$visibility" "$justification" || return 1
+	printf 'Confirmed %s at %s visibility.\n' "$lesson_id" "$visibility"
+}
+
+librarian_cli_lessons_pass() {
+	local lesson_id="${1:-}"
+	local reason="${2:-}"
+	local cwd="${3:-}"
+	[[ -z "$lesson_id" ]] && { printf 'usage: librarian_cli lessons pass <lesson_id> [reason]\n'; return 1; }
+
+	# reason and cwd are positional, not flags — but a flag-shaped token here
+	# is almost always a typo for confirm's `--justification` (the likeliest
+	# guess is `--reason`). Reject it rather than silently accepting it as
+	# the literal reason: librarian_lesson_pass writes to the append-only
+	# passed.jsonl ledger with no CLI verb to correct a bad line afterward.
+	case "$reason" in
+		--*) printf 'unknown option: %s\n' "$reason" >&2; return 1 ;;
+	esac
+	case "$cwd" in
+		--*) printf 'unknown option: %s\n' "$cwd" >&2; return 1 ;;
+	esac
+
+	local key
+	key=$(_librarian_cli_project_key "$cwd")
+	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
+
+	librarian_lesson_pass "$key" "$lesson_id" "$reason" || return 1
+	printf 'Passed on %s.\n' "$lesson_id"
+}
+
+librarian_cli_lessons_defer() {
+	local lesson_id="${1:-}"
+	[[ -z "$lesson_id" ]] && { printf 'usage: librarian_cli lessons defer <lesson_id>\n'; return 1; }
+	printf 'Deferred %s; it stays in the queue.\n' "$lesson_id"
+}
+
+librarian_cli_lessons_status() {
+	local cwd="${1:-}"
+	local key pending
+	key=$(_librarian_cli_project_key "$cwd")
+	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
+	pending=$(librarian_lesson_list_pending "$key")
+	printf 'lessons pending: %s\n' "$(printf '%s' "$pending" | jq 'length')"
+}
+
+librarian_cli_lessons() {
+	local verb="${1:-list}"
+	shift || true
+	case "$verb" in
+		list) librarian_cli_lessons_list "$@" ;;
+		show) librarian_cli_lessons_show "$@" ;;
+		confirm) librarian_cli_lessons_confirm "$@" ;;
+		pass) librarian_cli_lessons_pass "$@" ;;
+		defer) librarian_cli_lessons_defer "$@" ;;
+		status) librarian_cli_lessons_status "$@" ;;
+		*) printf 'unknown lessons action: %s\n' "$verb"; return 2 ;;
+	esac
+}
+
 librarian_cli() {
 	local action="${1:-list}"
 	shift || true
@@ -335,6 +499,7 @@ librarian_cli() {
 		reject) librarian_cli_reject "$@" ;;
 		defer) librarian_cli_defer "$@" ;;
 		status) librarian_cli_status "$@" ;;
+		lessons) librarian_cli_lessons "$@" ;;
 		*) printf 'unknown action: %s\n' "$action"; return 2 ;;
 	esac
 }
