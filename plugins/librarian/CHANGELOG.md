@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.7.1...librarian-v0.8.0) (2026-08-11)
+
+
+### Features
+
+* **librarian:** let a human decide what leaves the machine :raised_hand: ([#137](https://github.com/onlooker-community/ecosystem/issues/137)) ([16d7673](https://github.com/onlooker-community/ecosystem/commit/16d76734833aee9c8818f84c1c1f704be4cdfc33))
+
 ## [0.7.1](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.7.0...librarian-v0.7.1) (2026-08-10)
 
 
