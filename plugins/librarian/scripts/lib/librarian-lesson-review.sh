@@ -16,19 +16,21 @@ librarian_lesson_passed_path() {
 	printf '%s/passed.jsonl' "$(librarian_lessons_dir "$key")"
 }
 
-# Print pending proposals as a JSON array, oldest first. Prints [] when none.
+# Print proposals in the given status as a JSON array, oldest first. Prints []
+# when none.
 #
 # A malformed or racing file must shrink the result, never erase it: a
 # truncated write, a bare-value file, or a confirm/pass rewriting the file
 # mid-read all read as "that entry is missing" here, not as an error that
 # discards every proposal already gathered. `select(type == "object" and
-# ...)` folds the parse guard and the pending check into a single read of
+# ...)` folds the parse guard and the status check into a single read of
 # each file, the same shape librarian_lesson_seen uses for the same reason.
 #
-# Usage: librarian_lesson_list_pending <key>
-librarian_lesson_list_pending() {
+# Usage: librarian_lesson_list_by_status <key> <status>
+librarian_lesson_list_by_status() {
 	local key="$1"
-	[[ -z "$key" ]] && { printf '[]'; return 0; }
+	local status="$2"
+	[[ -z "$key" || -z "$status" ]] && { printf '[]'; return 0; }
 
 	local dir
 	dir="$(librarian_lessons_dir "$key")/proposals"
@@ -38,7 +40,7 @@ librarian_lesson_list_pending() {
 	out='[]'
 	for f in "$dir"/*.json; do
 		[[ -f "$f" ]] || continue
-		entry=$(jq -c 'select(type == "object" and .status == "pending")' "$f" 2>/dev/null)
+		entry=$(jq -c --arg s "$status" 'select(type == "object" and .status == $s)' "$f" 2>/dev/null)
 		[[ -z "$entry" ]] && continue
 		# Merge into a separate variable, not directly into $out: `out=$(cmd)
 		# || continue` still assigns $out to cmd's (possibly empty) stdout
@@ -48,6 +50,13 @@ librarian_lesson_list_pending() {
 		out="$merged"
 	done
 	printf '%s' "$(jq -c 'sort_by(.created_at)' <<<"$out")"
+}
+
+# Pending is the queue the review walk drives, so it keeps its own name.
+#
+# Usage: librarian_lesson_list_pending <key>
+librarian_lesson_list_pending() {
+	librarian_lesson_list_by_status "${1:-}" "pending"
 }
 
 _librarian_lesson_valid_visibility() {
@@ -92,7 +101,13 @@ librarian_lesson_confirm() {
 	candidate=$(printf '%s' "$proposal" | jq -c '.candidate' 2>/dev/null) || return 1
 	current_status=$(printf '%s' "$proposal" | jq -r '.status // ""' 2>/dev/null)
 
+	# Snapshot the candidate before the rewrite, so unconfirm can put it back.
+	# Only when we actually rewrite: a plain confirm never touches .candidate,
+	# so a snapshot there would be dead weight that unconfirm has to reason
+	# about. Absence of the field means "nothing was mutated".
+	local candidate_before=""
 	if [[ -n "$justification" ]]; then
+		candidate_before="$candidate"
 		candidate=$(printf '%s' "$candidate" | jq -c \
 			--arg j "$justification" \
 			'.applies_to.scope = {kind: "version_independent", justification: $j}' 2>/dev/null) || return 1
@@ -154,9 +169,82 @@ librarian_lesson_confirm() {
 	# versioned scope's `versions` key alongside the new `justification`,
 	# producing a candidate that fails its own validator's
 	# additionalProperties check on the way out the door.
-	updated=$(printf '%s' "$proposal" | jq \
-		--arg v "$visibility" --arg t "$now" --argjson c "$candidate" \
-		'. * {status: "confirmed", visibility: $v, confirmed_at: $t} | .candidate = $c' 2>/dev/null) || return 1
+	if [[ -n "$candidate_before" ]]; then
+		updated=$(printf '%s' "$proposal" | jq \
+			--arg v "$visibility" --arg t "$now" \
+			--argjson c "$candidate" --argjson cb "$candidate_before" \
+			'. * {status: "confirmed", visibility: $v, confirmed_at: $t}
+			 | .candidate = $c
+			 | .candidate_before_confirm = $cb' 2>/dev/null) || return 1
+	else
+		# No rewrite happened, so there is nothing to snapshot — and any field
+		# already on the proposal is stale by definition. Deleting it holds the
+		# invariant unconfirm relies on ("absence means the candidate was never
+		# mutated") from both ends: without this, a proposal that arrives
+		# carrying the field keeps it through a plain confirm, and the next
+		# unconfirm silently replaces .candidate with a snapshot describing a
+		# rewrite this confirm never performed.
+		updated=$(printf '%s' "$proposal" | jq \
+			--arg v "$visibility" --arg t "$now" --argjson c "$candidate" \
+			'. * {status: "confirmed", visibility: $v, confirmed_at: $t}
+			 | .candidate = $c
+			 | del(.candidate_before_confirm)' 2>/dev/null) || return 1
+	fi
+	[[ -z "$updated" || "$updated" == "null" ]] && return 1
+	printf '%s\n' "$updated" > "$path"
+}
+
+# Take back a confirmation, before the jury has seen the lesson.
+#
+# `confirmed` is otherwise terminal: confirm refuses a differing repeat and
+# pass refuses a confirmed lesson. Those guards are correct — they are what
+# keeps passed.jsonl from contradicting the proposal it describes — but they
+# left no way back from confirming at the wrong visibility, and `public` is
+# the tier that leaves this machine.
+#
+# Proceeds ONLY from `confirmed`. Every other status is refused, which is also
+# what makes this forward-safe: when the jury stage introduces a status of its
+# own, this verb refuses it through the catch-all with no change here.
+#
+# Usage: librarian_lesson_unconfirm <key> <lesson_id>
+librarian_lesson_unconfirm() {
+	local key="$1"
+	local lesson_id="$2"
+	[[ -z "$key" || -z "$lesson_id" ]] && return 1
+
+	local path
+	path="$(librarian_lessons_dir "$key")/proposals/${lesson_id}.json"
+	[[ -f "$path" ]] || { printf 'Lesson %s not found.\n' "$lesson_id" >&2; return 1; }
+
+	local current_status
+	current_status=$(jq -r '.status // ""' "$path" 2>/dev/null)
+
+	case "$current_status" in
+		confirmed) ;;
+		pending) return 0 ;;
+		passed)
+			# Passing is a different decision with its own durable record.
+			# Silently moving it back to pending would leave passed.jsonl
+			# asserting a decision the proposal contradicts.
+			printf 'Lesson %s was passed on, not confirmed; unconfirm does not undo that.\n' "$lesson_id" >&2
+			return 1
+			;;
+		*)
+			printf 'Lesson %s has an unrecognized status: %s\n' "$lesson_id" "$current_status" >&2
+			return 1
+			;;
+	esac
+
+	# Restore the pre-confirm candidate when one was snapshotted, and delete
+	# the snapshot either way. A stale snapshot left on a pending proposal is
+	# indistinguishable from a live one at the next confirm, and would
+	# silently revert a later legitimate rewrite.
+	local updated
+	updated=$(jq '
+		(if has("candidate_before_confirm") then .candidate = .candidate_before_confirm else . end)
+		| del(.candidate_before_confirm, .visibility, .confirmed_at)
+		| .status = "pending"
+	' "$path" 2>/dev/null) || return 1
 	[[ -z "$updated" || "$updated" == "null" ]] && return 1
 	printf '%s\n' "$updated" > "$path"
 }

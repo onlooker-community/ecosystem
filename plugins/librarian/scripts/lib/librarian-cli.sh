@@ -3,6 +3,7 @@
 #
 # Exposes:
 #   librarian_cli list                         # one-line summary + table of pending proposals
+#   librarian_cli lessons list [--confirmed]   # pending lesson queue, or the confirmed ones
 #   librarian_cli show <proposal_id>           # full proposal body + provenance + conflict state
 #   librarian_cli accept <proposal_id>         # write to typed memory store, mark accepted
 #   librarian_cli reject <proposal_id> [reason]  # tombstone + mark rejected
@@ -336,18 +337,40 @@ librarian_cli_status() {
 # should not sit one keystroke apart.
 # ----------------------------------------------------------------------------
 
+# Usage: librarian_cli_lessons_list [--confirmed] [cwd]
+#
+# Bare `list` shows the pending queue the review walk drives. `--confirmed`
+# shows lessons already confirmed and not yet judged, which is otherwise
+# undiscoverable: unconfirm operates only on a `confirmed` lesson, and the
+# pending list by definition never contains one. Without this view a human who
+# confirmed at the wrong visibility last session has no way back to the id.
 librarian_cli_lessons_list() {
-	local cwd="${1:-}"
-	local key pending
+	local status="pending" cwd=""
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+			--confirmed) status="confirmed"; shift ;;
+			--*)
+				# Same contract as the sibling verbs: an unrecognized flag is
+				# refused rather than falling through to the cwd bucket, where
+				# it would resolve no project key and report a path problem the
+				# caller does not have.
+				printf 'unknown option: %s\n' "$1" >&2
+				return 1
+				;;
+			*) cwd="$1"; shift ;;
+		esac
+	done
+
+	local key rows
 	key=$(_librarian_cli_project_key "$cwd")
 	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
-	pending=$(librarian_lesson_list_pending "$key")
+	rows=$(librarian_lesson_list_by_status "$key" "$status")
 
-	if [[ "$(printf '%s' "$pending" | jq 'length')" -eq 0 ]]; then
-		printf 'No pending lessons.\n'
+	if [[ "$(printf '%s' "$rows" | jq 'length')" -eq 0 ]]; then
+		printf 'No %s lessons.\n' "$status"
 		return 0
 	fi
-	printf '%s' "$pending" | jq -r '.[] | "\(.id)  \(.candidate.claim)"'
+	printf '%s' "$rows" | jq -r '.[] | "\(.id)  \(.candidate.claim)"'
 }
 
 librarian_cli_lessons_show() {
@@ -361,9 +384,14 @@ librarian_cli_lessons_show() {
 	path="$(librarian_lessons_dir "$key")/proposals/${lesson_id}.json"
 	[[ -f "$path" ]] || { printf 'Lesson %s not found.\n' "$lesson_id"; return 1; }
 
+	# visibility sits next to status because the two are read together: it is
+	# the field a human needs to check before deciding whether to unconfirm,
+	# and it is only set on a confirmed lesson. A pending one renders `—`
+	# rather than a jq `null`, so the absence reads as "not decided yet".
 	jq -r '
 		"id:          \(.id)",
 		"status:      \(.status)",
+		"visibility:  \(.visibility // "—")",
 		"artifact:    \(.artifact_id)",
 		"claim:       \(.candidate.claim)",
 		"rationale:   \(.candidate.rationale)",
@@ -460,6 +488,50 @@ librarian_cli_lessons_pass() {
 	printf 'Passed on %s.\n' "$lesson_id"
 }
 
+librarian_cli_lessons_unconfirm() {
+	local lesson_id="${1:-}"
+	local cwd="${2:-}"
+	[[ -z "$lesson_id" ]] && { printf 'usage: librarian_cli lessons unconfirm <lesson_id>\n'; return 1; }
+
+	# Reject a flag-shaped token rather than treating it as cwd. The sibling
+	# verbs already do this; a stray flag absorbed as a path resolves to the
+	# wrong project key and the verb then reports success against a lesson it
+	# never touched. Here that write-safety case can't actually arise — cwd
+	# is the last positional, so an invalid one (e.g. "--force") already
+	# fails project-key resolution below and returns 1 with no write. This
+	# guard is a diagnostic, not a write guard: it swaps that generic "No
+	# project key resolvable" for "unknown option: --force" so the caller
+	# isn't sent hunting a path problem they don't have. Keep it for that
+	# reason even though it looks redundant next to confirm's and pass's.
+	case "$cwd" in
+		--*) printf 'unknown option: %s\n' "$cwd" >&2; return 1 ;;
+	esac
+
+	local key
+	key=$(_librarian_cli_project_key "$cwd")
+	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
+
+	# Read the status before the call so the message can tell "took back a
+	# confirmation" apart from "it was already pending". librarian_lesson_unconfirm
+	# returns 0 for both by design — 0 means "the lesson is pending now" — and
+	# keeping that contract single-valued is what lets callers stay simple, so
+	# the distinction is made here rather than by widening the return.
+	#
+	# A status changing between this read and the call can only misword the
+	# message; the write itself is guarded inside librarian_lesson_unconfirm,
+	# which re-reads the file and refuses anything that is not `confirmed`.
+	local prior_status
+	prior_status=$(jq -r '.status // ""' \
+		"$(librarian_lessons_dir "$key")/proposals/${lesson_id}.json" 2>/dev/null)
+
+	librarian_lesson_unconfirm "$key" "$lesson_id" || return 1
+	if [[ "$prior_status" == "pending" ]]; then
+		printf 'Lesson %s was already pending; nothing to take back.\n' "$lesson_id"
+	else
+		printf 'Unconfirmed %s; it is pending again.\n' "$lesson_id"
+	fi
+}
+
 librarian_cli_lessons_defer() {
 	local lesson_id="${1:-}"
 	[[ -z "$lesson_id" ]] && { printf 'usage: librarian_cli lessons defer <lesson_id>\n'; return 1; }
@@ -483,6 +555,7 @@ librarian_cli_lessons() {
 		show) librarian_cli_lessons_show "$@" ;;
 		confirm) librarian_cli_lessons_confirm "$@" ;;
 		pass) librarian_cli_lessons_pass "$@" ;;
+		unconfirm) librarian_cli_lessons_unconfirm "$@" ;;
 		defer) librarian_cli_lessons_defer "$@" ;;
 		status) librarian_cli_lessons_status "$@" ;;
 		*) printf 'unknown lessons action: %s\n' "$verb"; return 2 ;;

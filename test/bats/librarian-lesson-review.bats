@@ -122,6 +122,18 @@ _seed_pending() {
 	printf '%s' "$output" | jq -e --arg id "$id" 'length == 1 and .[0].id == $id' >/dev/null
 }
 
+@test "list_by_status selects on the status it is handed, not just pending" {
+	_review_setup
+	a=$(_seed_pending)
+	b=$(_seed_pending)
+	librarian_lesson_confirm "$PROJECT_KEY" "$a" "org"
+	run librarian_lesson_list_by_status "$PROJECT_KEY" "confirmed"
+	[ "$status" -eq 0 ]
+	printf '%s' "$output" \
+		| jq -e --arg a "$a" --arg b "$b" \
+			'length == 1 and .[0].id == $a and .[0].id != $b' >/dev/null
+}
+
 @test "confirm records status and visibility on the proposal" {
 	_review_setup
 	id=$(_seed_pending)
@@ -383,6 +395,58 @@ _cli_setup() {
 	[[ "$output" == *"$id"* ]] || return 1
 }
 
+@test "lessons list --confirmed shows a confirmed lesson the pending list hides" {
+	_cli_setup
+	id=$(_seed_pending)
+	librarian_cli lessons confirm "$id" public "$PROJECT_REPO" >/dev/null
+
+	run librarian_cli lessons list "$PROJECT_REPO"
+	[[ "$output" == *"No pending lessons."* ]] || return 1
+
+	run librarian_cli lessons list --confirmed "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"$id"* ]] || return 1
+}
+
+@test "lessons list --confirmed reports an empty set of its own" {
+	_cli_setup
+	_seed_pending
+	# A pending lesson exists, so an implementation that ignored the flag
+	# would print that row instead of the empty state.
+	run librarian_cli lessons list --confirmed "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"No confirmed lessons."* ]] || return 1
+}
+
+@test "lessons list rejects an unknown flag instead of reading it as cwd" {
+	_cli_setup
+	_seed_pending
+	cd "$PROJECT_REPO" || return 1
+	run librarian_cli lessons list --passed
+	[ "$status" -ne 0 ]
+	# cd'd into the repo first so the cwd fallback resolves a real key: without
+	# the guard this would print the pending queue and exit 0, not a path error.
+	[[ "$output" == *"unknown option"* && "$output" == *"--passed"* ]] || return 1
+}
+
+@test "lessons show renders the visibility a confirmed lesson sits at" {
+	_cli_setup
+	id=$(_seed_pending)
+	librarian_cli lessons confirm "$id" public "$PROJECT_REPO" >/dev/null
+	run librarian_cli lessons show "$id" "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"visibility:  public"* ]] || return 1
+}
+
+@test "lessons show renders a dash for a pending lesson's visibility" {
+	_cli_setup
+	id=$(_seed_pending)
+	run librarian_cli lessons show "$id" "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"visibility:  —"* ]] || return 1
+	[[ "$output" != *"null"* ]] || return 1
+}
+
 @test "lessons show prints the claim" {
 	_cli_setup
 	claim="pin vitest below six to avoid the esm regression"
@@ -507,5 +571,229 @@ _cli_setup() {
 @test "memory verbs are unaffected by the lessons namespace" {
 	_cli_setup
 	run librarian_cli status "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+}
+
+@test "confirm without a justification writes no snapshot" {
+	_review_setup
+	id=$(_seed_pending)
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "org"
+	run jq -e 'has("candidate_before_confirm")' "${LESSONS_DIR}/proposals/${id}.json"
+	[ "$status" -ne 0 ]
+}
+
+@test "confirm without a justification clears a snapshot the proposal arrived with" {
+	_review_setup
+	id=$(_seed_pending)
+	# Nothing in the shipped verbs writes this field onto a pending proposal
+	# today, so seed it directly. The invariant unconfirm leans on is "absence
+	# means the candidate was never mutated" — a stale snapshot surviving a
+	# plain confirm would make the next unconfirm silently swap .candidate for
+	# a rewrite that never happened, stranding the user in the dead end this
+	# verb exists to escape.
+	tmp="${BATS_TEST_TMPDIR}/stale.json"
+	jq --argjson cb "$(_candidate "$(_indep)")" '.candidate_before_confirm = $cb' \
+		"${LESSONS_DIR}/proposals/${id}.json" > "$tmp"
+	mv "$tmp" "${LESSONS_DIR}/proposals/${id}.json"
+
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "org"
+	jq -e 'has("candidate_before_confirm") | not' \
+		"${LESSONS_DIR}/proposals/${id}.json" >/dev/null || return 1
+
+	# And the harm it would have caused: unconfirm must find nothing to restore.
+	librarian_lesson_unconfirm "$PROJECT_KEY" "$id"
+	run jq -e '.candidate.applies_to.scope.kind == "versioned"' \
+		"${LESSONS_DIR}/proposals/${id}.json"
+	[ "$status" -eq 0 ]
+}
+
+@test "confirm with a justification snapshots the pre-rewrite candidate" {
+	_review_setup
+	id=$(_seed_pending)
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "org" "git aborts on a dirty tree regardless of version"
+	run jq -e '.candidate_before_confirm.applies_to.scope.kind == "versioned"' \
+		"${LESSONS_DIR}/proposals/${id}.json"
+	[ "$status" -eq 0 ]
+}
+
+@test "unconfirm returns a confirmed lesson to pending and clears the decision" {
+	_review_setup
+	id=$(_seed_pending)
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "public"
+	run librarian_lesson_unconfirm "$PROJECT_KEY" "$id"
+	[ "$status" -eq 0 ]
+	run jq -e '.status == "pending" and (has("visibility") | not) and (has("confirmed_at") | not)' \
+		"${LESSONS_DIR}/proposals/${id}.json"
+	[ "$status" -eq 0 ]
+}
+
+@test "the round trip leaves the proposal byte-identical to its pre-confirm state" {
+	_review_setup
+	id=$(_seed_pending)
+	before="${BATS_TEST_TMPDIR}/before.json"
+	cp "${LESSONS_DIR}/proposals/${id}.json" "$before"
+
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "public" "git behavior is stable across versions"
+	librarian_lesson_unconfirm "$PROJECT_KEY" "$id"
+
+	run diff <(jq -S . "$before") <(jq -S . "${LESSONS_DIR}/proposals/${id}.json")
+	[ "$status" -eq 0 ]
+}
+
+@test "unconfirm restores versioned scope after a justification confirm" {
+	_review_setup
+	id=$(_seed_pending)
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "org" "stable across versions"
+	librarian_lesson_unconfirm "$PROJECT_KEY" "$id"
+	run jq -e '.candidate.applies_to.scope.kind == "versioned"
+	           and (has("candidate_before_confirm") | not)' \
+		"${LESSONS_DIR}/proposals/${id}.json"
+	[ "$status" -eq 0 ]
+}
+
+@test "after unconfirm a fresh confirm at a different visibility succeeds" {
+	_review_setup
+	id=$(_seed_pending)
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "public"
+	librarian_lesson_unconfirm "$PROJECT_KEY" "$id"
+	run librarian_lesson_confirm "$PROJECT_KEY" "$id" "private"
+	[ "$status" -eq 0 ]
+	run jq -e '.status == "confirmed" and .visibility == "private"' \
+		"${LESSONS_DIR}/proposals/${id}.json"
+	[ "$status" -eq 0 ]
+}
+
+@test "after unconfirm a justification confirm can be redone at private visibility" {
+	_review_setup
+	id=$(_seed_pending)
+	# The composite the design actually argues for. A justification rewrites
+	# scope to version_independent, and private refuses that scope — so without
+	# the snapshot restore this last confirm is refused for a rewrite the user
+	# already took back, trading one dead end for another. The plain-confirm
+	# case above still passes with the snapshot mechanism deleted entirely;
+	# this one does not.
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "public" \
+		"git aborts on a dirty tree regardless of version"
+	librarian_lesson_unconfirm "$PROJECT_KEY" "$id"
+	run librarian_lesson_confirm "$PROJECT_KEY" "$id" "private"
+	[ "$status" -eq 0 ]
+	run jq -e '.status == "confirmed" and .visibility == "private"
+	           and .candidate.applies_to.scope.kind == "versioned"' \
+		"${LESSONS_DIR}/proposals/${id}.json"
+	[ "$status" -eq 0 ]
+}
+
+@test "unconfirm from pending is a no-op success" {
+	_review_setup
+	id=$(_seed_pending)
+	run librarian_lesson_unconfirm "$PROJECT_KEY" "$id"
+	[ "$status" -eq 0 ]
+	run jq -e '.status == "pending"' "${LESSONS_DIR}/proposals/${id}.json"
+	[ "$status" -eq 0 ]
+}
+
+@test "unconfirm refuses a passed lesson and leaves the ledger untouched" {
+	_review_setup
+	id=$(_seed_pending)
+	librarian_lesson_pass "$PROJECT_KEY" "$id" "not worth sharing"
+	before_lines=$(wc -l < "${LESSONS_DIR}/passed.jsonl")
+
+	run librarian_lesson_unconfirm "$PROJECT_KEY" "$id"
+	[ "$status" -ne 0 ]
+	run jq -e '.status == "passed"' "${LESSONS_DIR}/proposals/${id}.json"
+	[ "$status" -eq 0 ]
+	[ "$(wc -l < "${LESSONS_DIR}/passed.jsonl")" -eq "$before_lines" ]
+}
+
+@test "unconfirm refuses an unrecognized status and names it" {
+	_review_setup
+	id=$(_seed_pending)
+	tmp="${BATS_TEST_TMPDIR}/mut.json"
+	jq '.status = "judging"' "${LESSONS_DIR}/proposals/${id}.json" > "$tmp"
+	mv "$tmp" "${LESSONS_DIR}/proposals/${id}.json"
+
+	run librarian_lesson_unconfirm "$PROJECT_KEY" "$id"
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"judging"* ]] || return 1
+}
+
+@test "unconfirm refuses a lesson that does not exist" {
+	_review_setup
+	run librarian_lesson_unconfirm "$PROJECT_KEY" "01KZNOSUCHLESSON0000000000"
+	[ "$status" -ne 0 ]
+}
+
+@test "unconfirm never invokes a model" {
+	_review_setup
+	stub="${BATS_TEST_TMPDIR}/bin"
+	mkdir -p "$stub"
+	printf '#!/usr/bin/env bash\necho "MODEL WAS INVOKED" >&2\nexit 42\n' > "${stub}/claude"
+	chmod +x "${stub}/claude"
+	PATH="${stub}:${PATH}"
+
+	id=$(_seed_pending)
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "org"
+	run librarian_lesson_unconfirm "$PROJECT_KEY" "$id"
+	[ "$status" -eq 0 ]
+	[[ "$output" != *"MODEL WAS INVOKED"* ]] || return 1
+}
+
+@test "lessons unconfirm returns a confirmed lesson to pending" {
+	_cli_setup
+	id=$(_seed_pending)
+	librarian_cli lessons confirm "$id" public "$PROJECT_REPO" >/dev/null
+	run librarian_cli lessons unconfirm "$id" "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	run jq -e '.status == "pending"' "${LESSONS_DIR}/proposals/${id}.json"
+	[ "$status" -eq 0 ]
+}
+
+@test "lessons unconfirm on a pending lesson does not claim it undid a confirmation" {
+	_cli_setup
+	id=$(_seed_pending)
+	run librarian_cli lessons unconfirm "$id" "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	# The no-op is a success, but reporting "Unconfirmed <id>" for a lesson
+	# nobody confirmed asserts an action that never happened — and a user
+	# chasing a mistaken confirm would read it as proof they fixed it.
+	[[ "$output" == *"already pending"* ]] || return 1
+	[[ "$output" != *"Unconfirmed"* ]] || return 1
+}
+
+@test "lessons unconfirm still reports the action when it took one" {
+	_cli_setup
+	id=$(_seed_pending)
+	librarian_cli lessons confirm "$id" public "$PROJECT_REPO" >/dev/null
+	run librarian_cli lessons unconfirm "$id" "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"Unconfirmed ${id}"* ]] || return 1
+	[[ "$output" != *"already pending"* ]] || return 1
+}
+
+@test "lessons unconfirm requires a lesson id" {
+	_cli_setup
+	run librarian_cli lessons unconfirm
+	[ "$status" -ne 0 ]
+	# With no lesson id, cwd is empty too, so _librarian_cli_project_key
+	# falls back to $(pwd) and resolves a valid key in this sandbox, and
+	# librarian_lesson_unconfirm's own empty-id guard also returns 1. Exit
+	# status alone can't tell the CLI's usage guard apart from that
+	# fallback path. Pin the message: without the CLI guard this test would
+	# pass while printing nothing useful.
+	[[ "$output" == *"usage:"* && "$output" == *"unconfirm"* ]] || return 1
+}
+
+@test "lessons unconfirm rejects an unknown flag" {
+	_cli_setup
+	id=$(_seed_pending)
+	librarian_cli lessons confirm "$id" public "$PROJECT_REPO" >/dev/null
+	run librarian_cli lessons unconfirm "$id" --force
+	[ "$status" -ne 0 ]
+	# An invalid cwd already fails project-key resolution on its own, so the
+	# exit code alone can't tell the guard's diagnostic apart from that
+	# fallback path. Pin the message too: without the guard this would read
+	# "No project key resolvable from this directory." instead.
+	[[ "$output" == *"unknown option"* && "$output" == *"--force"* ]] || return 1
+	run jq -e '.status == "confirmed"' "${LESSONS_DIR}/proposals/${id}.json"
 	[ "$status" -eq 0 ]
 }
