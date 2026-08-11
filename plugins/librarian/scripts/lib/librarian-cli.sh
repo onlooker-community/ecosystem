@@ -511,8 +511,25 @@ librarian_cli_lessons_unconfirm() {
 	key=$(_librarian_cli_project_key "$cwd")
 	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
 
+	# Read the status before the call so the message can tell "took back a
+	# confirmation" apart from "it was already pending". librarian_lesson_unconfirm
+	# returns 0 for both by design — 0 means "the lesson is pending now" — and
+	# keeping that contract single-valued is what lets callers stay simple, so
+	# the distinction is made here rather than by widening the return.
+	#
+	# A status changing between this read and the call can only misword the
+	# message; the write itself is guarded inside librarian_lesson_unconfirm,
+	# which re-reads the file and refuses anything that is not `confirmed`.
+	local prior_status
+	prior_status=$(jq -r '.status // ""' \
+		"$(librarian_lessons_dir "$key")/proposals/${lesson_id}.json" 2>/dev/null)
+
 	librarian_lesson_unconfirm "$key" "$lesson_id" || return 1
-	printf 'Unconfirmed %s; it is pending again.\n' "$lesson_id"
+	if [[ "$prior_status" == "pending" ]]; then
+		printf 'Lesson %s was already pending; nothing to take back.\n' "$lesson_id"
+	else
+		printf 'Unconfirmed %s; it is pending again.\n' "$lesson_id"
+	fi
 }
 
 librarian_cli_lessons_defer() {

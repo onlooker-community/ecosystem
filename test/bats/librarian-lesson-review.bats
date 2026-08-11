@@ -728,6 +728,28 @@ _cli_setup() {
 	[ "$status" -eq 0 ]
 }
 
+@test "lessons unconfirm on a pending lesson does not claim it undid a confirmation" {
+	_cli_setup
+	id=$(_seed_pending)
+	run librarian_cli lessons unconfirm "$id" "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	# The no-op is a success, but reporting "Unconfirmed <id>" for a lesson
+	# nobody confirmed asserts an action that never happened — and a user
+	# chasing a mistaken confirm would read it as proof they fixed it.
+	[[ "$output" == *"already pending"* ]] || return 1
+	[[ "$output" != *"Unconfirmed"* ]] || return 1
+}
+
+@test "lessons unconfirm still reports the action when it took one" {
+	_cli_setup
+	id=$(_seed_pending)
+	librarian_cli lessons confirm "$id" public "$PROJECT_REPO" >/dev/null
+	run librarian_cli lessons unconfirm "$id" "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"Unconfirmed ${id}"* ]] || return 1
+	[[ "$output" != *"already pending"* ]] || return 1
+}
+
 @test "lessons unconfirm requires a lesson id" {
 	_cli_setup
 	run librarian_cli lessons unconfirm
