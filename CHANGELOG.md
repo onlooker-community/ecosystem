@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.36.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.35.0...ecosystem-v0.36.0) (2026-08-11)
+
+
+### Features
+
+* **librarian:** let a human take back a lesson confirmation :leftwards_arrow_with_hook: ([#139](https://github.com/onlooker-community/ecosystem/issues/139)) ([a4c4ac8](https://github.com/onlooker-community/ecosystem/commit/a4c4ac8ed5b79f5596f4e22abd1d23a8b0d3e834))
+
 ## [0.35.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.34.1...ecosystem-v0.35.0) (2026-08-11)
 
 
