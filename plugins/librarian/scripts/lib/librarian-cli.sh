@@ -468,7 +468,13 @@ librarian_cli_lessons_unconfirm() {
 	# Reject a flag-shaped token rather than treating it as cwd. The sibling
 	# verbs already do this; a stray flag absorbed as a path resolves to the
 	# wrong project key and the verb then reports success against a lesson it
-	# never touched.
+	# never touched. Here that write-safety case can't actually arise — cwd
+	# is the last positional, so an invalid one (e.g. "--force") already
+	# fails project-key resolution below and returns 1 with no write. This
+	# guard is a diagnostic, not a write guard: it swaps that generic "No
+	# project key resolvable" for "unknown option: --force" so the caller
+	# isn't sent hunting a path problem they don't have. Keep it for that
+	# reason even though it looks redundant next to confirm's and pass's.
 	case "$cwd" in
 		--*) printf 'unknown option: %s\n' "$cwd" >&2; return 1 ;;
 	esac

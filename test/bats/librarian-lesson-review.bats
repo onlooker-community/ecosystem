@@ -651,6 +651,11 @@ _cli_setup() {
 	librarian_cli lessons confirm "$id" public "$PROJECT_REPO" >/dev/null
 	run librarian_cli lessons unconfirm "$id" --force
 	[ "$status" -ne 0 ]
+	# An invalid cwd already fails project-key resolution on its own, so the
+	# exit code alone can't tell the guard's diagnostic apart from that
+	# fallback path. Pin the message too: without the guard this would read
+	# "No project key resolvable from this directory." instead.
+	[[ "$output" == *"unknown option"* && "$output" == *"--force"* ]] || return 1
 	run jq -e '.status == "confirmed"' "${LESSONS_DIR}/proposals/${id}.json"
 	[ "$status" -eq 0 ]
 }
