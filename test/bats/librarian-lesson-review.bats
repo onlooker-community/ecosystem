@@ -628,3 +628,35 @@ _cli_setup() {
 	[ "$status" -eq 0 ]
 	[[ "$output" != *"MODEL WAS INVOKED"* ]] || return 1
 }
+
+@test "lessons unconfirm returns a confirmed lesson to pending" {
+	_cli_setup
+	id=$(_seed_pending)
+	librarian_cli lessons confirm "$id" public "$PROJECT_REPO" >/dev/null
+	run librarian_cli lessons unconfirm "$id" "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	run jq -e '.status == "pending"' "${LESSONS_DIR}/proposals/${id}.json"
+	[ "$status" -eq 0 ]
+}
+
+@test "lessons unconfirm requires a lesson id" {
+	_cli_setup
+	run librarian_cli lessons unconfirm
+	[ "$status" -ne 0 ]
+}
+
+@test "lessons unconfirm rejects an unknown flag" {
+	_cli_setup
+	id=$(_seed_pending)
+	librarian_cli lessons confirm "$id" public "$PROJECT_REPO" >/dev/null
+	run librarian_cli lessons unconfirm "$id" --force
+	[ "$status" -ne 0 ]
+	run jq -e '.status == "confirmed"' "${LESSONS_DIR}/proposals/${id}.json"
+	[ "$status" -eq 0 ]
+}
+
+@test "an unknown lessons verb is still rejected" {
+	_cli_setup
+	run librarian_cli lessons frobnicate
+	[ "$status" -ne 0 ]
+}

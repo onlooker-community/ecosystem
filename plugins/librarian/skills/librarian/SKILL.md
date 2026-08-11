@@ -1,6 +1,6 @@
 ---
 name: librarian
-description: Review the librarian's pending memory promotion proposals and lesson candidates queued from past sessions. Walk pending entries with the user one at a time, surfacing provenance and conflict state, and route each to accept (writes the typed memory file and updates MEMORY.md), reject (writes a body-hash tombstone so the same content won't re-propose), or defer (leave in the queue). Lesson candidates route separately to confirm (with a visibility), pass, or defer. Use when the user types `/librarian`, `/librarian review`, `/librarian triage`, `/librarian status`, `/librarian list`, `/librarian lessons`, or `/librarian lessons review`, or asks to review librarian proposals or lesson candidates.
+description: Review the librarian's pending memory promotion proposals and lesson candidates queued from past sessions. Walk pending entries with the user one at a time, surfacing provenance and conflict state, and route each to accept (writes the typed memory file and updates MEMORY.md), reject (writes a body-hash tombstone so the same content won't re-propose), or defer (leave in the queue). Lesson candidates route separately to confirm (with a visibility), pass, defer, or unconfirm (take back a confirmation before the jury sees it). Use when the user types `/librarian`, `/librarian review`, `/librarian triage`, `/librarian status`, `/librarian list`, `/librarian lessons`, or `/librarian lessons review`, or asks to review librarian proposals or lesson candidates.
 ---
 
 # Librarian: Promotion Queue Review
@@ -40,7 +40,7 @@ source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-lesson-review.sh"
 source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-cli.sh"
 
 # action is one of: list | show <id> | accept <id> | reject <id> [reason] | defer <id> | status
-# or: lessons <list|show <id>|confirm <id> <visibility> [--justification TEXT]|pass <id> [reason]|defer <id>|status>
+# or: lessons <list|show <id>|confirm <id> <visibility> [--justification TEXT]|pass <id> [reason]|unconfirm <id>|defer <id>|status>
 librarian_cli "<action>" "<args...>"
 ```
 
@@ -78,6 +78,8 @@ For `lessons` / `lessons review` (default for the `lessons` route), loop:
    - **pass** → `librarian_cli lessons pass <id> "<reason>"`. The reason is optional.
    - **defer** → `librarian_cli lessons defer <id>`. The candidate stays pending; mention it'll resurface next session.
 6. After each routed decision, fetch the next pending id and repeat. When `list` returns no rows, finish with `librarian_cli lessons status` so the user sees the final count.
+
+A confirm made at the wrong visibility isn't stuck that way — `librarian_cli lessons unconfirm <id>` takes it back, returning the lesson to pending so the user can confirm it again at the right visibility. It only works on a `confirmed` lesson: a `passed` lesson stays passed, because that decision already has its own record and unconfirm won't touch it.
 
 For `lessons list` and `lessons status`, just call `librarian_cli lessons <action>` once and render the output.
 

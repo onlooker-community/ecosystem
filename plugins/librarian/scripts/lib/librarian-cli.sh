@@ -460,6 +460,27 @@ librarian_cli_lessons_pass() {
 	printf 'Passed on %s.\n' "$lesson_id"
 }
 
+librarian_cli_lessons_unconfirm() {
+	local lesson_id="${1:-}"
+	local cwd="${2:-}"
+	[[ -z "$lesson_id" ]] && { printf 'usage: librarian_cli lessons unconfirm <lesson_id>\n'; return 1; }
+
+	# Reject a flag-shaped token rather than treating it as cwd. The sibling
+	# verbs already do this; a stray flag absorbed as a path resolves to the
+	# wrong project key and the verb then reports success against a lesson it
+	# never touched.
+	case "$cwd" in
+		--*) printf 'unknown option: %s\n' "$cwd" >&2; return 1 ;;
+	esac
+
+	local key
+	key=$(_librarian_cli_project_key "$cwd")
+	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
+
+	librarian_lesson_unconfirm "$key" "$lesson_id" || return 1
+	printf 'Unconfirmed %s; it is pending again.\n' "$lesson_id"
+}
+
 librarian_cli_lessons_defer() {
 	local lesson_id="${1:-}"
 	[[ -z "$lesson_id" ]] && { printf 'usage: librarian_cli lessons defer <lesson_id>\n'; return 1; }
@@ -483,6 +504,7 @@ librarian_cli_lessons() {
 		show) librarian_cli_lessons_show "$@" ;;
 		confirm) librarian_cli_lessons_confirm "$@" ;;
 		pass) librarian_cli_lessons_pass "$@" ;;
+		unconfirm) librarian_cli_lessons_unconfirm "$@" ;;
 		defer) librarian_cli_lessons_defer "$@" ;;
 		status) librarian_cli_lessons_status "$@" ;;
 		*) printf 'unknown lessons action: %s\n' "$verb"; return 2 ;;
