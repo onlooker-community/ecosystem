@@ -643,6 +643,13 @@ _cli_setup() {
 	_cli_setup
 	run librarian_cli lessons unconfirm
 	[ "$status" -ne 0 ]
+	# With no lesson id, cwd is empty too, so _librarian_cli_project_key
+	# falls back to $(pwd) and resolves a valid key in this sandbox, and
+	# librarian_lesson_unconfirm's own empty-id guard also returns 1. Exit
+	# status alone can't tell the CLI's usage guard apart from that
+	# fallback path. Pin the message: without the CLI guard this test would
+	# pass while printing nothing useful.
+	[[ "$output" == *"usage:"* && "$output" == *"unconfirm"* ]] || return 1
 }
 
 @test "lessons unconfirm rejects an unknown flag" {
