@@ -25,6 +25,11 @@ setup() {
 	source "${PLUGIN_ROOT}/scripts/lib/librarian-storage.sh"
 	source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-storage.sh"
 	source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-judge.sh"
+	# librarian_cli_lessons_list (exercised by the CLI tests below) calls
+	# librarian_lesson_list_by_status, which lives here — not pulled in by
+	# any of the sources above.
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-review.sh"
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-cli.sh"
 
 	# A claude stub that fails loudly. Any path asserted to spend no tokens
 	# must not invoke it. Same technique that proved stage 5's unavailable
@@ -368,4 +373,62 @@ _verdicts_split() {
 	run librarian_lesson_judge "$PROJECT_KEY" "nope01" "$(_verdicts_pass)"
 	[ "$status" -eq 1 ]
 	[[ "$output" == *"not found"* ]] || return 1
+}
+
+@test "lessons judge records a verdict through the CLI" {
+	_seed_confirmed "cli01" "org"
+	run librarian_cli lessons judge "cli01" "$(_verdicts_pass)" "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	[ "$(_status_of cli01)" = "approved" ]
+	[[ "$output" == *"approved"* ]] || return 1
+}
+
+@test "lessons judge reports an unjudged candidate distinctly from a rejection" {
+	_seed_confirmed "cli02" "org"
+	run librarian_cli lessons judge "cli02" '[{"judge_type":"standard","score":"nope","passed":true}]' "$PROJECT_REPO"
+	[ "$status" -eq 2 ]
+	[[ "$output" == *"could not be judged"* ]] || return 1
+	[ "$(_status_of cli02)" = "confirmed" ]
+}
+
+@test "lessons judge requires a lesson id" {
+	run librarian_cli lessons judge
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"usage:"* && "$output" == *"judge"* ]] || return 1
+}
+
+@test "lessons judge requires verdicts" {
+	run librarian_cli lessons judge "cli03"
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"usage:"* && "$output" == *"judge"* ]] || return 1
+}
+
+@test "lessons judge rejects an unknown flag" {
+	_seed_confirmed "cli04" "org"
+	run librarian_cli lessons judge "cli04" "$(_verdicts_pass)" --force
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"unknown option"* && "$output" == *"--force"* ]] || return 1
+}
+
+@test "lessons list --confirmed --json emits rows carrying visibility" {
+	_seed_confirmed "js01" "public"
+	_seed_confirmed "js02" "org"
+	run librarian_cli lessons list --confirmed --json "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	[ "$(printf '%s' "$output" | jq 'length')" -eq 2 ]
+	[ "$(printf '%s' "$output" | jq -r '[.[] | select(.visibility == "public")] | length')" -eq 1 ]
+	[ "$(printf '%s' "$output" | jq -r '.[0] | has("id")')" = "true" ]
+}
+
+@test "lessons list --json on an empty set emits an empty array, not prose" {
+	# The skill parses this; a human-readable empty-state message would break it.
+	run librarian_cli lessons list --confirmed --json "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	[ "$output" = "[]" ]
+}
+
+@test "bare lessons list is unchanged by the --json addition" {
+	run librarian_cli lessons list "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	[ "$output" = "No pending lessons." ]
 }
