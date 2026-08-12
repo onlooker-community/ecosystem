@@ -261,28 +261,96 @@ _verdicts_split() {
 	[ "$(printf '%s' "$v" | jq -r '.reason')" = "jury_not_majority" ]
 }
 
-@test "a three-judge panel with one dissenter separates the two tiers" {
-	# The case where the tiers genuinely produce different OUTCOMES, not just
-	# different reasons. This is the public tier's whole justification.
+@test "a three-element panel (one extra judge) is unjudged, not judged with an extra vote" {
+	# Both builtin rubrics declare exactly two judge_types (standard,
+	# adversarial). A three-element panel can no longer produce a real
+	# outcome divergence between majority and unanimous through
+	# librarian_lesson_judge: the composition check requires the panel's
+	# judge_type multiset to equal the rubric's, so an extra judge is
+	# rejected before the gate ever runs. (For a real two-judge panel,
+	# majority and unanimous are the same decision anyway: majority needs
+	# strictly more than half, which for count=2 means both pass — exactly
+	# what unanimous requires.) The gate-level divergence between the two
+	# policies on a hypothetical three-judge panel is still pinned directly
+	# by "majority and unanimous diverge on a two-of-three panel" above.
 	local three='[{"judge_type":"standard","score":0.95,"passed":true},{"judge_type":"adversarial","score":0.9,"passed":true},{"judge_type":"standard","score":0.8,"passed":false}]'
 
 	_seed_confirmed "tier01" "org"
+	local before_org
+	before_org=$(cat "$(librarian_lessons_dir "$PROJECT_KEY")/proposals/tier01.json")
 	run librarian_lesson_judge "$PROJECT_KEY" "tier01" "$three"
-	[ "$status" -eq 0 ]
-	[ "$(_status_of tier01)" = "approved" ]
+	[ "$status" -eq 2 ]
+	[ "$(_status_of tier01)" = "confirmed" ]
+	[ "$(cat "$(librarian_lessons_dir "$PROJECT_KEY")/proposals/tier01.json")" = "$before_org" ]
 
 	_seed_confirmed "tier02" "public"
+	local before_public
+	before_public=$(cat "$(librarian_lessons_dir "$PROJECT_KEY")/proposals/tier02.json")
 	run librarian_lesson_judge "$PROJECT_KEY" "tier02" "$three"
-	[ "$status" -eq 0 ]
-	[ "$(_status_of tier02)" = "rejected" ]
+	[ "$status" -eq 2 ]
+	[ "$(_status_of tier02)" = "confirmed" ]
+	[ "$(cat "$(librarian_lessons_dir "$PROJECT_KEY")/proposals/tier02.json")" = "$before_public" ]
 }
 
-@test "a rejected proposal keeps its file" {
+@test "a one-judge panel on a public candidate is unjudged, not approved by a lone judge" {
+	# The sharpest case: a single approving judge is trivially unanimous, so
+	# without the composition check this would promote a public lesson on
+	# one vote — the exact failure the unanimous policy exists to prevent.
+	_seed_confirmed "solo01" "public"
+	local before
+	before=$(cat "$(librarian_lessons_dir "$PROJECT_KEY")/proposals/solo01.json")
+
+	run librarian_lesson_judge "$PROJECT_KEY" "solo01" \
+		'[{"judge_type":"standard","score":0.9,"passed":true}]'
+	[ "$status" -eq 2 ]
+	[ "$(_status_of solo01)" = "confirmed" ]
+	[ "$(cat "$(librarian_lessons_dir "$PROJECT_KEY")/proposals/solo01.json")" = "$before" ]
+}
+
+@test "a one-judge panel on an org candidate is unjudged" {
+	_seed_confirmed "solo02" "org"
+	local before
+	before=$(cat "$(librarian_lessons_dir "$PROJECT_KEY")/proposals/solo02.json")
+
+	run librarian_lesson_judge "$PROJECT_KEY" "solo02" \
+		'[{"judge_type":"standard","score":0.9,"passed":true}]'
+	[ "$status" -eq 2 ]
+	[ "$(_status_of solo02)" = "confirmed" ]
+	[ "$(cat "$(librarian_lessons_dir "$PROJECT_KEY")/proposals/solo02.json")" = "$before" ]
+}
+
+@test "two judges of the same type is unjudged, not a stand-in for the missing type" {
+	# Two "standard" verdicts and no "adversarial" one is individually
+	# well-typed and even sized right, so only a composition check catches
+	# it.
+	_seed_confirmed "dup01" "org"
+	local before
+	before=$(cat "$(librarian_lessons_dir "$PROJECT_KEY")/proposals/dup01.json")
+
+	run librarian_lesson_judge "$PROJECT_KEY" "dup01" \
+		'[{"judge_type":"standard","score":0.9,"passed":true},{"judge_type":"standard","score":0.8,"passed":true}]'
+	[ "$status" -eq 2 ]
+	[ "$(_status_of dup01)" = "confirmed" ]
+	[ "$(cat "$(librarian_lessons_dir "$PROJECT_KEY")/proposals/dup01.json")" = "$before" ]
+}
+
+@test "a rejected proposal keeps its file, correctly marked rejected with a recorded verdict" {
 	# librarian_lesson_seen scans proposals/ by artifact_id; deleting the file
 	# would let the same artifact re-propose and re-pay tokens next scan.
+	# _seed_confirmed already creates this file before the call, so asserting
+	# only -f here would pass even if the function body did nothing at all —
+	# the assertion must pin what a *rejected* proposal looks like, not
+	# merely that the file was not deleted.
 	_seed_confirmed "rej01" "public"
 	run librarian_lesson_judge "$PROJECT_KEY" "rej01" "$(_verdicts_split)"
+	[ "$status" -eq 0 ]
 	[ -f "$(librarian_lessons_dir "$PROJECT_KEY")/proposals/rej01.json" ]
+	[ "$(_status_of rej01)" = "rejected" ]
+
+	local v
+	v=$(jq -c '.verdict' "$(librarian_lessons_dir "$PROJECT_KEY")/proposals/rej01.json")
+	[ "$(printf '%s' "$v" | jq -r '.passed')" = "false" ]
+	[ "$(printf '%s' "$v" | jq '.judges | length')" -eq 2 ]
 }
 
 @test "a malformed verdict leaves the candidate confirmed and writes nothing" {

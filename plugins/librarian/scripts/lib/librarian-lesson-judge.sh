@@ -128,23 +128,31 @@ librarian_lesson_judge() {
 			  aggregate_score: null, passed: true, reason: "private_no_jury",
 			  judges: []}') || return 1
 	else
-		# Every judge must have returned a usable verdict, or this candidate
-		# is unjudged. With a two-judge panel under either policy, losing one
-		# verdict means the gate cannot be decided at all.
-		local usable
-		usable=$(printf '%s' "$verdicts" | jq '
-			if type != "array" or length == 0 then false
-			else all(.[]; (.judge_type | type) == "string"
-			              and (.score | type) == "number"
-			              and (.passed | type) == "boolean")
-			end' 2>/dev/null) || usable="false"
-		[[ "$usable" != "true" ]] && return 2
-
-		local rubric threshold policy aggregate gate
+		local rubric threshold policy expected_judge_types
 		rubric=$(librarian_lesson_rubric_get "$rubric_id") || return 1
 		threshold=$(printf '%s' "$rubric" | jq -r '.score_threshold')
 		policy=$(printf '%s' "$rubric" | jq -r '.gate_policy')
+		expected_judge_types=$(printf '%s' "$rubric" | jq -c '.judge_types | sort')
 
+		# Every judge must have returned a usable verdict AND the panel's
+		# multiset of judge_type values must exactly match the rubric's
+		# judge_types, or this candidate is unjudged. Checking element types
+		# alone is not enough: a one-element panel is trivially unanimous, so
+		# a lone approving judge would promote a public lesson on its own,
+		# and two judges of the same type could silently stand in for a
+		# missing one. With a two-judge panel under either policy, losing (or
+		# duplicating) one verdict means the gate cannot be honestly decided.
+		local usable
+		usable=$(printf '%s' "$verdicts" | jq --argjson want "$expected_judge_types" '
+			if type != "array" or length == 0 then false
+			else (all(.[]; (.judge_type | type) == "string"
+			              and (.score | type) == "number"
+			              and (.passed | type) == "boolean")
+			      and ([.[].judge_type] | sort) == $want)
+			end' 2>/dev/null) || usable="false"
+		[[ "$usable" != "true" ]] && return 2
+
+		local aggregate gate
 		aggregate=$(librarian_lesson_aggregate "$verdicts") || return 2
 		gate=$(librarian_lesson_gate "$policy" "$verdicts" "$aggregate" "$threshold") || return 1
 
