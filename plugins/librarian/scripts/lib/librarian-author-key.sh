@@ -149,3 +149,51 @@ librarian_author_secret_ensure() {
 
 	printf '%s' "$secret"
 }
+
+# Derive this user's author_key for one visibility scope.
+#
+#   HMAC-SHA256(secret, "onlooker.author.v1:<visibility>")
+#   truncated to 16 bytes, rendered as 32 lowercase hex
+#
+# The domain tag stops this secret's output colliding with any other use of the
+# same secret. The version is what lets a future v2 add an org identity without
+# silently rederiving every existing key: v1 lessons keep validating under v1.
+#
+# No org id in v1 — none exists in this system, and inventing one for an
+# unwritten consumer is the mistake ecosystem-si6 avoided.
+#
+# Usage: librarian_author_key <private|org|public>
+librarian_author_key() {
+	local visibility="${1:-}"
+	case "$visibility" in
+		private|org|public) ;;
+		*)
+			printf 'author-key: unrecognized visibility: %s\n' "$visibility" >&2
+			return 1
+			;;
+	esac
+
+	command -v openssl >/dev/null 2>&1 || {
+		printf 'author-key: openssl is required to derive a key.\n' >&2
+		return 1
+	}
+
+	local secret
+	secret=$(librarian_author_secret_ensure) || return 1
+
+	local digest
+	digest=$(printf '%s' "onlooker.author.v1:${visibility}" \
+		| openssl dgst -sha256 -hmac "$secret" -r 2>/dev/null \
+		| cut -d' ' -f1) || {
+		printf 'author-key: HMAC failed.\n' >&2
+		return 1
+	}
+
+	# 64 hex chars in, 32 out. Truncating an HMAC is standard; 128 bits is
+	# ample for a collision-resistant pseudonymous identifier.
+	[[ "${#digest}" -eq 64 ]] || {
+		printf 'author-key: unexpected digest width %d; refusing.\n' "${#digest}" >&2
+		return 1
+	}
+	printf '%s' "${digest:0:32}"
+}

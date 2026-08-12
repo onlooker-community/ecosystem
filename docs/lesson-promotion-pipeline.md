@@ -201,9 +201,9 @@ what still needs independent judging.
 - **Where the human confirmation surfaces.** Librarian already has a proposal
   queue and a SessionStart surfacer for memory promotions. Reuse it, or keep
   lesson proposals separate so the two kinds of confirmation are not confused?
-- **`author_key` derivation.** The contract pins the format — 32 hex,
-  `HMAC(user_secret, scope)` — but nothing derives it yet. Where does
-  `user_secret` live, and how is it created on first use?
+- **`author_key` derivation.** Resolved: `user_secret` lives at
+  `$ONLOOKER_DIR/author/user_secret`, created on first use, never
+  project-keyed. See `docs/superpowers/specs/2026-08-12-author-key-design.md`.
 - **Whether the transform self-validates** against the published JSON Schema
   before writing to the pool, or leaves all validation to ingest. Validating
   locally catches a bad transform earlier; it also means fetching and caching

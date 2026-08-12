@@ -158,3 +158,112 @@ setup() {
 	run bash -c "grep -v '^[[:space:]]*#' \"${PLUGIN_ROOT}/scripts/lib/librarian-author-key.sh\" | grep -c 'RANDOM'"
 	[ "$output" = "0" ]
 }
+
+# A fixed secret, so the golden vector below is reproducible.
+_fixed_secret() {
+	local path
+	path=$(librarian_author_secret_path)
+	mkdir -p "$(dirname "$path")"
+	printf '%s\n' "0000000000000000000000000000000000000000000000000000000000000000" > "$path"
+	chmod 0600 "$path"
+}
+
+@test "GOLDEN VECTOR: a fixed secret and visibility produce a fixed key" {
+	# THE load-bearing test. Change the domain tag, the truncation width, the
+	# hash, or the argument order and this goes red. It is what makes "the
+	# derivation is permanent" enforceable rather than aspirational.
+	#
+	# Regenerate ONLY if the contract's width changes, and say so in the
+	# commit — a silent update here defeats the test's whole purpose.
+	_fixed_secret
+	run librarian_author_key "public"
+	[ "$status" -eq 0 ]
+	[ "$output" = "11ff8ab7134c834e788ab4a5130f7853" ]
+}
+
+@test "GOLDEN VECTOR: org and private are pinned too" {
+	# All three, so a change that happens to preserve one scope's output
+	# still goes red. Computed independently of the implementation.
+	_fixed_secret
+	[ "$(librarian_author_key "private")" = "e74674c25190cdf15099604441bb0d4b" ]
+	[ "$(librarian_author_key "org")" = "a8cf0203e178702412d37d5f796adbdc" ]
+}
+
+@test "the same inputs always produce the same key" {
+	# Retraction depends on this: a user must be able to re-derive the key
+	# that authored a lesson.
+	_fixed_secret
+	local a b
+	a=$(librarian_author_key "org")
+	b=$(librarian_author_key "org")
+	[ "$a" = "$b" ]
+}
+
+@test "the three visibilities produce three distinct keys" {
+	_fixed_secret
+	local p o u
+	p=$(librarian_author_key "private")
+	o=$(librarian_author_key "org")
+	u=$(librarian_author_key "public")
+	[ "$p" != "$o" ]
+	[ "$o" != "$u" ]
+	[ "$p" != "$u" ]
+}
+
+@test "different secrets produce different keys at the same visibility" {
+	# Catches a constant that ignores the secret entirely — which the
+	# scope-separation test above would NOT catch.
+	_fixed_secret
+	local first
+	first=$(librarian_author_key "public")
+
+	local path
+	path=$(librarian_author_secret_path)
+	printf '%s\n' "1111111111111111111111111111111111111111111111111111111111111111" > "$path"
+	local second
+	second=$(librarian_author_key "public")
+
+	[ "$first" != "$second" ]
+}
+
+@test "the key is 32 lowercase hex" {
+	_fixed_secret
+	run librarian_author_key "public"
+	[ "$status" -eq 0 ]
+	[ "${#output}" -eq 32 ]
+	printf '%s' "$output" | grep -Eq '^[0-9a-f]{32}$' || return 1
+}
+
+@test "the key is not the secret" {
+	# Catches a "derivation" that echoes its input.
+	_fixed_secret
+	local secret key
+	secret=$(librarian_author_secret_ensure)
+	key=$(librarian_author_key "public")
+	[ "$key" != "$secret" ]
+	[[ "$secret" != *"$key"* ]] || return 1
+}
+
+@test "an unknown visibility is refused, naming it" {
+	# --separate-stderr: plain `run` merges stdout and stderr into $output, so
+	# the required stderr reason would make $output non-empty even though
+	# stdout itself is clean. See the identical rationale on the Task 1 test
+	# "an empty secret is refused, not used" above.
+	_fixed_secret
+	run --separate-stderr librarian_author_key "everyone"
+	[ "$status" -ne 0 ]
+	[ "$output" = "" ]
+	[[ "$stderr" == *"everyone"* ]] || return 1
+}
+
+@test "a derivation on an empty secret refuses rather than sharing an identity" {
+	local path
+	path=$(librarian_author_secret_path)
+	mkdir -p "$(dirname "$path")"
+	: > "$path"
+
+	run --separate-stderr librarian_author_key "public"
+	[ "$status" -ne 0 ]
+	[ "$output" = "" ]
+	[[ "$stderr" == *"empty"* ]] || return 1
+}
