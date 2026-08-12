@@ -92,6 +92,25 @@ setup() {
 	[[ "$output" == *"too short"* ]] || return 1
 }
 
+@test "a 64-char non-hex secret is refused, naming the format problem" {
+	# Length alone is not content: 64 characters of the wrong shape (here,
+	# 64 'z's — not a hex digit) clears the length check but would still
+	# derive a garbage-but-deterministic identity from HMAC. This must be
+	# distinguishable from both "empty" and "too short" — a user acts on
+	# each differently.
+	local path secret
+	path=$(librarian_author_secret_path)
+	mkdir -p "$(dirname "$path")"
+	secret=$(printf 'z%.0s' $(seq 1 64))
+	printf '%s' "$secret" > "$path"
+	[ "${#secret}" -eq 64 ]
+
+	run librarian_author_secret_ensure
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"malformed"* ]] || return 1
+	[[ "$output" != *"too short"* ]] || return 1
+}
+
 @test "a world-readable secret is tightened and warned about" {
 	local path
 	path=$(librarian_author_secret_path)
@@ -103,6 +122,26 @@ setup() {
 	[ "$status" -eq 0 ]
 	[ "$(ls -l "$path" | cut -c1-10)" = "-rw-------" ]
 	[[ "$output" == *"permissions"* ]] || return 1
+}
+
+@test "an ACL-only grant is warned about even though the mode string looks fine" {
+	# `chmod +a` is macOS-specific; on Linux (CI) this scenario can't be
+	# constructed the same way, so this test only runs on Darwin.
+	[[ "$(uname)" == "Darwin" ]] || skip "chmod +a is macOS-only; CI runs on Linux"
+
+	local path
+	path=$(librarian_author_secret_path)
+	mkdir -p "$(dirname "$path")"
+	openssl rand -hex 32 > "$path"
+	chmod 0600 "$path"
+	chmod +a "$(id -un) allow read" "$path"
+	# Confirm the fixture actually carries the ACL before asserting on it —
+	# otherwise a chmod +a failure would make this test vacuously pass.
+	[ "$(ls -l "$path" | cut -c11)" = "+" ]
+
+	run librarian_author_secret_ensure
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"ACL"* ]] || return 1
 }
 
 @test "the lib never uses RANDOM for the secret" {
