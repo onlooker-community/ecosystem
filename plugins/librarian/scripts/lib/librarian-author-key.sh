@@ -43,10 +43,9 @@ librarian_author_secret_ensure() {
 			printf 'author-key: cannot create %s\n' "$dir" >&2
 			return 1
 		}
-		# 32 BYTES, printed as 64 hex characters. Do not substitute the
-		# shell's built-in pseudo-random-number variable used elsewhere in
-		# this repo for ULIDs — it carries only 15 bits of entropy, fine for
-		# a sortable id and disqualifying for a secret.
+		# 32 BYTES, printed as 64 hex characters. Not $RANDOM: that is a
+		# 15-bit PRNG, correct for archivist's sortable ULIDs and wrong for
+		# a secret.
 		local generated
 		generated=$(openssl rand -hex 32 2>/dev/null) || {
 			printf 'author-key: openssl rand failed.\n' >&2

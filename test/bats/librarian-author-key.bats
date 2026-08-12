@@ -75,6 +75,10 @@ setup() {
 	run --separate-stderr librarian_author_secret_ensure
 	[ "$status" -ne 0 ]
 	[ "$output" = "" ]
+	# Pins the empty-secret guard specifically: an empty secret also trips
+	# the short-secret check (0 < 64), so "refused" alone doesn't prove this
+	# guard exists — the message must name the case, not just reject it.
+	[[ "$stderr" == *"empty"* ]] || return 1
 }
 
 @test "a short secret is refused, naming the problem" {
@@ -104,6 +108,14 @@ setup() {
 @test "the lib never uses RANDOM for the secret" {
 	# archivist-ulid.sh uses $RANDOM correctly for a sortable id; it is the
 	# nearer example in this repo and the wrong one to copy for a secret.
-	run grep -c 'RANDOM' "${PLUGIN_ROOT}/scripts/lib/librarian-author-key.sh"
+	#
+	# Comment lines are excluded: this pins usage, not mention. The lib's own
+	# comment names $RANDOM directly to explain why it is disqualified, and a
+	# grep that can't tell code from commentary would force that comment to
+	# stop naming the thing it warns against.
+	#
+	# grep -c returns 0 with exit status 1 when there is no match — assert on
+	# $output, not $status.
+	run bash -c "grep -v '^[[:space:]]*#' \"${PLUGIN_ROOT}/scripts/lib/librarian-author-key.sh\" | grep -c 'RANDOM'"
 	[ "$output" = "0" ]
 }
