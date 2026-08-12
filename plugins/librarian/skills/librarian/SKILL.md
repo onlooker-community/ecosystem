@@ -1,6 +1,6 @@
 ---
 name: librarian
-description: Review the librarian's pending memory promotion proposals and lesson candidates queued from past sessions. Walk pending entries with the user one at a time, surfacing provenance and conflict state, and route each to accept (writes the typed memory file and updates MEMORY.md), reject (writes a body-hash tombstone so the same content won't re-propose), or defer (leave in the queue). Lesson candidates route separately to confirm (with a visibility), pass, or defer, with unconfirm to take back a confirmation before the jury sees it. Use when the user types `/librarian`, `/librarian review`, `/librarian triage`, `/librarian status`, `/librarian list`, `/librarian lessons`, or `/librarian lessons review`, or asks to review librarian proposals or lesson candidates.
+description: Review the librarian's pending memory promotion proposals and lesson candidates queued from past sessions. Walk pending entries with the user one at a time, surfacing provenance and conflict state, and route each to accept (writes the typed memory file and updates MEMORY.md), reject (writes a body-hash tombstone so the same content won't re-propose), or defer (leave in the queue). Lesson candidates route separately to confirm (with a visibility), pass, or defer, with unconfirm to take back a confirmation before the jury sees it. Use when the user types `/librarian`, `/librarian review`, `/librarian triage`, `/librarian status`, `/librarian list`, `/librarian lessons`, `/librarian lessons review`, or `/librarian lessons judge`, or asks to review librarian proposals or lesson candidates.
 ---
 
 # Librarian: Promotion Queue Review
@@ -19,6 +19,7 @@ Read the user's argument after `/librarian`:
 - a proposal id (starts with a ULID-shaped string) → jump straight to **show** for that id
 - `lessons`, `lessons review` → **walk the lesson queue** (see below)
 - `lessons list` / `lessons status` → print and stop (`lessons list --confirmed` lists confirmed lessons instead of pending ones)
+- `lessons judge` → **run the jury over confirmed candidates** (see below)
 
 If the user passes a free-form intent ("clear out the queue", "what's pending?"), map it to `review` or `list` as appropriate.
 
@@ -37,6 +38,8 @@ source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-emit.sh"
 source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-lesson-storage.sh"
 source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-lesson-validate.sh"
 source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-lesson-review.sh"
+source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-lesson-rubric.sh"
+source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-lesson-judge.sh"
 source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-cli.sh"
 
 # action is one of: list | show <id> | accept <id> | reject <id> [reason] | defer <id> | status
@@ -85,6 +88,45 @@ Finding the lesson is its own step, because `lessons list` shows only the pendin
 
 For `lessons list`, `lessons list --confirmed`, and `lessons status`, just call `librarian_cli lessons <action>` once and render the output.
 
+For `lessons judge`, run the jury over confirmed candidates:
+
+1. Call `librarian_cli lessons list --confirmed --json`. Each row carries `id`,
+   `visibility`, and the full `candidate`. If the array is empty, tell the user
+   there is nothing awaiting judgment and stop.
+2. **Report the batch before spending anything.** Say how many candidates are
+   confirmed and how many are `public`, and ask whether to proceed. This is the
+   most expensive step in the pipeline. If the user declines, stop — nothing is
+   written and every candidate stays `confirmed`.
+3. For each candidate, in order:
+   - **If `visibility` is `private`, dispatch no judges at all.** Call
+     `librarian_cli lessons judge <id> '[]'` and move on. Private lessons run no
+     jury; that is what makes cost scale with intent rather than artifact volume.
+   - Otherwise spawn **both** `tribunal-judge-standard` and
+     `tribunal-judge-adversarial` with the Task tool. Give each the candidate's
+     `claim`, `rationale`, `evidence.resolution`, and `applies_to`, plus the
+     rubric criteria for its visibility: for `org`, grounding / scope_accuracy /
+     generality; for `public`, those three plus **disclosure** — does the text
+     leak a credential, internal hostname, customer name, or proprietary detail?
+   - Each judge returns a JSON object with `score`, `passed`, `judge_type`, and
+     `feedback_summary`. Collect both into a JSON array **verbatim** — never
+     summarize or reconstruct a judge's verdict.
+   - Call `librarian_cli lessons judge <id> '<verdicts-json>'`. Record before
+     moving to the next candidate, so an interrupted run costs at most one
+     re-judgment.
+4. **If either judge fails to return parseable JSON, do not invent a verdict and
+   do not drop that judge.** The array must still have one entry per empaneled
+   judge: put that judge's raw output, as a JSON string, in its slot instead of
+   a parsed verdict object. Pass that array to the CLI; it will exit 2, leave
+   the candidate `confirmed`, and report that it could not be judged. Collect
+   those ids and list them at the end so the user knows to re-run. A broken judge
+   must never become a rejection — the artifact's watermark has already moved,
+   so a false rejection buries a good lesson permanently.
+5. Finish by reporting counts: approved, rejected, and could-not-judge.
+
+`scope_accuracy` is the criterion that matters most on a `version_independent`
+candidate. The schema guarantees such a lesson **carries** a justification; this
+criterion asks whether it is **true**.
+
 ## Safety rules
 
 - **Never accept a proposal on the user's behalf without explicit confirmation.** Accepting writes a file to the user's typed memory store and that memory will be loaded into every future session in this project. Treat each accept like editing a CLAUDE.md.
@@ -92,3 +134,4 @@ For `lessons list`, `lessons list --confirmed`, and `lessons status`, just call 
 - **Do not delete proposal files manually.** Reject (with a tombstone) is the cleanup path. Direct deletion would let the same body re-propose on the next scan.
 - **Conflict-state proposals deserve a careful read.** When `conflict_state` is `near_duplicate` or `contradicts_existing`, surface the conflict to the user before they decide. Often the right answer is reject (the existing memory is better) or accept-and-then-prune (you can mention that follow-up).
 - **Never confirm a lesson on the user's behalf without an explicit visibility.** Confirming commits a candidate toward leaving this machine — a decision separate from, and heavier than, accepting a memory proposal.
+- **Never dispatch judges without reporting the batch and getting the user's go-ahead first.** Judge dispatch is the most expensive step in the pipeline; report the confirmed and `public` counts and wait before spawning a single judge.

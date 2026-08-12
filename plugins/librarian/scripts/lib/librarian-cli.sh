@@ -21,7 +21,8 @@
 # Depends on (sourced by the caller): librarian-config.sh,
 # librarian-project-key.sh, librarian-storage.sh, librarian-emit.sh,
 # librarian-lesson-storage.sh, librarian-lesson-validate.sh,
-# librarian-lesson-review.sh
+# librarian-lesson-review.sh, librarian-lesson-judge.sh,
+# librarian-lesson-rubric.sh
 
 # ----------------------------------------------------------------------------
 # Project key + memory store path resolution
@@ -345,10 +346,11 @@ librarian_cli_status() {
 # pending list by definition never contains one. Without this view a human who
 # confirmed at the wrong visibility last session has no way back to the id.
 librarian_cli_lessons_list() {
-	local status="pending" cwd=""
+	local status="pending" cwd="" json=0
 	while [[ $# -gt 0 ]]; do
 		case "$1" in
 			--confirmed) status="confirmed"; shift ;;
+			--json) json=1; shift ;;
 			--*)
 				# Same contract as the sibling verbs: an unrecognized flag is
 				# refused rather than falling through to the cwd bucket, where
@@ -365,6 +367,14 @@ librarian_cli_lessons_list() {
 	key=$(_librarian_cli_project_key "$cwd")
 	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
 	rows=$(librarian_lesson_list_by_status "$key" "$status")
+
+	# Checked before the empty-set branch below: the skill parses this output,
+	# and an empty result must still emit `[]`, not the prose empty-state
+	# message that follows.
+	if [[ "$json" -eq 1 ]]; then
+		printf '%s' "$rows"
+		return 0
+	fi
 
 	if [[ "$(printf '%s' "$rows" | jq 'length')" -eq 0 ]]; then
 		printf 'No %s lessons.\n' "$status"
@@ -532,6 +542,55 @@ librarian_cli_lessons_unconfirm() {
 	fi
 }
 
+# Usage: librarian_cli_lessons_judge <lesson_id> <verdicts-json> [cwd]
+#
+# Verdicts come from the judge subagents the skill dispatched. Exit 2 means the
+# candidate could not be judged and stays confirmed — distinct from a rejection,
+# which is a real verdict and exits 0.
+librarian_cli_lessons_judge() {
+	local lesson_id="" verdicts="" cwd=""
+	local positional=0
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+			--*)
+				printf 'unknown option: %s\n' "$1" >&2
+				return 1
+				;;
+			*)
+				case "$positional" in
+					0) lesson_id="$1" ;;
+					1) verdicts="$1" ;;
+					*) cwd="$1" ;;
+				esac
+				positional=$((positional + 1))
+				shift
+				;;
+		esac
+	done
+
+	if [[ -z "$lesson_id" || -z "$verdicts" ]]; then
+		printf 'usage: librarian_cli lessons judge <lesson_id> <verdicts-json> [cwd]\n'
+		return 1
+	fi
+
+	local key
+	key=$(_librarian_cli_project_key "$cwd")
+	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
+
+	librarian_lesson_judge "$key" "$lesson_id" "$verdicts"
+	local rc=$?
+	case "$rc" in
+		0)
+			printf 'Lesson %s is now %s.\n' "$lesson_id" \
+				"$(jq -r '.status' "$(librarian_lessons_dir "$key")/proposals/${lesson_id}.json")"
+			;;
+		2)
+			printf 'Lesson %s could not be judged; it stays confirmed. Re-run to retry.\n' "$lesson_id"
+			;;
+	esac
+	return $rc
+}
+
 librarian_cli_lessons_defer() {
 	local lesson_id="${1:-}"
 	[[ -z "$lesson_id" ]] && { printf 'usage: librarian_cli lessons defer <lesson_id>\n'; return 1; }
@@ -556,6 +615,7 @@ librarian_cli_lessons() {
 		confirm) librarian_cli_lessons_confirm "$@" ;;
 		pass) librarian_cli_lessons_pass "$@" ;;
 		unconfirm) librarian_cli_lessons_unconfirm "$@" ;;
+		judge) librarian_cli_lessons_judge "$@" ;;
 		defer) librarian_cli_lessons_defer "$@" ;;
 		status) librarian_cli_lessons_status "$@" ;;
 		*) printf 'unknown lessons action: %s\n' "$verb"; return 2 ;;

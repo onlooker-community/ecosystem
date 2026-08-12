@@ -88,6 +88,12 @@ _review_setup() {
 	source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-storage.sh"
 	# shellcheck disable=SC1091
 	source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-review.sh"
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-config.sh"
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-rubric.sh"
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-judge.sh"
 
 	PROJECT_REPO="${BATS_TEST_TMPDIR}/repo"
 	mkdir -p "$PROJECT_REPO"
@@ -99,6 +105,7 @@ _review_setup() {
 	[ -n "$PROJECT_KEY" ]
 	LESSONS_DIR="${ONLOOKER_DIR}/librarian/${PROJECT_KEY}/lessons"
 	librarian_lesson_storage_init "$PROJECT_KEY"
+	librarian_config_load "$PROJECT_REPO"
 }
 
 # Seeds one pending proposal and prints its id.
@@ -796,4 +803,30 @@ _cli_setup() {
 	[[ "$output" == *"unknown option"* && "$output" == *"--force"* ]] || return 1
 	run jq -e '.status == "confirmed"' "${LESSONS_DIR}/proposals/${id}.json"
 	[ "$status" -eq 0 ]
+}
+
+@test "unconfirm refuses an approved lesson, naming the status" {
+	_review_setup
+	local id
+	id=$(_seed_pending)
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "org"
+	librarian_lesson_judge "$PROJECT_KEY" "$id" \
+		'[{"judge_type":"standard","score":0.9,"passed":true},{"judge_type":"adversarial","score":0.8,"passed":true}]'
+
+	run librarian_lesson_unconfirm "$PROJECT_KEY" "$id"
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"unrecognized status"* && "$output" == *"approved"* ]] || return 1
+}
+
+@test "unconfirm refuses a rejected lesson, naming the status" {
+	_review_setup
+	local id
+	id=$(_seed_pending)
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "public"
+	librarian_lesson_judge "$PROJECT_KEY" "$id" \
+		'[{"judge_type":"standard","score":0.95,"passed":true},{"judge_type":"adversarial","score":0.75,"passed":false}]'
+
+	run librarian_lesson_unconfirm "$PROJECT_KEY" "$id"
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"unrecognized status"* && "$output" == *"rejected"* ]] || return 1
 }
