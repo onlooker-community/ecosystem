@@ -96,10 +96,12 @@ setup() {
 }
 
 @test "disclosure carries the highest floor of any criterion" {
-	local floor
-	floor=$(librarian_lesson_rubric_get "lesson-promotion-public" \
-		| jq '.criteria[] | select(.name == "disclosure") | .min_pass')
-	[ "$floor" = "0.9" ]
+	local r floor others_max
+	r=$(librarian_lesson_rubric_get "lesson-promotion-public")
+	floor=$(printf '%s' "$r" | jq '.criteria[] | select(.name == "disclosure") | .min_pass')
+	others_max=$(printf '%s' "$r" | jq '[.criteria[] | select(.name != "disclosure") | .min_pass] | max')
+	[ "$floor" = "0.9" ] || return 1
+	[ "$(jq -n --argjson a "$floor" --argjson b "$others_max" '$a > $b')" = "true" ] || return 1
 }
 
 @test "an unknown rubric id is refused and echoes nothing" {
