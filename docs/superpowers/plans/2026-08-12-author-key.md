@@ -8,21 +8,16 @@
 
 **Tech Stack:** bash (macOS bash 3.2 compatible), `openssl` (LibreSSL 3.3.6 on macOS, OpenSSL 3.x on Linux CI), bats.
 
-## BLOCKING PRE-FLIGHT — resolve before Task 2
+## Pre-flight — RESOLVED
 
-The spec records the `author_key` **width as an assumption**: 32 lowercase hex
-characters, i.e. HMAC-SHA256 truncated to its first 16 bytes. The contract says
-"32 lowercase hex"; HMAC-SHA256 natively yields 64 hex characters.
+The `author_key` width was recorded as an assumption. **It is confirmed.**
+`ZAuthorKey` in `onlooker/packages/lesson-contract/src/primitives.ts:35-41`
+is `z.string().regex(/^[0-9a-f]{32}$/)` — 32 lowercase hex characters. The
+derivation truncates HMAC-SHA256 to its first 16 bytes, and the golden vectors
+below are correct as written.
 
-`packages/lesson-contract` does not exist in this repository and
-`@onlooker-community/schema` carries no `author_key`. **Confirm the width
-against the lesson contract in the onlooker repo before implementing Task 2.**
-If it turns out to be 64, change the truncation and the golden vector — nothing
-else in this plan moves.
-
-Getting it wrong produces keys that are well-formed and rejected at ingest, and
-the rejection surfaces only when a sync service that does not exist yet starts
-refusing them.
+The contract does not pin the HMAC's `scope` input, so the
+`onlooker.author.v1:` domain tag is ours to choose and is compatible.
 
 ## Global Constraints
 

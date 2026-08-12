@@ -125,20 +125,23 @@ consumer, which is the mistake `ecosystem-si6` avoided by refusing to add a
 
 ### Truncation
 
-**Assumption, gated on verification.** The contract says "32 lowercase hex,"
-read literally as 32 *characters* — 128 bits. HMAC-SHA256 natively produces 32
-*bytes*, which is 64 hex characters.
+**Verified against the contract.** `ZAuthorKey` in
+`onlooker/packages/lesson-contract/src/primitives.ts:35-41` is
+`z.string().regex(/^[0-9a-f]{32}$/)` — 32 characters, confirming the literal
+reading. Its own comment reasons the same way we did: "128 bits makes that
+negligible; truncating further buys nothing."
 
-128 bits is ample for a collision-resistant pseudonymous identifier, and
-truncating an HMAC is standard practice. But only one of these validates at
-ingest, and the enforcement boundary is the sync endpoint in `apps/api`, which
-lives in the **onlooker** repo — not here. `packages/lesson-contract` does not
-exist in this repository, and `@onlooker-community/schema` carries no
-`author_key` at all.
+HMAC-SHA256 natively produces 64 hex characters, so the derivation truncates
+to the first 16 bytes.
 
-**Confirm the width against the lesson contract before writing code.** Getting
-it wrong means every key we mint fails at ingest, and we would discover that
-only when a sync service that does not exist yet starts rejecting them.
+The contract documents the field as `HMAC(user_secret, scope)` but **does not
+pin what `scope` is**, so the producing side owns that choice and the
+`onlooker.author.v1:` domain tag below is compatible with it.
+
+That comment also states what `author_key` is *for*, which sharpens why
+stability matters: it "is what org revocation and public blocking act on." A
+regenerated secret does not merely orphan a user's lessons — it walks them out
+from under a block.
 
 ### The empty-secret trap
 
