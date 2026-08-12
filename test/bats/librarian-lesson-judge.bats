@@ -305,6 +305,43 @@ _verdicts_split() {
 	[ "$(_status_of bad03)" = "confirmed" ]
 }
 
+# The three malformed-panel tests above are all double-covered downstream:
+# a non-numeric score fails jq arithmetic inside librarian_lesson_aggregate,
+# unparseable JSON fails its `jq 'length'`, and an empty array is refused by
+# librarian_lesson_aggregate's own zero-length check. Every one of those
+# still returns 2 even with the `usable` guard deleted, so none of them
+# actually pins the guard itself. A wrong-typed or absent `passed` field is
+# the one shape that reaches neither check: the scores parse fine, so the
+# aggregate succeeds, and jq's `select(.passed == true)` on a non-boolean or
+# missing `passed` just quietly evaluates false instead of erroring. Without
+# the guard, that panel gets judged as though every judge blocked — written
+# `rejected` rather than left `confirmed` for a retry, which is exactly the
+# "malformed panel permanently buries a good lesson" failure this stage
+# exists to prevent.
+@test "a wrong-typed passed field is unjudged, not silently scored as a block" {
+	_seed_confirmed "bad04" "org"
+	local before
+	before=$(cat "$(librarian_lessons_dir "$PROJECT_KEY")/proposals/bad04.json")
+
+	run librarian_lesson_judge "$PROJECT_KEY" "bad04" \
+		'[{"judge_type":"standard","score":0.9,"passed":"true"},{"judge_type":"adversarial","score":0.85,"passed":"true"}]'
+	[ "$status" -eq 2 ]
+	[ "$(_status_of bad04)" = "confirmed" ]
+	[ "$(cat "$(librarian_lessons_dir "$PROJECT_KEY")/proposals/bad04.json")" = "$before" ]
+}
+
+@test "a missing passed field is unjudged, not silently scored as a block" {
+	_seed_confirmed "bad05" "org"
+	local before
+	before=$(cat "$(librarian_lessons_dir "$PROJECT_KEY")/proposals/bad05.json")
+
+	run librarian_lesson_judge "$PROJECT_KEY" "bad05" \
+		'[{"judge_type":"standard","score":0.9},{"judge_type":"adversarial","score":0.85}]'
+	[ "$status" -eq 2 ]
+	[ "$(_status_of bad05)" = "confirmed" ]
+	[ "$(cat "$(librarian_lessons_dir "$PROJECT_KEY")/proposals/bad05.json")" = "$before" ]
+}
+
 @test "judging proceeds only from confirmed" {
 	_seed_confirmed "st01" "org"
 	local path="$(librarian_lessons_dir "$PROJECT_KEY")/proposals/st01.json"
