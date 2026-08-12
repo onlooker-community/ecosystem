@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.37.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.36.0...ecosystem-v0.37.0) (2026-08-12)
+
+
+### Features
+
+* **librarian:** judge lessons before they leave the machine :balance_scale: ([#142](https://github.com/onlooker-community/ecosystem/issues/142)) ([a877527](https://github.com/onlooker-community/ecosystem/commit/a87752714961613b6b2bb768239c666f78d950f8))
+
 ## [0.36.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.35.0...ecosystem-v0.36.0) (2026-08-11)
 
 
