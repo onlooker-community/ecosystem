@@ -20,6 +20,33 @@
       "model": "claude-haiku-4-5-20251001",
       "timeout_seconds": 20
     },
+    "lesson_judging": {
+      "rubrics": [
+        {
+          "id": "lesson-promotion",
+          "criteria": [
+            { "name": "grounding", "weight": 0.45, "min_pass": 0.7 },
+            { "name": "scope_accuracy", "weight": 0.35, "min_pass": 0.7 },
+            { "name": "generality", "weight": 0.2, "min_pass": 0.6 }
+          ],
+          "score_threshold": 0.75,
+          "judge_types": ["standard", "adversarial"],
+          "gate_policy": "majority"
+        },
+        {
+          "id": "lesson-promotion-public",
+          "criteria": [
+            { "name": "grounding", "weight": 0.32, "min_pass": 0.7 },
+            { "name": "scope_accuracy", "weight": 0.24, "min_pass": 0.7 },
+            { "name": "generality", "weight": 0.14, "min_pass": 0.6 },
+            { "name": "disclosure", "weight": 0.3, "min_pass": 0.9 }
+          ],
+          "score_threshold": 0.75,
+          "judge_types": ["standard", "adversarial"],
+          "gate_policy": "unanimous"
+        }
+      ]
+    },
     "durability_filter": {
       "marker_phrases": [
         "always",
