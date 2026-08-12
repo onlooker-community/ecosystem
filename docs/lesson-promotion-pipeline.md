@@ -175,9 +175,9 @@ From [CLAUDE.md](../CLAUDE.md) — these differ from the onlooker repo:
 - **Event names** follow `<plugin>.<noun>.<verb>`. Likely additions here:
   `librarian.lesson.proposed`, `librarian.lesson.approved`,
   `librarian.lesson.declined`, `tribunal.lesson.judged`.
-- **ULIDs, not UUIDs**, and each plugin ships its own helper. Librarian will need
-  one for lesson ids if it does not have one — copy
-  `plugins/tribunal/scripts/lib/tribunal-ulid.sh` and rename the prefix.
+- **ULIDs, not UUIDs**, and each plugin ships its own helper. Librarian already
+  has one — `plugins/librarian/scripts/lib/librarian-ulid.sh`, exposing
+  `librarian_ulid`. Use it for lesson ids rather than adding a second generator.
 - **Config defaults** live in the plugin's `config.json`; user overrides go under
   the plugin's namespace key in settings. See ADR-004.
 
