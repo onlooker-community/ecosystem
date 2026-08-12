@@ -33,14 +33,23 @@ its own aggregate and gate — roughly twenty lines — rather than calling
 ## Rationale
 
 An agent definition is declarative: a markdown file with frontmatter and a
-prompt. It has no runtime surface, cannot fail at call time in a way that
-propagates, and is resolved by the harness rather than by librarian. Depending
-on one is closer to depending on a published schema than to calling another
-plugin's code.
+prompt. It has no runtime surface and cannot fail at call time in a way that
+propagates — the harness resolves it, librarian never invokes tribunal's code
+directly. That is a real difference from sourcing tribunal's bash, where a
+signature change to `tribunal_gate_decide` breaks librarian mid-call and
+neither plugin's tests would catch it.
 
-Sourcing tribunal's bash would be the real coupling: a change to
-`tribunal_gate_decide`'s signature would break librarian silently, and
-tribunal's own tests would not catch it.
+It is a weaker guarantee than depending on a published schema, though.
+`@onlooker-community/schema` is registered and drift-checked in CI (see
+[ADR-005](../../../../docs/adr/005-runtime-emitter-fails-open.md)): a breaking
+change to it fails a build before it ships. A judge agent's prompt carries no
+such contract — nothing in either plugin's test suite stops a maintainer from
+narrowing or repurposing what `tribunal-judge-standard` returns without
+touching the agent's name. Calling that "closer to a published schema than to
+calling another plugin's code" overstated the guarantee; only the *loud*
+failure modes — the judge being renamed or removed — actually behave like a
+schema break. See Consequences for what happens when the drift is quiet
+instead.
 
 Keeping the lifecycle in librarian also keeps `ecosystem-4z8.4`'s pool and
 ledger in one plugin instead of splitting them across two.
@@ -51,6 +60,22 @@ A judge agent renamed or removed in tribunal breaks lesson judging at dispatch
 time. That is a visible, loud failure at the moment a human invokes the verb —
 not a silent one — and the "could not judge" path already handles it: the
 candidate stays `confirmed` and nothing is written.
+
+A judge agent silently edited in place is a different, unmitigated risk. If a
+maintainer changes what a judge returns without renaming it — dropping
+`judge_type`, redefining what `feedback_summary` means, rescaling `score` —
+nothing in this pipeline notices at edit time, because the agent definition
+carries no drift check the way `@onlooker-community/schema` does. The
+`usable` panel check in `librarian-lesson-judge.sh` only catches the subset of
+that risk that changes the verdict's *shape*: it requires `judge_type` to be a
+string, `score` a number, and `passed` a boolean, and returns UNJUDGED rather
+than a false rejection if any is missing or mistyped. A *semantic* change —
+same shape, different meaning, such as a score scale moving from 0–1 to
+0–100 — passes that check and is judged normally, with no signal to librarian
+or its maintainers that the verdict no longer means what the aggregate and
+gate assume it means. This ADR accepts that risk rather than closing it;
+closing it would require either a real schema contract for judge output or
+librarian validating semantics it does not own.
 
 Librarian's gate logic can drift from tribunal's. Accepted deliberately: they
 answer different questions. Tribunal gates an Actor's output with retry;

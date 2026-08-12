@@ -114,7 +114,9 @@ For `lessons judge`, run the jury over confirmed candidates:
      moving to the next candidate, so an interrupted run costs at most one
      re-judgment.
 4. **If either judge fails to return parseable JSON, do not invent a verdict and
-   do not drop that judge.** Pass what you have to the CLI; it will exit 2, leave
+   do not drop that judge.** The array must still have one entry per empaneled
+   judge: put that judge's raw output, as a JSON string, in its slot instead of
+   a parsed verdict object. Pass that array to the CLI; it will exit 2, leave
    the candidate `confirmed`, and report that it could not be judged. Collect
    those ids and list them at the end so the user knows to re-run. A broken judge
    must never become a rejection — the artifact's watermark has already moved,
@@ -132,3 +134,4 @@ criterion asks whether it is **true**.
 - **Do not delete proposal files manually.** Reject (with a tombstone) is the cleanup path. Direct deletion would let the same body re-propose on the next scan.
 - **Conflict-state proposals deserve a careful read.** When `conflict_state` is `near_duplicate` or `contradicts_existing`, surface the conflict to the user before they decide. Often the right answer is reject (the existing memory is better) or accept-and-then-prune (you can mention that follow-up).
 - **Never confirm a lesson on the user's behalf without an explicit visibility.** Confirming commits a candidate toward leaving this machine — a decision separate from, and heavier than, accepting a memory proposal.
+- **Never dispatch judges without reporting the batch and getting the user's go-ahead first.** Judge dispatch is the most expensive step in the pipeline; report the confirmed and `public` counts and wait before spawning a single judge.
