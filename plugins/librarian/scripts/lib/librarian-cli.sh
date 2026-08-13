@@ -22,7 +22,8 @@
 # librarian-project-key.sh, librarian-storage.sh, librarian-emit.sh,
 # librarian-lesson-storage.sh, librarian-lesson-validate.sh,
 # librarian-lesson-review.sh, librarian-lesson-judge.sh,
-# librarian-lesson-rubric.sh
+# librarian-lesson-rubric.sh, librarian-author-key.sh,
+# librarian-lesson-promote.sh
 
 # ----------------------------------------------------------------------------
 # Project key + memory store path resolution
@@ -583,12 +584,52 @@ librarian_cli_lessons_judge() {
 		0)
 			printf 'Lesson %s is now %s.\n' "$lesson_id" \
 				"$(jq -r '.status' "$(librarian_lessons_dir "$key")/proposals/${lesson_id}.json")"
+			# Promotion failing does not undo a correct verdict: report it and
+			# leave the lesson promotable by a standalone `lessons promote`.
+			librarian_lesson_promote "$key" "$lesson_id" \
+				|| printf 'Lesson %s was judged but not promoted; run `lessons promote %s` to retry.\n' \
+					"$lesson_id" "$lesson_id"
 			;;
 		2)
 			printf 'Lesson %s could not be judged; it stays confirmed. Re-run to retry.\n' "$lesson_id"
 			;;
 	esac
 	return $rc
+}
+
+# Usage: librarian_cli_lessons_promote <lesson_id> [cwd]
+#
+# Runnable standalone on purpose: promotion fails for reasons judging does not
+# — a malformed author secret, absent node, a full disk — and a standalone run
+# is how a correctly-judged, not-yet-promoted lesson gets reconciled.
+librarian_cli_lessons_promote() {
+	local lesson_id="" cwd=""
+	local positional=0
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+			--*)
+				printf 'unknown option: %s\n' "$1" >&2
+				return 1
+				;;
+			*)
+				case "$positional" in
+					0) lesson_id="$1" ;;
+					*) cwd="$1" ;;
+				esac
+				positional=$((positional + 1))
+				shift
+				;;
+		esac
+	done
+
+	[[ -z "$lesson_id" ]] && { printf 'usage: librarian_cli lessons promote <lesson_id> [cwd]\n'; return 1; }
+
+	local key
+	key=$(_librarian_cli_project_key "$cwd")
+	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
+
+	librarian_lesson_promote "$key" "$lesson_id" || return 1
+	printf 'Lesson %s promoted.\n' "$lesson_id"
 }
 
 librarian_cli_lessons_defer() {
@@ -616,6 +657,7 @@ librarian_cli_lessons() {
 		pass) librarian_cli_lessons_pass "$@" ;;
 		unconfirm) librarian_cli_lessons_unconfirm "$@" ;;
 		judge) librarian_cli_lessons_judge "$@" ;;
+		promote) librarian_cli_lessons_promote "$@" ;;
 		defer) librarian_cli_lessons_defer "$@" ;;
 		status) librarian_cli_lessons_status "$@" ;;
 		*) printf 'unknown lessons action: %s\n' "$verb"; return 2 ;;

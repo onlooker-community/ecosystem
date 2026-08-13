@@ -61,29 +61,51 @@ librarian_lesson_write_proposal() {
 # bury a good artifact permanently, because the watermark has already moved
 # past it and declined entries are never re-read.
 #
-# Usage: librarian_lesson_append_declined <key> <artifact_id> <reason> [detail]
+# `verdict` is emitted with --argjson so it lands as a nested object, not a
+# serialized string: consumers read .verdict.judges[].score directly. Rows
+# written by the transform have no verdict and simply lack the key — a format
+# failure has no jury.
+#
+# Usage: librarian_lesson_append_declined <key> <artifact_id> <reason> [detail] [verdict_json]
 librarian_lesson_append_declined() {
 	local key="$1"
 	local artifact_id="$2"
 	local reason="$3"
 	local detail="${4:-}"
+	local verdict="${5:-}"
 	[[ -z "$key" || -z "$artifact_id" || -z "$reason" ]] && return 1
 
 	librarian_lesson_storage_init "$key" || return 1
 
 	local now line
 	now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-	line=$(jq -cn \
-		--arg artifact_id "$artifact_id" \
-		--arg reason "$reason" \
-		--arg detail "$detail" \
-		--arg at "$now" \
-		'{
-			artifact_id: $artifact_id,
-			reason: $reason,
-			detail: (if $detail == "" then null else $detail end),
-			declined_at: $at
-		}') || return 1
+	if [[ -n "$verdict" ]]; then
+		line=$(jq -cn \
+			--arg artifact_id "$artifact_id" \
+			--arg reason "$reason" \
+			--arg detail "$detail" \
+			--arg at "$now" \
+			--argjson verdict "$verdict" \
+			'{
+				artifact_id: $artifact_id,
+				reason: $reason,
+				detail: (if $detail == "" then null else $detail end),
+				declined_at: $at,
+				verdict: $verdict
+			}') || return 1
+	else
+		line=$(jq -cn \
+			--arg artifact_id "$artifact_id" \
+			--arg reason "$reason" \
+			--arg detail "$detail" \
+			--arg at "$now" \
+			'{
+				artifact_id: $artifact_id,
+				reason: $reason,
+				detail: (if $detail == "" then null else $detail end),
+				declined_at: $at
+			}') || return 1
+	fi
 
 	printf '%s\n' "$line" >> "$(librarian_lessons_dir "$key")/declined.jsonl"
 }
@@ -123,6 +145,17 @@ librarian_lesson_seen() {
 		return 0
 	fi
 
+	# The approved/*.json half of this loop cannot actually match a promoted
+	# pool entry: ZLesson is a strict object with no `artifact_id` field (see
+	# librarian-lesson-promote.sh's key-set comment), so `.artifact_id == $a`
+	# is always false there. Dedup for an approved-and-promoted artifact
+	# works today only because proposals/*.json is never pruned — the
+	# proposals/ half of the loop is what's actually carrying it. This is
+	# NOT proof the pool is covered; it is proposals/ growing without bound
+	# standing in for coverage the pool entry cannot provide. See ecosystem-d0m
+	# for the options (an artifact_id -> lesson id index, making
+	# "never prune proposals" explicit, or a per-entry sidecar) — do not
+	# "fix" this loop without picking one of those first.
 	local f
 	for f in "$dir"/proposals/*.json "$dir"/approved/*.json; do
 		[[ -f "$f" ]] || continue
