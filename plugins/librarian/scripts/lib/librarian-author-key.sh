@@ -258,7 +258,20 @@ process.stdout.write(
 	# contract — this is what actually provides fail-closed behavior if the
 	# subprocess misbehaves, since the command substitution above has no
 	# `pipefail` to catch a partial write on its own.
-	if ! printf '%s' "$digest" | grep -Eq '^[0-9a-f]{64}$'; then
+	#
+	# `[[ =~ ]]`, not `grep`: grep is LINE-oriented, so `^`/`$` anchor to
+	# each line, not the whole string. $digest is raw subprocess stdout and
+	# can carry an embedded newline (a preload named by NODE_OPTIONS writing
+	# a line to stdout before node's own output is a routine, non-adversarial
+	# way to hit this) — `grep -Eq '^[0-9a-f]{64}\$'` matches as soon as ANY
+	# line is 64 hex chars, garbage lines and all. `[[ =~ ]]` anchors to the
+	# entire string, so a leading or trailing line makes it refuse, matching
+	# what the old whole-string `${#digest} -eq 64` check refused too. Keep
+	# the pattern in a variable and leave it unquoted in the test — quoting
+	# it would make bash match it literally instead of as a regex, and that
+	# is the bash-3.2-portable way to write this (macOS ships 3.2).
+	local hex_re='^[0-9a-f]{64}$'
+	if [[ ! "$digest" =~ $hex_re ]]; then
 		printf 'author-key: HMAC returned a malformed digest (expected 64 lowercase hex characters).\n' >&2
 		return 1
 	fi
