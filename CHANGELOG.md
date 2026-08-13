@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.38.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.37.0...ecosystem-v0.38.0) (2026-08-13)
+
+
+### Features
+
+* **librarian:** derive an author identity that cannot be linked across scopes :closed_lock_with_key: ([#144](https://github.com/onlooker-community/ecosystem/issues/144)) ([29b3042](https://github.com/onlooker-community/ecosystem/commit/29b3042ef6cd6e7582206cfea6fcf37ebe661021))
+
 ## [0.37.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.36.0...ecosystem-v0.37.0) (2026-08-12)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.10.0...librarian-v0.11.0) (2026-08-13)
+
+
+### Features
+
+* **librarian:** derive an author identity that cannot be linked across scopes :closed_lock_with_key: ([#144](https://github.com/onlooker-community/ecosystem/issues/144)) ([29b3042](https://github.com/onlooker-community/ecosystem/commit/29b3042ef6cd6e7582206cfea6fcf37ebe661021))
+
 ## [0.10.0](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.9.0...librarian-v0.10.0) (2026-08-12)
 
 
