@@ -215,33 +215,26 @@ _split() {
 	[ "$(jq -r '.verdict.judges | length' "$(_dir)/proposals/keep01.json")" = "2" ]
 }
 
-@test "librarian_lesson_seen reports the artifact handled after either path" {
-	# Rejected path: the proposal is deleted after promoting, on purpose.
-	# librarian_lesson_seen scans proposals/ unconditionally of status, so
-	# leaving it in place would let this test pass even if promote wrote
-	# nothing at all. The property under test is that the TERMINAL RECORD —
-	# the declined row — is what marks the artifact handled once its
-	# proposal ages out, not the (now-gone) proposal file.
+@test "a promoted rejection is still seen after its proposal is deleted" {
+	# The proposal is deleted after promoting, on purpose. librarian_lesson_seen
+	# scans proposals/ unconditionally of status, so leaving it in place would
+	# let this test pass even if promote wrote nothing at all. The property
+	# under test is that the TERMINAL RECORD — the declined row — is what
+	# marks the artifact handled once its proposal ages out, not the
+	# (now-gone) proposal file.
+	#
+	# There is deliberately NO approved-path equivalent of this test. A
+	# ZLesson pool entry carries no artifact_id (strict key set — see the
+	# promote lib's key-set comment), so librarian_lesson_seen's approved/
+	# scan can never match one; "promote, delete the proposal, assert seen"
+	# would pass or fail based on proposal presence alone, never on anything
+	# promote itself wrote — the same false-coverage shape this test replaced.
+	# ecosystem-d0m tracks the gap. Don't add that assertion back without
+	# closing it first: it will pass while proving nothing.
 	_seed_judged "seen02" "public" "rejected" "$(_split)"
 	librarian_lesson_promote "$PROJECT_KEY" "seen02"
 	rm -f "$(_dir)/proposals/seen02.json"
 	run librarian_lesson_seen "$PROJECT_KEY" "art-seen02"
-	[ "$status" -eq 0 ]
-
-	# Approved path: intentionally NOT proven after proposal deletion here.
-	# ZLesson's strict key set (see the promote lib's key-set comment) has no
-	# artifact_id, so librarian_lesson_seen's `.artifact_id ==` scan over
-	# approved/*.json can never match a pool entry — an approved+promoted
-	# lesson is only findable by artifact_id while its proposal survives.
-	# Nothing in this codebase deletes proposals today, so the gap is latent
-	# rather than live, but asserting `[ "$status" -eq 0 ]` after deleting
-	# the proposal here would currently fail, and asserting non-zero would
-	# enshrine the gap as intended behavior. Flagged to the team lead in fix
-	# round 1 rather than papered over either way; this asserts only what
-	# the proposal-present case actually proves.
-	_seed_judged "seen01" "org" "approved" "$(_two_passing)"
-	librarian_lesson_promote "$PROJECT_KEY" "seen01"
-	run librarian_lesson_seen "$PROJECT_KEY" "art-seen01"
 	[ "$status" -eq 0 ]
 }
 
