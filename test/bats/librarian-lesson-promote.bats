@@ -253,17 +253,54 @@ _split() {
 	_seed_judged "decl01" "public" "rejected" "$(_split)"
 
 	chmod 0500 "$(_dir)/proposals"
-	run librarian_lesson_promote "$PROJECT_KEY" "decl01"
+	run --separate-stderr librarian_lesson_promote "$PROJECT_KEY" "decl01"
 	chmod 0700 "$(_dir)/proposals"
 	[ "$status" -ne 0 ]
 	[ "$(jq -r 'has("promoted_at")' "$(_dir)/proposals/decl01.json")" = "false" ]
 	[ "$(grep -c 'art-decl01' "$(_dir)/declined.jsonl")" -eq 1 ]
+	# This is the one failure path that writes something (the declined row
+	# above) before failing — the stderr message must say so, not return
+	# silently, or this state is indistinguishable from "nothing written."
+	[[ "$stderr" == *"terminal record written but promoted_at could not be stamped"* ]] || return 1
 
 	# The standalone re-run — the exact path the ordering guarantee exists to
 	# make safe.
 	run librarian_lesson_promote "$PROJECT_KEY" "decl01"
 	[ "$status" -eq 0 ]
 	[ "$(grep -c 'art-decl01' "$(_dir)/declined.jsonl")" -eq 1 ]
+}
+
+@test "the pool entry guard leaves an existing entry untouched when the proposal isn't yet stamped" {
+	# Mirrors test 14's shape for the approved path. The ordering guarantee
+	# means the pool write can succeed and the stamp fail afterward, so a
+	# standalone re-run must find that pool entry already present and skip
+	# rewriting it. Nothing before this pins that: "promoting twice..." above
+	# never reaches the pool_path guard at all — the earlier already-promoted
+	# check (promoted_at present on the proposal) short-circuits first, since
+	# a plain double-promote always stamps successfully on the first call.
+	_seed_judged "pool01" "org" "approved" "$(_two_passing)"
+
+	mkdir -p "$(_dir)/approved"
+	printf '{"sentinel":"pre-existing pool entry"}' > "$(_dir)/approved/pool01.json"
+
+	run librarian_lesson_promote "$PROJECT_KEY" "pool01"
+	[ "$status" -eq 0 ]
+	[ "$(jq -r '.sentinel // empty' "$(_dir)/approved/pool01.json")" = "pre-existing pool entry" ]
+}
+
+@test "promotion self-heals a missing approved/ directory" {
+	# Empty directories do not survive git, or tar/rsync without -d, so
+	# approved/ can be legitimately absent even though proposals/ —
+	# non-empty, holding this very lesson — is right there. Unlike
+	# librarian_lesson_append_declined, promote did not call
+	# librarian_lesson_storage_init; without it this lesson stayed stuck at
+	# "cannot write the pool entry" forever.
+	_seed_judged "heal01" "org" "approved" "$(_two_passing)"
+	rm -rf "$(_dir)/approved"
+
+	run librarian_lesson_promote "$PROJECT_KEY" "heal01"
+	[ "$status" -eq 0 ]
+	[ -f "$(_dir)/approved/heal01.json" ]
 }
 
 @test "a missing lesson is refused" {

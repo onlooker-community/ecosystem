@@ -43,8 +43,12 @@ _librarian_lesson_write_atomic() {
 # Promote one judged proposal to its terminal record.
 #
 # Returns 0 on success, including the already-promoted no-op. Returns 1 on
-# refusal or failure, having written NOTHING — the proposal stays `approved`
-# without `promoted_at`, which is the state a standalone re-run resolves.
+# refusal or failure. Every failure before the terminal record lands writes
+# NOTHING. The one exception is a stamp failure AFTER the terminal record
+# already landed — the proposal stays `approved` without `promoted_at`, and
+# the stderr message says explicitly that the record was written so this
+# state is never mistaken for "nothing written." Either way, standalone
+# `lessons promote` is what reconciles it.
 #
 # Ordering is load-bearing: the terminal record lands BEFORE the stamp. A
 # stamp followed by a failed write would leave the lesson marked done, present
@@ -55,6 +59,13 @@ librarian_lesson_promote() {
 	local key="$1"
 	local lesson_id="$2"
 	[[ -z "$key" || -z "$lesson_id" ]] && return 1
+
+	# Self-heal, same as librarian_lesson_append_declined does. Empty
+	# directories don't survive git, or tar/rsync without -d, so approved/
+	# can be legitimately absent even though proposals/ — non-empty, holding
+	# this very lesson — is right there. Without this, a missing approved/
+	# fails every promotion forever with "cannot write the pool entry."
+	librarian_lesson_storage_init "$key" || return 1
 
 	local dir path
 	dir="$(librarian_lessons_dir "$key")"
@@ -169,9 +180,24 @@ librarian_lesson_promote() {
 		fi
 	fi
 
-	# Stamp LAST. See the ordering note above.
-	local updated
-	updated=$(jq --arg t "$now" '.promoted_at = $t' "$path" 2>/dev/null) || return 1
-	[[ -z "$updated" || "$updated" == "null" ]] && return 1
-	_librarian_lesson_write_atomic "$path" "$updated"
+	# Stamp LAST. See the ordering note above. The terminal record is already
+	# on disk by this point, so every failure below must say so on stderr —
+	# a bare `return 1` here is indistinguishable from a refusal that wrote
+	# nothing, when in fact `lessons promote <id>` is exactly what recovers
+	# this specific state.
+	local updated stamp_fail_msg
+	stamp_fail_msg=$(printf "Lesson %s: terminal record written but promoted_at could not be stamped; re-run 'lessons promote %s'." \
+		"$lesson_id" "$lesson_id")
+	updated=$(jq --arg t "$now" '.promoted_at = $t' "$path" 2>/dev/null) || {
+		printf '%s\n' "$stamp_fail_msg" >&2
+		return 1
+	}
+	if [[ -z "$updated" || "$updated" == "null" ]]; then
+		printf '%s\n' "$stamp_fail_msg" >&2
+		return 1
+	fi
+	_librarian_lesson_write_atomic "$path" "$updated" || {
+		printf '%s\n' "$stamp_fail_msg" >&2
+		return 1
+	}
 }
