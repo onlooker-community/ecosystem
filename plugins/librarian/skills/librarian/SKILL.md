@@ -118,8 +118,11 @@ For `lessons judge`, run the jury over confirmed candidates:
      call — approved candidates land in the pool and rejected ones in the
      declined ledger, with no separate step. If the output instead says the
      lesson was judged but not promoted, the verdict is already recorded;
-     retry with `librarian_cli lessons promote <id>`, not by re-judging —
+     retry once with `librarian_cli lessons promote <id>`, not by re-judging —
      re-judging would spend tokens again for a verdict that already exists.
+     **If that retry itself fails, do not loop on it.** Add the id to the
+     judged-but-not-promoted bucket and move to the next candidate; report it
+     at the end alongside the retry command rather than retrying again here.
 4. **If either judge fails to return parseable JSON, do not invent a verdict and
    do not drop that judge.** The array must still have one entry per empaneled
    judge: put that judge's raw output, as a JSON string, in its slot instead of
@@ -128,7 +131,10 @@ For `lessons judge`, run the jury over confirmed candidates:
    those ids and list them at the end so the user knows to re-run. A broken judge
    must never become a rejection — the artifact's watermark has already moved,
    so a false rejection buries a good lesson permanently.
-5. Finish by reporting counts: approved, rejected, and could-not-judge.
+5. Finish by reporting counts: approved, rejected, could-not-judge, and
+   **judged but not promoted** (verdict recorded, pool write still pending —
+   list these ids with `librarian_cli lessons promote <id>` as the next step).
+   Don't fold this bucket into "approved": a lesson here has no pool entry yet.
 
 `scope_accuracy` is the criterion that matters most on a `version_independent`
 candidate. The schema guarantees such a lesson **carries** a justification; this

@@ -135,9 +135,14 @@ file exists to carry.
 
 A jury rejection is a machine quality judgment. By that line it belongs in
 `declined.jsonl` alongside the transform's own drops, distinguished by `reason`.
-This also leaves `librarian_lesson_seen` untouched — it already reads
-`declined.jsonl`, `proposals/`, and `approved/`, so the dedup story needs no
-change at all.
+
+**This does *not* leave `librarian_lesson_seen` untouched, as shipped.** It
+already reads `declined.jsonl` and `proposals/`, and also scans `approved/` —
+but that scan can never match a promoted entry, because `ZLesson` is a
+`strictObject` with no `artifact_id` field (see the pool entry's key set,
+above). Dedup for a promoted lesson works today only because `proposals/` is
+never pruned, standing in for coverage the pool entry cannot provide. That gap
+is tracked as `ecosystem-d0m`; this stage does not close it.
 
 ## Ordering, and why it is load-bearing
 
@@ -150,9 +155,13 @@ that keys on the absence of the stamp. In this order a failure between the two
 steps means a re-run finds the pool entry already present, skips rewriting it,
 and completes the stamp.
 
-Every failure path writes **nothing** and returns non-zero with a reason on
-stderr. The proposal stays `approved` without `promoted_at`, which is exactly
-the state standalone promote exists to resolve.
+Every failure path before the terminal record lands writes **nothing** and
+returns non-zero with a reason on stderr. One failure path is the exception by
+design: the terminal record can land and then the stamp itself fail (a
+read-only `proposals/`, an interrupted process). There the record is on disk,
+the proposal stays `approved` without `promoted_at`, and the stderr message
+says so explicitly — naming the standalone re-run — so this state is never
+mistaken for "nothing written."
 
 ## The proposal file survives
 
@@ -206,7 +215,11 @@ once to confirm it discriminates.
 - **A failing `author_key` leaves nothing written and the proposal still
   `approved` without `promoted_at`** — the reconcile property, and the one most
   worth pinning.
-- `librarian_lesson_seen` reports the artifact handled after both paths.
+- `librarian_lesson_seen` reports the artifact handled after the declined
+  path. There is deliberately no approved-path equivalent: a promoted entry
+  carries no `artifact_id`, so that assertion would pass or fail on whether
+  `proposals/` still holds the file, never on anything promote itself wrote —
+  see `ecosystem-d0m`.
 - **Promotion spends nothing** — asserted with a `claude` stub on `PATH` that
   fails loudly if invoked, the technique that already proved stages 5, 6, and 7.
 
