@@ -216,15 +216,57 @@ _split() {
 }
 
 @test "librarian_lesson_seen reports the artifact handled after either path" {
+	# Rejected path: the proposal is deleted after promoting, on purpose.
+	# librarian_lesson_seen scans proposals/ unconditionally of status, so
+	# leaving it in place would let this test pass even if promote wrote
+	# nothing at all. The property under test is that the TERMINAL RECORD —
+	# the declined row — is what marks the artifact handled once its
+	# proposal ages out, not the (now-gone) proposal file.
+	_seed_judged "seen02" "public" "rejected" "$(_split)"
+	librarian_lesson_promote "$PROJECT_KEY" "seen02"
+	rm -f "$(_dir)/proposals/seen02.json"
+	run librarian_lesson_seen "$PROJECT_KEY" "art-seen02"
+	[ "$status" -eq 0 ]
+
+	# Approved path: intentionally NOT proven after proposal deletion here.
+	# ZLesson's strict key set (see the promote lib's key-set comment) has no
+	# artifact_id, so librarian_lesson_seen's `.artifact_id ==` scan over
+	# approved/*.json can never match a pool entry — an approved+promoted
+	# lesson is only findable by artifact_id while its proposal survives.
+	# Nothing in this codebase deletes proposals today, so the gap is latent
+	# rather than live, but asserting `[ "$status" -eq 0 ]` after deleting
+	# the proposal here would currently fail, and asserting non-zero would
+	# enshrine the gap as intended behavior. Flagged to the team lead in fix
+	# round 1 rather than papered over either way; this asserts only what
+	# the proposal-present case actually proves.
 	_seed_judged "seen01" "org" "approved" "$(_two_passing)"
 	librarian_lesson_promote "$PROJECT_KEY" "seen01"
 	run librarian_lesson_seen "$PROJECT_KEY" "art-seen01"
 	[ "$status" -eq 0 ]
+}
 
-	_seed_judged "seen02" "public" "rejected" "$(_split)"
-	librarian_lesson_promote "$PROJECT_KEY" "seen02"
-	run librarian_lesson_seen "$PROJECT_KEY" "art-seen02"
+@test "promoting a rejected lesson twice writes exactly one declined row" {
+	# Mirrors test 8's shape for the approved path. A plain double-promote
+	# never reaches the guard under test: a first call that succeeds
+	# outright already stamps promoted_at, and the second call short-circuits
+	# on that before ever looking at declined.jsonl. The guard only matters
+	# when the FIRST call's stamp fails AFTER the declined row has already
+	# landed — proposals/ turning read-only mid-promote is a plausible way
+	# to hit that, and the same shape test 11 uses for the author_key case.
+	_seed_judged "decl01" "public" "rejected" "$(_split)"
+
+	chmod 0500 "$(_dir)/proposals"
+	run librarian_lesson_promote "$PROJECT_KEY" "decl01"
+	chmod 0700 "$(_dir)/proposals"
+	[ "$status" -ne 0 ]
+	[ "$(jq -r 'has("promoted_at")' "$(_dir)/proposals/decl01.json")" = "false" ]
+	[ "$(grep -c 'art-decl01' "$(_dir)/declined.jsonl")" -eq 1 ]
+
+	# The standalone re-run — the exact path the ordering guarantee exists to
+	# make safe.
+	run librarian_lesson_promote "$PROJECT_KEY" "decl01"
 	[ "$status" -eq 0 ]
+	[ "$(grep -c 'art-decl01' "$(_dir)/declined.jsonl")" -eq 1 ]
 }
 
 @test "a missing lesson is refused" {

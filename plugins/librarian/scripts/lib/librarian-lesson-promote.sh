@@ -136,14 +136,37 @@ librarian_lesson_promote() {
 			}
 		fi
 	else
-		local artifact_id reason verdict
+		local artifact_id reason verdict declined_path already_declined
 		artifact_id=$(jq -r '.artifact_id // ""' "$path" 2>/dev/null)
 		reason=$(jq -r '.verdict.reason // "rejected"' "$path" 2>/dev/null)
 		verdict=$(jq -c '.verdict // {}' "$path" 2>/dev/null)
-		librarian_lesson_append_declined "$key" "$artifact_id" "$reason" "" "$verdict" || {
-			printf 'Lesson %s: cannot append to the declined ledger.\n' "$lesson_id" >&2
-			return 1
-		}
+		declined_path="${dir}/declined.jsonl"
+
+		# Mirrors the approved branch's pool_path guard above: without it, a
+		# stamp that fails AFTER a successful declined-row write (proposals/
+		# turns read-only mid-promote, say) leaves an unstamped proposal whose
+		# standalone re-run — the exact path the ordering guarantee above
+		# exists to make safe — double-writes the same artifact into
+		# declined.jsonl, double-counting a rejected artifact in the
+		# rubric-tuning signal the ledger exists to carry.
+		#
+		# Same scan shape as librarian_lesson_seen: -R/fromjson? survives a
+		# truncated trailing line from a process killed mid-append, and
+		# `objects` stops a valid-but-non-object line from erroring the whole
+		# invocation.
+		already_declined=false
+		if [[ -f "$declined_path" ]] \
+			&& jq -Re --arg a "$artifact_id" 'fromjson? | objects | select(.artifact_id == $a)' \
+				"$declined_path" >/dev/null 2>&1; then
+			already_declined=true
+		fi
+
+		if [[ "$already_declined" == false ]]; then
+			librarian_lesson_append_declined "$key" "$artifact_id" "$reason" "" "$verdict" || {
+				printf 'Lesson %s: cannot append to the declined ledger.\n' "$lesson_id" >&2
+				return 1
+			}
+		fi
 	fi
 
 	# Stamp LAST. See the ordering note above.
