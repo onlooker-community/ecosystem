@@ -20,6 +20,10 @@ setup() {
 	source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-storage.sh"
 	source "${PLUGIN_ROOT}/scripts/lib/librarian-author-key.sh"
 	source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-promote.sh"
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-review.sh"
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-rubric.sh"
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-judge.sh"
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-cli.sh"
 	librarian_config_load "$PROJECT_REPO"
 
 	PROJECT_KEY=$(librarian_project_key "$PROJECT_REPO")
@@ -266,4 +270,44 @@ _split() {
 	run --separate-stderr librarian_lesson_promote "$PROJECT_KEY" "nope01"
 	[ "$status" -ne 0 ]
 	[[ "$stderr" == *"not found"* ]] || return 1
+}
+
+@test "lessons promote lands a pool entry through the CLI" {
+	_seed_judged "cli01" "org" "approved" "$(_two_passing)"
+	run librarian_cli lessons promote "cli01" "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	[ -f "$(_dir)/approved/cli01.json" ]
+	[[ "$output" == *"cli01"* ]] || return 1
+}
+
+@test "lessons promote requires a lesson id" {
+	run librarian_cli lessons promote
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"usage:"* && "$output" == *"promote"* ]] || return 1
+}
+
+@test "lessons promote rejects an unknown flag" {
+	_seed_judged "cli02" "org" "approved" "$(_two_passing)"
+	run librarian_cli lessons promote "cli02" --force
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"unknown option"* && "$output" == *"--force"* ]] || return 1
+}
+
+@test "lessons judge promotes automatically after recording a verdict" {
+	# The ordinary path is one command: judge, record, promote.
+	_seed_judged "auto01" "org" "confirmed" '[]'
+	run librarian_cli lessons judge "auto01" "$(_two_passing)" "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	[ "$(jq -r '.status' "$(_dir)/proposals/auto01.json")" = "approved" ]
+	[ -f "$(_dir)/approved/auto01.json" ]
+}
+
+@test "an unjudged candidate is neither recorded nor promoted" {
+	# The judge returns 2 for UNJUDGED and writes nothing; promotion must not
+	# run behind it and invent a terminal state for a lesson with no verdict.
+	_seed_judged "auto02" "org" "confirmed" '[]'
+	run librarian_cli lessons judge "auto02" '[{"judge_type":"standard","score":"bad","passed":true}]' "$PROJECT_REPO"
+	[ "$status" -eq 2 ]
+	[ "$(jq -r '.status' "$(_dir)/proposals/auto02.json")" = "confirmed" ]
+	[ ! -f "$(_dir)/approved/auto02.json" ]
 }

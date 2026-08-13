@@ -40,6 +40,7 @@ source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-lesson-validate.sh"
 source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-lesson-review.sh"
 source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-lesson-rubric.sh"
 source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-lesson-judge.sh"
+source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-lesson-promote.sh"
 source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-cli.sh"
 
 # action is one of: list | show <id> | accept <id> | reject <id> [reason] | defer <id> | status
@@ -112,7 +113,12 @@ For `lessons judge`, run the jury over confirmed candidates:
      summarize or reconstruct a judge's verdict.
    - Call `librarian_cli lessons judge <id> '<verdicts-json>'`. Record before
      moving to the next candidate, so an interrupted run costs at most one
-     re-judgment.
+     re-judgment. Recording a verdict also promotes the lesson in the same
+     call — approved candidates land in the pool and rejected ones in the
+     declined ledger, with no separate step. If the output instead says the
+     lesson was judged but not promoted, the verdict is already recorded;
+     retry with `librarian_cli lessons promote <id>`, not by re-judging —
+     re-judging would spend tokens again for a verdict that already exists.
 4. **If either judge fails to return parseable JSON, do not invent a verdict and
    do not drop that judge.** The array must still have one entry per empaneled
    judge: put that judge's raw output, as a JSON string, in its slot instead of
