@@ -60,13 +60,6 @@ librarian_lesson_promote() {
 	local lesson_id="$2"
 	[[ -z "$key" || -z "$lesson_id" ]] && return 1
 
-	# Self-heal, same as librarian_lesson_append_declined does. Empty
-	# directories don't survive git, or tar/rsync without -d, so approved/
-	# can be legitimately absent even though proposals/ — non-empty, holding
-	# this very lesson — is right there. Without this, a missing approved/
-	# fails every promotion forever with "cannot write the pool entry."
-	librarian_lesson_storage_init "$key" || return 1
-
 	local dir path
 	dir="$(librarian_lessons_dir "$key")"
 	path="${dir}/proposals/${lesson_id}.json"
@@ -138,6 +131,18 @@ librarian_lesson_promote() {
 			printf 'Lesson %s: cannot build a pool entry.\n' "$lesson_id" >&2
 			return 1
 		}
+
+		# Self-heal, same as librarian_lesson_append_declined does
+		# internally for declined.jsonl. Empty directories don't survive
+		# git, or tar/rsync without -d, so approved/ can be legitimately
+		# absent even though proposals/ — non-empty, holding this very
+		# lesson — is right there. Placed HERE, immediately before the
+		# write, not at the top of the function: every refusal above (not
+		# found, already promoted, wrong status, bad visibility, a failing
+		# author_key, a failing entry build) must create nothing, matching
+		# this function's own doc comment and the spec's "every failure
+		# path before the terminal record lands writes NOTHING."
+		librarian_lesson_storage_init "$key" || return 1
 
 		pool_path="${dir}/approved/${lesson_id}.json"
 		if [[ ! -f "$pool_path" ]]; then

@@ -303,6 +303,21 @@ _split() {
 	[ -f "$(_dir)/approved/heal01.json" ]
 }
 
+@test "a refusal before the approved branch creates no directory scaffolding" {
+	# The self-heal above must not run ahead of every refusal path. A pure
+	# refusal ("not judged yet," "not found," wrong status) has to write
+	# NOTHING, per this function's own doc comment and the spec — and
+	# mkdir -p is a write, even though it's idempotent and inert once made.
+	# setup() already ran storage_init once, so start from zero prior
+	# activity by removing approved/ again before seeding.
+	_seed_judged "refuse01" "org" "confirmed" '[]'
+	rm -rf "$(_dir)/approved"
+
+	run librarian_lesson_promote "$PROJECT_KEY" "refuse01"
+	[ "$status" -ne 0 ]
+	[ ! -d "$(_dir)/approved" ]
+}
+
 @test "a missing lesson is refused" {
 	run --separate-stderr librarian_lesson_promote "$PROJECT_KEY" "nope01"
 	[ "$status" -ne 0 ]
