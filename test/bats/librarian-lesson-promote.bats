@@ -419,6 +419,12 @@ _promote_refuses_shape() {
 	# mislabels the field (or a check that's silently missing) still fails
 	# this test. Matches the file's existing refusal-test pattern (empty
 	# stdout + a specific stderr substring) rather than status/absence alone.
+	#
+	# Whole-token match, not substring: "id" is a substring of "candidate"
+	# (c-a-n-d-id-a-t-e), so a bare *"$field"* glob would accept a message
+	# naming candidate.claim for a null .id. Pull the guard's comma-joined
+	# field list out of the message, strip spaces, and check exact
+	# membership by delimiting both sides with commas.
 	local id="$1" mutate="$2" field="$3"
 	_seed_judged "$id" "org" "approved" "$(_two_passing)"
 	local p
@@ -431,7 +437,11 @@ _promote_refuses_shape() {
 	[ "$output" = "" ]
 	[ ! -f "$(_dir)/approved/${id}.json" ]
 	[ "$(jq -r 'has("promoted_at")' "$p")" = "false" ]
-	[[ "$stderr" == *"$field"* ]] || return 1
+
+	local list
+	list=$(printf '%s' "$stderr" | sed -n 's/.*bad or missing: \([^)]*\)).*/\1/p')
+	[ -n "$list" ] || return 1
+	printf ',%s,' "$(printf '%s' "$list" | tr -d ' ')" | grep -Fq ",${field}," || return 1
 }
 
 @test "a null judges array is refused, not read as a jury-less lesson" {
