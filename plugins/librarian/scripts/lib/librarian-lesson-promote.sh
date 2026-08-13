@@ -26,20 +26,6 @@ _librarian_lesson_source_for_visibility() {
 	return 0
 }
 
-# Write a file atomically: temp in the same directory, then mv.
-#
-# ecosystem-a3b is open against three existing `printf > path` sites in this
-# plugin, each of which truncates before writing. These are new sites; adding
-# a fourth instance of a known bug would be a choice, not an inheritance.
-_librarian_lesson_write_atomic() {
-	local path="$1"
-	local content="$2"
-	local tmp
-	tmp=$(mktemp "${path}.XXXXXX" 2>/dev/null) || return 1
-	printf '%s\n' "$content" > "$tmp" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 1; }
-	mv "$tmp" "$path" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 1; }
-}
-
 # Promote one judged proposal to its terminal record.
 #
 # Returns 0 on success, including the already-promoted no-op. Returns 1 on
@@ -146,7 +132,7 @@ librarian_lesson_promote() {
 
 		pool_path="${dir}/approved/${lesson_id}.json"
 		if [[ ! -f "$pool_path" ]]; then
-			_librarian_lesson_write_atomic "$pool_path" "$entry" || {
+			librarian_lesson_write_atomic "$pool_path" "$entry" || {
 				printf 'Lesson %s: cannot write the pool entry.\n' "$lesson_id" >&2
 				return 1
 			}
@@ -201,7 +187,7 @@ librarian_lesson_promote() {
 		printf '%s\n' "$stamp_fail_msg" >&2
 		return 1
 	fi
-	_librarian_lesson_write_atomic "$path" "$updated" || {
+	librarian_lesson_write_atomic "$path" "$updated" || {
 		printf '%s\n' "$stamp_fail_msg" >&2
 		return 1
 	}
