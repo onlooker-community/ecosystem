@@ -327,3 +327,35 @@ _split() {
 	[ ! -f "$(_dir)/approved/auto02.json" ]
 	[ ! -f "$marker" ]
 }
+
+@test "a judge-walk promotion failure reports, does not undo the verdict, and reconciles" {
+	# The other half of the reconcile property, exercised through the CLI's
+	# judge verb rather than promote directly. A promotion failure inside the
+	# automatic call must not undo the verdict the jury just recorded — the
+	# lesson stays `approved`, unstamped, and the standalone `lessons
+	# promote` verb is how it gets picked back up once the failure is fixed.
+	# Same corruption Task 1's `ak01` test uses to fail librarian_author_key.
+	_seed_judged "jwfail01" "org" "confirmed" '[]'
+
+	local secret_path
+	secret_path=$(librarian_author_secret_path)
+	mkdir -p "$(dirname "$secret_path")"
+	printf 'not-a-valid-secret\n' > "$secret_path"
+	chmod 0600 "$secret_path"
+
+	run librarian_cli lessons judge "jwfail01" "$(_two_passing)" "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"Lesson jwfail01 is now approved."* ]] || return 1
+	[[ "$output" == *"Lesson jwfail01 was judged but not promoted; run \`lessons promote jwfail01\` to retry."* ]] || return 1
+	[ ! -f "$(_dir)/approved/jwfail01.json" ]
+	[ "$(jq -r '.status' "$(_dir)/proposals/jwfail01.json")" = "approved" ]
+	[ "$(jq -r 'has("promoted_at")' "$(_dir)/proposals/jwfail01.json")" = "false" ]
+
+	# Repair the secret and reconcile through the standalone verb — the
+	# point of the whole design.
+	openssl rand -hex 32 > "$secret_path"
+	chmod 0600 "$secret_path"
+	run librarian_cli lessons promote "jwfail01" "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	[ -f "$(_dir)/approved/jwfail01.json" ]
+}
