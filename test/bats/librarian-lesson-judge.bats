@@ -356,6 +356,30 @@ _verdicts_split() {
 	[ "$(printf '%s' "$v" | jq '.judges | length')" -eq 2 ]
 }
 
+@test "judge writes the verdict atomically, never truncating in place" {
+	# Same discriminator as the three atomic-write tests in
+	# librarian-lesson-review.bats: `printf > path` truncates before writing,
+	# so an interrupted write leaves a zero-byte proposal that every verb
+	# refuses and list_pending hides — unrecoverable even by unconfirm. A
+	# read-only-dir test would NOT catch this: it blocks the open entirely,
+	# so the truncating code also leaves the original intact. What
+	# distinguishes atomic from not is that the write lands somewhere else
+	# first, so spy on the rename.
+	_seed_confirmed "atomic01" "org"
+
+	local marker="${BATS_TEST_TMPDIR}/mv-called"
+	rm -f "$marker"
+	mv() { printf '%s -> %s\n' "$1" "$2" >> "$marker"; command mv "$@"; }
+
+	run librarian_lesson_judge "$PROJECT_KEY" "atomic01" "$(_verdicts_pass)"
+	[ "$status" -eq 0 ]
+
+	[ -f "$marker" ]
+	grep -q "proposals/atomic01.json" "$marker" || return 1
+	[ "$(_status_of atomic01)" = "approved" ]
+	unset -f mv
+}
+
 @test "a malformed verdict leaves the candidate confirmed and writes nothing" {
 	_seed_confirmed "bad01" "org"
 	local before

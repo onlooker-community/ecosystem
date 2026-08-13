@@ -196,5 +196,10 @@ librarian_lesson_judge() {
 		printf 'Lesson %s: the verdict could not be recorded; the update produced no result.\n' "$lesson_id" >&2
 		return 1
 	fi
-	printf '%s\n' "$updated" > "$path"
+	# Atomic, not `printf > "$path"`: a plain redirect truncates before
+	# writing, so an interrupted write here leaves the same zero-byte,
+	# permanently-stuck proposal that a3b fixed in confirm, unconfirm, and
+	# pass — "unrecognized status: " from every verb, and even unconfirm
+	# cannot recover it because list_pending hides it too.
+	librarian_lesson_write_atomic "$path" "$updated"
 }
