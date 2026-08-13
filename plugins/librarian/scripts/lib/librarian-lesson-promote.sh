@@ -87,6 +87,26 @@ librarian_lesson_promote() {
 			return 1
 		}
 
+		# Validate the fields the entry mapping reads. Without this, a corrupt
+		# proposal produces a well-formed-but-empty pool entry that passes the
+		# key-set check and fails at ingest — and a null judges array yields a
+		# consensus byte-identical to a legitimate private entry while carrying a
+		# syncing source.
+		local missing
+		missing=$(jq -r '
+			[ (if (.candidate.claim | type) != "string" then "candidate.claim" else empty end),
+			  (if (.candidate.rationale | type) != "string" then "candidate.rationale" else empty end),
+			  (if (.candidate.evidence | type) != "object" then "candidate.evidence" else empty end),
+			  (if (.candidate.applies_to | type) != "object" then "candidate.applies_to" else empty end),
+			  (if (.judged_at | type) != "string" then "judged_at" else empty end),
+			  (if (.verdict.judges | type) != "array" then "verdict.judges" else empty end)
+			] | join(", ")' "$path" 2>/dev/null) || missing="unreadable"
+		if [[ -n "$missing" ]]; then
+			printf 'Lesson %s is malformed; cannot promote (bad or missing: %s).\n' \
+				"$lesson_id" "$missing" >&2
+			return 1
+		fi
+
 		# Exactly ZLesson's key set — it is a strictObject, so an extra key
 		# fails ingest as surely as a missing one. A private entry gets
 		# judges: 0 and is deliberately not ingest-valid; it never syncs.

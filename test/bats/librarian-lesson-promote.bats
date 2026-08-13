@@ -412,6 +412,50 @@ _split() {
 	[ -f "$(_dir)/approved/jwfail01.json" ]
 }
 
+_promote_refuses_shape() {
+	# $1 = id, $2 = jq program mutating the seeded proposal
+	local id="$1" mutate="$2"
+	_seed_judged "$id" "org" "approved" "$(_two_passing)"
+	local p
+	p="$(_dir)/proposals/${id}.json"
+	local tmp="${BATS_TEST_TMPDIR}/${id}.json"
+	jq "$mutate" "$p" > "$tmp" && mv "$tmp" "$p"
+
+	run --separate-stderr librarian_lesson_promote "$PROJECT_KEY" "$id"
+	[ "$status" -ne 0 ]
+	[ ! -f "$(_dir)/approved/${id}.json" ]
+	[ "$(jq -r 'has("promoted_at")' "$p")" = "false" ]
+}
+
+@test "a null judges array is refused, not read as a jury-less lesson" {
+	# The worst shape: consensus {judges:0, agreed:0} is byte-identical to a
+	# legitimate private entry, but carries source "org" — so unlike a private
+	# entry it WILL sync, and then fail ingest on ZConsensus.judges >= 1.
+	_promote_refuses_shape "mal01" '.verdict.judges = null'
+}
+
+@test "a judges object rather than an array is refused" {
+	_promote_refuses_shape "mal02" '.verdict.judges = {"a":{"passed":true}}'
+}
+
+@test "a proposal missing its candidate is refused" {
+	# Currently produces the exact 13 ZLesson keys with null claim/rationale/
+	# evidence/applies_to — it passes the key-set test while being empty.
+	_promote_refuses_shape "mal03" 'del(.candidate)'
+}
+
+@test "a proposal missing judged_at is refused" {
+	_promote_refuses_shape "mal04" 'del(.judged_at)'
+}
+
+@test "a well-formed proposal still promotes" {
+	# The guard must not reject anything the pipeline actually produces.
+	_seed_judged "ok01" "org" "approved" "$(_two_passing)"
+	run librarian_lesson_promote "$PROJECT_KEY" "ok01"
+	[ "$status" -eq 0 ]
+	[ -f "$(_dir)/approved/ok01.json" ]
+}
+
 @test "an approved promotion succeeds when sourced through exactly SKILL.md's source list" {
 	# The runtime's ONLY entry point for the lessons CLI is SKILL.md's source
 	# block — not this file's own setup(), which sources librarian-author-key.sh
