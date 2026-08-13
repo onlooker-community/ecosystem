@@ -97,7 +97,10 @@ librarian_lesson_judge() {
 	local key="$1"
 	local lesson_id="$2"
 	local verdicts="${3:-[]}"
-	[[ -z "$key" || -z "$lesson_id" ]] && return 1
+	if [[ -z "$key" || -z "$lesson_id" ]]; then
+		printf 'usage: librarian_lesson_judge <key> <lesson_id> <verdicts_json>\n' >&2
+		return 1
+	fi
 
 	local path
 	path="$(librarian_lessons_dir "$key")/proposals/${lesson_id}.json"
@@ -126,10 +129,16 @@ librarian_lesson_judge() {
 		verdict=$(jq -cn --arg t "$now" \
 			'{rubric_id: null, gate_policy: null, score_threshold: null,
 			  aggregate_score: null, passed: true, reason: "private_no_jury",
-			  judges: []}') || return 1
+			  judges: []}') || {
+			printf 'Lesson %s: the verdict could not be built.\n' "$lesson_id" >&2
+			return 1
+		}
 	else
 		local rubric threshold policy expected_judge_types
-		rubric=$(librarian_lesson_rubric_get "$rubric_id") || return 1
+		rubric=$(librarian_lesson_rubric_get "$rubric_id") || {
+			printf 'Lesson %s: rubric %s is not defined in config.\n' "$lesson_id" "$rubric_id" >&2
+			return 1
+		}
 		threshold=$(printf '%s' "$rubric" | jq -r '.score_threshold')
 		policy=$(printf '%s' "$rubric" | jq -r '.gate_policy')
 		expected_judge_types=$(printf '%s' "$rubric" | jq -c '.judge_types | sort')
@@ -154,7 +163,10 @@ librarian_lesson_judge() {
 
 		local aggregate gate
 		aggregate=$(librarian_lesson_aggregate "$verdicts") || return 2
-		gate=$(librarian_lesson_gate "$policy" "$verdicts" "$aggregate" "$threshold") || return 1
+		gate=$(librarian_lesson_gate "$policy" "$verdicts" "$aggregate" "$threshold") || {
+			printf 'Lesson %s: the gate could not be decided.\n' "$lesson_id" >&2
+			return 1
+		}
 
 		verdict=$(jq -cn \
 			--arg r "$rubric_id" --arg p "$policy" \
@@ -162,7 +174,10 @@ librarian_lesson_judge() {
 			--argjson g "$gate" --argjson j "$verdicts" \
 			'{rubric_id: $r, gate_policy: $p, score_threshold: $th,
 			  aggregate_score: $ag, passed: $g.passed, reason: $g.reason,
-			  judges: $j}') || return 1
+			  judges: $j}') || {
+			printf 'Lesson %s: the verdict could not be built.\n' "$lesson_id" >&2
+			return 1
+		}
 	fi
 
 	local new_status updated
@@ -173,7 +188,13 @@ librarian_lesson_judge() {
 	fi
 
 	updated=$(jq --arg s "$new_status" --arg t "$now" --argjson v "$verdict" \
-		'.status = $s | .judged_at = $t | .verdict = $v' "$path" 2>/dev/null) || return 1
-	[[ -z "$updated" || "$updated" == "null" ]] && return 1
+		'.status = $s | .judged_at = $t | .verdict = $v' "$path" 2>/dev/null) || {
+		printf 'Lesson %s: the verdict could not be recorded.\n' "$lesson_id" >&2
+		return 1
+	}
+	if [[ -z "$updated" || "$updated" == "null" ]]; then
+		printf 'Lesson %s: the verdict could not be recorded; the update produced no result.\n' "$lesson_id" >&2
+		return 1
+	fi
 	printf '%s\n' "$updated" > "$path"
 }

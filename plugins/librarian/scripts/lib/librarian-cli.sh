@@ -593,6 +593,9 @@ librarian_cli_lessons_judge() {
 		2)
 			printf 'Lesson %s could not be judged; it stays confirmed. Re-run to retry.\n' "$lesson_id"
 			;;
+		*)
+			printf 'Lesson %s could not be judged (exit %d); see above.\n' "$lesson_id" "$rc"
+			;;
 	esac
 	return $rc
 }

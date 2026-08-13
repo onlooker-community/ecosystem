@@ -1,5 +1,8 @@
 #!/usr/bin/env bats
 
+# `run --separate-stderr` (used below) requires bats >= 1.5.0.
+bats_require_minimum_version 1.5.0
+
 setup() {
 	source "${BATS_TEST_DIRNAME}/../helpers/setup.bash"
 	setup_test_env
@@ -476,6 +479,20 @@ _verdicts_split() {
 	run librarian_cli lessons judge "cli04" "$(_verdicts_pass)" --force
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"unknown option"* && "$output" == *"--force"* ]] || return 1
+}
+
+@test "a rubric missing from config is refused with a reason, not silently" {
+	# Reachable by config drift: the visibility map still names a rubric that
+	# librarian.lesson_judging.rubrics no longer defines. State stays safe —
+	# nothing is written — but a user sees only an exit code.
+	_seed_confirmed "cfg01" "org"
+	_LIBRARIAN_CONFIG=$(printf '%s' "$_LIBRARIAN_CONFIG" | jq 'del(.librarian.lesson_judging.rubrics)')
+
+	run --separate-stderr librarian_lesson_judge "$PROJECT_KEY" "cfg01" "$(_verdicts_pass)"
+	[ "$status" -eq 1 ]
+	[ "$output" = "" ]
+	[[ "$stderr" == *"rubric"* ]] || return 1
+	[ "$(_status_of cfg01)" = "confirmed" ]
 }
 
 @test "lessons list --confirmed --json emits rows carrying visibility" {
