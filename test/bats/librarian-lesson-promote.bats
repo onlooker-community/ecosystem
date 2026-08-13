@@ -359,3 +359,37 @@ _split() {
 	[ "$status" -eq 0 ]
 	[ -f "$(_dir)/approved/jwfail01.json" ]
 }
+
+@test "an approved promotion succeeds when sourced through exactly SKILL.md's source list" {
+	# The runtime's ONLY entry point for the lessons CLI is SKILL.md's source
+	# block — not this file's own setup(), which sources librarian-author-key.sh
+	# itself and so could never catch a missing dependency in the shipped list.
+	# Parse the `source` lines straight out of SKILL.md (never hand-copy them)
+	# and drive one promotion in a subshell seeded with only those, so a future
+	# lib gaining an undeclared dependency fails THIS test instead of shipping
+	# with an inert runtime.
+	local skill="${PLUGIN_ROOT}/skills/librarian/SKILL.md"
+	[ -f "$skill" ]
+
+	_seed_judged "skill01" "org" "approved" "$(_two_passing)"
+
+	local script="${BATS_TEST_TMPDIR}/drive-skill-sources.sh"
+	{
+		printf '#!/usr/bin/env bash\n'
+		printf 'set -uo pipefail\n'
+		# Mirrors SKILL.md's own two-line preamble (unchanged by this branch):
+		# librarian-config.sh sources a sibling by the bare $PLUGIN_ROOT
+		# variable, not $CLAUDE_PLUGIN_ROOT, so both must be set the same way
+		# the skill's bash block sets them, in the same shell as the sources
+		# below. This is fixed boilerplate, not "the source list" itself —
+		# only the `source` lines that follow are parsed out of SKILL.md.
+		printf 'PLUGIN_ROOT=%q\n' "$PLUGIN_ROOT"
+		printf 'export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"\n'
+		grep -E '^source "\$CLAUDE_PLUGIN_ROOT/' "$skill"
+		printf 'librarian_lesson_promote %q %q\n' "$PROJECT_KEY" "skill01"
+	} > "$script"
+
+	run bash "$script"
+	[ "$status" -eq 0 ]
+	[ -f "$(_dir)/approved/skill01.json" ]
+}

@@ -22,7 +22,8 @@
 # librarian-project-key.sh, librarian-storage.sh, librarian-emit.sh,
 # librarian-lesson-storage.sh, librarian-lesson-validate.sh,
 # librarian-lesson-review.sh, librarian-lesson-judge.sh,
-# librarian-lesson-rubric.sh, librarian-lesson-promote.sh
+# librarian-lesson-rubric.sh, librarian-author-key.sh,
+# librarian-lesson-promote.sh
 
 # ----------------------------------------------------------------------------
 # Project key + memory store path resolution

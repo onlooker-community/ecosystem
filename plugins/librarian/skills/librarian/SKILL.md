@@ -40,6 +40,7 @@ source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-lesson-validate.sh"
 source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-lesson-review.sh"
 source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-lesson-rubric.sh"
 source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-lesson-judge.sh"
+source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-author-key.sh"
 source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-lesson-promote.sh"
 source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-cli.sh"
 
