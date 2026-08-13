@@ -387,6 +387,6 @@ Commit subject: `fix(librarian): refuse a corrupt proposal instead of promoting 
 | Bead | Acceptance | Task |
 |---|---|---|
 | `a3b` | All three proposal writes atomic; an interrupted write leaves the prior proposal intact | 1 |
-| `qx5` | Every non-zero return from `librarian_lesson_judge` produces a message identifying the failure | 2 |
+| `qx5` | Every `return 1` from `librarian_lesson_judge` produces a message identifying the failure | 2 |
 | `wqd` | A subprocess returning 64 non-hex characters is refused, not truncated and returned; golden vectors unchanged | 3 |
 | `mpt` | All malformed shapes produce the same outcome rather than three accepted and one refused | 4 |
