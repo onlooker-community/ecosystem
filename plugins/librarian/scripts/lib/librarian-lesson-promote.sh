@@ -94,7 +94,8 @@ librarian_lesson_promote() {
 		# syncing source.
 		local missing
 		missing=$(jq -r '
-			[ (if (.candidate.claim | type) != "string" then "candidate.claim" else empty end),
+			[ (if (.id | type) != "string" then "id" else empty end),
+			  (if (.candidate.claim | type) != "string" then "candidate.claim" else empty end),
 			  (if (.candidate.rationale | type) != "string" then "candidate.rationale" else empty end),
 			  (if (.candidate.evidence | type) != "object" then "candidate.evidence" else empty end),
 			  (if (.candidate.applies_to | type) != "object" then "candidate.applies_to" else empty end),

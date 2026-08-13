@@ -413,8 +413,13 @@ _split() {
 }
 
 _promote_refuses_shape() {
-	# $1 = id, $2 = jq program mutating the seeded proposal
-	local id="$1" mutate="$2"
+	# $1 = id, $2 = jq program mutating the seeded proposal, $3 = field name
+	# the guard's stderr message must name — pins WHY the refusal happened,
+	# not just THAT it happened, so a guard that fires on the right shape but
+	# mislabels the field (or a check that's silently missing) still fails
+	# this test. Matches the file's existing refusal-test pattern (empty
+	# stdout + a specific stderr substring) rather than status/absence alone.
+	local id="$1" mutate="$2" field="$3"
 	_seed_judged "$id" "org" "approved" "$(_two_passing)"
 	local p
 	p="$(_dir)/proposals/${id}.json"
@@ -423,29 +428,39 @@ _promote_refuses_shape() {
 
 	run --separate-stderr librarian_lesson_promote "$PROJECT_KEY" "$id"
 	[ "$status" -ne 0 ]
+	[ "$output" = "" ]
 	[ ! -f "$(_dir)/approved/${id}.json" ]
 	[ "$(jq -r 'has("promoted_at")' "$p")" = "false" ]
+	[[ "$stderr" == *"$field"* ]] || return 1
 }
 
 @test "a null judges array is refused, not read as a jury-less lesson" {
 	# The worst shape: consensus {judges:0, agreed:0} is byte-identical to a
 	# legitimate private entry, but carries source "org" — so unlike a private
 	# entry it WILL sync, and then fail ingest on ZConsensus.judges >= 1.
-	_promote_refuses_shape "mal01" '.verdict.judges = null'
+	_promote_refuses_shape "mal01" '.verdict.judges = null' "verdict.judges"
 }
 
 @test "a judges object rather than an array is refused" {
-	_promote_refuses_shape "mal02" '.verdict.judges = {"a":{"passed":true}}'
+	_promote_refuses_shape "mal02" '.verdict.judges = {"a":{"passed":true}}' "verdict.judges"
 }
 
 @test "a proposal missing its candidate is refused" {
 	# Currently produces the exact 13 ZLesson keys with null claim/rationale/
 	# evidence/applies_to — it passes the key-set test while being empty.
-	_promote_refuses_shape "mal03" 'del(.candidate)'
+	_promote_refuses_shape "mal03" 'del(.candidate)' "candidate.claim"
 }
 
 @test "a proposal missing judged_at is refused" {
-	_promote_refuses_shape "mal04" 'del(.judged_at)'
+	_promote_refuses_shape "mal04" 'del(.judged_at)' "judged_at"
+}
+
+@test "a proposal with a null id is refused" {
+	# .id is read by the entry mapping (id: $p.id) same as candidate/judged_at/
+	# verdict.judges — a null id promotes to a pool entry with "id": null,
+	# passing the key-set check while being exactly the kind of well-formed-
+	# but-wrong entry this guard exists to prevent.
+	_promote_refuses_shape "mal05" '.id = null' "id"
 }
 
 @test "a well-formed proposal still promotes" {
