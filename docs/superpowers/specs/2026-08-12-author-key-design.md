@@ -1,6 +1,6 @@
 # Author Key Derivation — Design
 
-**Status:** Approved, not started.
+**Status:** Shipped.
 **Tracked by:** `ecosystem-4z8.5`, under epic `ecosystem-4z8`.
 **Blocks:** `ecosystem-4z8.4` (approved pool and declined ledger).
 **Contract:** `docs/lesson-promotion-pipeline.md:92`.
@@ -91,7 +91,8 @@ author_key(visibility) =
     rendered as 32 lowercase hex
 ```
 
-Verified shape on LibreSSL 3.3.6:
+Verified shape on LibreSSL 3.3.6, and the algorithm it verifies is unchanged
+by the implementation note below:
 
 ```bash
 printf '%s' "onlooker.author.v1:${visibility}" \
@@ -100,11 +101,31 @@ printf '%s' "onlooker.author.v1:${visibility}" \
   | cut -c1-32
 ```
 
-`openssl dgst -sha256 -hmac` is present on macOS (LibreSSL 3.3.6) and accepts
-the same form on OpenSSL 3.x. **Confirm that on Linux CI rather than assuming
-it** — OpenSSL 3.x deprecated some `dgst` options and prefers `-macopt` for
-certain algorithms, and a silent behavioral difference here produces wrong keys
-rather than an error.
+### Implementation: node, not openssl, for the HMAC call
+
+The shape above is `openssl`, because that's what proves the algorithm on the
+command line. The shipped implementation calls `node` instead, for one reason:
+`openssl dgst -sha256 -hmac` takes the key as a CLI argument, and there is no
+flag to take it any other way. On Linux, `/proc/<pid>/cmdline` is
+world-readable, so for the life of every derivation call, any local user could
+read `$secret` straight out of the process table. `node`'s `crypto.createHmac`
+takes the key from a variable, so the secret goes over the **environment**
+instead (`/proc/<pid>/environ` is owner-only) and never appears on argv;
+`visibility` still does, because it isn't secret.
+
+The algorithm did not change: node's `crypto.createHmac("sha256", secret)`
+computes the identical HMAC-SHA256 as `openssl dgst -sha256 -hmac`, verified
+against all three golden vectors byte-for-byte before the switch shipped. The
+node call still emits the full 64 hex characters; truncation to 32 stays a
+separate step in the shell, gated by the digest-width sanity check described
+below — that check, not the command substitution's own exit status, is what
+makes a misbehaving subprocess fail closed, since there is no `pipefail` on a
+pipeline that no longer exists once `cut` is gone.
+
+The repo already depends on `node` (see `librarian-emit.sh` and its
+`curator`/`historian` counterparts), so this adds no new dependency. `node`
+absence is handled the same way `openssl` absence was: refuse, with a reason
+on stderr, before attempting the call.
 
 ### Why a domain tag and a version
 
@@ -157,6 +178,43 @@ expected" means fewer than 64 hex characters** — the full width `openssl rand
 derives a plausible-looking key, just one with less entropy behind it than the
 design claims.
 
+**"Shorter than expected" has a mirror: longer than expected, and it is
+refused too, not accepted.** The width check is exact — `^[0-9a-f]{64}$`,
+anchored on both ends — not "64 or more." HMAC does not ignore extra key
+width; a 65-character value is a *different* secret, not a wider version of
+the same one. Only the raw **first line** of the file is read and validated,
+before any newline stripping. That single choice closes both the
+malformed-content case (64 characters of the wrong shape — uppercase, spaces,
+punctuation — pass a length check but not the anchored hex check, and are
+refused as malformed rather than deriving a garbage-but-deterministic
+identity) and an embedded-newline case: the documented way to move the secret
+to a second machine is a plain copy, but a user who instead appends (`>>`
+instead of `>`, or a backup restored on top of an existing file) leaves a
+second 64-hex line sitting after the first. Stripping newlines from the whole
+file before validating would concatenate the two lines into a 128-character
+string that reads as one long-but-"valid" secret — a *third* identity,
+matching neither machine, accepted silently. Reading only the first line
+means content past it is simply never read, so that case can't arise.
+
+### Permissions guard: the secret path must be a regular file
+
+`ln FILE DIR` succeeds — POSIX `ln` links `basename(FILE)` *inside* an
+existing directory rather than failing — so a directory sitting at the secret
+path used to make first-use creation look like it succeeded (`created=1`)
+while stranding a fresh 0600 secret one level down, at
+`$path/user_secret.XXXXXX`, that nothing ever reads again: one new stray
+secret file per call. A pre-existing FIFO at the secret path is worse: `ln`
+correctly refuses to overwrite it, but the subsequent plain `cat` used to
+block forever with no writer, hanging the calling session — a hard violation
+of this repo's "a plugin must never block a session" constraint.
+
+Both are the same underlying condition: something other than a regular file
+at the secret path. The derivation checks for it explicitly (`[[ -f "$path"
+]]`) immediately after the creation step and before either the permission
+tightening step or the read below can touch it, cleans up any stray secret
+material the `ln`-into-directory case may have left, and refuses with a
+reason naming the real cause.
+
 ## Interface
 
 `librarian_author_key <visibility>`, in
@@ -169,10 +227,12 @@ All three visibilities get a key, `private` included. Private lessons never
 leave the machine, but the contract requires the field on every lesson, and
 deriving uniformly means `4z8.4` carries no special case.
 
-It refuses, rather than improvising, when `openssl` is absent, the secret
-cannot be created or read, the secret is empty or short, or the visibility is
-not one of `private` / `org` / `public`. Every refusal writes a reason — this
-is the one place in the pipeline where silence is the actual danger.
+It refuses, rather than improvising, when `openssl` (secret creation) or
+`node` (HMAC derivation) is absent, the secret cannot be created or read, the
+secret path is not a regular file, the secret is empty, short, too long, or
+malformed, or the visibility is not one of `private` / `org` / `public`.
+Every refusal writes a reason — this is the one place in the pipeline where
+silence is the actual danger.
 
 ### What a caller does with a failure
 
@@ -209,12 +269,45 @@ once to confirm it discriminates.
   assert the file is byte-identical. Catches silent regeneration.
 - **An empty secret is refused** — a zero-byte secret file yields non-zero and
   empty stdout. This is the guard against everyone collapsing onto one identity.
+- **A short secret is refused**, naming the problem distinctly from empty.
+- **A malformed secret is refused** — 64 characters of the wrong shape (not
+  `[0-9a-f]`) clears the length check but is still rejected, distinguishably
+  from both empty and short. Length is not content.
+- **A too-long secret is refused, not accepted as a wider key** — 65
+  characters of otherwise-valid hex. Pins the width check as exact
+  (`{64}`, anchored), not "64 or more": the regression this guards against
+  is a real one that shipped and was caught in review, not a hypothetical.
+- **A second line in the secret file changes nothing** — two concatenated
+  64-hex lines (the `>>`-instead-of-`>` shape) still derive the golden
+  vector for the first line alone, proving the second line is never read
+  rather than silently concatenated into a third identity.
 - **Format** — exactly 32 characters, all `[0-9a-f]`. Catches uppercase and
   width drift.
 - **The key is not the secret** — catches a "derivation" that echoes its input.
 - **No `$RANDOM` in the lib**, asserted by grep, because the wrong pattern is
   the nearer example in this repo.
 - **Permissions** — created `0600`; a `0644` file is tightened and warned about.
+- **An ACL-only grant is warned about** — `chmod +a` on macOS produces a
+  `-rw-------+` mode string that looks clean; the warning fires anyway
+  because the ACL flag is checked separately from the mode bits. Darwin-only,
+  skipped on Linux CI where the fixture can't be constructed the same way.
+- **The secret never reaches the HMAC subprocess over argv** — a spy `node`
+  on `PATH` records its own argv and delegates to the real `node`, so the
+  derivation still has to produce the golden vector while proving the
+  secret isn't sitting in the process table.
+- **A directory at the secret path is refused**, not silently stranded with
+  a fresh secret one level down that nothing reads again.
+- **A FIFO at the secret path is refused rather than hanging** the calling
+  session forever. Run under `timeout` as a safety net for the test itself.
+- **The `created` guard is pinned directly** — a stub `mktemp` on `PATH`
+  simulates a creation-path regression (a freshly created secret landing at
+  `0644` instead of `0600`) and asserts the weak permissions survive
+  un-repaired on that same call, which is what makes the regression
+  observable to a human or to the permissions test above instead of being
+  silently papered over.
+- **The returned key carries no trailing newline** — `run`'s `$output` and
+  `$()` both strip trailing newlines, so this needs a sentinel appended
+  immediately after the call to make a stray one visible.
 
 ## Out of scope
 

@@ -267,3 +267,159 @@ _fixed_secret() {
 	[ "$output" = "" ]
 	[[ "$stderr" == *"empty"* ]] || return 1
 }
+
+@test "a 65-character secret is refused, not accepted as a wider key" {
+	# The charset check used to be unbounded above (^[0-9a-f]{64,}$), so a
+	# longer-but-still-hex first line quietly derived a DIFFERENT identity
+	# instead of being refused. HMAC does not ignore extra key width — a
+	# longer key is a different key, not a wider version of the same one.
+	local path secret
+	path=$(librarian_author_secret_path)
+	mkdir -p "$(dirname "$path")"
+	secret=$(printf '0%.0s' $(seq 1 65))
+	[ "${#secret}" -eq 65 ]
+	printf '%s\n' "$secret" > "$path"
+
+	run librarian_author_key "public"
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"malformed"* ]] || return 1
+}
+
+@test "a second line in the secret file is never concatenated into a third identity" {
+	# Regression for the embedded-newline bug: the charset check used to run
+	# AFTER a `tr -d '\n'` that stripped every newline in the file, so two
+	# concatenated 64-char lines (exactly the shape you get from `>>`
+	# instead of `>`, or restoring a backup on top of an existing secret)
+	# read as one 128-char "valid" secret — a THIRD identity matching
+	# neither line. Reading only the first line sidesteps that: content
+	# past line one is simply never read, so the key must match the golden
+	# vector for the all-zero secret used on its own.
+	local path
+	path=$(librarian_author_secret_path)
+	mkdir -p "$(dirname "$path")"
+	printf '%s\n' "0000000000000000000000000000000000000000000000000000000000000000" > "$path"
+	printf '%s\n' "1111111111111111111111111111111111111111111111111111111111111111" >> "$path"
+	chmod 0600 "$path"
+
+	run librarian_author_key "public"
+	[ "$status" -eq 0 ]
+	[ "$output" = "11ff8ab7134c834e788ab4a5130f7853" ]
+}
+
+@test "the secret reaches the HMAC subprocess over the environment, never argv" {
+	# On Linux /proc/<pid>/cmdline is world-readable, so a secret on argv
+	# would be visible to any local user for the life of the call. A spy
+	# `node` on PATH records its own argv, then delegates to the real node
+	# so the derivation still runs for real — this isn't just checking that
+	# SOME node ran, the golden vector still has to come out right.
+	_fixed_secret
+	local stub_bin argv_capture real_node
+	stub_bin="${BATS_TEST_TMPDIR}/bin"
+	mkdir -p "$stub_bin"
+	real_node=$(command -v node)
+	argv_capture="${BATS_TEST_TMPDIR}/node-argv.bin"
+	rm -f "$argv_capture"
+	cat > "${stub_bin}/node" <<STUB
+#!/usr/bin/env bash
+printf '%s\0' "\$@" >> "$argv_capture"
+exec "$real_node" "\$@"
+STUB
+	chmod +x "${stub_bin}/node"
+
+	local old_path="$PATH"
+	export PATH="${stub_bin}:${PATH}"
+	run librarian_author_key "public"
+	export PATH="$old_path"
+
+	[ "$status" -eq 0 ]
+	[ "$output" = "11ff8ab7134c834e788ab4a5130f7853" ]
+	[ -f "$argv_capture" ]
+
+	# grep -c returns 0 with exit status 1 when there is no match — assert
+	# on $output, not $status, per the $RANDOM check above.
+	run grep -ac "0000000000000000000000000000000000000000000000000000000000000000" "$argv_capture"
+	[ "$output" = "0" ]
+}
+
+@test "a directory at the secret path is refused, not silently stranding a secret" {
+	# `ln FILE DIR` succeeds by linking basename(FILE) inside DIR rather
+	# than failing, so a directory at the secret path used to make creation
+	# look like it succeeded while stranding a fresh 0600 secret one level
+	# down that nothing ever reads again — one new stray file per call.
+	local path
+	path=$(librarian_author_secret_path)
+	mkdir -p "$path"
+
+	run --separate-stderr librarian_author_secret_ensure
+	[ "$status" -ne 0 ]
+	[ "$output" = "" ]
+	[[ "$stderr" == *"not a regular file"* ]] || return 1
+
+	# No stray secret left behind inside the directory.
+	[ -z "$(ls -A "$path")" ]
+}
+
+@test "a FIFO at the secret path is refused rather than hanging forever" {
+	# A plain `cat` on a FIFO with no writer blocks indefinitely, and this
+	# repo's constraint is that a plugin must never hang a session. Wrapped
+	# in `timeout` as a safety net for the test itself in case of a
+	# regression; a correct implementation returns well inside it.
+	command -v timeout >/dev/null 2>&1 || skip "timeout not available"
+	command -v mkfifo >/dev/null 2>&1 || skip "mkfifo not available"
+	local path
+	path=$(librarian_author_secret_path)
+	mkdir -p "$(dirname "$path")"
+	mkfifo "$path"
+
+	run timeout 5 bash -c "source '${PLUGIN_ROOT}/scripts/lib/librarian-author-key.sh'; librarian_author_secret_ensure"
+	[ "$status" -ne 124 ] || return 1
+	[ "$status" -ne 0 ]
+}
+
+@test "a weak-permission secret from a compromised creation path is not silently repaired" {
+	# Pins the `created` guard directly: without it, the tighten step below
+	# would run unconditionally and silently repair a permissions
+	# regression in the creation path on the very call that introduced it,
+	# before anything — test or human — could observe it. The real
+	# creation path always produces 0600 under a healthy umask, so a stub
+	# `mktemp` on PATH stands in for a umask/creation regression: it
+	# creates the temp file for real (so `ln` still has something to link)
+	# and then weakens its permissions before this lib ever sees it.
+	local stub_bin real_mktemp
+	stub_bin="${BATS_TEST_TMPDIR}/bin"
+	mkdir -p "$stub_bin"
+	real_mktemp=$(command -v mktemp)
+	cat > "${stub_bin}/mktemp" <<STUB
+#!/usr/bin/env bash
+tmp=\$("$real_mktemp" "\$@")
+chmod 0644 "\$tmp"
+printf '%s' "\$tmp"
+STUB
+	chmod +x "${stub_bin}/mktemp"
+
+	local old_path="$PATH"
+	export PATH="${stub_bin}:${PATH}"
+	run librarian_author_secret_ensure
+	export PATH="$old_path"
+	[ "$status" -eq 0 ]
+
+	local path
+	path=$(librarian_author_secret_path)
+	# The guard's job: leave the weak permissions from a bad creation path
+	# visible rather than silently fixing them on the same call that
+	# created the file.
+	[ "$(ls -l "$path" | cut -c1-10)" = "-rw-r--r--" ]
+}
+
+@test "the returned key carries no trailing newline" {
+	# `run`'s $output and $() both strip trailing newlines, so a stray
+	# printf '%s\n' regression in librarian_author_key would stay invisible
+	# to every other assertion in this file. Capture with a sentinel
+	# appended immediately after the call: only newlines at the very end of
+	# the whole captured stream get stripped, so a newline the function
+	# itself emits ends up mid-stream, before the sentinel, and survives.
+	_fixed_secret
+	local captured
+	captured=$(librarian_author_key "public"; printf 'END')
+	[ "$captured" = "11ff8ab7134c834e788ab4a5130f7853END" ]
+}

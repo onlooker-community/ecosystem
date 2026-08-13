@@ -73,6 +73,11 @@ librarian_author_secret_ensure() {
 			printf 'author-key: cannot create a temp file in %s\n' "$dir" >&2
 			return 1
 		}
+		# Captured now, while it is still known: if $path turns out to be
+		# a directory below, the stray secret `ln` leaves behind is named
+		# after this.
+		local tmp_basename
+		tmp_basename="$(basename "$tmp")"
 		# Belt-and-suspenders with mktemp's own restrictive creation mode —
 		# create restricted, then write, never write-then-chmod, which
 		# would leave a window where the secret is world-readable on disk.
@@ -87,6 +92,31 @@ librarian_author_secret_ensure() {
 		# Someone else winning the race is not an error — clean up our
 		# losing copy either way.
 		rm -f "$tmp" 2>/dev/null
+
+		# `ln FILE DIR` succeeds — POSIX `ln` links basename(FILE) *inside*
+		# an existing directory rather than failing — so a directory
+		# sitting at $path makes the `ln` above "succeed" (created=1)
+		# while $path itself is still that directory, not a secret. Left
+		# alone, the stray hard link at $path/$tmp_basename is live secret
+		# material nothing ever reads again. Catch it here, while the name
+		# is still known, and remove it before refusing.
+		if [[ "$created" -eq 1 && ! -f "$path" ]]; then
+			rm -f "${path}/${tmp_basename}" 2>/dev/null
+			printf 'author-key: %s is not a regular file; refusing to create a secret there.\n' "$path" >&2
+			return 1
+		fi
+	fi
+
+	# A pre-existing non-regular file at $path (a FIFO, a socket, a device
+	# node) also fails the `-f` check above and enters the block above —
+	# but `ln` refuses to link onto an existing non-directory path, so
+	# `created` stays 0 and the directory case just above never fires.
+	# Catch it here instead: before the tighten step below touches its
+	# mode, and before the plain `cat` further down would block forever
+	# reading a FIFO with no writer. Plugins must never hang a session.
+	if [[ ! -f "$path" ]]; then
+		printf 'author-key: %s is not a regular file; refusing to read a secret from it.\n' "$path" >&2
+		return 1
 	fi
 
 	# Tighten loose permissions and say so, but only on a file that already
@@ -121,28 +151,47 @@ librarian_author_secret_ensure() {
 		printf 'author-key: %s carries an ACL granting access beyond its file mode (mode alone will not show this); chmod cannot clear it — review and remove it manually.\n' "$path" >&2
 	fi
 
+	# Read only the FIRST LINE, and validate it before any other processing.
+	# `head -n1` never touches bytes past the first newline, which matters
+	# for two reasons at once: a secret file is never regenerated (see
+	# above), so the documented way to move it to a second machine is a
+	# plain copy — but a user who instead appends (`>>` instead of `>`, or
+	# restoring a backup on top of an existing file) leaves a *second*
+	# 64-hex line sitting after the first. Stripping newlines from the
+	# whole file before validating would concatenate the two lines into a
+	# 128-character string that reads as one long-but-"valid" secret — a
+	# THIRD identity, matching neither machine, accepted silently. Reading
+	# only line one sidesteps that: whatever is on later lines is simply
+	# never read.
 	local secret
-	secret=$(cat "$path" 2>/dev/null | tr -d '\n')
+	secret=$(head -n1 "$path" 2>/dev/null)
 	if [[ -z "$secret" ]]; then
 		printf 'author-key: secret at %s is empty; refusing to derive.\n' "$path" >&2
 		return 1
 	fi
 	# A short-but-nonempty secret still derives a plausible key with less
-	# entropy than this design claims. 64 is the floor width openssl
-	# rand -hex 32 produces — longer is accepted; HMAC does not care about
-	# extra key width.
+	# entropy than this design claims. 64 is the exact width openssl
+	# rand -hex 32 produces.
 	if [[ "${#secret}" -lt 64 ]]; then
 		printf 'author-key: secret at %s is too short (%d chars, expected 64).\n' \
 			"$path" "${#secret}" >&2
 		return 1
 	fi
-	# Length is not content: 64 characters of the wrong shape (spaces,
-	# uppercase, punctuation) passes the check above and would still derive
-	# a garbage-but-deterministic identity from HMAC — accepted-but-wrong is
-	# worse than rejected outright, because nothing downstream can tell the
-	# difference between that and a real one.
-	if ! printf '%s' "$secret" | grep -Eq '^[0-9a-f]{64,}$'; then
-		printf 'author-key: secret at %s is malformed (expected 64+ lowercase hex characters).\n' \
+	# Anchored and EXACT, not "64 or more": a longer key is not a wider
+	# version of the same secret, it is a DIFFERENT secret — HMAC does not
+	# ignore the extra width, it derives a different identity from it.
+	# Accepting anything past 64 chars here is exactly how a stray longer
+	# first line (or the wrong-shape content below) becomes a silently
+	# wrong-but-well-formed author_key rather than a refusal.
+	#
+	# This is also what catches wrong-shape content: 64 characters of the
+	# wrong shape (spaces, uppercase, punctuation) passes the length check
+	# above and would still derive a garbage-but-deterministic identity
+	# from HMAC — accepted-but-wrong is worse than rejected outright,
+	# because nothing downstream can tell the difference between that and
+	# a real one.
+	if ! printf '%s' "$secret" | grep -Eq '^[0-9a-f]{64}$'; then
+		printf 'author-key: secret at %s is malformed (expected exactly 64 lowercase hex characters).\n' \
 			"$path" >&2
 		return 1
 	fi
@@ -173,8 +222,15 @@ librarian_author_key() {
 			;;
 	esac
 
-	command -v openssl >/dev/null 2>&1 || {
-		printf 'author-key: openssl is required to derive a key.\n' >&2
+	# node, not openssl: openssl's `dgst -hmac` CLI has no way to take the
+	# HMAC key off argv. On Linux /proc/<pid>/cmdline is world-readable, so
+	# any local user could read the secret out of the process table for
+	# the life of the call. node reads it from the environment instead
+	# (AK_SECRET, below) — /proc/<pid>/environ is owner-only. Visibility is
+	# not secret and stays on argv. The algorithm is unchanged: verified
+	# against the golden vectors byte-for-byte before this switch.
+	command -v node >/dev/null 2>&1 || {
+		printf 'author-key: node is required to derive a key.\n' >&2
 		return 1
 	}
 
@@ -182,15 +238,23 @@ librarian_author_key() {
 	secret=$(librarian_author_secret_ensure) || return 1
 
 	local digest
-	digest=$(printf '%s' "onlooker.author.v1:${visibility}" \
-		| openssl dgst -sha256 -hmac "$secret" -r 2>/dev/null \
-		| cut -d' ' -f1) || {
+	digest=$(AK_SECRET="$secret" node -e '
+const crypto = require("crypto");
+process.stdout.write(
+	crypto.createHmac("sha256", process.env.AK_SECRET)
+		.update("onlooker.author.v1:" + process.argv[1])
+		.digest("hex")
+);
+' "$visibility" 2>/dev/null) || {
 		printf 'author-key: HMAC failed.\n' >&2
 		return 1
 	}
 
 	# 64 hex chars in, 32 out. Truncating an HMAC is standard; 128 bits is
-	# ample for a collision-resistant pseudonymous identifier.
+	# ample for a collision-resistant pseudonymous identifier. This width
+	# check is what actually provides fail-closed behavior if the node
+	# subprocess misbehaves — the command substitution above has no
+	# `pipefail` to catch a partial write on its own.
 	[[ "${#digest}" -eq 64 ]] || {
 		printf 'author-key: unexpected digest width %d; refusing.\n' "${#digest}" >&2
 		return 1
