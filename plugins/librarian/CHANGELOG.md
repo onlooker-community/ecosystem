@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.11.0...librarian-v0.12.0) (2026-08-13)
+
+
+### Features
+
+* **librarian:** land judged lessons in the approved pool :package: ([#146](https://github.com/onlooker-community/ecosystem/issues/146)) ([f7adc72](https://github.com/onlooker-community/ecosystem/commit/f7adc7263a985d4cb7695b46d6f9dbab77dce587))
+
 ## [0.11.0](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.10.0...librarian-v0.11.0) (2026-08-13)
 
 

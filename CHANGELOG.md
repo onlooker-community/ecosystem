@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.39.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.38.0...ecosystem-v0.39.0) (2026-08-13)
+
+
+### Features
+
+* **librarian:** land judged lessons in the approved pool :package: ([#146](https://github.com/onlooker-community/ecosystem/issues/146)) ([f7adc72](https://github.com/onlooker-community/ecosystem/commit/f7adc7263a985d4cb7695b46d6f9dbab77dce587))
+
 ## [0.38.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.37.0...ecosystem-v0.38.0) (2026-08-13)
 
 
