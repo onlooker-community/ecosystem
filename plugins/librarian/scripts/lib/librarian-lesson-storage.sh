@@ -61,29 +61,51 @@ librarian_lesson_write_proposal() {
 # bury a good artifact permanently, because the watermark has already moved
 # past it and declined entries are never re-read.
 #
-# Usage: librarian_lesson_append_declined <key> <artifact_id> <reason> [detail]
+# `verdict` is emitted with --argjson so it lands as a nested object, not a
+# serialized string: consumers read .verdict.judges[].score directly. Rows
+# written by the transform have no verdict and simply lack the key — a format
+# failure has no jury.
+#
+# Usage: librarian_lesson_append_declined <key> <artifact_id> <reason> [detail] [verdict_json]
 librarian_lesson_append_declined() {
 	local key="$1"
 	local artifact_id="$2"
 	local reason="$3"
 	local detail="${4:-}"
+	local verdict="${5:-}"
 	[[ -z "$key" || -z "$artifact_id" || -z "$reason" ]] && return 1
 
 	librarian_lesson_storage_init "$key" || return 1
 
 	local now line
 	now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-	line=$(jq -cn \
-		--arg artifact_id "$artifact_id" \
-		--arg reason "$reason" \
-		--arg detail "$detail" \
-		--arg at "$now" \
-		'{
-			artifact_id: $artifact_id,
-			reason: $reason,
-			detail: (if $detail == "" then null else $detail end),
-			declined_at: $at
-		}') || return 1
+	if [[ -n "$verdict" ]]; then
+		line=$(jq -cn \
+			--arg artifact_id "$artifact_id" \
+			--arg reason "$reason" \
+			--arg detail "$detail" \
+			--arg at "$now" \
+			--argjson verdict "$verdict" \
+			'{
+				artifact_id: $artifact_id,
+				reason: $reason,
+				detail: (if $detail == "" then null else $detail end),
+				declined_at: $at,
+				verdict: $verdict
+			}') || return 1
+	else
+		line=$(jq -cn \
+			--arg artifact_id "$artifact_id" \
+			--arg reason "$reason" \
+			--arg detail "$detail" \
+			--arg at "$now" \
+			'{
+				artifact_id: $artifact_id,
+				reason: $reason,
+				detail: (if $detail == "" then null else $detail end),
+				declined_at: $at
+			}') || return 1
+	fi
 
 	printf '%s\n' "$line" >> "$(librarian_lessons_dir "$key")/declined.jsonl"
 }
