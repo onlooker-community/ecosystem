@@ -251,13 +251,16 @@ process.stdout.write(
 	}
 
 	# 64 hex chars in, 32 out. Truncating an HMAC is standard; 128 bits is
-	# ample for a collision-resistant pseudonymous identifier. This width
-	# check is what actually provides fail-closed behavior if the node
-	# subprocess misbehaves — the command substitution above has no
+	# ample for a collision-resistant pseudonymous identifier. Anchored and
+	# on the CHARSET, not just the width: a width-only check lets 64 bytes
+	# of anything through a misbehaving node subprocess, and the truncated
+	# result would still violate this function's own 32-lowercase-hex
+	# contract — this is what actually provides fail-closed behavior if the
+	# subprocess misbehaves, since the command substitution above has no
 	# `pipefail` to catch a partial write on its own.
-	[[ "${#digest}" -eq 64 ]] || {
-		printf 'author-key: unexpected digest width %d; refusing.\n' "${#digest}" >&2
+	if ! printf '%s' "$digest" | grep -Eq '^[0-9a-f]{64}$'; then
+		printf 'author-key: HMAC returned a malformed digest (expected 64 lowercase hex characters).\n' >&2
 		return 1
-	}
+	fi
 	printf '%s' "${digest:0:32}"
 }

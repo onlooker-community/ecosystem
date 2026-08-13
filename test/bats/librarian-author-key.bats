@@ -423,3 +423,28 @@ STUB
 	captured=$(librarian_author_key "public"; printf 'END')
 	[ "$captured" = "11ff8ab7134c834e788ab4a5130f7853END" ]
 }
+
+@test "a 64-character non-hex digest is refused, not truncated and returned" {
+	# The width check alone cannot tell a digest from 64 arbitrary bytes.
+	# Requires a misbehaving node, which is a serious precondition — but a
+	# subprocess can misbehave for reasons other than compromise, and a
+	# non-hex key fails the contract's own /^[0-9a-f]{32}$/ at ingest.
+	_fixed_secret
+	local stub_bin
+	stub_bin="${BATS_TEST_TMPDIR}/bin"
+	mkdir -p "$stub_bin"
+	cat > "${stub_bin}/node" <<'STUB'
+#!/usr/bin/env bash
+printf 'zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz'
+STUB
+	chmod +x "${stub_bin}/node"
+
+	local old_path="$PATH"
+	export PATH="${stub_bin}:${PATH}"
+	run --separate-stderr librarian_author_key "public"
+	export PATH="$old_path"
+
+	[ "$status" -ne 0 ]
+	[ "$output" = "" ]
+	[[ "$stderr" == *"malformed"* ]] || return 1
+}
