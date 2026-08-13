@@ -302,12 +302,28 @@ _split() {
 	[ -f "$(_dir)/approved/auto01.json" ]
 }
 
-@test "an unjudged candidate is neither recorded nor promoted" {
-	# The judge returns 2 for UNJUDGED and writes nothing; promotion must not
-	# run behind it and invent a terminal state for a lesson with no verdict.
+@test "an unjudged candidate does not even attempt promotion" {
+	# The judge returns 2 for UNJUDGED and writes nothing — but that alone
+	# does not pin the wiring. librarian_lesson_promote independently refuses
+	# a still-`confirmed` proposal ("has not been judged yet"), so a `2)` arm
+	# that mistakenly calls it would land on the exact same empty state as a
+	# `2)` arm that never calls it at all: same status, same missing pool
+	# file. Shadow librarian_lesson_promote with a spy that records whether
+	# it was invoked and delegates to the real implementation, so a call
+	# wired into the `2)` arm is caught even though the call itself is a
+	# no-op.
 	_seed_judged "auto02" "org" "confirmed" '[]'
+
+	local marker="${BATS_TEST_TMPDIR}/promote-invoked"
+	eval "$(declare -f librarian_lesson_promote | sed '1s/^librarian_lesson_promote/_real_librarian_lesson_promote/')"
+	librarian_lesson_promote() {
+		: > "$marker"
+		_real_librarian_lesson_promote "$@"
+	}
+
 	run librarian_cli lessons judge "auto02" '[{"judge_type":"standard","score":"bad","passed":true}]' "$PROJECT_REPO"
 	[ "$status" -eq 2 ]
 	[ "$(jq -r '.status' "$(_dir)/proposals/auto02.json")" = "confirmed" ]
 	[ ! -f "$(_dir)/approved/auto02.json" ]
+	[ ! -f "$marker" ]
 }
