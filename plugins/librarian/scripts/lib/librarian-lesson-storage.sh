@@ -145,6 +145,17 @@ librarian_lesson_seen() {
 		return 0
 	fi
 
+	# The approved/*.json half of this loop cannot actually match a promoted
+	# pool entry: ZLesson is a strict object with no `artifact_id` field (see
+	# librarian-lesson-promote.sh's key-set comment), so `.artifact_id == $a`
+	# is always false there. Dedup for an approved-and-promoted artifact
+	# works today only because proposals/*.json is never pruned — the
+	# proposals/ half of the loop is what's actually carrying it. This is
+	# NOT proof the pool is covered; it is proposals/ growing without bound
+	# standing in for coverage the pool entry cannot provide. See ecosystem-d0m
+	# for the options (an artifact_id -> lesson id index, making
+	# "never prune proposals" explicit, or a per-entry sidecar) — do not
+	# "fix" this loop without picking one of those first.
 	local f
 	for f in "$dir"/proposals/*.json "$dir"/approved/*.json; do
 		[[ -f "$f" ]] || continue
