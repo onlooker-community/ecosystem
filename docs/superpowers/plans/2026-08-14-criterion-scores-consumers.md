@@ -1185,6 +1185,73 @@ Append to `test/bats/librarian-lesson-judge.bats`:
 Run: `bats test/bats/librarian-lesson-judge.bats`
 Expected: FAIL — the gate-policy test and the SKILL.md test fail. The floor and criteria-differ tests pass already, pinning what must not regress.
 
+- [ ] **Step 2b: Carry `failed_criterion` into the on-disk verdict**
+
+Found by Task 4's review. `librarian_lesson_gate` computes `failed_criterion`, but `librarian_lesson_judge` discards it — its verdict block extracts only `.passed` and `.reason`. So a rejected proposal records `"reason":"criterion_floor"` with no indication of *which* criterion, which is exactly the ambiguity `criterion_floor` was introduced to remove. Tribunal's walk copies the field onto its event for this reason; librarian had no counterpart.
+
+First, the failing test — append to `test/bats/librarian-lesson-judge.bats`:
+
+```bash
+@test "a floor rejection records which criterion failed" {
+	# "reason": "criterion_floor" without the criterion name is no more
+	# actionable than "blocked" — the whole argument for a distinct reason
+	# was naming the thing that failed.
+	_seed_confirmed "floorname01" "public"
+	local verdicts='[
+	  {"judge_type":"standard","score":0.9,"passed":true,"criterion_scores":{"grounding":0.95,"scope_accuracy":0.95,"generality":0.9,"disclosure":0.4}},
+	  {"judge_type":"adversarial","score":0.85,"passed":true,"criterion_scores":{"grounding":0.9,"scope_accuracy":0.9,"generality":0.85,"disclosure":0.4}}
+	]'
+	run librarian_lesson_judge "$PROJECT_KEY" "floorname01" "$verdicts"
+	[ "$status" -eq 0 ] || return 1
+	[ "$(_status_of floorname01)" = "rejected" ] || return 1
+
+	local path
+	path="$(librarian_lessons_dir "$PROJECT_KEY")/proposals/floorname01.json"
+	jq -e '.verdict.reason == "criterion_floor"' "$path" >/dev/null || return 1
+	jq -e '.verdict.failed_criterion == "disclosure"' "$path" >/dev/null
+}
+
+@test "an approved verdict carries no failed_criterion key" {
+	# Absent rather than null: a key that is always present but usually empty
+	# invites `// ""` at the read site, which is how this pipeline has
+	# repeatedly lost the absent-vs-empty distinction.
+	_seed_confirmed "floorname02" "public"
+	local verdicts='[
+	  {"judge_type":"standard","score":0.9,"passed":true,"criterion_scores":{"grounding":0.95,"scope_accuracy":0.95,"generality":0.9,"disclosure":0.95}},
+	  {"judge_type":"adversarial","score":0.9,"passed":true,"criterion_scores":{"grounding":0.9,"scope_accuracy":0.9,"generality":0.9,"disclosure":0.95}}
+	]'
+	run librarian_lesson_judge "$PROJECT_KEY" "floorname02" "$verdicts"
+	[ "$status" -eq 0 ] || return 1
+
+	local path
+	path="$(librarian_lessons_dir "$PROJECT_KEY")/proposals/floorname02.json"
+	jq -e '.verdict | has("failed_criterion") | not' "$path" >/dev/null
+}
+```
+
+These use the file's existing helpers — `_seed_confirmed <id> <visibility>` (line 138), `_status_of <id>` (line 154), and `$PROJECT_KEY` — verified against the neighboring end-to-end test at line 690. Do not invent new fixtures.
+
+Run them: the first must fail on the missing `failed_criterion` key; the second passes already, since it pins behavior that must not regress.
+
+Then, in `plugins/librarian/scripts/lib/librarian-lesson-judge.sh`, change the verdict construction inside `librarian_lesson_judge` from:
+
+```bash
+			'{rubric_id: $r, gate_policy: $p, score_threshold: $th,
+			  aggregate_score: $ag, passed: $g.passed, reason: $g.reason,
+			  judges: $j}') || {
+```
+
+to:
+
+```bash
+			'{rubric_id: $r, gate_policy: $p, score_threshold: $th,
+			  aggregate_score: $ag, passed: $g.passed, reason: $g.reason,
+			  judges: $j}
+			 + (if $g.failed_criterion then {failed_criterion: $g.failed_criterion} else {} end)') || {
+```
+
+The `+ (if … else {} end)` form keeps the key **absent** on a non-floor verdict rather than present-and-null. Re-run: both tests pass.
+
 - [ ] **Step 3: Swap the public tier's gate policy**
 
 In `plugins/librarian/config.json`, in the rubric with `"id": "lesson-promotion-public"`, change:
