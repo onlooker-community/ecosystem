@@ -95,9 +95,16 @@ tribunal_gate_decide() {
 	local score_ok=1
 	awk -v s="$aggregated_score" -v t="$score_threshold" 'BEGIN { exit !(s >= t) }' && score_ok=0
 
-	# Per-criterion floors. A criterion whose mean across the judges that scored
-	# it falls below min_pass blocks regardless of the aggregate or the policy —
-	# that is the whole point of a floor.
+	# Per-criterion floors. A criterion whose *lowest* score among the judges
+	# that scored it falls below min_pass blocks regardless of the aggregate or
+	# the policy — that is the whole point of a floor.
+	#
+	# The lowest, not the mean: a floor means nobody may be below it. Using the
+	# mean let a specialist's finding be diluted by generalists who did not
+	# look — with safety floored at 0.8, a security judge scoring 0.6 against
+	# two generalists at 0.95 averaged to 0.83 and passed, so empanelling more
+	# judges made every floor weaker. Weighting still uses the mean; only the
+	# floor is a minimum.
 	#
 	# A criterion no judge scored is NOT a violation: absence is not a zero, and
 	# treating it as one would fail every verdict emitted before judges shipped
@@ -120,7 +127,7 @@ tribunal_gate_decide() {
 		         | .criterion_scores[$c.name]
 		         | select(type == "number") ]) as $scores
 		    | select(($scores | length) > 0)
-		    | select((($scores | add) / ($scores | length)) < $c.min_pass)
+		    | select(($scores | min) < $c.min_pass)
 		    | $c.name ]
 		| first // empty
 	' 2>/dev/null) || floor_failed=""
@@ -145,18 +152,26 @@ tribunal_gate_decide() {
 		fi
 	fi
 
+	# A violated floor is worth naming whichever reason wins the precedence
+	# contest below: the worst failures drag the aggregate under the threshold
+	# too, so attaching failed_criterion only to the criterion_floor arm left
+	# the diagnostic absent exactly where it mattered most. Precedence itself is
+	# unchanged — this only decorates.
+	local floor_suffix=""
+	[[ -n "$floor_failed" ]] && floor_suffix=$(printf ',"failed_criterion":"%s"' "$floor_failed")
+
 	# Pick the most informative blocking reason. low_score first: if the
 	# aggregate missed the threshold, that is the more actionable thing to tell
 	# the Actor than any single criterion.
 	if [[ "$score_ok" -ne 0 ]]; then
-		printf '{"passed":false,"reason":"low_score"}'
+		printf '{"passed":false,"reason":"low_score"%s}' "$floor_suffix"
 	elif [[ -n "$floor_failed" ]]; then
 		printf '{"passed":false,"reason":"criterion_floor","failed_criterion":"%s"}' "$floor_failed"
 	elif [[ "$jury_ok" -ne 0 ]]; then
 		if [[ "$meta_override" == "reject" ]]; then
-			printf '{"passed":false,"reason":"meta_override"}'
+			printf '{"passed":false,"reason":"meta_override"%s}' "$floor_suffix"
 		else
-			printf '{"passed":false,"reason":"dissent_unresolved"}'
+			printf '{"passed":false,"reason":"dissent_unresolved"%s}' "$floor_suffix"
 		fi
 	else
 		printf '{"passed":true}'

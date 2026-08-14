@@ -148,6 +148,6 @@ Keep the summary terse. The artifacts on disk are the long form.
 
 ## Error handling
 
-- If a judge subagent fails to return parseable JSON, treat that judge as `score: 0, passed: false, confidence: 0` and surface the parse error in `feedback_summary`. Do not abort the iteration — let the gate decide.
+- If a judge subagent fails to return parseable JSON, treat that judge as `score: 0, passed: false, confidence: 0` **and give it a `criterion_scores` object assigning `0` to every criterion in the active rubric.** Surface the parse error in `feedback_summary`. Do not abort the iteration — let the gate decide. A crashed judge was dispatched and produced nothing — that is the "assessed and failed" case, not the "did not assess" case. Omitting `criterion_scores` (or sending `{}`) would make the crash invisible to `weighted_mean`, which never reads `.score`, and the panel would score as though the judge had never been empaneled.
 - If the Meta-Judge fails, default to `verdict_quality: "questionable", bias_detected: false` so the gate falls back to score-based logic.
 - If event emission fails (schema validation), keep going and write a warning to stderr. The persisted artifacts on disk are still trustworthy.

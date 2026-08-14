@@ -69,4 +69,6 @@ Final message is a single JSON object — no prose, no fence:
 }
 ```
 
+The `criterion_scores` keys above are the **default rubric's** criteria, shown as an example. **The rubric you are given governs** — score its criterion names, whatever they are. Other callers ship different rubrics; librarian's lesson rubrics, for instance, use `grounding`, `scope_accuracy`, `generality`, and `disclosure`.
+
 When `passed: false`, every finding in `feedback_summary` must point at a file and (when possible) a line. Vague security objections waste the Actor's retry budget.

@@ -74,4 +74,6 @@ Final message is a single JSON object — no prose, no fence:
 }
 ```
 
+The `criterion_scores` keys above are the **default rubric's** criteria, shown as an example. **The rubric you are given governs** — score its criterion names, whatever they are. Other callers ship different rubrics; librarian's lesson rubrics, for instance, use `grounding`, `scope_accuracy`, `generality`, and `disclosure`.
+
 `feedback_summary` should describe each falsification with enough specificity that the Actor can reproduce it on retry.

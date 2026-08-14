@@ -34,9 +34,16 @@ _agent_json() {
 }
 
 @test "criterion_scores is keyed by rubric criteria, not by the agent's own lenses" {
-	# The default rubric's criteria are the only legal keys. This is the whole
-	# point: an agent keying by its own lens names (edge-cases, injection)
-	# produces scores no aggregator can ever match to a floor.
+	# The default rubric's criteria are the only legal keys *for this example*.
+	# This is the whole point: an agent keying by its own lens names
+	# (edge-cases, injection) produces scores no aggregator can ever match to a
+	# floor.
+	#
+	# The example is not the contract — the caller's rubric governs, and other
+	# callers ship different names. Librarian dispatches these same agents
+	# (ADR-002) against rubrics keyed grounding / scope_accuracy / generality /
+	# disclosure. Each agent says so in prose right below the block this test
+	# reads; do not "fix" a librarian mismatch by editing the keys here.
 	local rubric_names json agent
 	rubric_names=$(jq -c '[.tribunal.rubric.builtins[0].criteria[].name]' \
 		"${REPO_ROOT}/plugins/tribunal/config.json")
@@ -56,6 +63,22 @@ _agent_json() {
 	for agent in standard adversarial security; do
 		json=$(_agent_json "${AGENTS_DIR}/tribunal-judge-${agent}.md")
 		printf '%s' "$json" | jq -e '.criterion_scores | has("safety")' >/dev/null || return 1
+	done
+}
+
+@test "every judge agent says the caller's rubric governs, not the example keys" {
+	# C2. The test above pins the example block to tribunal's default rubric,
+	# which is right for tribunal and wrong for everyone else: librarian
+	# dispatches these same three agents by name (ADR-002) against rubrics keyed
+	# grounding / scope_accuracy / generality / disclosure. A judge that copies
+	# the example into a librarian context emits keys matching nothing, the
+	# aggregate silently degrades, and disclosure's floor never runs on a lesson
+	# about to be published. An example is the strongest signal in an agent
+	# prompt, so the correction has to sit next to it.
+	local agent
+	for agent in standard adversarial security; do
+		grep -q 'The rubric you are given governs' "${AGENTS_DIR}/tribunal-judge-${agent}.md" || return 1
+		grep -q 'disclosure' "${AGENTS_DIR}/tribunal-judge-${agent}.md" || return 1
 	done
 }
 

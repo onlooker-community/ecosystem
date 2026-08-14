@@ -46,6 +46,8 @@ Your **final message** must be a single JSON object matching `TribunalVerdictPay
 }
 ```
 
+The `criterion_scores` keys above are the **default rubric's** criteria, shown as an example. **The rubric you are given governs** — score its criterion names, whatever they are. Other callers ship different rubrics; librarian's lesson rubrics, for instance, use `grounding`, `scope_accuracy`, `generality`, and `disclosure`.
+
 Required fields: `score`, `passed`, `judge_type`. `passed` reflects your own judgment based on the rubric thresholds — the orchestrator may still aggregate and override per gate policy.
 
 `criterion_scores` maps **each criterion name from the rubric you were given** to your score for it in `[0,1]`. This is separate from `criteria_evaluated`, which lists the dimensions *you* chose to investigate — the rubric's criteria are what the orchestrator weights and floors.

@@ -37,10 +37,42 @@ VERDICTS='[{"judge_id":"a","score":0.8},{"judge_id":"b","score":0.6},{"judge_id"
 	awk -v v="$v" 'BEGIN { exit !(v > 0.39 && v < 0.41) }'
 }
 
-@test "weighted_mean degrades to mean in v0.1" {
+@test "weighted_mean falls back to mean with neither rubric nor criterion scores" {
 	local v
 	v=$(tribunal_aggregate "weighted_mean" "$VERDICTS")
 	awk -v v="$v" 'BEGIN { exit !(v > 0.59 && v < 0.61) }'
+}
+
+@test "weighted_mean degrades to mean when the panel covered too little of the rubric" {
+	# The C1 regression: two judges rating work at 0.45/0.50 overall while
+	# scoring only clarity (weight 0.1) at 0.9 produced an aggregate of 0.9 —
+	# renormalized over a tenth of the rubric and passing a gate that the
+	# judges' own scores would have blocked.
+	local out
+	out=$(tribunal_aggregate "weighted_mean" '[
+	  {"judge_id":"a","score":0.45,"passed":true,"criterion_scores":{"clarity":0.9}},
+	  {"judge_id":"b","score":0.50,"passed":true,"criterion_scores":{"clarity":0.9}}
+	]' '{"criteria":[{"name":"correctness","weight":0.4,"min_pass":0.7},{"name":"completeness","weight":0.3,"min_pass":0.7},{"name":"safety","weight":0.2,"min_pass":0.8},{"name":"clarity","weight":0.1,"min_pass":0.5}]}')
+	# Must be the plain mean of .score (0.475), not the renormalized 0.9.
+	awk -v a="$out" 'BEGIN { exit !(a > 0.474 && a < 0.476) }'
+}
+
+@test "weighted_mean trusts a panel that covered enough of the rubric" {
+	local out
+	out=$(tribunal_aggregate "weighted_mean" '[
+	  {"judge_id":"a","score":0.1,"passed":true,"criterion_scores":{"correctness":0.8,"completeness":0.8,"safety":0.8}}
+	]' '{"criteria":[{"name":"correctness","weight":0.4,"min_pass":0.7},{"name":"completeness","weight":0.3,"min_pass":0.7},{"name":"safety","weight":0.2,"min_pass":0.8},{"name":"clarity","weight":0.1,"min_pass":0.5}]}')
+	# 0.9 of the weight is covered; the weighted value (0.8) must win over .score.
+	awk -v a="$out" 'BEGIN { exit !(a > 0.799 && a < 0.801) }'
+}
+
+@test "an out-of-range criterion score is ignored, not trusted" {
+	local out
+	out=$(tribunal_aggregate "weighted_mean" '[
+	  {"judge_id":"a","score":0.5,"criterion_scores":{"correctness":100}}
+	]' '{"criteria":[{"name":"correctness","weight":1.0,"min_pass":0.7}]}')
+	# 100 is filtered, nothing is covered, so this degrades to the mean of .score.
+	awk -v a="$out" 'BEGIN { exit !(a > 0.499 && a < 0.501) }'
 }
 
 @test "unknown method falls back to mean with warning on stderr" {

@@ -21,12 +21,33 @@
 # is excluded from the denominator — absence is not a zero. When no criterion
 # has any score (every verdict emitted before judges shipped criterion_scores),
 # weighted_mean degrades to mean rather than collapsing to 0.
+#
+# Normalizing by the weights actually scored is only honest once the panel has
+# covered enough of the rubric. The judge agents are told to omit any criterion
+# they cannot assess, so a panel that scores one cheap criterion and skips the
+# rest would otherwise produce an aggregate computed entirely from that one and
+# renormalized to look complete — and .score, the judge's own overall verdict,
+# is never read here to contradict it. So: unless the scored weight covers
+# min_criterion_coverage of the rubric's total declared weight, degrade to the
+# plain mean of .score, which is the panel's own summary judgment.
 
 tribunal_aggregate() {
 	local method="${1:-mean}"
 	local verdicts="${2:-[]}"
 	local rubric="${3:-}"
 	[ -z "$rubric" ] && rubric='{}'
+
+	# This lib is sourced standalone in tests and does not pull in
+	# tribunal-config.sh; fall back rather than adding a source line.
+	local min_coverage
+	if ! type tribunal_config_get >/dev/null 2>&1; then
+		min_coverage="0.6"
+	else
+		min_coverage=$(tribunal_config_get '.tribunal.rubric.min_criterion_coverage' 2>/dev/null)
+	fi
+	case "$min_coverage" in
+		''|null) min_coverage="0.6" ;;
+	esac
 
 	local count
 	count=$(printf '%s' "$verdicts" | jq 'length' 2>/dev/null) || count=0
@@ -38,8 +59,11 @@ tribunal_aggregate() {
 			;;
 		weighted_mean)
 			local weighted
-			weighted=$(printf '%s' "$verdicts" | jq -r --argjson rubric "$rubric" '
+			weighted=$(printf '%s' "$verdicts" | jq -r \
+				--argjson rubric "$rubric" --argjson mincov "$min_coverage" '
 				. as $v
+				| ([ ($rubric.criteria // [])[]
+				     | select((.weight | type) == "number") | .weight ] | add) as $total_w
 				| [ ($rubric.criteria // [])[]
 				    | select((.name | type) == "string" and (.weight | type) == "number")
 				    | . as $c
@@ -47,18 +71,21 @@ tribunal_aggregate() {
 				         | select((.criterion_scores | type) == "object")
 				         | select(.criterion_scores | has($c.name))
 				         | .criterion_scores[$c.name]
-				         | select(type == "number") ]) as $scores
+				         | select(type == "number" and . >= 0 and . <= 1) ]) as $scores
 				    | select(($scores | length) > 0)
-				    | { w: $c.weight, m: (($scores | add) / ($scores | length)) } ]
-				| (map(.w) | add) as $den
-				| if length == 0 or $den == null or $den <= 0 then empty
-				  else (map(.w * .m) | add) / $den
+				    | { w: $c.weight, m: (($scores | add) / ($scores | length)) } ] as $covered
+				| ($covered | map(.w) | add) as $den
+				| if ($covered | length) == 0 or $den == null or $den <= 0 then empty
+				  elif $total_w == null or $total_w <= 0 then empty
+				  elif ($den / $total_w) < $mincov then empty
+				  else ($covered | map(.w * .m) | add) / $den
 				  end
 			' 2>/dev/null)
 			if [ -n "$weighted" ]; then
 				printf '%s' "$weighted"
 			else
-				# No criterion carried a usable score — degrade to mean.
+				# No criterion carried a usable score, or the panel covered too
+				# little of the rubric to renormalize honestly — degrade to mean.
 				printf '%s' "$verdicts" | jq -r '[.[].score] | add / length'
 			fi
 			;;

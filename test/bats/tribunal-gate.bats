@@ -182,6 +182,30 @@ RUBRIC_FLOOR='{"criteria":[{"name":"correctness","weight":0.5,"min_pass":0.7},{"
 	printf '%s' "$out" | jq -e '.reason == "low_score"' >/dev/null
 }
 
+@test "a floor uses the lowest judge score, not the mean" {
+	# A specialist's finding must not be dilutable by generalists who did not
+	# look. safety's floor is 0.8; the mean of 0.95/0.95/0.6 is 0.833 and used
+	# to pass.
+	local out
+	out=$(tribunal_gate_decide "majority" '[
+	  {"judge_id":"a","score":0.9,"passed":true,"criterion_scores":{"correctness":0.9,"safety":0.95}},
+	  {"judge_id":"b","score":0.9,"passed":true,"criterion_scores":{"correctness":0.9,"safety":0.95}},
+	  {"judge_id":"c","score":0.9,"passed":true,"criterion_scores":{"correctness":0.9,"safety":0.6}}
+	]' "0.9" "0.75" "$NO_META" "0.05" "0.25" "$RUBRIC_FLOOR")
+	printf '%s' "$out" | jq -e '.reason == "criterion_floor"' >/dev/null || return 1
+	printf '%s' "$out" | jq -e '.failed_criterion == "safety"' >/dev/null
+}
+
+@test "a low_score block still names the criterion that failed its floor" {
+	local out
+	out=$(tribunal_gate_decide "majority" '[
+	  {"judge_id":"a","score":0.2,"passed":true,"criterion_scores":{"correctness":0.9,"safety":0.1}},
+	  {"judge_id":"b","score":0.2,"passed":true,"criterion_scores":{"correctness":0.9,"safety":0.1}}
+	]' "0.20" "0.75" "$NO_META" "0.05" "0.25" "$RUBRIC_FLOOR")
+	printf '%s' "$out" | jq -e '.reason == "low_score"' >/dev/null || return 1
+	printf '%s' "$out" | jq -e '.failed_criterion == "safety"' >/dev/null
+}
+
 @test "a floor on a criterion no judge scored is reported on stderr" {
 	# The adversarial-judge gap: safety carries the highest floor and appeared
 	# in no agent contract. Silently passing a floor nobody scored is this
