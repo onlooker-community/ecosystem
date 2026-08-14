@@ -21,6 +21,7 @@
       "timeout_seconds": 20
     },
     "lesson_judging": {
+      "min_criterion_coverage": 0.6,
       "rubrics": [
         {
           "id": "lesson-promotion",

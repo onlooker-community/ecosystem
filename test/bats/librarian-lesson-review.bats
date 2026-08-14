@@ -810,8 +810,10 @@ _cli_setup() {
 	local id
 	id=$(_seed_pending)
 	librarian_lesson_confirm "$PROJECT_KEY" "$id" "org"
+	# criterion_scores must cover the rubric's floored criteria or the judge
+	# refuses the panel as UNJUDGED and this lesson never reaches `approved`.
 	librarian_lesson_judge "$PROJECT_KEY" "$id" \
-		'[{"judge_type":"standard","score":0.9,"passed":true},{"judge_type":"adversarial","score":0.8,"passed":true}]'
+		'[{"judge_type":"standard","score":0.9,"passed":true,"criterion_scores":{"grounding":0.9,"scope_accuracy":0.9,"generality":0.9}},{"judge_type":"adversarial","score":0.8,"passed":true,"criterion_scores":{"grounding":0.8,"scope_accuracy":0.8,"generality":0.8}}]'
 
 	run librarian_lesson_unconfirm "$PROJECT_KEY" "$id"
 	[ "$status" -ne 0 ]
@@ -823,8 +825,10 @@ _cli_setup() {
 	local id
 	id=$(_seed_pending)
 	librarian_lesson_confirm "$PROJECT_KEY" "$id" "public"
+	# As above: the public rubric floors disclosure too, so it must be scored
+	# for the panel to produce a verdict at all. The jury split is what rejects.
 	librarian_lesson_judge "$PROJECT_KEY" "$id" \
-		'[{"judge_type":"standard","score":0.95,"passed":true},{"judge_type":"adversarial","score":0.75,"passed":false}]'
+		'[{"judge_type":"standard","score":0.95,"passed":true,"criterion_scores":{"grounding":0.95,"scope_accuracy":0.95,"generality":0.95,"disclosure":0.95}},{"judge_type":"adversarial","score":0.75,"passed":false,"criterion_scores":{"grounding":0.75,"scope_accuracy":0.75,"generality":0.75,"disclosure":0.95}}]'
 
 	run librarian_lesson_unconfirm "$PROJECT_KEY" "$id"
 	[ "$status" -ne 0 ]
