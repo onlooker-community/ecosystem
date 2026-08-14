@@ -6,10 +6,16 @@
 # knows tribunal. Librarian loads them itself rather than sourcing tribunal's
 # lib — see docs/adr/002-agent-definitions-are-shared-assets.md.
 #
-# The per-criterion weights and min_pass floors are DECLARED BUT INERT today:
-# tribunal_aggregate discards the rubric it is handed, and no per-criterion
-# score reaches any gate. They are the honest statement of intent and go live
-# unchanged when ecosystem-pht lands. Nothing here may depend on them.
+# The per-criterion weights and min_pass floors are LIVE as of ecosystem-pht:
+# librarian_lesson_aggregate weights them and librarian_lesson_gate blocks on
+# any criterion below its floor.
+#
+# `disclosure` at min_pass 0.9 is what makes the public tier stricter than org.
+# It replaces gate_policy `unanimous`, which was intended as a stand-in for
+# exactly this and turned out to be a no-op: at the configured two-judge panel,
+# `unanimous` and `majority` agree on every possible pass count. See
+# ecosystem-j74. Changing judge_types without re-reading that bead is how the
+# hole reopens.
 #
 # Exposes:
 #   librarian_lesson_rubric_id_for_visibility <visibility>

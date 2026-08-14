@@ -133,17 +133,15 @@ Second PR, after the schema version publishes.
 
 ### Judges emit it
 
-`tribunal-judge-standard` and `-security` already receive the rubric with its
-criteria and are told to "score each criterion in [0,1]". They have nowhere to
-put the result; their output contract gains `criterion_scores`.
+`tribunal-judge-standard` already receives the rubric with its criteria and is
+told to "score each criterion in [0,1]". It has nowhere to put the result; its
+output contract gains `criterion_scores`.
 
-**`tribunal-judge-adversarial` has no rubric section at all.** Its output keys
-— edge cases, concurrency, idempotency — are disjoint from every rubric in the
-repo. On tribunal's default panel that means `safety`, the criterion carrying
-the *highest* floor at `min_pass: 0.8`, would be scored by zero judges; under
-"absent scores must not block," its floor would silently never fire. The
-design's own failure mode, reappearing one layer down and looking like it
-works.
+**Neither `tribunal-judge-adversarial` nor `tribunal-judge-security` has a
+rubric section at all.** Both report `criteria_evaluated` lists drawn from their
+own investigative lenses — `edge-cases`, `concurrency`, `idempotency` for one;
+`injection`, `secrets`, `path-traversal` for the other — disjoint from every
+rubric in the repo.
 
 So the adversarial agent needs a rubric section before any floor can be
 trusted, and the consumer plan must state which judge types are expected to

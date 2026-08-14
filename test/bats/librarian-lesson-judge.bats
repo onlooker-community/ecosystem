@@ -71,12 +71,15 @@ STUB
 	[ "$status" -ne 0 ]
 }
 
-@test "the org rubric gates on majority and the public rubric on unanimous" {
+@test "both the org and public rubrics gate on majority" {
+	# unanimous was the public tier's stand-in protection and never worked at
+	# this panel size — see ecosystem-j74. Both rubrics are majority now; what
+	# still differs between them is the criteria, pinned separately below.
 	local org public
 	org=$(librarian_lesson_rubric_get "lesson-promotion")
 	public=$(librarian_lesson_rubric_get "lesson-promotion-public")
 	[ "$(printf '%s' "$org" | jq -r '.gate_policy')" = "majority" ]
-	[ "$(printf '%s' "$public" | jq -r '.gate_policy')" = "unanimous" ]
+	[ "$(printf '%s' "$public" | jq -r '.gate_policy')" = "majority" ]
 }
 
 @test "both rubrics carry a 0.75 score threshold and two judge types" {
@@ -232,8 +235,9 @@ _verdicts_split() {
 }
 
 @test "a public candidate one judge blocks is rejected though the aggregate clears" {
-	# The whole reason public differs from org. The mean here is 0.85, well
-	# above the 0.75 threshold; only the unanimous policy stops it.
+	# The mean here is 0.85, well above the 0.75 threshold; only the jury
+	# policy stops it. A split 1-of-2 panel fails majority the same way it
+	# failed unanimous at this panel size — see ecosystem-j74.
 	_seed_confirmed "pub01" "public"
 	run librarian_lesson_judge "$PROJECT_KEY" "pub01" "$(_verdicts_split)"
 	[ "$status" -eq 0 ]
@@ -242,8 +246,8 @@ _verdicts_split() {
 	local v
 	v=$(jq -c '.verdict' "$(librarian_lessons_dir "$PROJECT_KEY")/proposals/pub01.json")
 	[ "$(printf '%s' "$v" | jq -r '.rubric_id')" = "lesson-promotion-public" ]
-	[ "$(printf '%s' "$v" | jq -r '.gate_policy')" = "unanimous" ]
-	[ "$(printf '%s' "$v" | jq -r '.reason')" = "jury_not_unanimous" ]
+	[ "$(printf '%s' "$v" | jq -r '.gate_policy')" = "majority" ]
+	[ "$(printf '%s' "$v" | jq -r '.reason')" = "jury_not_majority" ]
 }
 
 @test "the same split panel is rejected at org, but for the majority reason" {
@@ -704,4 +708,82 @@ PUBLIC_RUBRIC='{"id":"lesson-promotion-public","criteria":[
 	local v
 	v=$(jq -c '.verdict' "$(librarian_lessons_dir "$PROJECT_KEY")/proposals/floor01.json")
 	[ "$(printf '%s' "$v" | jq -r '.reason')" = "criterion_floor" ]
+}
+
+@test "the public rubric no longer relies on unanimous" {
+	# unanimous was a stand-in for the disclosure floor and never worked: at the
+	# configured panel of 2, unanimous and majority are the same function for
+	# every possible pass count. ecosystem-j74.
+	local policy
+	policy=$(jq -r '.librarian.lesson_judging.rubrics[]
+		| select(.id == "lesson-promotion-public") | .gate_policy' \
+		"${REPO_ROOT}/plugins/librarian/config.json")
+	[ "$policy" = "majority" ]
+}
+
+@test "the public rubric keeps disclosure's floor at 0.9" {
+	# The floor is now the ONLY thing making public stricter than org. If this
+	# drops, the public tier silently loses its protection entirely.
+	local floor
+	floor=$(jq -r '.librarian.lesson_judging.rubrics[]
+		| select(.id == "lesson-promotion-public")
+		| .criteria[] | select(.name == "disclosure") | .min_pass' \
+		"${REPO_ROOT}/plugins/librarian/config.json")
+	[ "$floor" = "0.9" ]
+}
+
+@test "org and public rubrics differ by more than their gate policy" {
+	# Both are `majority` now. If the criteria ever converge too, the two tiers
+	# become indistinguishable and the public tier is inert again — the exact
+	# shape of j74.
+	local org_crit pub_crit
+	org_crit=$(jq -c '[.librarian.lesson_judging.rubrics[]
+		| select(.id == "lesson-promotion") | .criteria[].name] | sort' \
+		"${REPO_ROOT}/plugins/librarian/config.json")
+	pub_crit=$(jq -c '[.librarian.lesson_judging.rubrics[]
+		| select(.id == "lesson-promotion-public") | .criteria[].name] | sort' \
+		"${REPO_ROOT}/plugins/librarian/config.json")
+	[ "$org_crit" != "$pub_crit" ]
+}
+
+@test "the librarian walk tells judges to return criterion_scores" {
+	# The rubric floors are unreachable unless the judges actually score them,
+	# and this walk is where librarian's judges get their instructions.
+	grep -q 'criterion_scores' "${REPO_ROOT}/plugins/librarian/skills/librarian/SKILL.md"
+}
+
+@test "a floor rejection records which criterion failed" {
+	# "reason": "criterion_floor" without the criterion name is no more
+	# actionable than "blocked" — the whole argument for a distinct reason
+	# was naming the thing that failed.
+	_seed_confirmed "floorname01" "public"
+	local verdicts='[
+	  {"judge_type":"standard","score":0.9,"passed":true,"criterion_scores":{"grounding":0.95,"scope_accuracy":0.95,"generality":0.9,"disclosure":0.4}},
+	  {"judge_type":"adversarial","score":0.85,"passed":true,"criterion_scores":{"grounding":0.9,"scope_accuracy":0.9,"generality":0.85,"disclosure":0.4}}
+	]'
+	run librarian_lesson_judge "$PROJECT_KEY" "floorname01" "$verdicts"
+	[ "$status" -eq 0 ] || return 1
+	[ "$(_status_of floorname01)" = "rejected" ] || return 1
+
+	local path
+	path="$(librarian_lessons_dir "$PROJECT_KEY")/proposals/floorname01.json"
+	jq -e '.verdict.reason == "criterion_floor"' "$path" >/dev/null || return 1
+	jq -e '.verdict.failed_criterion == "disclosure"' "$path" >/dev/null
+}
+
+@test "an approved verdict carries no failed_criterion key" {
+	# Absent rather than null: a key that is always present but usually empty
+	# invites `// ""` at the read site, which is how this pipeline has
+	# repeatedly lost the absent-vs-empty distinction.
+	_seed_confirmed "floorname02" "public"
+	local verdicts='[
+	  {"judge_type":"standard","score":0.9,"passed":true,"criterion_scores":{"grounding":0.95,"scope_accuracy":0.95,"generality":0.9,"disclosure":0.95}},
+	  {"judge_type":"adversarial","score":0.9,"passed":true,"criterion_scores":{"grounding":0.9,"scope_accuracy":0.9,"generality":0.9,"disclosure":0.95}}
+	]'
+	run librarian_lesson_judge "$PROJECT_KEY" "floorname02" "$verdicts"
+	[ "$status" -eq 0 ] || return 1
+
+	local path
+	path="$(librarian_lessons_dir "$PROJECT_KEY")/proposals/floorname02.json"
+	jq -e '.verdict | has("failed_criterion") | not' "$path" >/dev/null
 }

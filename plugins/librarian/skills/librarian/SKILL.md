@@ -109,9 +109,13 @@ For `lessons judge`, run the jury over confirmed candidates:
      rubric criteria for its visibility: for `org`, grounding / scope_accuracy /
      generality; for `public`, those three plus **disclosure** — does the text
      leak a credential, internal hostname, customer name, or proprietary detail?
-   - Each judge returns a JSON object with `score`, `passed`, `judge_type`, and
-     `feedback_summary`. Collect both into a JSON array **verbatim** — never
-     summarize or reconstruct a judge's verdict.
+   - Each judge returns a JSON object with `score`, `passed`, `judge_type`,
+     `feedback_summary`, and `criterion_scores` — a map from **each rubric
+     criterion name you gave it** to a score in `[0,1]`. Tell each judge
+     explicitly to omit any criterion it cannot assess rather than scoring it
+     `0`: a `0` on `disclosure` blocks a public lesson by itself, while an
+     omission does not. Collect both verdicts into a JSON array **verbatim** —
+     never summarize or reconstruct a judge's verdict.
    - Call `librarian_cli lessons judge <id> '<verdicts-json>'`. Record before
      moving to the next candidate, so an interrupted run costs at most one
      re-judgment. Recording a verdict also promotes the lesson in the same

@@ -239,7 +239,8 @@ librarian_lesson_judge() {
 			--argjson g "$gate" --argjson j "$verdicts" \
 			'{rubric_id: $r, gate_policy: $p, score_threshold: $th,
 			  aggregate_score: $ag, passed: $g.passed, reason: $g.reason,
-			  judges: $j}') || {
+			  judges: $j}
+			 + (if $g.failed_criterion then {failed_criterion: $g.failed_criterion} else {} end)') || {
 			printf 'Lesson %s: the verdict could not be built.\n' "$lesson_id" >&2
 			return 1
 		}

@@ -43,7 +43,7 @@
           ],
           "score_threshold": 0.75,
           "judge_types": ["standard", "adversarial"],
-          "gate_policy": "unanimous"
+          "gate_policy": "majority"
         }
       ]
     },
