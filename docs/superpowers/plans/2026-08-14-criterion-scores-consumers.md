@@ -876,13 +876,35 @@ PUBLIC_RUBRIC='{"id":"lesson-promotion-public","criteria":[
 	printf '%s' "$out" | jq -e '.passed == true' >/dev/null
 }
 
-@test "lesson gate: absent criterion scores never block" {
+@test "lesson gate: a verdict with no criterion_scores key at all never blocks" {
+	# Every verdict emitted before judges shipped criterion_scores. Note this
+	# case is caught by the OUTER type guard and never reaches has() — it does
+	# NOT pin the per-criterion absence guard. The next test does that.
 	local out
 	out=$(librarian_lesson_gate "majority" '[
 	  {"judge_type":"standard","score":0.9,"passed":true},
 	  {"judge_type":"adversarial","score":0.85,"passed":true}
 	]' "0.88" "0.75" "$PUBLIC_RUBRIC")
 	printf '%s' "$out" | jq -e '.passed == true and .reason == "gate_passed"' >/dev/null
+}
+
+@test "lesson gate: scores present but one floored criterion omitted does not block" {
+	# THE test that pins the has() guard. These verdicts DO carry
+	# criterion_scores, so they survive the outer type guard and reach the
+	# per-criterion lookup — but `disclosure`, whose floor is 0.9, is absent.
+	# Substituting `// 0` for has() makes disclosure read as 0.0 and blocks.
+	#
+	# Written as its own test because the case above cannot fail when has() is
+	# deleted: its fixture is filtered one layer earlier. Two different absences
+	# sharing one test is how an outer guard silently stands in for an inner one
+	# — this project has hit that shape eight times.
+	local out
+	out=$(librarian_lesson_gate "majority" '[
+	  {"judge_type":"standard","score":0.9,"passed":true,"criterion_scores":{"grounding":0.95,"scope_accuracy":0.95,"generality":0.9}},
+	  {"judge_type":"adversarial","score":0.85,"passed":true,"criterion_scores":{"grounding":0.9,"scope_accuracy":0.9,"generality":0.85}}
+	]' "0.88" "0.75" "$PUBLIC_RUBRIC")
+	printf '%s' "$out" | jq -e '.passed == true' >/dev/null || return 1
+	printf '%s' "$out" | jq -e '.reason == "gate_passed"' >/dev/null
 }
 
 @test "lesson gate: a criterion scored zero does block" {
@@ -1073,7 +1095,9 @@ Expected: PASS, 55/55.
 Three scratch (uncommitted) edits, each reverted after checking:
 
 1. Delete the `if [[ -n "$floor_failed" ]]` block. The disclosure-floor tests must fail.
-2. Change `.criterion_scores[$c.name]` to `(.criterion_scores[$c.name] // 0)` and drop the `has()` select. The "absent criterion scores never block" test must fail while the "scored zero does block" test still passes — proving the pair discriminates.
+2. Change `.criterion_scores[$c.name]` to `(.criterion_scores[$c.name] // 0)` and drop the `has()` select. **`scores present but one floored criterion omitted` must fail, while `a criterion scored zero does block` still passes** — that pair is what discriminates absence from zero.
+
+   **Do not expect `a verdict with no criterion_scores key at all` to fail here.** It will not, and that is correct: its fixture is removed by the outer `select((.criterion_scores | type) == "object")` before the `has()` lookup is ever reached. Task 3 shipped with only that weaker test and the guard was consequently unpinned — verified, not hypothetical. If you find yourself editing the no-key test to make it fail, stop: you would be deleting the coverage of the pre-upgrade case to duplicate a test you already have.
 3. Revert Step 5's rubric threading (pass no rubric from `librarian_lesson_judge`). Any end-to-end judging test that exercises a floor must fail. **If none does, that is a coverage gap — add one before finishing.**
 
 **Report all three results in your report file.**
