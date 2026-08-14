@@ -33,6 +33,12 @@ Your **final message** must be a single JSON object matching `TribunalVerdictPay
   "passed": true,
   "judge_type": "standard",
   "criteria_evaluated": ["correctness", "completeness", "clarity"],
+  "criterion_scores": {
+    "correctness": 0.9,
+    "completeness": 0.75,
+    "safety": 0.85,
+    "clarity": 0.8
+  },
   "strengths_count": 3,
   "weaknesses_count": 1,
   "confidence": 0.85,
@@ -41,6 +47,10 @@ Your **final message** must be a single JSON object matching `TribunalVerdictPay
 ```
 
 Required fields: `score`, `passed`, `judge_type`. `passed` reflects your own judgment based on the rubric thresholds — the orchestrator may still aggregate and override per gate policy.
+
+`criterion_scores` maps **each criterion name from the rubric you were given** to your score for it in `[0,1]`. This is separate from `criteria_evaluated`, which lists the dimensions *you* chose to investigate — the rubric's criteria are what the orchestrator weights and floors.
+
+Score every rubric criterion you can judge. **Omit any criterion you genuinely cannot assess — do not send `0` for it.** A `0` means "I assessed this and it failed"; an omission means "I did not assess this." The orchestrator treats them very differently: a `0` on a criterion with a floor blocks the task outright, while an omission is reported as a coverage gap.
 
 `feedback_summary` should be 1–3 sentences. Name specific files and lines when you can. This is what the Actor sees on retry.
 
