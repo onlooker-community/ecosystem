@@ -1,5 +1,8 @@
 #!/usr/bin/env bats
 
+# `run --separate-stderr` (used below) requires bats >= 1.5.0.
+bats_require_minimum_version 1.5.0
+
 setup() {
 	source "${BATS_TEST_DIRNAME}/../helpers/setup.bash"
 	setup_test_env
@@ -118,12 +121,31 @@ RUBRIC_FLOOR='{"criteria":[{"name":"correctness","weight":0.5,"min_pass":0.7},{"
 	printf '%s' "$out" | jq -e '.passed == true' >/dev/null
 }
 
-@test "absent criterion_scores never block" {
+@test "a verdict with no criterion_scores key at all never blocks" {
 	# Every verdict emitted before Task 1 shipped. Treating absence as violation
 	# would make every pre-upgrade judge fail every rubric carrying a floor.
+	# Caught by the outer `criterion_scores | type == "object"` guard — this
+	# case never reaches has(), so it does not pin the has() guard itself.
 	local out
 	out=$(tribunal_gate_decide "majority" "$ALL_PASSED" "0.82" "0.75" \
 		"$NO_META" "0.05" "0.25" "$RUBRIC_FLOOR")
+	printf '%s' "$out" | jq -e '.passed == true' >/dev/null
+}
+
+@test "scores present but a floored criterion omitted does not block" {
+	# THE test that pins the has() guard. These verdicts DO carry
+	# criterion_scores, so they survive the outer type guard and reach the
+	# per-criterion lookup — but `safety`, whose floor is 0.8, is absent.
+	# Substituting `// 0` for has() makes safety read as 0.0 and blocks.
+	#
+	# Its own test because the case above cannot fail when has() is deleted:
+	# that fixture is filtered one layer earlier. Two different absences
+	# sharing one test is how an outer guard silently stands in for an inner.
+	local out
+	out=$(tribunal_gate_decide "majority" '[
+	  {"judge_id":"a","score":0.85,"passed":true,"criterion_scores":{"correctness":0.9}},
+	  {"judge_id":"b","score":0.80,"passed":true,"criterion_scores":{"correctness":0.9}}
+	]' "0.82" "0.75" "$NO_META" "0.05" "0.25" "$RUBRIC_FLOOR")
 	printf '%s' "$out" | jq -e '.passed == true' >/dev/null
 }
 
