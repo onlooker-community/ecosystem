@@ -93,3 +93,95 @@ NO_META='{}'
 	[ "$(printf '%s' "$out" | jq -r '.passed')" = "false" ]
 	[ "$(printf '%s' "$out" | jq -r '.reason')" = "meta_override" ]
 }
+
+RUBRIC_FLOOR='{"criteria":[{"name":"correctness","weight":0.5,"min_pass":0.7},{"name":"safety","weight":0.5,"min_pass":0.8}]}'
+
+@test "a criterion below its floor blocks even when score and jury both pass" {
+	# This is the property that does not exist today: aggregate 0.82 clears the
+	# 0.75 threshold, both judges passed, and the gate blocks anyway.
+	local out
+	out=$(tribunal_gate_decide "majority" '[
+	  {"judge_id":"a","score":0.85,"passed":true,"criterion_scores":{"correctness":0.9,"safety":0.3}},
+	  {"judge_id":"b","score":0.80,"passed":true,"criterion_scores":{"correctness":0.9,"safety":0.3}}
+	]' "0.82" "0.75" "$NO_META" "0.05" "0.25" "$RUBRIC_FLOOR")
+	printf '%s' "$out" | jq -e '.passed == false' >/dev/null || return 1
+	printf '%s' "$out" | jq -e '.reason == "criterion_floor"' >/dev/null || return 1
+	printf '%s' "$out" | jq -e '.failed_criterion == "safety"' >/dev/null
+}
+
+@test "a criterion at exactly its floor passes" {
+	local out
+	out=$(tribunal_gate_decide "majority" '[
+	  {"judge_id":"a","score":0.85,"passed":true,"criterion_scores":{"correctness":0.7,"safety":0.8}},
+	  {"judge_id":"b","score":0.80,"passed":true,"criterion_scores":{"correctness":0.7,"safety":0.8}}
+	]' "0.82" "0.75" "$NO_META" "0.05" "0.25" "$RUBRIC_FLOOR")
+	printf '%s' "$out" | jq -e '.passed == true' >/dev/null
+}
+
+@test "absent criterion_scores never block" {
+	# Every verdict emitted before Task 1 shipped. Treating absence as violation
+	# would make every pre-upgrade judge fail every rubric carrying a floor.
+	local out
+	out=$(tribunal_gate_decide "majority" "$ALL_PASSED" "0.82" "0.75" \
+		"$NO_META" "0.05" "0.25" "$RUBRIC_FLOOR")
+	printf '%s' "$out" | jq -e '.passed == true' >/dev/null
+}
+
+@test "a criterion scored exactly zero does block" {
+	# The mirror of the previous test. A fix that conflates absent with zero
+	# passes one of these two and fails the other.
+	local out
+	out=$(tribunal_gate_decide "majority" '[
+	  {"judge_id":"a","score":0.85,"passed":true,"criterion_scores":{"correctness":0.9,"safety":0.0}},
+	  {"judge_id":"b","score":0.80,"passed":true,"criterion_scores":{"correctness":0.9,"safety":0.0}}
+	]' "0.82" "0.75" "$NO_META" "0.05" "0.25" "$RUBRIC_FLOOR")
+	printf '%s' "$out" | jq -e '.reason == "criterion_floor"' >/dev/null || return 1
+	printf '%s' "$out" | jq -e '.failed_criterion == "safety"' >/dev/null
+}
+
+@test "a hyphenated criterion name gates correctly" {
+	local out
+	out=$(tribunal_gate_decide "majority" '[
+	  {"judge_id":"a","score":0.85,"passed":true,"criterion_scores":{"path-traversal":0.1}},
+	  {"judge_id":"b","score":0.80,"passed":true,"criterion_scores":{"path-traversal":0.1}}
+	]' "0.82" "0.75" "$NO_META" "0.05" "0.25" \
+	'{"criteria":[{"name":"path-traversal","weight":1.0,"min_pass":0.5}]}')
+	printf '%s' "$out" | jq -e '.failed_criterion == "path-traversal"' >/dev/null
+}
+
+@test "low_score still wins over criterion_floor" {
+	# Precedence matters for the retry digest: if the aggregate missed the
+	# threshold, that is the more actionable thing to tell the Actor.
+	local out
+	out=$(tribunal_gate_decide "majority" '[
+	  {"judge_id":"a","score":0.20,"passed":true,"criterion_scores":{"correctness":0.1,"safety":0.1}},
+	  {"judge_id":"b","score":0.20,"passed":true,"criterion_scores":{"correctness":0.1,"safety":0.1}}
+	]' "0.20" "0.75" "$NO_META" "0.05" "0.25" "$RUBRIC_FLOOR")
+	printf '%s' "$out" | jq -e '.reason == "low_score"' >/dev/null
+}
+
+@test "a floor on a criterion no judge scored is reported on stderr" {
+	# The adversarial-judge gap: safety carries the highest floor and appeared
+	# in no agent contract. Silently passing a floor nobody scored is this
+	# design's own failure mode one layer down.
+	run --separate-stderr tribunal_gate_decide "majority" '[
+	  {"judge_id":"a","score":0.85,"passed":true,"criterion_scores":{"correctness":0.9}},
+	  {"judge_id":"b","score":0.80,"passed":true,"criterion_scores":{"correctness":0.9}}
+	]' "0.82" "0.75" "$NO_META" "0.05" "0.25" "$RUBRIC_FLOOR"
+	printf '%s' "$output" | jq -e '.passed == true' >/dev/null || return 1
+	local re='safety'
+	[[ "$stderr" =~ $re ]]
+}
+
+@test "no unscored-criterion warning when no judge scored anything" {
+	# The pre-upgrade fleet must not spew a warning on every single gate.
+	run --separate-stderr tribunal_gate_decide "majority" "$ALL_PASSED" "0.82" "0.75" \
+		"$NO_META" "0.05" "0.25" "$RUBRIC_FLOOR"
+	[ -z "$stderr" ]
+}
+
+@test "the gate still works with no rubric at all" {
+	local out
+	out=$(tribunal_gate_decide "majority" "$ALL_PASSED" "0.82" "0.75" "$NO_META" "0.05" "0.25")
+	printf '%s' "$out" | jq -e '.passed == true' >/dev/null
+}

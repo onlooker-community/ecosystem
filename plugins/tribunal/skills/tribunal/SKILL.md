@@ -117,9 +117,11 @@ For `iteration_number` from `0` while `iteration_number < max_iterations`:
 7. **Gate.**
    ```bash
    policy=$(printf '%s' "$rubric" | jq -r '.gate_policy // "majority"')
-   gate=$(tribunal_gate_decide "$policy" "$verdicts" "$aggregated" "$threshold" "$meta" "$dissent" "$dissent_threshold")
+   gate=$(tribunal_gate_decide "$policy" "$verdicts" "$aggregated" "$threshold" "$meta" "$dissent" "$dissent_threshold" "$rubric")
    ```
-   If `gate.passed == true`, emit `tribunal.gate.passed` with `final_score: aggregated` and break the loop with outcome `accepted`. Otherwise emit `tribunal.gate.blocked` with the `reason`, `will_retry: (iteration_number + 1 < max_iterations)`, and `retry_iteration_number` if retrying. Persist `gate.json` either way.
+   If `gate.passed == true`, emit `tribunal.gate.passed` with `final_score: aggregated` and break the loop with outcome `accepted`. Otherwise emit `tribunal.gate.blocked` with the `reason`, `will_retry: (iteration_number + 1 < max_iterations)`, and `retry_iteration_number` if retrying. **When `reason` is `criterion_floor`, copy `gate.failed_criterion` onto the event payload as `failed_criterion`** — without it the log records that a floor blocked but not which one. Persist `gate.json` either way.
+
+   A `criterion_floor` block means the aggregate *cleared* its threshold and one criterion still failed its floor. Say so when you report it: "blocked on `safety` (0.30 < 0.80) despite an overall 0.82" is actionable, "blocked" is not.
 
    If blocking and retrying, build the retry digest (lowest-scoring criteria + meta override + dissent summary) and feed it into the next iteration's Actor prompt.
 
