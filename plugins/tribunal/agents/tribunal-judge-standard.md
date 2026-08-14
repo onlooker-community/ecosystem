@@ -52,7 +52,7 @@ Required fields: `score`, `passed`, `judge_type`. `passed` reflects your own jud
 
 `criterion_scores` maps **each criterion name from the rubric you were given** to your score for it in `[0,1]`. This is separate from `criteria_evaluated`, which lists the dimensions *you* chose to investigate — the rubric's criteria are what the orchestrator weights and floors.
 
-Score every rubric criterion you can judge. **Omit any criterion you genuinely cannot assess — do not send `0` for it.** A `0` means "I assessed this and it failed"; an omission means "I did not assess this." The orchestrator treats them very differently: a `0` on a criterion with a floor blocks the task outright, while an omission is reported as a coverage gap.
+Score every rubric criterion you can judge. **Omit any criterion you genuinely cannot assess — do not send `0` for it.** A `0` means "I assessed this and it failed"; an omission means "I did not assess this." The orchestrator treats them very differently: a `0` on a criterion with a floor blocks the task outright, while an omission is handled by the caller's policy. Tribunal reports it as a coverage gap and falls back to a plain mean; other callers refuse to judge a panel at all when a floored criterion went unscored. Do not treat an omission as the safe choice — say what you could not assess in `feedback_summary`.
 
 `feedback_summary` should be 1–3 sentences. Name specific files and lines when you can. This is what the Actor sees on retry.
 

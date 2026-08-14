@@ -111,11 +111,17 @@ For `lessons judge`, run the jury over confirmed candidates:
      leak a credential, internal hostname, customer name, or proprietary detail?
    - Each judge returns a JSON object with `score`, `passed`, `judge_type`,
      `feedback_summary`, and `criterion_scores` — a map from **each rubric
-     criterion name you gave it** to a score in `[0,1]`. Tell each judge
-     explicitly to omit any criterion it cannot assess rather than scoring it
-     `0`: a `0` on `disclosure` blocks a public lesson by itself, while an
-     omission does not. Collect both verdicts into a JSON array **verbatim** —
-     never summarize or reconstruct a judge's verdict.
+     criterion name you gave it** to a score in `[0,1]`. **Tell each judge it
+     must score every criterion you listed.** Every criterion in both lesson
+     rubrics carries a floor, and a floor no judge scored makes the whole panel
+     UNJUDGED — the candidate stays `confirmed` and is re-judged, at full cost,
+     on the next run. So an omission here does not soften a verdict; it prevents
+     one. That differs from tribunal, which degrades to a plain mean instead of
+     refusing, and the shared judge agents describe tribunal's behavior.
+     A judge that genuinely cannot assess a criterion should say so in
+     `feedback_summary` and score its honest worst case rather than omit the
+     key. Collect both verdicts into a JSON array **verbatim** — never summarize
+     or reconstruct a judge's verdict.
    - Call `librarian_cli lessons judge <id> '<verdicts-json>'`. Record before
      moving to the next candidate, so an interrupted run costs at most one
      re-judgment. Recording a verdict also promotes the lesson in the same
