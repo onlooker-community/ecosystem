@@ -15,28 +15,52 @@
 #   tribunal_disagreement <verdicts_json>
 #       echoes max(score) - min(score), or 0 if 0/1 verdicts
 #
-# weighted_mean uses *rubric criterion weights*, not per-judge weights — the
-# semantics are "weight each criterion's contribution, then average judges'
-# scores on each criterion." For v0.1 the per-criterion breakdown is not yet
-# threaded through verdicts, so weighted_mean degrades to mean when the rubric
-# weights cannot be applied. The schema still emits aggregation_method =
-# "weighted_mean" so dashboards see the intent.
+# weighted_mean uses *rubric criterion weights*: average the judges' scores on
+# each criterion, weight each criterion's mean, and normalize by the weights
+# actually used. A criterion no judge scored contributes nothing and its weight
+# is excluded from the denominator — absence is not a zero. When no criterion
+# has any score (every verdict emitted before judges shipped criterion_scores),
+# weighted_mean degrades to mean rather than collapsing to 0.
 
 tribunal_aggregate() {
 	local method="${1:-mean}"
 	local verdicts="${2:-[]}"
-	# reserved for true weighted_mean once per-criterion scores are threaded
-	local _rubric="${3:-}"
-	[ -z "$_rubric" ] && _rubric='{}'
-	: "$_rubric"
+	local rubric="${3:-}"
+	[ -z "$rubric" ] && rubric='{}'
 
 	local count
 	count=$(printf '%s' "$verdicts" | jq 'length' 2>/dev/null) || count=0
 	[[ "$count" -eq 0 ]] && { printf '0'; return 0; }
 
 	case "$method" in
-		mean|weighted_mean)
+		mean)
 			printf '%s' "$verdicts" | jq -r '[.[].score] | add / length'
+			;;
+		weighted_mean)
+			local weighted
+			weighted=$(printf '%s' "$verdicts" | jq -r --argjson rubric "$rubric" '
+				. as $v
+				| [ ($rubric.criteria // [])[]
+				    | select((.name | type) == "string" and (.weight | type) == "number")
+				    | . as $c
+				    | ([ $v[]
+				         | select((.criterion_scores | type) == "object")
+				         | select(.criterion_scores | has($c.name))
+				         | .criterion_scores[$c.name]
+				         | select(type == "number") ]) as $scores
+				    | select(($scores | length) > 0)
+				    | { w: $c.weight, m: (($scores | add) / ($scores | length)) } ]
+				| (map(.w) | add) as $den
+				| if length == 0 or $den == null or $den <= 0 then empty
+				  else (map(.w * .m) | add) / $den
+				  end
+			' 2>/dev/null)
+			if [ -n "$weighted" ]; then
+				printf '%s' "$weighted"
+			else
+				# No criterion carried a usable score — degrade to mean.
+				printf '%s' "$verdicts" | jq -r '[.[].score] | add / length'
+			fi
 			;;
 		median)
 			printf '%s' "$verdicts" | jq -r '
