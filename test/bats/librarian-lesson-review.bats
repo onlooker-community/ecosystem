@@ -830,3 +830,67 @@ _cli_setup() {
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"unrecognized status"* && "$output" == *"rejected"* ]] || return 1
 }
+
+@test "confirm writes the proposal atomically, never truncating in place" {
+	# `printf > path` truncates first, so an interrupted write leaves a
+	# zero-byte proposal that every verb refuses and list_pending hides —
+	# unrecoverable even by unconfirm. A read-only-dir test would NOT catch
+	# this: it blocks the open entirely, so the truncating code also leaves
+	# the original intact. What distinguishes atomic from not is that the
+	# write lands somewhere else first, so spy on the rename.
+	_review_setup
+	local id
+	id=$(_seed_pending)
+
+	local marker="${BATS_TEST_TMPDIR}/mv-called"
+	rm -f "$marker"
+	mv() { printf '%s -> %s\n' "$1" "$2" >> "$marker"; command mv "$@"; }
+
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "org"
+
+	[ -f "$marker" ]
+	grep -q "proposals/${id}.json" "$marker" || return 1
+	[ "$(jq -r '.status' "$(librarian_lessons_dir "$PROJECT_KEY")/proposals/${id}.json")" = "confirmed" ]
+	unset -f mv
+}
+
+@test "pass writes the proposal atomically, never truncating in place" {
+	# Same discriminator as confirm's atomic-write test: a read-only-dir test
+	# would not catch a reverted fix here either, since the truncating write
+	# also never opens the file. Spy on the rename instead.
+	_review_setup
+	local id
+	id=$(_seed_pending)
+
+	local marker="${BATS_TEST_TMPDIR}/mv-called"
+	rm -f "$marker"
+	mv() { printf '%s -> %s\n' "$1" "$2" >> "$marker"; command mv "$@"; }
+
+	librarian_lesson_pass "$PROJECT_KEY" "$id" "not worth sharing"
+
+	[ -f "$marker" ]
+	grep -q "proposals/${id}.json" "$marker" || return 1
+	[ "$(jq -r '.status' "$(librarian_lessons_dir "$PROJECT_KEY")/proposals/${id}.json")" = "passed" ]
+	unset -f mv
+}
+
+@test "unconfirm writes the proposal atomically, never truncating in place" {
+	# Same discriminator as confirm's atomic-write test. unconfirm is the
+	# recovery verb for a stuck proposal, so a truncating write here is the
+	# one that would leave it unrecoverable even from its own remedy.
+	_review_setup
+	local id
+	id=$(_seed_pending)
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "org"
+
+	local marker="${BATS_TEST_TMPDIR}/mv-called"
+	rm -f "$marker"
+	mv() { printf '%s -> %s\n' "$1" "$2" >> "$marker"; command mv "$@"; }
+
+	librarian_lesson_unconfirm "$PROJECT_KEY" "$id"
+
+	[ -f "$marker" ]
+	grep -q "proposals/${id}.json" "$marker" || return 1
+	[ "$(jq -r '.status' "$(librarian_lessons_dir "$PROJECT_KEY")/proposals/${id}.json")" = "pending" ]
+	unset -f mv
+}

@@ -191,7 +191,7 @@ librarian_lesson_confirm() {
 			 | del(.candidate_before_confirm)' 2>/dev/null) || return 1
 	fi
 	[[ -z "$updated" || "$updated" == "null" ]] && return 1
-	printf '%s\n' "$updated" > "$path"
+	librarian_lesson_write_atomic "$path" "$updated"
 }
 
 # Take back a confirmation, before the jury has seen the lesson.
@@ -246,7 +246,7 @@ librarian_lesson_unconfirm() {
 		| .status = "pending"
 	' "$path" 2>/dev/null) || return 1
 	[[ -z "$updated" || "$updated" == "null" ]] && return 1
-	printf '%s\n' "$updated" > "$path"
+	librarian_lesson_write_atomic "$path" "$updated"
 }
 
 # Decline to share a candidate.
@@ -297,7 +297,7 @@ librarian_lesson_pass() {
 
 	updated=$(jq --arg t "$now" '. * {status: "passed", passed_at: $t}' "$path" 2>/dev/null) || return 1
 	[[ -z "$updated" || "$updated" == "null" ]] && return 1
-	printf '%s\n' "$updated" > "$path"
+	librarian_lesson_write_atomic "$path" "$updated" || return 1
 
 	local line
 	line=$(jq -cn \

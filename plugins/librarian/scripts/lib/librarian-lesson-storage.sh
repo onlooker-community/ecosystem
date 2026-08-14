@@ -25,6 +25,23 @@ librarian_lesson_storage_init() {
 	mkdir -p "$dir/proposals" "$dir/approved" 2>/dev/null
 }
 
+# Write a file atomically: temp in the same directory, then mv.
+#
+# `printf > "$path"` truncates before writing, so an interrupted write leaves
+# a zero-byte file. For a proposal that is permanently stuck: every verb
+# refuses it with "unrecognized status: " and list_pending hides it, so even
+# unconfirm — the recovery verb — cannot bring it back.
+#
+# Usage: librarian_lesson_write_atomic <path> <content>
+librarian_lesson_write_atomic() {
+	local path="$1"
+	local content="$2"
+	local tmp
+	tmp=$(mktemp "${path}.XXXXXX" 2>/dev/null) || return 1
+	printf '%s\n' "$content" > "$tmp" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 1; }
+	mv "$tmp" "$path" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 1; }
+}
+
 # Write one candidate. Prints the ULID on success.
 # Usage: librarian_lesson_write_proposal <key> <candidate_json> <artifact_id>
 librarian_lesson_write_proposal() {

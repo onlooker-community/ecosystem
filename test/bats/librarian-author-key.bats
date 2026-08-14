@@ -423,3 +423,55 @@ STUB
 	captured=$(librarian_author_key "public"; printf 'END')
 	[ "$captured" = "11ff8ab7134c834e788ab4a5130f7853END" ]
 }
+
+@test "a 64-character non-hex digest is refused, not truncated and returned" {
+	# The width check alone cannot tell a digest from 64 arbitrary bytes.
+	# Requires a misbehaving node, which is a serious precondition — but a
+	# subprocess can misbehave for reasons other than compromise, and a
+	# non-hex key fails the contract's own /^[0-9a-f]{32}$/ at ingest.
+	_fixed_secret
+	local stub_bin
+	stub_bin="${BATS_TEST_TMPDIR}/bin"
+	mkdir -p "$stub_bin"
+	cat > "${stub_bin}/node" <<'STUB'
+#!/usr/bin/env bash
+printf 'zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz'
+STUB
+	chmod +x "${stub_bin}/node"
+
+	local old_path="$PATH"
+	export PATH="${stub_bin}:${PATH}"
+	run --separate-stderr librarian_author_key "public"
+	export PATH="$old_path"
+
+	[ "$status" -ne 0 ]
+	[ "$output" = "" ]
+	[[ "$stderr" == *"malformed"* ]] || return 1
+}
+
+@test "a digest with a garbage line ahead of 64 valid hex chars is refused, not truncated" {
+	# grep is LINE-oriented: `grep -Eq '^[0-9a-f]{64}$'` matches as soon as ANY
+	# line in its input is 64 hex chars, so a stub that writes a non-hex line
+	# before a well-formed 64-hex line reproduces the bug a line-oriented grep
+	# would miss here — the single-line stub above cannot catch it. NODE_OPTIONS
+	# pointing at a preload that writes to stdout before node's own output is a
+	# routine, non-adversarial way to hit this shape in practice.
+	_fixed_secret
+	local stub_bin
+	stub_bin="${BATS_TEST_TMPDIR}/bin"
+	mkdir -p "$stub_bin"
+	cat > "${stub_bin}/node" <<'STUB'
+#!/usr/bin/env bash
+printf 'zzzzzzzz\n0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
+STUB
+	chmod +x "${stub_bin}/node"
+
+	local old_path="$PATH"
+	export PATH="${stub_bin}:${PATH}"
+	run --separate-stderr librarian_author_key "public"
+	export PATH="$old_path"
+
+	[ "$status" -ne 0 ]
+	[ "$output" = "" ]
+	[[ "$stderr" == *"malformed"* ]] || return 1
+}
