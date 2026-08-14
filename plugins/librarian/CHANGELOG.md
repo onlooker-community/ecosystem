@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.1](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.12.0...librarian-v0.12.1) (2026-08-14)
+
+
+### Bug Fixes
+
+* **librarian:** close four follow-up defects from the promotion epic :broom: ([#148](https://github.com/onlooker-community/ecosystem/issues/148)) ([895df74](https://github.com/onlooker-community/ecosystem/commit/895df7430fa8ba75976d38964d061c21bff785d3))
+
 ## [0.12.0](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.11.0...librarian-v0.12.0) (2026-08-13)
 
 
