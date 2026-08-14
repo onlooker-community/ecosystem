@@ -10,35 +10,75 @@
 # be the hook-to-hook runtime coupling that ADR rules out.
 #
 # Exposes:
-#   librarian_lesson_aggregate <verdicts_json>
-#   librarian_lesson_gate <gate_policy> <verdicts_json> <aggregate> <threshold>
+#   librarian_lesson_aggregate <verdicts_json> [<rubric_json>]
+#   librarian_lesson_gate <gate_policy> <verdicts_json> <aggregate> <threshold> [<rubric_json>]
 #   librarian_lesson_judge <key> <lesson_id> <verdicts_json>
 
-# Mean of the judges' scores. Returns 1 on an empty panel.
+# Aggregate the judges' scores. Returns 1 on an empty panel.
 #
-# A plain mean, deliberately: per-criterion scores never reach this layer, so
-# there is nothing to weight. See ecosystem-pht.
+# With a rubric and per-criterion scores, this is a weighted mean: average the
+# judges on each criterion, weight each criterion's mean, normalize by the
+# weights actually used. Without them it is the plain mean it has always been.
 #
-# Usage: librarian_lesson_aggregate <verdicts_json>
+# A criterion no judge scored contributes nothing and its weight leaves the
+# denominator — absence is not a zero. Scoring it 0 instead would turn a judge
+# that skipped a criterion into one that failed it.
+#
+# Usage: librarian_lesson_aggregate <verdicts_json> [<rubric_json>]
 librarian_lesson_aggregate() {
 	local verdicts="${1:-[]}"
+	local rubric="${2:-}"
+	[ -z "$rubric" ] && rubric='{}'
+
 	local n
 	n=$(printf '%s' "$verdicts" | jq 'length' 2>/dev/null) || return 1
 	[[ -z "$n" || "$n" -eq 0 ]] && return 1
+
+	local weighted
+	weighted=$(printf '%s' "$verdicts" | jq -r --argjson rubric "$rubric" '
+		. as $v
+		| [ ($rubric.criteria // [])[]
+		    | select((.name | type) == "string" and (.weight | type) == "number")
+		    | . as $c
+		    | ([ $v[]
+		         | select((.criterion_scores | type) == "object")
+		         | select(.criterion_scores | has($c.name))
+		         | .criterion_scores[$c.name]
+		         | select(type == "number") ]) as $scores
+		    | select(($scores | length) > 0)
+		    | { w: $c.weight, m: (($scores | add) / ($scores | length)) } ]
+		| (map(.w) | add) as $den
+		| if length == 0 or $den == null or $den <= 0 then empty
+		  else (map(.w * .m) | add) / $den
+		  end
+	' 2>/dev/null)
+	if [ -n "$weighted" ]; then
+		printf '%s' "$weighted"
+		return 0
+	fi
+
 	printf '%s' "$verdicts" | jq -r '[.[].score] | add / length' 2>/dev/null || return 1
 }
 
-# Decide pass/block from the panel and the aggregate.
+# Decide pass/block from the panel, the aggregate, and the rubric's floors.
 #
-# Echoes {"passed": bool, "reason": string}. Both conditions must hold: the
-# jury must clear its policy AND the aggregate must clear the threshold.
+# Echoes {"passed": bool, "reason": string} and, when a floor failed, a
+# "failed_criterion" naming it. Three conditions must hold: the jury clears its
+# policy, the aggregate clears the threshold, and no criterion sits below its
+# min_pass.
 #
-# Usage: librarian_lesson_gate <gate_policy> <verdicts_json> <aggregate> <threshold>
+# The floor is what makes the public tier meaningfully stricter than org. Before
+# it existed, lesson-promotion-public declared gate_policy `unanimous` for that
+# purpose and it did nothing at all — see ecosystem-j74.
+#
+# Usage: librarian_lesson_gate <gate_policy> <verdicts_json> <aggregate> <threshold> [<rubric_json>]
 librarian_lesson_gate() {
 	local policy="${1:-majority}"
 	local verdicts="${2:-[]}"
 	local aggregate="${3:-0}"
 	local threshold="${4:-0.75}"
+	local rubric="${5:-}"
+	[ -z "$rubric" ] && rubric='{}'
 
 	local count passed_count
 	count=$(printf '%s' "$verdicts" | jq 'length' 2>/dev/null) || count=0
@@ -72,11 +112,36 @@ librarian_lesson_gate() {
 	fi
 
 	# awk for the float comparison: bash cannot compare decimals.
-	if awk -v s="$aggregate" -v t="$threshold" 'BEGIN { exit !(s >= t) }'; then
-		printf '{"passed":true,"reason":"gate_passed"}'
-	else
+	if ! awk -v s="$aggregate" -v t="$threshold" 'BEGIN { exit !(s >= t) }'; then
 		printf '{"passed":false,"reason":"below_threshold"}'
+		return 0
 	fi
+
+	# Per-criterion floors, checked last: the jury and the aggregate are both
+	# more actionable to report, so they take precedence.
+	local floor_failed
+	floor_failed=$(printf '%s' "$verdicts" | jq -r --argjson rubric "$rubric" '
+		. as $v
+		| [ ($rubric.criteria // [])[]
+		    | select((.name | type) == "string" and (.min_pass | type) == "number")
+		    | . as $c
+		    | ([ $v[]
+		         | select((.criterion_scores | type) == "object")
+		         | select(.criterion_scores | has($c.name))
+		         | .criterion_scores[$c.name]
+		         | select(type == "number") ]) as $scores
+		    | select(($scores | length) > 0)
+		    | select((($scores | add) / ($scores | length)) < $c.min_pass)
+		    | $c.name ]
+		| first // empty
+	' 2>/dev/null) || floor_failed=""
+
+	if [[ -n "$floor_failed" ]]; then
+		printf '{"passed":false,"reason":"criterion_floor","failed_criterion":"%s"}' "$floor_failed"
+		return 0
+	fi
+
+	printf '{"passed":true,"reason":"gate_passed"}'
 	return 0
 }
 
@@ -162,8 +227,8 @@ librarian_lesson_judge() {
 		[[ "$usable" != "true" ]] && return 2
 
 		local aggregate gate
-		aggregate=$(librarian_lesson_aggregate "$verdicts") || return 2
-		gate=$(librarian_lesson_gate "$policy" "$verdicts" "$aggregate" "$threshold") || {
+		aggregate=$(librarian_lesson_aggregate "$verdicts" "$rubric") || return 2
+		gate=$(librarian_lesson_gate "$policy" "$verdicts" "$aggregate" "$threshold" "$rubric") || {
 			printf 'Lesson %s: the gate could not be decided.\n' "$lesson_id" >&2
 			return 1
 		}
