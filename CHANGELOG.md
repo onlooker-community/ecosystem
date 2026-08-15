@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.40.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.39.1...ecosystem-v0.40.0) (2026-08-15)
+
+
+### Features
+
+* **tribunal,librarian:** make rubric weights and min_pass floors real :straight_ruler: ([#150](https://github.com/onlooker-community/ecosystem/issues/150)) ([f8f8e28](https://github.com/onlooker-community/ecosystem/commit/f8f8e28b60f6d13d5a2a54e26ca284137b77f99a))
+
 ## [0.39.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.39.0...ecosystem-v0.39.1) (2026-08-14)
 
 
