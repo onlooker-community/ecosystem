@@ -17,7 +17,45 @@
 #   reason is one of: low_score | meta_override | bias_detected | dissent_unresolved
 #                   | criterion_floor  (with failed_criterion naming the criterion)
 #
-# Usage: result=$(tribunal_gate_decide "$policy" "$verdicts" "$agg" "$thr" "$meta" "$dissent" "$dissent_thr")
+# Usage: result=$(tribunal_gate_decide "$policy" "$verdicts" "$agg" "$thr" "$meta" "$dissent" "$dissent_thr" "$rubric")
+
+# Names the first criterion sitting below its min_pass, or echoes nothing.
+#
+# The *lowest* score among the judges that scored it, not the mean: a floor
+# means nobody may be below it. Using the mean let a specialist's finding be
+# diluted by generalists who did not look — with safety floored at 0.8, a
+# security judge scoring 0.6 against two generalists at 0.95 averaged to 0.83
+# and passed, so empanelling more judges made every floor weaker. Weighting
+# still uses the mean; only the floor is a minimum.
+#
+# A criterion no judge scored is NOT a violation: absence is not a zero, and
+# treating it as one would fail every verdict emitted before judges shipped
+# criterion_scores. tribunal_aggregate degrades weighted_mean to the plain mean
+# when that happens, and the caller warns on stderr.
+#
+# Private to this file. It exists as a function because the answer is needed in
+# two places — once to veto `meta_override: accept`, once for the blocking
+# precedence chain — and duplicating the jq is how the two drift apart.
+_tribunal_floor_failed() {
+	local verdicts="${1:-[]}"
+	local rubric="${2:-}"
+	[ -z "$rubric" ] && rubric='{}'
+	printf '%s' "$verdicts" | jq -r --argjson rubric "$rubric" '
+		. as $v
+		| [ ($rubric.criteria // [])[]
+		    | select((.name | type) == "string" and (.min_pass | type) == "number")
+		    | . as $c
+		    | ([ $v[]
+		         | select((.criterion_scores | type) == "object")
+		         | select(.criterion_scores | has($c.name))
+		         | .criterion_scores[$c.name]
+		         | select(type == "number") ]) as $scores
+		    | select(($scores | length) > 0)
+		    | select(($scores | min) < $c.min_pass)
+		    | $c.name ]
+		| first // empty
+	' 2>/dev/null || printf ''
+}
 
 tribunal_gate_decide() {
 	local policy="${1:-majority}"
@@ -35,10 +73,26 @@ tribunal_gate_decide() {
 	meta_bias_detected=$(printf '%s' "$meta" | jq -r '.bias_detected // false' 2>/dev/null)
 	meta_override=$(printf '%s' "$meta" | jq -r '.override_recommendation // empty' 2>/dev/null)
 
+	# Which criterion, if any, sits below its floor. Computed here rather than
+	# beside the other blocking reasons because `meta_override: accept` returns
+	# before them, and a floor the Meta-Judge can lift is not a floor. See the
+	# longer note on min-not-mean further down.
+	local floor_failed
+	floor_failed=$(_tribunal_floor_failed "$verdicts" "$rubric")
+
 	# meta_override policy: the Meta-Judge wins, regardless of jury.
 	if [[ "$policy" == "meta_override" ]]; then
 		case "$meta_override" in
 			accept)
+				# ...but not regardless of the rubric. `accept` overrules the
+				# jury's *opinion*; a floor is the rubric's hard constraint, so
+				# it survives. Every other short-circuit below already blocks,
+				# which made this the one arm that could turn a violated floor
+				# into a pass.
+				if [[ -n "$floor_failed" ]]; then
+					printf '{"passed":false,"reason":"criterion_floor","failed_criterion":"%s"}' "$floor_failed"
+					return 0
+				fi
 				printf '{"passed":true}'
 				return 0
 				;;
@@ -95,42 +149,15 @@ tribunal_gate_decide() {
 	local score_ok=1
 	awk -v s="$aggregated_score" -v t="$score_threshold" 'BEGIN { exit !(s >= t) }' && score_ok=0
 
-	# Per-criterion floors. A criterion whose *lowest* score among the judges
-	# that scored it falls below min_pass blocks regardless of the aggregate or
-	# the policy — that is the whole point of a floor.
-	#
-	# The lowest, not the mean: a floor means nobody may be below it. Using the
-	# mean let a specialist's finding be diluted by generalists who did not
-	# look — with safety floored at 0.8, a security judge scoring 0.6 against
-	# two generalists at 0.95 averaged to 0.83 and passed, so empanelling more
-	# judges made every floor weaker. Weighting still uses the mean; only the
-	# floor is a minimum.
-	#
-	# A criterion no judge scored is NOT a violation: absence is not a zero, and
-	# treating it as one would fail every verdict emitted before judges shipped
-	# criterion_scores. It is reported on stderr instead, because a floor nobody
-	# scores is a silent hole in the rubric.
-	local floor_failed unscored_floors any_scored
+	# A floor nobody scored is a silent hole in the rubric, so say so. The gate
+	# does not block on it — see _tribunal_floor_failed for why absence is not a
+	# zero — but tribunal_aggregate has already refused to renormalize around it,
+	# so the aggregate this gate just judged is the panel's plain mean.
+	local unscored_floors any_scored
 	any_scored=$(printf '%s' "$verdicts" | jq -r '
 		[.[] | select((.criterion_scores | type) == "object")
 		     | select((.criterion_scores | length) > 0)] | length > 0
 	' 2>/dev/null) || any_scored="false"
-
-	floor_failed=$(printf '%s' "$verdicts" | jq -r --argjson rubric "$rubric" '
-		. as $v
-		| [ ($rubric.criteria // [])[]
-		    | select((.name | type) == "string" and (.min_pass | type) == "number")
-		    | . as $c
-		    | ([ $v[]
-		         | select((.criterion_scores | type) == "object")
-		         | select(.criterion_scores | has($c.name))
-		         | .criterion_scores[$c.name]
-		         | select(type == "number") ]) as $scores
-		    | select(($scores | length) > 0)
-		    | select(($scores | min) < $c.min_pass)
-		    | $c.name ]
-		| first // empty
-	' 2>/dev/null) || floor_failed=""
 
 	if [[ "$any_scored" == "true" ]]; then
 		unscored_floors=$(printf '%s' "$verdicts" | jq -r --argjson rubric "$rubric" '

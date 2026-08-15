@@ -112,6 +112,34 @@ RUBRIC_FLOOR='{"criteria":[{"name":"correctness","weight":0.5,"min_pass":0.7},{"
 	printf '%s' "$out" | jq -e '.failed_criterion == "safety"' >/dev/null
 }
 
+@test "meta_override accept cannot lift a criterion below its floor" {
+	# `accept` returned before the floor check ever ran, so one gate policy
+	# defeated every floor in the rubric. A floor is not the jury's opinion for
+	# the Meta-Judge to overrule — it is the rubric's hard constraint, and the
+	# function's own contract is that it blocks regardless of the policy.
+	local meta='{"override_recommendation":"accept","bias_detected":false}'
+	local out
+	out=$(tribunal_gate_decide "meta_override" '[
+	  {"judge_id":"a","score":0.85,"passed":true,"criterion_scores":{"correctness":0.9,"safety":0.3}},
+	  {"judge_id":"b","score":0.80,"passed":true,"criterion_scores":{"correctness":0.9,"safety":0.3}}
+	]' "0.82" "0.75" "$meta" "0.05" "0.25" "$RUBRIC_FLOOR")
+	printf '%s' "$out" | jq -e '.passed == false' >/dev/null || return 1
+	printf '%s' "$out" | jq -e '.reason == "criterion_floor"' >/dev/null || return 1
+	printf '%s' "$out" | jq -e '.failed_criterion == "safety"' >/dev/null
+}
+
+@test "meta_override accept still overrules a failing jury when the floors hold" {
+	# The veto above must stay narrow: `accept` beating a jury that voted no is
+	# the whole purpose of the policy, and only a *violated* floor may stop it.
+	local meta='{"override_recommendation":"accept","bias_detected":false}'
+	local out
+	out=$(tribunal_gate_decide "meta_override" '[
+	  {"judge_id":"a","score":0.30,"passed":false,"criterion_scores":{"correctness":0.9,"safety":0.95}},
+	  {"judge_id":"b","score":0.40,"passed":false,"criterion_scores":{"correctness":0.9,"safety":0.95}}
+	]' "0.30" "0.75" "$meta" "0.10" "0.25" "$RUBRIC_FLOOR")
+	printf '%s' "$out" | jq -e '.passed == true' >/dev/null
+}
+
 @test "a criterion at exactly its floor passes" {
 	local out
 	out=$(tribunal_gate_decide "majority" '[
