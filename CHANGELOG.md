@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.40.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.40.1...ecosystem-v0.40.2) (2026-08-15)
+
+
+### Bug Fixes
+
+* **tribunal:** drop scoreless verdicts instead of averaging them in :bug: ([#154](https://github.com/onlooker-community/ecosystem/issues/154)) ([f546757](https://github.com/onlooker-community/ecosystem/commit/f5467574f08094b0369f0bd699983cb41ded2cc3))
+
 ## [0.40.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.40.0...ecosystem-v0.40.1) (2026-08-15)
 
 
