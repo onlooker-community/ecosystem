@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.2.0...tribunal-v1.2.1) (2026-08-15)
+
+
+### Bug Fixes
+
+* **tribunal:** close two ways a criterion floor could still be escaped :relieved: ([#152](https://github.com/onlooker-community/ecosystem/issues/152)) ([5b2ddee](https://github.com/onlooker-community/ecosystem/commit/5b2ddee8a787ba0f3e8656a6522b12f348f74859))
+
 ## [1.2.0](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.1.3...tribunal-v1.2.0) (2026-08-15)
 
 
