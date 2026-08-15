@@ -68,11 +68,16 @@ _seed_judged() {
 		> "$(_dir)/proposals/${id}.json"
 }
 
+# Both fixtures carry criterion_scores covering the superset of the org and
+# public rubrics. They are load-bearing, not decoration: librarian_lesson_judge
+# refuses a panel that leaves a floored criterion unscored, so without them
+# these panels are UNJUDGED (2) and never reach the promotion path under test.
+# disclosure sits at 0.95 against its 0.9 floor, which is now a panel MINIMUM.
 _two_passing() {
-	printf '%s' '[{"judge_type":"standard","score":0.9,"passed":true},{"judge_type":"adversarial","score":0.8,"passed":true}]'
+	printf '%s' '[{"judge_type":"standard","score":0.9,"passed":true,"criterion_scores":{"grounding":0.9,"scope_accuracy":0.9,"generality":0.9,"disclosure":0.95}},{"judge_type":"adversarial","score":0.8,"passed":true,"criterion_scores":{"grounding":0.8,"scope_accuracy":0.8,"generality":0.8,"disclosure":0.95}}]'
 }
 _split() {
-	printf '%s' '[{"judge_type":"standard","score":0.95,"passed":true},{"judge_type":"adversarial","score":0.75,"passed":false}]'
+	printf '%s' '[{"judge_type":"standard","score":0.95,"passed":true,"criterion_scores":{"grounding":0.95,"scope_accuracy":0.95,"generality":0.95,"disclosure":0.95}},{"judge_type":"adversarial","score":0.75,"passed":false,"criterion_scores":{"grounding":0.75,"scope_accuracy":0.75,"generality":0.75,"disclosure":0.95}}]'
 }
 
 @test "an approved org lesson becomes a pool entry with exactly ZLesson's keys" {

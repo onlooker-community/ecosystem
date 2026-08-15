@@ -21,6 +21,7 @@
       "timeout_seconds": 20
     },
     "lesson_judging": {
+      "min_criterion_coverage": 0.6,
       "rubrics": [
         {
           "id": "lesson-promotion",
@@ -43,7 +44,7 @@
           ],
           "score_threshold": 0.75,
           "judge_types": ["standard", "adversarial"],
-          "gate_policy": "unanimous"
+          "gate_policy": "majority"
         }
       ]
     },

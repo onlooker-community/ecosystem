@@ -152,6 +152,19 @@ about `generality` also blocks a public lesson. That is accepted for the tier
 that leaves the machine and draws the disclosure lens. When `pht` lands, this
 can narrow to a true per-criterion floor.
 
+**Correction (2026-08-14).** This section described `unanimous` as delivering
+"a single judge's objection cannot be outvoted." It never did. Both rubrics
+declare `judge_types: ["standard", "adversarial"]` — a panel of two — and at
+panel size two `unanimous` (`passed == count`) and `majority`
+(`passed * 2 > count`) return the same answer for all three possible pass
+counts. They diverge only at three judges or more, and `librarian_lesson_judge`
+refuses any panel whose judge-type multiset does not match the rubric's, so a
+third judge never reaches the gate.
+
+The public tier was never stricter than the org tier. `ecosystem-pht` replaced
+the stand-in with `disclosure`'s real `min_pass` floor and the policy is now
+`majority`. Tracked as `ecosystem-j74`.
+
 ### No new judge agent
 
 The bead proposed reusing `tribunal-judge-security` as the disclosure lens. On

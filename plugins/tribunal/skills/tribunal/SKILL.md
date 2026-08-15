@@ -117,9 +117,11 @@ For `iteration_number` from `0` while `iteration_number < max_iterations`:
 7. **Gate.**
    ```bash
    policy=$(printf '%s' "$rubric" | jq -r '.gate_policy // "majority"')
-   gate=$(tribunal_gate_decide "$policy" "$verdicts" "$aggregated" "$threshold" "$meta" "$dissent" "$dissent_threshold")
+   gate=$(tribunal_gate_decide "$policy" "$verdicts" "$aggregated" "$threshold" "$meta" "$dissent" "$dissent_threshold" "$rubric")
    ```
-   If `gate.passed == true`, emit `tribunal.gate.passed` with `final_score: aggregated` and break the loop with outcome `accepted`. Otherwise emit `tribunal.gate.blocked` with the `reason`, `will_retry: (iteration_number + 1 < max_iterations)`, and `retry_iteration_number` if retrying. Persist `gate.json` either way.
+   If `gate.passed == true`, emit `tribunal.gate.passed` with `final_score: aggregated` and break the loop with outcome `accepted`. Otherwise emit `tribunal.gate.blocked` with the `reason`, `will_retry: (iteration_number + 1 < max_iterations)`, and `retry_iteration_number` if retrying. **Whenever `gate.failed_criterion` is present, copy it onto the event payload as `failed_criterion` — whatever the `reason` is.** The gate names the criterion whenever a floor was violated, not only when `criterion_floor` won the precedence contest: a criterion scored far below its floor also drags the aggregate under `score_threshold`, so the *worst* failures surface as `low_score`. Copying it only on `criterion_floor` drops the diagnostic precisely where it matters most. Persist `gate.json` either way.
+
+   A `criterion_floor` block means the aggregate *cleared* its threshold and one criterion still failed its floor. Say so when you report it: "blocked on `safety` (0.30 < 0.80) despite an overall 0.82" is actionable, "blocked" is not.
 
    If blocking and retrying, build the retry digest (lowest-scoring criteria + meta override + dissent summary) and feed it into the next iteration's Actor prompt.
 
@@ -146,6 +148,6 @@ Keep the summary terse. The artifacts on disk are the long form.
 
 ## Error handling
 
-- If a judge subagent fails to return parseable JSON, treat that judge as `score: 0, passed: false, confidence: 0` and surface the parse error in `feedback_summary`. Do not abort the iteration — let the gate decide.
+- If a judge subagent fails to return parseable JSON, treat that judge as `score: 0, passed: false, confidence: 0` **and give it a `criterion_scores` object assigning `0` to every criterion in the active rubric.** Surface the parse error in `feedback_summary`. Do not abort the iteration — let the gate decide. A crashed judge was dispatched and produced nothing — that is the "assessed and failed" case, not the "did not assess" case. Omitting `criterion_scores` (or sending `{}`) would make the crash invisible to `weighted_mean`, which never reads `.score`, and the panel would score as though the judge had never been empaneled.
 - If the Meta-Judge fails, default to `verdict_quality: "questionable", bias_detected: false` so the gate falls back to score-based logic.
 - If event emission fails (schema validation), keep going and write a warning to stderr. The persisted artifacts on disk are still trustworthy.

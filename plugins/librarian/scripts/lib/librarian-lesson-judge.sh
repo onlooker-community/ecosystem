@@ -10,39 +10,115 @@
 # be the hook-to-hook runtime coupling that ADR rules out.
 #
 # Exposes:
-#   librarian_lesson_aggregate <verdicts_json>
-#   librarian_lesson_gate <gate_policy> <verdicts_json> <aggregate> <threshold>
+#   librarian_lesson_aggregate <verdicts_json> [<rubric_json>]
+#   librarian_lesson_gate <gate_policy> <verdicts_json> <aggregate> <threshold> [<rubric_json>]
 #   librarian_lesson_judge <key> <lesson_id> <verdicts_json>
 
-# Mean of the judges' scores. Returns 1 on an empty panel.
+# Aggregate the judges' scores. Returns 1 on an empty panel.
 #
-# A plain mean, deliberately: per-criterion scores never reach this layer, so
-# there is nothing to weight. See ecosystem-pht.
+# With a rubric and per-criterion scores, this is a weighted mean: average the
+# judges on each criterion, weight each criterion's mean, normalize by the
+# weights actually used. Without them it is the plain mean it has always been.
 #
-# Usage: librarian_lesson_aggregate <verdicts_json>
+# A criterion no judge scored contributes nothing and its weight leaves the
+# denominator — absence is not a zero. Scoring it 0 instead would turn a judge
+# that skipped a criterion into one that failed it.
+#
+# Usage: librarian_lesson_aggregate <verdicts_json> [<rubric_json>]
 librarian_lesson_aggregate() {
 	local verdicts="${1:-[]}"
+	local rubric="${2:-}"
+	[ -z "$rubric" ] && rubric='{}'
+
 	local n
 	n=$(printf '%s' "$verdicts" | jq 'length' 2>/dev/null) || return 1
 	[[ -z "$n" || "$n" -eq 0 ]] && return 1
+
+	local weighted
+	weighted=$(printf '%s' "$verdicts" | jq -r --argjson rubric "$rubric" '
+		. as $v
+		| [ ($rubric.criteria // [])[]
+		    | select((.name | type) == "string" and (.weight | type) == "number")
+		    | . as $c
+		    | ([ $v[]
+		         | select((.criterion_scores | type) == "object")
+		         | select(.criterion_scores | has($c.name))
+		         | .criterion_scores[$c.name]
+		         | select(type == "number") ]) as $scores
+		    | select(($scores | length) > 0)
+		    | { w: $c.weight, m: (($scores | add) / ($scores | length)) } ]
+		| (map(.w) | add) as $den
+		| if length == 0 or $den == null or $den <= 0 then empty
+		  else (map(.w * .m) | add) / $den
+		  end
+	' 2>/dev/null)
+	if [ -n "$weighted" ]; then
+		printf '%s' "$weighted"
+		return 0
+	fi
+
 	printf '%s' "$verdicts" | jq -r '[.[].score] | add / length' 2>/dev/null || return 1
 }
 
-# Decide pass/block from the panel and the aggregate.
+# Decide pass/block from the panel, the aggregate, and the rubric's floors.
 #
-# Echoes {"passed": bool, "reason": string}. Both conditions must hold: the
-# jury must clear its policy AND the aggregate must clear the threshold.
+# Echoes {"passed": bool, "reason": string} and, when a floor was violated, a
+# "failed_criterion" naming it — on whichever blocking reason wins, not only on
+# `criterion_floor`. Three conditions must hold: the jury clears its policy, the
+# aggregate clears the threshold, and no criterion sits below its min_pass.
 #
-# Usage: librarian_lesson_gate <gate_policy> <verdicts_json> <aggregate> <threshold>
+# The floor is what makes the public tier meaningfully stricter than org. Before
+# it existed, lesson-promotion-public declared gate_policy `unanimous` for that
+# purpose and it did nothing at all — see ecosystem-j74.
+#
+# Usage: librarian_lesson_gate <gate_policy> <verdicts_json> <aggregate> <threshold> [<rubric_json>]
 librarian_lesson_gate() {
 	local policy="${1:-majority}"
 	local verdicts="${2:-[]}"
 	local aggregate="${3:-0}"
 	local threshold="${4:-0.75}"
+	local rubric="${5:-}"
+	[ -z "$rubric" ] && rubric='{}'
 
 	local count passed_count
 	count=$(printf '%s' "$verdicts" | jq 'length' 2>/dev/null) || count=0
 	passed_count=$(printf '%s' "$verdicts" | jq '[.[] | select(.passed == true)] | length' 2>/dev/null) || passed_count=0
+
+	# Per-criterion floors, computed up front. The precedence below is unchanged
+	# — jury, then aggregate, then floor — but a violated floor now names itself
+	# on whichever reason wins. `disclosure` carries weight 0.30, so the *worst*
+	# leaks drag the aggregate under the threshold and used to land as a bare
+	# `below_threshold`, while borderline ones got named: the diagnostic was
+	# absent exactly where it mattered most.
+	#
+	# The floor is the *lowest* score among the judges that scored it, not their
+	# mean. A floor means nobody may be below it; using the mean let one judge's
+	# finding be diluted by others who did not look, and made every floor weaker
+	# as the panel grew. Weighting still uses the mean — only the floor is a
+	# minimum.
+	#
+	# A criterion no judge scored is not a violation here: absence is not a zero.
+	# librarian_lesson_judge refuses that panel outright before it reaches this
+	# function, which is the stronger answer than silently skipping the floor.
+	local floor_failed
+	floor_failed=$(printf '%s' "$verdicts" | jq -r --argjson rubric "$rubric" '
+		. as $v
+		| [ ($rubric.criteria // [])[]
+		    | select((.name | type) == "string" and (.min_pass | type) == "number")
+		    | . as $c
+		    | ([ $v[]
+		         | select((.criterion_scores | type) == "object")
+		         | select(.criterion_scores | has($c.name))
+		         | .criterion_scores[$c.name]
+		         | select(type == "number") ]) as $scores
+		    | select(($scores | length) > 0)
+		    | select(($scores | min) < $c.min_pass)
+		    | $c.name ]
+		| first // empty
+	' 2>/dev/null) || floor_failed=""
+
+	local floor_suffix=""
+	[[ -n "$floor_failed" ]] && floor_suffix=$(printf ',"failed_criterion":"%s"' "$floor_failed")
 
 	local jury_ok=1 jury_reason=""
 	case "$policy" in
@@ -61,23 +137,68 @@ librarian_lesson_gate() {
 			fi
 			;;
 		*)
-			printf '{"passed":false,"reason":"unknown_gate_policy"}'
+			printf '{"passed":false,"reason":"unknown_gate_policy"%s}' "$floor_suffix"
 			return 0
 			;;
 	esac
 
 	if [[ "$jury_ok" -ne 0 ]]; then
-		printf '{"passed":false,"reason":"%s"}' "$jury_reason"
+		printf '{"passed":false,"reason":"%s"%s}' "$jury_reason" "$floor_suffix"
 		return 0
 	fi
 
 	# awk for the float comparison: bash cannot compare decimals.
-	if awk -v s="$aggregate" -v t="$threshold" 'BEGIN { exit !(s >= t) }'; then
-		printf '{"passed":true,"reason":"gate_passed"}'
-	else
-		printf '{"passed":false,"reason":"below_threshold"}'
+	if ! awk -v s="$aggregate" -v t="$threshold" 'BEGIN { exit !(s >= t) }'; then
+		printf '{"passed":false,"reason":"below_threshold"%s}' "$floor_suffix"
+		return 0
 	fi
+
+	if [[ -n "$floor_failed" ]]; then
+		printf '{"passed":false,"reason":"criterion_floor","failed_criterion":"%s"}' "$floor_failed"
+		return 0
+	fi
+
+	printf '{"passed":true,"reason":"gate_passed"}'
 	return 0
+}
+
+# Names the floored criteria this panel failed to score, plus a coverage verdict.
+#
+# Echoes a JSON object: { unscored: [names], covered: <fraction 0..1> }
+#
+# Librarian refuses rather than degrades. Tribunal can afford to fall back to a
+# plain mean because a blocked task retries; a lesson that publishes without its
+# `disclosure` floor ever running is not recoverable. "The panel did not evaluate
+# the thing that gates this tier" is not a verdict — it is UNJUDGED.
+#
+# Usage: librarian_lesson_coverage <verdicts_json> <rubric_json>
+librarian_lesson_coverage() {
+	local verdicts="${1:-[]}"
+	# Brace-free default, matching the two functions above: `${2:-{\}}` keeps the
+	# backslash on the bash 3.2 macOS ships, yielding `{\}` — invalid JSON, so
+	# jq fails and every panel reads as zero coverage. See
+	# test/bats/emit-payload-default.bats.
+	local rubric="${2:-}"
+	[ -z "$rubric" ] && rubric='{}'
+	printf '%s' "$verdicts" | jq -c --argjson rubric "$rubric" '
+		. as $v
+		| ([ ($rubric.criteria // [])[]
+		     | select((.weight | type) == "number") | .weight ] | add) as $total_w
+		| [ ($rubric.criteria // [])[]
+		    | select((.name | type) == "string")
+		    | . as $c
+		    | { name: $c.name,
+		        w: (if (.weight | type) == "number" then .weight else 0 end),
+		        floored: ((.min_pass | type) == "number"),
+		        n: ([ $v[]
+		              | select((.criterion_scores | type) == "object")
+		              | select(.criterion_scores | has($c.name))
+		              | .criterion_scores[$c.name]
+		              | select(type == "number" and . >= 0 and . <= 1) ] | length) } ]
+		| { unscored: [ .[] | select(.floored and .n == 0) | .name ],
+		    covered: (if $total_w == null or $total_w <= 0 then 0
+		              else (([ .[] | select(.n > 0) | .w ] | add) // 0) / $total_w end) }
+	' 2>/dev/null || printf '{"unscored":[],"covered":0}'
 }
 
 # Judge one confirmed lesson and record the outcome.
@@ -161,9 +282,31 @@ librarian_lesson_judge() {
 			end' 2>/dev/null) || usable="false"
 		[[ "$usable" != "true" ]] && return 2
 
+		# A floored criterion nobody scored, or a panel that covered too little
+		# of the rubric, is UNJUDGED — not a pass. The candidate stays
+		# `confirmed` and the next run retries it.
+		local coverage unscored covered min_coverage
+		min_coverage=$(librarian_config_get '.librarian.lesson_judging.min_criterion_coverage' 2>/dev/null)
+		case "$min_coverage" in
+			''|null) min_coverage="0.6" ;;
+		esac
+		coverage=$(librarian_lesson_coverage "$verdicts" "$rubric")
+		unscored=$(printf '%s' "$coverage" | jq -r '.unscored | join(", ")')
+		covered=$(printf '%s' "$coverage" | jq -r '.covered')
+		if [[ -n "$unscored" ]]; then
+			printf 'Lesson %s: no judge scored these floored criteria, so the panel cannot be trusted: %s\n' \
+				"$lesson_id" "$unscored" >&2
+			return 2
+		fi
+		if ! awk -v c="$covered" -v m="$min_coverage" 'BEGIN { exit !(c >= m) }'; then
+			printf 'Lesson %s: the panel scored only %s of the rubric weight (minimum %s).\n' \
+				"$lesson_id" "$covered" "$min_coverage" >&2
+			return 2
+		fi
+
 		local aggregate gate
-		aggregate=$(librarian_lesson_aggregate "$verdicts") || return 2
-		gate=$(librarian_lesson_gate "$policy" "$verdicts" "$aggregate" "$threshold") || {
+		aggregate=$(librarian_lesson_aggregate "$verdicts" "$rubric") || return 2
+		gate=$(librarian_lesson_gate "$policy" "$verdicts" "$aggregate" "$threshold" "$rubric") || {
 			printf 'Lesson %s: the gate could not be decided.\n' "$lesson_id" >&2
 			return 1
 		}
@@ -174,7 +317,8 @@ librarian_lesson_judge() {
 			--argjson g "$gate" --argjson j "$verdicts" \
 			'{rubric_id: $r, gate_policy: $p, score_threshold: $th,
 			  aggregate_score: $ag, passed: $g.passed, reason: $g.reason,
-			  judges: $j}') || {
+			  judges: $j}
+			 + (if $g.failed_criterion then {failed_criterion: $g.failed_criterion} else {} end)') || {
 			printf 'Lesson %s: the verdict could not be built.\n' "$lesson_id" >&2
 			return 1
 		}

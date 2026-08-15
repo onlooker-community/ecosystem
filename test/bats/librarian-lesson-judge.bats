@@ -71,12 +71,15 @@ STUB
 	[ "$status" -ne 0 ]
 }
 
-@test "the org rubric gates on majority and the public rubric on unanimous" {
+@test "both the org and public rubrics gate on majority" {
+	# unanimous was the public tier's stand-in protection and never worked at
+	# this panel size — see ecosystem-j74. Both rubrics are majority now; what
+	# still differs between them is the criteria, pinned separately below.
 	local org public
 	org=$(librarian_lesson_rubric_get "lesson-promotion")
 	public=$(librarian_lesson_rubric_get "lesson-promotion-public")
 	[ "$(printf '%s' "$org" | jq -r '.gate_policy')" = "majority" ]
-	[ "$(printf '%s' "$public" | jq -r '.gate_policy')" = "unanimous" ]
+	[ "$(printf '%s' "$public" | jq -r '.gate_policy')" = "majority" ]
 }
 
 @test "both rubrics carry a 0.75 score threshold and two judge types" {
@@ -155,14 +158,23 @@ _status_of() {
 	jq -r '.status' "$(librarian_lessons_dir "$PROJECT_KEY")/proposals/${1}.json"
 }
 
-# Two judges, both passing, mean 0.85 — clears the 0.75 threshold.
+# Two judges, both passing. Aggregate 0.85 at org / 0.88 at public — both clear
+# the 0.75 threshold, and every criterion sits above its floor.
+#
+# criterion_scores are the superset of both rubrics' criteria, so the same
+# fixture serves org (grounding / scope_accuracy / generality) and public (those
+# plus disclosure). They are not decoration: librarian_lesson_judge refuses a
+# panel that leaves a floored criterion unscored, so a fixture without them is
+# UNJUDGED (2) rather than a verdict. disclosure is 0.95 on both judges because
+# its floor is 0.9 and the floor is now the panel MINIMUM.
 _verdicts_pass() {
-	printf '%s' '[{"judge_type":"standard","score":0.9,"passed":true,"confidence":0.9,"feedback_summary":"Well grounded."},{"judge_type":"adversarial","score":0.8,"passed":true,"confidence":0.8,"feedback_summary":"Holds up."}]'
+	printf '%s' '[{"judge_type":"standard","score":0.9,"passed":true,"confidence":0.9,"criterion_scores":{"grounding":0.9,"scope_accuracy":0.9,"generality":0.9,"disclosure":0.95},"feedback_summary":"Well grounded."},{"judge_type":"adversarial","score":0.8,"passed":true,"confidence":0.8,"criterion_scores":{"grounding":0.8,"scope_accuracy":0.8,"generality":0.8,"disclosure":0.95},"feedback_summary":"Holds up."}]'
 }
 
-# Split panel: mean 0.85 still clears the threshold, but one judge blocks.
+# Split panel: the aggregate still clears the threshold and no floor is
+# violated, so the jury policy is the only thing that blocks it.
 _verdicts_split() {
-	printf '%s' '[{"judge_type":"standard","score":0.95,"passed":true,"confidence":0.9,"feedback_summary":"Strong."},{"judge_type":"adversarial","score":0.75,"passed":false,"confidence":0.8,"feedback_summary":"Scope claim is not supported."}]'
+	printf '%s' '[{"judge_type":"standard","score":0.95,"passed":true,"confidence":0.9,"criterion_scores":{"grounding":0.95,"scope_accuracy":0.95,"generality":0.95,"disclosure":0.95},"feedback_summary":"Strong."},{"judge_type":"adversarial","score":0.75,"passed":false,"confidence":0.8,"criterion_scores":{"grounding":0.75,"scope_accuracy":0.75,"generality":0.75,"disclosure":0.95},"feedback_summary":"Scope claim is not supported."}]'
 }
 
 @test "aggregate averages the judges' scores" {
@@ -232,8 +244,9 @@ _verdicts_split() {
 }
 
 @test "a public candidate one judge blocks is rejected though the aggregate clears" {
-	# The whole reason public differs from org. The mean here is 0.85, well
-	# above the 0.75 threshold; only the unanimous policy stops it.
+	# The mean here is 0.85, well above the 0.75 threshold; only the jury
+	# policy stops it. A split 1-of-2 panel fails majority the same way it
+	# failed unanimous at this panel size — see ecosystem-j74.
 	_seed_confirmed "pub01" "public"
 	run librarian_lesson_judge "$PROJECT_KEY" "pub01" "$(_verdicts_split)"
 	[ "$status" -eq 0 ]
@@ -242,8 +255,8 @@ _verdicts_split() {
 	local v
 	v=$(jq -c '.verdict' "$(librarian_lessons_dir "$PROJECT_KEY")/proposals/pub01.json")
 	[ "$(printf '%s' "$v" | jq -r '.rubric_id')" = "lesson-promotion-public" ]
-	[ "$(printf '%s' "$v" | jq -r '.gate_policy')" = "unanimous" ]
-	[ "$(printf '%s' "$v" | jq -r '.reason')" = "jury_not_unanimous" ]
+	[ "$(printf '%s' "$v" | jq -r '.gate_policy')" = "majority" ]
+	[ "$(printf '%s' "$v" | jq -r '.reason')" = "jury_not_majority" ]
 }
 
 @test "the same split panel is rejected at org, but for the majority reason" {
@@ -540,4 +553,332 @@ _verdicts_split() {
 	run librarian_cli lessons list "$PROJECT_REPO"
 	[ "$status" -eq 0 ]
 	[ "$output" = "No pending lessons." ]
+}
+
+PUBLIC_RUBRIC='{"id":"lesson-promotion-public","criteria":[
+  {"name":"grounding","weight":0.32,"min_pass":0.7},
+  {"name":"scope_accuracy","weight":0.24,"min_pass":0.7},
+  {"name":"generality","weight":0.14,"min_pass":0.6},
+  {"name":"disclosure","weight":0.30,"min_pass":0.9}],
+  "score_threshold":0.75,"gate_policy":"majority"}'
+
+@test "lesson aggregate weights criteria when scores are present" {
+	local w m verdicts
+	verdicts='[
+	  {"judge_type":"standard","score":0.5,"passed":true,"criterion_scores":{"grounding":1.0,"scope_accuracy":1.0,"generality":1.0,"disclosure":0.0}},
+	  {"judge_type":"adversarial","score":0.5,"passed":true,"criterion_scores":{"grounding":1.0,"scope_accuracy":1.0,"generality":1.0,"disclosure":0.0}}
+	]'
+	w=$(librarian_lesson_aggregate "$verdicts" "$PUBLIC_RUBRIC")
+	m=$(librarian_lesson_aggregate "$verdicts")
+	# weighted: 0.32+0.24+0.14 = 0.70 over a weight sum of 1.0. Plain mean: 0.5.
+	awk -v a="$w" -v b="$m" 'BEGIN { exit !(a != b) }' || return 1
+	awk -v a="$w" 'BEGIN { exit !(a > 0.699 && a < 0.701) }'
+}
+
+@test "lesson aggregate degrades to the plain mean without criterion scores" {
+	local out
+	out=$(librarian_lesson_aggregate \
+		'[{"judge_type":"standard","score":0.8,"passed":true},
+		  {"judge_type":"adversarial","score":0.6,"passed":true}]' "$PUBLIC_RUBRIC")
+	awk -v a="$out" 'BEGIN { exit !(a > 0.699 && a < 0.701) }'
+}
+
+@test "lesson aggregate still returns 1 on an empty panel" {
+	run librarian_lesson_aggregate '[]' "$PUBLIC_RUBRIC"
+	[ "$status" -eq 1 ]
+}
+
+@test "lesson aggregate normalizes weights that do not sum to 1.0" {
+	# librarian_lesson_rubric_get validates NOTHING, so a mis-summed rubric
+	# reaches this function where tribunal's validator would have refused it.
+	local out
+	out=$(librarian_lesson_aggregate \
+		'[{"judge_type":"standard","score":0.1,"passed":true,"criterion_scores":{"grounding":1.0,"disclosure":0.0}}]' \
+		'{"criteria":[{"name":"grounding","weight":1.8,"min_pass":0.7},{"name":"disclosure","weight":0.2,"min_pass":0.9}]}')
+	awk -v a="$out" 'BEGIN { exit !(a > 0.899 && a < 0.901) }'
+}
+
+@test "a low disclosure score blocks a public lesson under majority" {
+	# The reason this whole thread exists: disclosure's 0.9 floor blocks even
+	# though both judges passed and the aggregate clears 0.75.
+	local out
+	out=$(librarian_lesson_gate "majority" '[
+	  {"judge_type":"standard","score":0.9,"passed":true,"criterion_scores":{"grounding":0.95,"scope_accuracy":0.95,"generality":0.9,"disclosure":0.4}},
+	  {"judge_type":"adversarial","score":0.9,"passed":true,"criterion_scores":{"grounding":0.95,"scope_accuracy":0.95,"generality":0.9,"disclosure":0.4}}
+	]' "0.78" "0.75" "$PUBLIC_RUBRIC")
+	printf '%s' "$out" | jq -e '.passed == false' >/dev/null || return 1
+	printf '%s' "$out" | jq -e '.reason == "criterion_floor"' >/dev/null || return 1
+	printf '%s' "$out" | jq -e '.failed_criterion == "disclosure"' >/dev/null
+}
+
+@test "a generality score above its floor does not block a public lesson" {
+	# Pins generality's 0.6 floor: 0.65 clears it. This is NOT a difference from
+	# the old `unanimous` policy — both judges pass, so unanimous accepted it
+	# too, and at a two-judge panel no fixture can tell the policies apart.
+	# See ecosystem-j74.
+	local out
+	out=$(librarian_lesson_gate "majority" '[
+	  {"judge_type":"standard","score":0.9,"passed":true,"criterion_scores":{"grounding":0.95,"scope_accuracy":0.95,"generality":0.65,"disclosure":0.95}},
+	  {"judge_type":"adversarial","score":0.85,"passed":true,"criterion_scores":{"grounding":0.9,"scope_accuracy":0.9,"generality":0.65,"disclosure":0.95}}
+	]' "0.88" "0.75" "$PUBLIC_RUBRIC")
+	printf '%s' "$out" | jq -e '.passed == true' >/dev/null
+}
+
+@test "lesson gate: a verdict with no criterion_scores key at all never blocks" {
+	# Every verdict emitted before judges shipped criterion_scores. Note this
+	# case is caught by the OUTER type guard and never reaches has() — it does
+	# NOT pin the per-criterion absence guard. The next test does that.
+	local out
+	out=$(librarian_lesson_gate "majority" '[
+	  {"judge_type":"standard","score":0.9,"passed":true},
+	  {"judge_type":"adversarial","score":0.85,"passed":true}
+	]' "0.88" "0.75" "$PUBLIC_RUBRIC")
+	printf '%s' "$out" | jq -e '.passed == true and .reason == "gate_passed"' >/dev/null
+}
+
+@test "lesson gate: scores present but one floored criterion omitted does not block" {
+	# THE test that pins the has() guard. These verdicts DO carry
+	# criterion_scores, so they survive the outer type guard and reach the
+	# per-criterion lookup — but `disclosure`, whose floor is 0.9, is absent.
+	# Substituting `// 0` for has() makes disclosure read as 0.0 and blocks.
+	#
+	# Written as its own test because the case above cannot fail when has() is
+	# deleted: its fixture is filtered one layer earlier. Two different absences
+	# sharing one test is how an outer guard silently stands in for an inner one
+	# — this project has hit that shape eight times.
+	local out
+	out=$(librarian_lesson_gate "majority" '[
+	  {"judge_type":"standard","score":0.9,"passed":true,"criterion_scores":{"grounding":0.95,"scope_accuracy":0.95,"generality":0.9}},
+	  {"judge_type":"adversarial","score":0.85,"passed":true,"criterion_scores":{"grounding":0.9,"scope_accuracy":0.9,"generality":0.85}}
+	]' "0.88" "0.75" "$PUBLIC_RUBRIC")
+	printf '%s' "$out" | jq -e '.passed == true' >/dev/null || return 1
+	printf '%s' "$out" | jq -e '.reason == "gate_passed"' >/dev/null
+}
+
+@test "lesson gate: a criterion scored zero does block" {
+	local out
+	out=$(librarian_lesson_gate "majority" '[
+	  {"judge_type":"standard","score":0.9,"passed":true,"criterion_scores":{"disclosure":0.0}},
+	  {"judge_type":"adversarial","score":0.85,"passed":true,"criterion_scores":{"disclosure":0.0}}
+	]' "0.88" "0.75" "$PUBLIC_RUBRIC")
+	printf '%s' "$out" | jq -e '.reason == "criterion_floor"' >/dev/null || return 1
+	printf '%s' "$out" | jq -e '.failed_criterion == "disclosure"' >/dev/null
+}
+
+@test "lesson gate: below_threshold still wins over criterion_floor" {
+	local out
+	out=$(librarian_lesson_gate "majority" '[
+	  {"judge_type":"standard","score":0.2,"passed":true,"criterion_scores":{"disclosure":0.1}},
+	  {"judge_type":"adversarial","score":0.2,"passed":true,"criterion_scores":{"disclosure":0.1}}
+	]' "0.20" "0.75" "$PUBLIC_RUBRIC")
+	printf '%s' "$out" | jq -e '.reason == "below_threshold"' >/dev/null
+}
+
+@test "lesson gate: jury policy still wins over criterion_floor" {
+	local out
+	out=$(librarian_lesson_gate "majority" '[
+	  {"judge_type":"standard","score":0.9,"passed":false,"criterion_scores":{"disclosure":0.1}},
+	  {"judge_type":"adversarial","score":0.9,"passed":false,"criterion_scores":{"disclosure":0.1}}
+	]' "0.90" "0.75" "$PUBLIC_RUBRIC")
+	printf '%s' "$out" | jq -e '.reason == "jury_not_majority"' >/dev/null
+}
+
+@test "lesson gate: works with no rubric at all" {
+	local out
+	out=$(librarian_lesson_gate "majority" '[
+	  {"judge_type":"standard","score":0.9,"passed":true},
+	  {"judge_type":"adversarial","score":0.85,"passed":true}
+	]' "0.88" "0.75")
+	printf '%s' "$out" | jq -e '.passed == true' >/dev/null
+}
+
+@test "lesson gate: a hyphenated criterion name gates correctly" {
+	local out
+	out=$(librarian_lesson_gate "majority" '[
+	  {"judge_type":"standard","score":0.9,"passed":true,"criterion_scores":{"scope-accuracy":0.1}},
+	  {"judge_type":"adversarial","score":0.9,"passed":true,"criterion_scores":{"scope-accuracy":0.1}}
+	]' "0.90" "0.75" '{"criteria":[{"name":"scope-accuracy","weight":1.0,"min_pass":0.7}]}')
+	printf '%s' "$out" | jq -e '.failed_criterion == "scope-accuracy"' >/dev/null
+}
+
+@test "an end-to-end public judge is rejected by a criterion floor, not just the unit gate" {
+	# Pins Step 5's threading, not just librarian_lesson_gate in isolation: both
+	# judges pass unanimously and the mean (0.875) clears the 0.75 threshold, so
+	# without the rubric reaching the gate through librarian_lesson_judge this
+	# would approve. disclosure's 0.9 floor is what actually blocks it.
+	_seed_confirmed "floor01" "public"
+	local verdicts='[
+	  {"judge_type":"standard","score":0.9,"passed":true,"criterion_scores":{"grounding":0.95,"scope_accuracy":0.95,"generality":0.9,"disclosure":0.4}},
+	  {"judge_type":"adversarial","score":0.85,"passed":true,"criterion_scores":{"grounding":0.9,"scope_accuracy":0.9,"generality":0.85,"disclosure":0.4}}
+	]'
+	run librarian_lesson_judge "$PROJECT_KEY" "floor01" "$verdicts"
+	[ "$status" -eq 0 ]
+	[ "$(_status_of floor01)" = "rejected" ]
+
+	local v
+	v=$(jq -c '.verdict' "$(librarian_lessons_dir "$PROJECT_KEY")/proposals/floor01.json")
+	[ "$(printf '%s' "$v" | jq -r '.reason')" = "criterion_floor" ]
+}
+
+@test "the public rubric no longer relies on unanimous" {
+	# unanimous was a stand-in for the disclosure floor and never worked: at the
+	# configured panel of 2, unanimous and majority are the same function for
+	# every possible pass count. ecosystem-j74.
+	local policy
+	policy=$(jq -r '.librarian.lesson_judging.rubrics[]
+		| select(.id == "lesson-promotion-public") | .gate_policy' \
+		"${REPO_ROOT}/plugins/librarian/config.json")
+	[ "$policy" = "majority" ]
+}
+
+@test "the public rubric keeps disclosure's floor at 0.9" {
+	# The floor is now the ONLY thing making public stricter than org. If this
+	# drops, the public tier silently loses its protection entirely.
+	local floor
+	floor=$(jq -r '.librarian.lesson_judging.rubrics[]
+		| select(.id == "lesson-promotion-public")
+		| .criteria[] | select(.name == "disclosure") | .min_pass' \
+		"${REPO_ROOT}/plugins/librarian/config.json")
+	[ "$floor" = "0.9" ]
+}
+
+@test "org and public rubrics differ by more than their gate policy" {
+	# Both are `majority` now. If the criteria ever converge too, the two tiers
+	# become indistinguishable and the public tier is inert again — the exact
+	# shape of j74.
+	local org_crit pub_crit
+	org_crit=$(jq -c '[.librarian.lesson_judging.rubrics[]
+		| select(.id == "lesson-promotion") | .criteria[].name] | sort' \
+		"${REPO_ROOT}/plugins/librarian/config.json")
+	pub_crit=$(jq -c '[.librarian.lesson_judging.rubrics[]
+		| select(.id == "lesson-promotion-public") | .criteria[].name] | sort' \
+		"${REPO_ROOT}/plugins/librarian/config.json")
+	[ "$org_crit" != "$pub_crit" ]
+}
+
+@test "the librarian walk names every public rubric criterion to its judges" {
+	# A bare grep for "criterion_scores" passes even when the walk hands judges
+	# the wrong key names — which silently disables the floor, since no key
+	# matches the rubric. Assert the actual names, read from config.
+	local skill name
+	skill="${REPO_ROOT}/plugins/librarian/skills/librarian/SKILL.md"
+	grep -q 'criterion_scores' "$skill" || return 1
+
+	while IFS= read -r name; do
+		grep -q "$name" "$skill" || return 1
+	done < <(jq -r '.librarian.lesson_judging.rubrics[]
+		| select(.id == "lesson-promotion-public") | .criteria[].name' \
+		"${REPO_ROOT}/plugins/librarian/config.json")
+}
+
+@test "a floor rejection records which criterion failed" {
+	# "reason": "criterion_floor" without the criterion name is no more
+	# actionable than "blocked" — the whole argument for a distinct reason
+	# was naming the thing that failed.
+	_seed_confirmed "floorname01" "public"
+	local verdicts='[
+	  {"judge_type":"standard","score":0.9,"passed":true,"criterion_scores":{"grounding":0.95,"scope_accuracy":0.95,"generality":0.9,"disclosure":0.4}},
+	  {"judge_type":"adversarial","score":0.85,"passed":true,"criterion_scores":{"grounding":0.9,"scope_accuracy":0.9,"generality":0.85,"disclosure":0.4}}
+	]'
+	run librarian_lesson_judge "$PROJECT_KEY" "floorname01" "$verdicts"
+	[ "$status" -eq 0 ] || return 1
+	[ "$(_status_of floorname01)" = "rejected" ] || return 1
+
+	local path
+	path="$(librarian_lessons_dir "$PROJECT_KEY")/proposals/floorname01.json"
+	jq -e '.verdict.reason == "criterion_floor"' "$path" >/dev/null || return 1
+	jq -e '.verdict.failed_criterion == "disclosure"' "$path" >/dev/null
+}
+
+@test "an approved verdict carries no failed_criterion key" {
+	# Absent rather than null: a key that is always present but usually empty
+	# invites `// ""` at the read site, which is how this pipeline has
+	# repeatedly lost the absent-vs-empty distinction.
+	_seed_confirmed "floorname02" "public"
+	local verdicts='[
+	  {"judge_type":"standard","score":0.9,"passed":true,"criterion_scores":{"grounding":0.95,"scope_accuracy":0.95,"generality":0.9,"disclosure":0.95}},
+	  {"judge_type":"adversarial","score":0.9,"passed":true,"criterion_scores":{"grounding":0.9,"scope_accuracy":0.9,"generality":0.9,"disclosure":0.95}}
+	]'
+	run librarian_lesson_judge "$PROJECT_KEY" "floorname02" "$verdicts"
+	[ "$status" -eq 0 ] || return 1
+
+	local path
+	path="$(librarian_lessons_dir "$PROJECT_KEY")/proposals/floorname02.json"
+	jq -e '.verdict | has("failed_criterion") | not' "$path" >/dev/null
+}
+
+@test "a floored criterion no judge scored is UNJUDGED, not approved" {
+	# C2: librarian dispatches tribunal's judge agents, whose shipped example
+	# keys are tribunal's rubric. A judge following that example emits keys
+	# matching nothing here, disclosure never runs, and the lesson publishes.
+	# Refusing is right: the candidate stays confirmed and is retried.
+	_seed_confirmed "cov01" "public"
+	local verdicts='[
+	  {"judge_type":"standard","score":0.9,"passed":true,"criterion_scores":{"correctness":0.9,"completeness":0.9,"safety":0.2,"clarity":0.9}},
+	  {"judge_type":"adversarial","score":0.9,"passed":true,"criterion_scores":{"correctness":0.9,"completeness":0.9,"safety":0.2,"clarity":0.9}}
+	]'
+	run --separate-stderr librarian_lesson_judge "$PROJECT_KEY" "cov01" "$verdicts"
+	[ "$status" -eq 2 ] || return 1
+	[ "$(_status_of cov01)" = "confirmed" ] || return 1
+	local re='disclosure'
+	[[ "$stderr" =~ $re ]]
+}
+
+@test "a panel that scored every floored criterion but too little weight is UNJUDGED" {
+	# Isolates the coverage fraction from the unscored-floors check above.
+	#
+	# Both SHIPPED rubrics floor every one of their criteria, so with them a
+	# floor-complete panel always covers 1.0 of the weight and this branch is
+	# unreachable: a fixture built on the org rubric would be caught by the
+	# unscored check and would still pass with the coverage guard deleted —
+	# the outer-guard-stands-in-for-the-inner shape this repo keeps hitting.
+	# ADR-004 lets a user override `rubrics`, so an unfloored criterion is a
+	# real configuration, and it is the only one that reaches this guard.
+	_LIBRARIAN_CONFIG=$(printf '%s' "$_LIBRARIAN_CONFIG" | jq '
+		.librarian.lesson_judging.rubrics = [
+		  { id: "lesson-promotion",
+		    criteria: [ { name: "grounding", weight: 0.2, min_pass: 0.7 },
+		                { name: "depth", weight: 0.8 } ],
+		    score_threshold: 0.75,
+		    judge_types: ["standard", "adversarial"],
+		    gate_policy: "majority" } ]')
+
+	_seed_confirmed "cov02" "org"
+	# grounding is the only floored criterion and both judges scored it, so the
+	# unscored check passes. Coverage is 0.2 of 1.0 — well under the 0.6 floor.
+	local verdicts='[
+	  {"judge_type":"standard","score":0.9,"passed":true,"criterion_scores":{"grounding":0.9}},
+	  {"judge_type":"adversarial","score":0.9,"passed":true,"criterion_scores":{"grounding":0.9}}
+	]'
+	run --separate-stderr librarian_lesson_judge "$PROJECT_KEY" "cov02" "$verdicts"
+	[ "$status" -eq 2 ] || return 1
+	[ "$(_status_of cov02)" = "confirmed" ] || return 1
+	local re='rubric weight'
+	[[ "$stderr" =~ $re ]]
+}
+
+@test "a below_threshold block still names the criterion that failed its floor" {
+	# The worst disclosure failures drag the aggregate under threshold, so
+	# before this they landed as below_threshold with no failed_criterion —
+	# the diagnostic absent exactly where it matters most.
+	local out
+	out=$(librarian_lesson_gate "majority" '[
+	  {"judge_type":"standard","score":0.9,"passed":true,"criterion_scores":{"grounding":0.95,"scope_accuracy":0.95,"generality":0.95,"disclosure":0.0}},
+	  {"judge_type":"adversarial","score":0.9,"passed":true,"criterion_scores":{"grounding":0.95,"scope_accuracy":0.95,"generality":0.95,"disclosure":0.0}}
+	]' "0.665" "0.75" "$PUBLIC_RUBRIC")
+	printf '%s' "$out" | jq -e '.reason == "below_threshold"' >/dev/null || return 1
+	printf '%s' "$out" | jq -e '.failed_criterion == "disclosure"' >/dev/null
+}
+
+@test "a lesson floor uses the lowest judge score, not the mean" {
+	local out
+	out=$(librarian_lesson_gate "majority" '[
+	  {"judge_type":"standard","score":0.9,"passed":true,"criterion_scores":{"grounding":0.95,"scope_accuracy":0.95,"generality":0.95,"disclosure":1.0}},
+	  {"judge_type":"adversarial","score":0.9,"passed":true,"criterion_scores":{"grounding":0.95,"scope_accuracy":0.95,"generality":0.95,"disclosure":0.85}}
+	]' "0.93" "0.75" "$PUBLIC_RUBRIC")
+	# The discriminating pair: the mean of 1.0/0.85 is 0.925 and CLEARS the 0.9
+	# floor, so a mean-based floor passes this panel. The min, 0.85, does not.
+	# 0.99/0.8 would not discriminate — that mean is 0.895, already under 0.9.
+	printf '%s' "$out" | jq -e '.reason == "criterion_floor"' >/dev/null || return 1
+	printf '%s' "$out" | jq -e '.failed_criterion == "disclosure"' >/dev/null
 }

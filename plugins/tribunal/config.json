@@ -28,6 +28,7 @@
     },
     "rubric": {
       "default_id": "default",
+      "min_criterion_coverage": 0.6,
       "builtins": [
         {
           "id": "default",
