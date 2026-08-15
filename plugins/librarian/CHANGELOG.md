@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.1](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.13.0...librarian-v0.13.1) (2026-08-15)
+
+
+### Bug Fixes
+
+* **librarian:** make proposals the sole dedup source, and say so :broom: ([#156](https://github.com/onlooker-community/ecosystem/issues/156)) ([729d9ea](https://github.com/onlooker-community/ecosystem/commit/729d9ea3e328c2734712cfc5adf556c6798334aa))
+
 ## [0.13.0](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.12.1...librarian-v0.13.0) (2026-08-15)
 
 
