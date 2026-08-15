@@ -1,5 +1,8 @@
 #!/usr/bin/env bats
 
+# `run --separate-stderr` (used below) requires bats >= 1.5.0.
+bats_require_minimum_version 1.5.0
+
 setup() {
 	source "${BATS_TEST_DIRNAME}/../helpers/setup.bash"
 	setup_test_env
@@ -246,4 +249,104 @@ SCORED='[
 		'[{"judge_id":"a","score":0.5,"criterion_scores":{"correctness":1.0,"clarity":"n/a"}}]' \
 		"$RUBRIC_UNEQUAL")
 	awk -v a="$out" 'BEGIN { exit !(a > 0.999 && a < 1.001) }'
+}
+
+# --- Verdicts with no usable .score (ecosystem-up8) -------------------------
+#
+# A judge that returns parseable JSON omitting `score` is malformed, not
+# unanimous. jq's `add` treats the missing key as null and `null + n == n`, so
+# such a verdict used to contribute 0 to the numerator and 1 to the
+# denominator — wrong rather than loud. It is dropped from the panel instead.
+
+SCORELESS_RUBRIC='{"criteria":[{"name":"correctness","weight":1.0,"min_pass":0.7}]}'
+
+@test "mean drops a scoreless verdict instead of counting it as zero" {
+	local out
+	out=$(tribunal_aggregate "mean" '[{"judge_id":"a","score":0.9},{"judge_id":"b"}]')
+	# Counting the missing score as 0 gives 0.45. Dropping it gives 0.9.
+	awk -v a="$out" 'BEGIN { exit !(a > 0.899 && a < 0.901) }'
+}
+
+@test "weighted_mean does not count a scoreless judge's criterion scores" {
+	# The failure mode ecosystem-pht introduced: once criterion_scores cover the
+	# rubric, weighted_mean never reads .score, so a judge that returned no
+	# verdict at all was silently counted as a fully participating one — and it
+	# fails toward NOT blocking. Dropping happens before any method runs, so the
+	# malformed judge takes its criterion scores with it.
+	local out
+	out=$(tribunal_aggregate "weighted_mean" '[
+	  {"judge_id":"a","score":0.9,"criterion_scores":{"correctness":0.9}},
+	  {"judge_id":"b","criterion_scores":{"correctness":0.1}}
+	]' "$SCORELESS_RUBRIC")
+	# Averaging both criterion scores gives 0.5; dropping judge b gives 0.9.
+	awk -v a="$out" 'BEGIN { exit !(a > 0.899 && a < 0.901) }'
+}
+
+@test "median drops a scoreless verdict" {
+	local out
+	out=$(tribunal_aggregate "median" '[{"score":0.4},{"score":0.8},{"judge_id":"c"}]')
+	# Two usable scores left, so the median is their mean: 0.6.
+	awk -v a="$out" 'BEGIN { exit !(a > 0.599 && a < 0.601) }'
+}
+
+@test "min never returns null when a verdict has no score" {
+	# jq's `min` over [null, 0.9] is null, which the gate then feeds to awk as
+	# the string "null" and coerces to 0 — a non-numeric aggregate that reads
+	# as the worst possible score.
+	local out
+	out=$(tribunal_aggregate "min" '[{"judge_id":"a","score":0.9},{"judge_id":"b"}]')
+	[ "$out" != "null" ] || return 1
+	awk -v a="$out" 'BEGIN { exit !(a > 0.899 && a < 0.901) }'
+}
+
+@test "a panel where no verdict carries a score aggregates to 0, not a crash" {
+	# Fails closed, matching the empty-panel convention directly above it: 0 is
+	# below every threshold, so the gate blocks.
+	local none='[{"judge_id":"a"},{"judge_id":"b"}]'
+	local m
+	for m in mean weighted_mean median min; do
+		# --separate-stderr: the drop warning would otherwise land in $output.
+		run --separate-stderr tribunal_aggregate "$m" "$none" "$SCORELESS_RUBRIC"
+		[ "$status" -eq 0 ] || return 1
+		[ "$output" = "0" ] || return 1
+	done
+}
+
+@test "a scoreless verdict with criterion_scores still aggregates to 0 when it is the whole panel" {
+	# weighted_mean must not resurrect a panel that has no usable verdict just
+	# because the criterion map looks complete.
+	run --separate-stderr tribunal_aggregate "weighted_mean" \
+		'[{"judge_id":"a","criterion_scores":{"correctness":0.9}}]' "$SCORELESS_RUBRIC"
+	[ "$status" -eq 0 ] || return 1
+	[ "$output" = "0" ]
+}
+
+@test "dropping a scoreless verdict is reported on stderr with its judge_id" {
+	run --separate-stderr tribunal_aggregate "mean" \
+		'[{"judge_id":"a","score":0.9},{"judge_id":"bad-judge"}]'
+	[ "$status" -eq 0 ] || return 1
+	local re='bad-judge'
+	[[ "$stderr" =~ $re ]]
+}
+
+@test "no dropped-verdict warning when every verdict carries a score" {
+	run --separate-stderr tribunal_aggregate "mean" '[{"score":0.8},{"score":0.6}]'
+	[ -z "$stderr" ]
+}
+
+@test "disagreement ignores a verdict with no score" {
+	local d
+	d=$(tribunal_disagreement '[{"score":0.2},{"score":0.8},{"judge_id":"c"}]')
+	awk -v d="$d" 'BEGIN { exit !(d > 0.599 && d < 0.601) }'
+}
+
+@test "disagreement is 0 when fewer than two verdicts carry a score" {
+	# It crashed on a single scoreless verdict, and a crash prints nothing to
+	# stdout — so the caller read an empty dissent score, awk coerced it to 0,
+	# and the gate's dissent short-circuit never fired. Fails toward not blocking.
+	local d
+	d=$(tribunal_disagreement '[{"score":0.9},{"judge_id":"b"}]')
+	[ "$d" = "0" ] || return 1
+	d=$(tribunal_disagreement '[{"judge_id":"a"},{"judge_id":"b"}]')
+	[ "$d" = "0" ]
 }
