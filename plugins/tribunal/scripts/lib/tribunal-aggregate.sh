@@ -27,9 +27,26 @@
 # they cannot assess, so a panel that scores one cheap criterion and skips the
 # rest would otherwise produce an aggregate computed entirely from that one and
 # renormalized to look complete — and .score, the judge's own overall verdict,
-# is never read here to contradict it. So: unless the scored weight covers
-# min_criterion_coverage of the rubric's total declared weight, degrade to the
-# plain mean of .score, which is the panel's own summary judgment.
+# is never read here to contradict it. Two guards, and weighted_mean degrades to
+# the plain mean of .score — the panel's own summary judgment — on either:
+#
+#   1. Any criterion carrying a min_pass went unscored. A weight fraction is the
+#      wrong proxy for what a floor protects, because a floor protects one named
+#      criterion. In the shipped default rubric correctness (0.4) plus
+#      completeness (0.3) clears any coverage bar at or below 0.7 while skipping
+#      safety, the highest floor there is — which reproduced the exact inversion
+#      guard 2 was added to stop, one criterion further along.
+#   2. The scored weight covers less than min_criterion_coverage of the rubric's
+#      total declared weight. Still load-bearing for rubrics that mix floored and
+#      unfloored criteria, where guard 1 has nothing to say.
+#
+# A criterion with no min_pass is exempt from guard 1 by design: absence is not a
+# zero, and renormalizing over it stays correct. Only floors force the degrade,
+# or every partial panel would collapse weighted_mean into mean.
+#
+# Degrading is deliberately not refusing — a blocked tribunal task retries. That
+# is the asymmetry with librarian, which refuses (UNJUDGED) because a lesson
+# published without its disclosure floor ever running is not recoverable.
 
 tribunal_aggregate() {
 	local method="${1:-mean}"
@@ -74,9 +91,19 @@ tribunal_aggregate() {
 				         | select(type == "number" and . >= 0 and . <= 1) ]) as $scores
 				    | select(($scores | length) > 0)
 				    | { w: $c.weight, m: (($scores | add) / ($scores | length)) } ] as $covered
+				| [ ($rubric.criteria // [])[]
+				    | select((.name | type) == "string" and (.min_pass | type) == "number")
+				    | . as $c
+				    | select([ $v[]
+				               | select((.criterion_scores | type) == "object")
+				               | select(.criterion_scores | has($c.name))
+				               | .criterion_scores[$c.name]
+				               | select(type == "number" and . >= 0 and . <= 1) ] | length == 0)
+				    | $c.name ] as $unscored_floors
 				| ($covered | map(.w) | add) as $den
 				| if ($covered | length) == 0 or $den == null or $den <= 0 then empty
 				  elif $total_w == null or $total_w <= 0 then empty
+				  elif ($unscored_floors | length) > 0 then empty
 				  elif ($den / $total_w) < $mincov then empty
 				  else ($covered | map(.w * .m) | add) / $den
 				  end
