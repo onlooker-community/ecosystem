@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.40.3](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.40.2...ecosystem-v0.40.3) (2026-08-15)
+
+
+### Bug Fixes
+
+* **librarian:** make proposals the sole dedup source, and say so :broom: ([#156](https://github.com/onlooker-community/ecosystem/issues/156)) ([729d9ea](https://github.com/onlooker-community/ecosystem/commit/729d9ea3e328c2734712cfc5adf556c6798334aa))
+
 ## [0.40.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.40.1...ecosystem-v0.40.2) (2026-08-15)
 
 
