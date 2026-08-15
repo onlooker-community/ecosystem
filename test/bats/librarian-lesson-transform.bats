@@ -220,13 +220,27 @@ _storage_setup() {
   [ "$status" -eq 0 ]
 }
 
-@test "seen finds an artifact already promoted into the approved pool" {
+@test "seen ignores the approved pool, which cannot identify an artifact" {
+  # This replaces a test that wrote {artifact_id: ...} into approved/ and
+  # asserted seen found it. That shape is unreachable — a pool entry is
+  # ZLesson, a strictObject with no artifact_id — so the old test fed the scan
+  # a file promote could never produce and reported coverage for a branch that
+  # never matched anything real. It was the reason the dead scan survived.
+  #
+  # ecosystem-d0m settled this: proposals/ is the sole dedup source. The
+  # end-to-end tripwire lives in librarian-lesson-promote.bats, against a real
+  # promoted entry; this one pins that a pool-shaped file is simply not
+  # consulted.
   _storage_setup
   librarian_lesson_storage_init "$PROJECT_KEY"
-  jq -n '{artifact_id: "01KZ45MKAM734ZS7JK24D2DK0R"}' \
+  jq -n '{id: "01KZ45MKGQ7QZWMABQ4H12SHSV", schema_version: 2, claim: "c",
+          rationale: "r", evidence: [], applies_to: [], visibility: "public",
+          consensus: {judges: 2, agreed: 2, decided_at: "2026-01-01T00:00:00Z"},
+          status: "active", superseded_by: null, source: "s",
+          author_key: "k", promoted_at: "2026-01-01T00:00:00Z"}' \
     > "${LESSONS_DIR}/approved/01KZ45MKGQ7QZWMABQ4H12SHSV.json"
   run librarian_lesson_seen "$PROJECT_KEY" "01KZ45MKAM734ZS7JK24D2DK0R"
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ]
 }
 
 @test "seen still finds a declined artifact when declined.jsonl has a truncated trailing line" {

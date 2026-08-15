@@ -162,19 +162,38 @@ librarian_lesson_seen() {
 		return 0
 	fi
 
-	# The approved/*.json half of this loop cannot actually match a promoted
-	# pool entry: ZLesson is a strict object with no `artifact_id` field (see
-	# librarian-lesson-promote.sh's key-set comment), so `.artifact_id == $a`
-	# is always false there. Dedup for an approved-and-promoted artifact
-	# works today only because proposals/*.json is never pruned — the
-	# proposals/ half of the loop is what's actually carrying it. This is
-	# NOT proof the pool is covered; it is proposals/ growing without bound
-	# standing in for coverage the pool entry cannot provide. See ecosystem-d0m
-	# for the options (an artifact_id -> lesson id index, making
-	# "never prune proposals" explicit, or a per-entry sidecar) — do not
-	# "fix" this loop without picking one of those first.
+	# ===================================================================
+	# proposals/ IS THE SOLE DEDUP SOURCE FOR AN APPROVED LESSON.
+	# PRUNING proposals/ SILENTLY BREAKS DEDUP. See ecosystem-d0m.
+	# ===================================================================
+	#
+	# A declined artifact is covered by declined.jsonl above — a terminal
+	# record keyed by artifact_id that outlives its proposal. An APPROVED one
+	# has no equivalent: the pool entry is ZLesson, a strictObject whose key
+	# set has no artifact_id and cannot gain one (an extra key fails ingest —
+	# see librarian-lesson-promote.sh's key-set comment). So nothing promote
+	# writes can answer "was this artifact already handled?"
+	#
+	# This loop used to scan approved/*.json too. That branch could never
+	# match, and the test covering it fabricated an {artifact_id: ...} file
+	# promote cannot produce — dead code with a green test in front of it,
+	# which is why it survived. Dropped rather than left as a decorative
+	# safety net that reads like coverage.
+	#
+	# The consequence, accepted deliberately: prune a promoted lesson's
+	# proposal and its artifact reads as unseen, so it is re-transformed
+	# (Haiku), re-confirmed BY THE HUMAN AGAIN, and re-judged (Opus),
+	# producing a duplicate pool entry for a lesson already promoted.
+	#
+	# The alternative was an artifact_id -> lesson id index (or a per-entry
+	# sidecar) to make the pool self-identifying. Neither buys anything until
+	# someone actually wants to prune, and both add a surface that can drift
+	# from the directory — so the requirement is stated instead of engineered
+	# around. Build the index FIRST if you ever need to prune; the tripwire
+	# test is "an approved lesson is NOT seen once its proposal is gone" in
+	# test/bats/librarian-lesson-promote.bats.
 	local f
-	for f in "$dir"/proposals/*.json "$dir"/approved/*.json; do
+	for f in "$dir"/proposals/*.json; do
 		[[ -f "$f" ]] || continue
 		if jq -e --arg a "$artifact_id" '.artifact_id == $a' "$f" >/dev/null 2>&1; then
 			return 0

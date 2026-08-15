@@ -111,6 +111,16 @@ librarian_lesson_promote() {
 		# Exactly ZLesson's key set — it is a strictObject, so an extra key
 		# fails ingest as surely as a missing one. A private entry gets
 		# judges: 0 and is deliberately not ingest-valid; it never syncs.
+		#
+		# Note what is NOT here and cannot be: `artifact_id`. Adding it would
+		# fail ingest, so a pool entry can never identify the artifact it came
+		# from. That is why librarian_lesson_seen scans ONLY proposals/, and
+		# why THE PROPOSAL FILE BELOW MUST NEVER BE PRUNED — it is the sole
+		# thing standing between an approved lesson and being re-transformed,
+		# re-confirmed by the human, and re-judged on the next scan. The
+		# proposal is kept after promotion for exactly this reason, not merely
+		# because it holds per-judge detail the pool entry drops.
+		# See ecosystem-d0m and the seen-side comment for the full decision.
 		entry=$(jq -cn \
 			--argjson p "$(cat "$path")" \
 			--arg ak "$author_key" \
