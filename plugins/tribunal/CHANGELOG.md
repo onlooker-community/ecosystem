@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.1.3...tribunal-v1.2.0) (2026-08-15)
+
+
+### Features
+
+* **tribunal,librarian:** make rubric weights and min_pass floors real :straight_ruler: ([#150](https://github.com/onlooker-community/ecosystem/issues/150)) ([f8f8e28](https://github.com/onlooker-community/ecosystem/commit/f8f8e28b60f6d13d5a2a54e26ca284137b77f99a))
+
 ## [1.1.3](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.1.2...tribunal-v1.1.3) (2026-08-10)
 
 
