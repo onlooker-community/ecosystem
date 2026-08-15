@@ -235,19 +235,47 @@ _split() {
 	# marks the artifact handled once its proposal ages out, not the
 	# (now-gone) proposal file.
 	#
-	# There is deliberately NO approved-path equivalent of this test. A
-	# ZLesson pool entry carries no artifact_id (strict key set — see the
-	# promote lib's key-set comment), so librarian_lesson_seen's approved/
-	# scan can never match one; "promote, delete the proposal, assert seen"
-	# would pass or fail based on proposal presence alone, never on anything
-	# promote itself wrote — the same false-coverage shape this test replaced.
-	# ecosystem-d0m tracks the gap. Don't add that assertion back without
-	# closing it first: it will pass while proving nothing.
+	# The approved path has no equivalent, and cannot: see the test directly
+	# below, which pins that absence as the known limitation it is.
 	_seed_judged "seen02" "public" "rejected" "$(_split)"
 	librarian_lesson_promote "$PROJECT_KEY" "seen02"
 	rm -f "$(_dir)/proposals/seen02.json"
 	run librarian_lesson_seen "$PROJECT_KEY" "art-seen02"
 	[ "$status" -eq 0 ]
+}
+
+@test "an approved lesson is NOT seen once its proposal is gone — proposals are the sole dedup source" {
+	# The limitation ecosystem-d0m settled, made executable so it cannot drift.
+	#
+	# A rejection survives its proposal because the declined row is a terminal
+	# record keyed by artifact_id. An approval has no such record: the pool
+	# entry is ZLesson, a strictObject with no artifact_id, so nothing promote
+	# writes can answer "was this artifact handled?" Dedup for an approved
+	# lesson rests entirely on proposals/ never being pruned.
+	#
+	# This asserts status 1 deliberately. It is not endorsing the gap — it is
+	# the tripwire for it. If someone builds the artifact_id -> lesson id index
+	# and closes d0m, THIS TEST WILL FAIL, which is the point: the fix should
+	# have to come here and say so, rather than quietly leaving a stale
+	# assertion that the limitation still exists.
+	#
+	# Use a real promote, never a hand-written approved/*.json. The test this
+	# replaced fabricated {artifact_id: ...} into the pool — a shape promote
+	# cannot produce — and so reported coverage of a scan that never ran.
+	_seed_judged "seen03" "public" "approved" "$(_two_passing)"
+	librarian_lesson_promote "$PROJECT_KEY" "seen03"
+	# The pool entry exists and carries no artifact_id: that is the whole cause.
+	[ -f "$(_dir)/approved/seen03.json" ] || return 1
+	run jq -e 'has("artifact_id")' "$(_dir)/approved/seen03.json"
+	[ "$status" -ne 0 ] || return 1
+
+	# With the proposal present, dedup works — via proposals/, not the pool.
+	run librarian_lesson_seen "$PROJECT_KEY" "art-seen03"
+	[ "$status" -eq 0 ] || return 1
+
+	rm -f "$(_dir)/proposals/seen03.json"
+	run librarian_lesson_seen "$PROJECT_KEY" "art-seen03"
+	[ "$status" -eq 1 ]
 }
 
 @test "promoting a rejected lesson twice writes exactly one declined row" {
