@@ -1,6 +1,6 @@
 ---
 name: cartographer
-description: Audit CLAUDE.md, AGENTS.md, and .claude/rules/ instruction files for contradictions, stale references, dead rules, and scope collisions. Runs a full audit in the foreground (with lock). Use when the user explicitly invokes /cartographer, or when they want immediate feedback after editing an instruction file. Supports --scope, --phase, --verbose, --status, and --force flags.
+description: Audit CLAUDE.md, AGENTS.md, and .claude/rules/ instruction files for contradictions, stale references, dead rules, scope collisions, and entities no instruction file mentions. Runs a full audit in the foreground (with lock). Use when the user explicitly invokes /cartographer, or when they want immediate feedback after editing an instruction file. Supports --scope, --phase, --verbose, --status, and --force flags.
 ---
 
 # Cartographer Skill
@@ -109,7 +109,7 @@ fi
 
 ### `/cartographer --phase=<phase>` — single phase
 
-Runs only one analysis phase: `contradiction`, `stale_ref`, `dead_rule`, or `scope_collision`.
+Runs only one analysis phase: `contradiction`, `stale_ref`, `dead_rule`, `scope_collision`, or `undocumented_entity`.
 Pass `CARTOGRAPHER_PHASE_FILTER` to run-audit.sh (the script checks this env var and skips other phases).
 
 ### `/cartographer --scope=<path>` — scoped audit
