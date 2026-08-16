@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.3](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.2.2...tribunal-v1.2.3) (2026-08-16)
+
+
+### Bug Fixes
+
+* **tribunal:** stop a verdict nobody scored from voting to approve :no_entry: ([#158](https://github.com/onlooker-community/ecosystem/issues/158)) ([1d6c2dc](https://github.com/onlooker-community/ecosystem/commit/1d6c2dc9c8f5833891732dc7e6637c496ba81f6f))
+
 ## [1.2.2](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.2.1...tribunal-v1.2.2) (2026-08-15)
 
 
