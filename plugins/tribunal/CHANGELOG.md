@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.6](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.2.5...tribunal-v1.2.6) (2026-08-16)
+
+
+### Bug Fixes
+
+* **tribunal:** stop a low criterion from hiding why the panel failed :arrows_counterclockwise: ([#164](https://github.com/onlooker-community/ecosystem/issues/164)) ([a3ec128](https://github.com/onlooker-community/ecosystem/commit/a3ec128f1e2e723e02396580b9ffbcff26f0787f))
+
 ## [1.2.5](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.2.4...tribunal-v1.2.5) (2026-08-16)
 
 
