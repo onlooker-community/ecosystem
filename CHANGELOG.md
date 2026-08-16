@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.41.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.40.8...ecosystem-v0.41.0) (2026-08-16)
+
+
+### Features
+
+* **cartographer:** detect what no instruction file mentions :eyes: ([#168](https://github.com/onlooker-community/ecosystem/issues/168)) ([31efb7b](https://github.com/onlooker-community/ecosystem/commit/31efb7b035665d5a49a37c1e1af21f519850f7bd))
+
 ## [0.40.8](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.40.7...ecosystem-v0.40.8) (2026-08-16)
 
 
