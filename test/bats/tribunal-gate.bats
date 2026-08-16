@@ -259,3 +259,107 @@ RUBRIC_FLOOR='{"criteria":[{"name":"correctness","weight":0.5,"min_pass":0.7},{"
 	out=$(tribunal_gate_decide "majority" "$ALL_PASSED" "0.82" "0.75" "$NO_META" "0.05" "0.25")
 	printf '%s' "$out" | jq -e '.passed == true' >/dev/null
 }
+
+# --- Verdicts the aggregate refuses to score (ecosystem-y7y) ----------------
+#
+# tribunal_aggregate drops a verdict with no numeric .score (ecosystem-up8),
+# but the jury counted .passed over the raw panel, so a verdict that
+# contributed nothing to the aggregate could still vote.
+#
+# The fix denies the vote and KEEPS THE SEAT. Dropping the verdict outright —
+# making both halves agree on membership, which is what this bead originally
+# asked for — shrinks the panel, and a shrunken panel is a trivially satisfied
+# majority. That is the hazard librarian's judge-type check exists to prevent,
+# so the naive reading of "agree on membership" would have loosened the gate
+# in three cases while fixing one. A judge that failed to return a verdict did
+# not leave the panel; it failed.
+
+@test "a verdict with no usable score cannot cast a passing vote" {
+	# The verified fail-open: the only judge that actually returned a verdict
+	# rejected the work, and two malformed verdicts supplied the majority.
+	#
+	# The fixture is asserted well-formed first. An earlier draft of this test
+	# built the panel by string-concatenating a fixture variable and produced
+	# invalid JSON, which made jq fail and passed_count fall back to 0 — so it
+	# passed while proving nothing, whether or not the guard existed.
+	local panel='[
+	  {"judge_id":"real","score":0.9,"passed":false},
+	  {"judge_id":"bad1","passed":true},
+	  {"judge_id":"bad2","passed":true}
+	]'
+	printf '%s' "$panel" | jq -e 'length == 3' >/dev/null || return 1
+
+	local out
+	out=$(tribunal_gate_decide "majority" "$panel" "0.90" "0.75" "$NO_META" "0.05" "0.25")
+	printf '%s' "$out" | jq -e '.passed == false' >/dev/null
+}
+
+@test "a malformed verdict keeps its seat, so a thin panel is not a trivial majority" {
+	# One real approval plus two verdicts that never arrived is not a majority
+	# of a three-judge panel. Filtering them out would make it one.
+	local out
+	out=$(tribunal_gate_decide "majority" '[
+	  {"judge_id":"real","score":0.9,"passed":true},
+	  {"judge_id":"bad1","passed":false},
+	  {"judge_id":"bad2","passed":false}
+	]' "0.90" "0.75" "$NO_META" "0.05" "0.25")
+	printf '%s' "$out" | jq -e '.passed == false' >/dev/null
+}
+
+@test "strict blocks when any judge returned no usable verdict" {
+	# strict means every judge passed. A judge that returned nothing did not.
+	local out
+	out=$(tribunal_gate_decide "strict" '[
+	  {"judge_id":"a","score":0.9,"passed":true},
+	  {"judge_id":"b","score":0.8,"passed":true},
+	  {"judge_id":"bad","passed":true}
+	]' "0.85" "0.75" "$NO_META" "0.05" "0.25")
+	printf '%s' "$out" | jq -e '.passed == false' >/dev/null
+}
+
+@test "a malformed verdict does not block a genuine majority" {
+	# The guard must not overreach: two real approvals out of three still carry
+	# a majority gate, exactly as before.
+	local out
+	out=$(tribunal_gate_decide "majority" '[
+	  {"judge_id":"a","score":0.9,"passed":true},
+	  {"judge_id":"b","score":0.8,"passed":true},
+	  {"judge_id":"bad","passed":true}
+	]' "0.85" "0.75" "$NO_META" "0.05" "0.25")
+	printf '%s' "$out" | jq -e '.passed == true' >/dev/null
+}
+
+@test "usable verdicts agree with tribunal_aggregate" {
+	# The gate and tribunal_aggregate each carry their own copy of "is this
+	# verdict usable", in different files, with nothing keeping them in step.
+	# This pins the equivalence behaviorally rather than by comparing source.
+	#
+	# A single-judge panel makes both answers observable: majority needs one
+	# passing vote, and the aggregate of a lone unusable verdict is 0.
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/tribunal-aggregate.sh"
+
+	local shape agg out kept votable
+	for shape in \
+		'{"judge_id":"a","score":0.9,"passed":true}' \
+		'{"judge_id":"a","passed":true}' \
+		'{"judge_id":"a","score":"high","passed":true}' \
+		'{"judge_id":"a","score":null,"passed":true}'
+	do
+		# Does the aggregate keep it? A kept verdict yields its own score.
+		agg=$(tribunal_aggregate "mean" "[$shape]" 2>/dev/null)
+		kept=$(awk -v a="$agg" 'BEGIN { print (a > 0.5) ? "yes" : "no" }')
+
+		# Does the gate let it vote? Handed an aggregate that clears the
+		# threshold, a one-judge majority turns entirely on the vote.
+		out=$(tribunal_gate_decide "majority" "[$shape]" "0.90" "0.75" \
+			"$NO_META" "0.0" "0.25" 2>/dev/null)
+		votable=$(printf '%s' "$out" | jq -r 'if .passed then "yes" else "no" end')
+
+		[ "$kept" = "$votable" ] || {
+			printf 'drift on %s: aggregate kept=%s, gate votable=%s\n' \
+				"$shape" "$kept" "$votable" >&2
+			return 1
+		}
+	done
+}

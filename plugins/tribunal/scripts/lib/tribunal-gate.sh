@@ -121,9 +121,29 @@ tribunal_gate_decide() {
 		return 0
 	fi
 
+	# A verdict tribunal_aggregate refuses to score cannot vote to approve, but
+	# its SEAT STILL COUNTS. The `(.score | type) == "number"` test is the same
+	# one _tribunal_usable_verdicts applies in tribunal-aggregate.sh; the two
+	# must stay in step, and "usable verdicts agree with tribunal_aggregate" in
+	# the bats file is what catches them drifting.
+	#
+	# Denying the vote rather than dropping the verdict is deliberate, and it
+	# is NOT what ecosystem-y7y originally asked for. Making both halves agree
+	# on panel membership sounds right and loosens the gate: dropping shrinks
+	# the panel, and a shrunken panel is a trivially satisfied majority. One
+	# real approval beside two verdicts that never arrived would become a
+	# 1-of-1 pass, and strict would clear on a panel that never fully reported
+	# — the hazard librarian's judge-type check exists to prevent. Measured
+	# across the five reachable cases, dropping fixed one and loosened three.
+	#
+	# A judge that failed to return a verdict did not leave the panel; it
+	# failed. So majority still needs a majority of everyone empaneled, and
+	# strict still needs all of them.
 	local count passed_count
 	count=$(printf '%s' "$verdicts" | jq 'length' 2>/dev/null) || count=0
-	passed_count=$(printf '%s' "$verdicts" | jq '[.[] | select(.passed == true)] | length' 2>/dev/null) || passed_count=0
+	passed_count=$(printf '%s' "$verdicts" | jq '
+		[.[] | select(.passed == true and (.score | type) == "number")] | length
+	' 2>/dev/null) || passed_count=0
 
 	local jury_ok=1  # 0 = ok, 1 = not ok (shell convention)
 	case "$policy" in
