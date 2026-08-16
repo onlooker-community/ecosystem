@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.4](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.2.3...tribunal-v1.2.4) (2026-08-16)
+
+
+### Bug Fixes
+
+* **tribunal:** refuse a score that is not on the scale it claims :straight_ruler: ([#160](https://github.com/onlooker-community/ecosystem/issues/160)) ([bab2855](https://github.com/onlooker-community/ecosystem/commit/bab28558a68402c1dd67623f469467fd99302ba6))
+
 ## [1.2.3](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.2.2...tribunal-v1.2.3) (2026-08-16)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.40.5](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.40.4...ecosystem-v0.40.5) (2026-08-16)
+
+
+### Bug Fixes
+
+* **tribunal:** refuse a score that is not on the scale it claims :straight_ruler: ([#160](https://github.com/onlooker-community/ecosystem/issues/160)) ([bab2855](https://github.com/onlooker-community/ecosystem/commit/bab28558a68402c1dd67623f469467fd99302ba6))
+
 ## [0.40.4](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.40.3...ecosystem-v0.40.4) (2026-08-16)
 
 
