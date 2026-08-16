@@ -2,6 +2,13 @@
 
 All notable changes to the Cartographer plugin are documented here.
 
+## [0.4.0](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.3.1...cartographer-v0.4.0) (2026-08-16)
+
+
+### Features
+
+* **cartographer:** detect what no instruction file mentions :eyes: ([#168](https://github.com/onlooker-community/ecosystem/issues/168)) ([31efb7b](https://github.com/onlooker-community/ecosystem/commit/31efb7b035665d5a49a37c1e1af21f519850f7bd))
+
 ## [0.3.1](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.3.0...cartographer-v0.3.1) (2026-08-01)
 
 
