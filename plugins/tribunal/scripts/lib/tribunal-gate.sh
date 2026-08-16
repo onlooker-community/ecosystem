@@ -33,6 +33,24 @@
 # criterion_scores. tribunal_aggregate degrades weighted_mean to the plain mean
 # when that happens, and the caller warns on stderr.
 #
+# A criterion a judge DID score but scored unreadably — outside [0,1], or not a
+# number — is a different thing, and it is a violation. Absence means the judge
+# declined to assess (the agents are told to omit what they cannot judge);
+# unreadable means they assessed it and the answer did not survive. A floor is
+# the rubric's hard constraint, so "cannot confirm this held" must fail closed.
+#
+# ANY unreadable report violates, not merely an all-unreadable criterion, and
+# that follows from why the floor uses min rather than mean in the first place:
+# a specialist's finding must not be diluted by generalists who did not look.
+# Merely filtering the bad value reproduces the exact dilution this design was
+# built to prevent — a security judge emitting 30 (plausibly 0.30, a violation)
+# would be discarded so two generalists at 0.95 carry the floor.
+#
+# The range test matches _tribunal_usable_verdicts in tribunal-aggregate.sh and
+# the criterion filter in weighted_mean. Those disagreeing is what let an
+# out-of-range score satisfy a floor while aggregation refused to score it at
+# all — see ecosystem-5fy.
+#
 # Private to this file. It exists as a function because the answer is needed in
 # two places — once to veto `meta_override: accept`, once for the blocking
 # precedence chain — and duplicating the jq is how the two drift apart.
@@ -41,6 +59,7 @@ _tribunal_floor_failed() {
 	local rubric="${2:-}"
 	[ -z "$rubric" ] && rubric='{}'
 	printf '%s' "$verdicts" | jq -r --argjson rubric "$rubric" '
+		def readable: (type == "number") and . >= 0 and . <= 1;
 		. as $v
 		| [ ($rubric.criteria // [])[]
 		    | select((.name | type) == "string" and (.min_pass | type) == "number")
@@ -48,10 +67,14 @@ _tribunal_floor_failed() {
 		    | ([ $v[]
 		         | select((.criterion_scores | type) == "object")
 		         | select(.criterion_scores | has($c.name))
-		         | .criterion_scores[$c.name]
-		         | select(type == "number") ]) as $scores
-		    | select(($scores | length) > 0)
-		    | select(($scores | min) < $c.min_pass)
+		         | .criterion_scores[$c.name] ]) as $reported
+		    | ([ $reported[] | select(readable) ]) as $scores
+		    | select(
+		        # somebody reported a score this scale cannot read...
+		        ($reported | length) > ($scores | length)
+		        # ...or the readable ones put somebody under the floor.
+		        or (($scores | length) > 0 and ($scores | min) < $c.min_pass)
+		      )
 		    | $c.name ]
 		| first // empty
 	' 2>/dev/null || printf ''
@@ -176,6 +199,13 @@ tribunal_gate_decide() {
 	# does not block on it — see _tribunal_floor_failed for why absence is not a
 	# zero — but tribunal_aggregate has already refused to renormalize around it,
 	# so the aggregate this gate just judged is the panel's plain mean.
+	#
+	# ABSENCE ONLY: this names criteria nobody reported, not ones reported
+	# unreadably. Those now violate the floor and block, so naming them here
+	# would print "their min_pass floors did not apply" about a floor that did
+	# apply and did block. The two also cannot share a predicate: conflating
+	# them meant the sole signal for "a floor got skipped" was emitted by the
+	# very defect that skipped it, which is how this stayed quiet.
 	local unscored_floors any_scored
 	any_scored=$(printf '%s' "$verdicts" | jq -r '
 		[.[] | select((.criterion_scores | type) == "object")
@@ -191,8 +221,7 @@ tribunal_gate_decide() {
 			    | select([ $v[]
 			               | select((.criterion_scores | type) == "object")
 			               | select(.criterion_scores | has($c.name))
-			               | .criterion_scores[$c.name]
-			               | select(type == "number") ] | length == 0)
+			               | .criterion_scores[$c.name] ] | length == 0)
 			    | $c.name ]
 			| join(", ")
 		' 2>/dev/null) || unscored_floors=""
