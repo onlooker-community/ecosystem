@@ -344,7 +344,10 @@ RUBRIC_FLOOR='{"criteria":[{"name":"correctness","weight":0.5,"min_pass":0.7},{"
 		'{"judge_id":"a","score":0.9,"passed":true}' \
 		'{"judge_id":"a","passed":true}' \
 		'{"judge_id":"a","score":"high","passed":true}' \
-		'{"judge_id":"a","score":null,"passed":true}'
+		'{"judge_id":"a","score":null,"passed":true}' \
+		'{"judge_id":"a","score":100,"passed":true}' \
+		'{"judge_id":"a","score":-5,"passed":true}' \
+		'{"judge_id":"a","score":1,"passed":true}'
 	do
 		# Does the aggregate keep it? A kept verdict yields its own score.
 		agg=$(tribunal_aggregate "mean" "[$shape]" 2>/dev/null)
@@ -362,4 +365,51 @@ RUBRIC_FLOOR='{"criteria":[{"name":"correctness","weight":0.5,"min_pass":0.7},{"
 			return 1
 		}
 	done
+}
+
+# --- out-of-range verdict scores (ecosystem-7cl) --------------------------
+
+@test "a whole panel of out-of-range scores cannot pass the gate" {
+	# Three judges all reporting 95-instead-of-0.95. Pre-fix the aggregate
+	# trusted them, so every threshold cleared. The scores are deliberately
+	# IDENTICAL: a spread of out-of-range scores blocks on dissent instead, so
+	# the mixed panel would pass this test with the bug still in place. Only a
+	# unanimous out-of-range panel — dissent 0, nothing left to catch it — is
+	# the actual fail-open.
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/tribunal-aggregate.sh"
+
+	local panel='[{"judge_id":"a","score":95,"passed":true},{"judge_id":"b","score":95,"passed":true},{"judge_id":"c","score":95,"passed":true}]'
+	local agg dissent out
+	agg=$(tribunal_aggregate "mean" "$panel" 2>/dev/null)
+	dissent=$(tribunal_disagreement "$panel" 2>/dev/null)
+	out=$(tribunal_gate_decide "majority" "$panel" "$agg" "0.75" "$NO_META" "$dissent" "0.25" 2>/dev/null)
+
+	[ "$(printf '%s' "$out" | jq -r '.passed')" = "false" ]
+}
+
+@test "an out-of-range verdict keeps its seat, so it cannot be voted around" {
+	# Same rule y7y settled for scoreless verdicts: a judge whose verdict was
+	# refused did not leave the panel, it failed. Two real approvals beside one
+	# out-of-range verdict is 2-of-3, not 2-of-2.
+	local panel='[{"judge_id":"a","score":0.9,"passed":true},{"judge_id":"b","score":0.85,"passed":true},{"judge_id":"c","score":100,"passed":true}]'
+	local out
+	out=$(tribunal_gate_decide "strict" "$panel" "0.87" "0.75" "$NO_META" "0.05" "0.25" 2>/dev/null)
+	[ "$(printf '%s' "$out" | jq -r '.passed')" = "false" ] || return 1
+
+	# ...and majority, which two of three genuinely satisfies, still passes.
+	out=$(tribunal_gate_decide "majority" "$panel" "0.87" "0.75" "$NO_META" "0.05" "0.25" 2>/dev/null)
+	[ "$(printf '%s' "$out" | jq -r '.passed')" = "true" ]
+}
+
+@test "a verdict scored 0 still casts its vote" {
+	# [0,1] is inclusive at both ends. 0 is a real verdict — the judge scored
+	# the work and scored it badly — so it must not be swept up with the
+	# malformed ones. Pinned at the gate because the drift-guard loop below
+	# infers usability from the aggregate clearing 0.5 and cannot see this.
+	local out
+	out=$(tribunal_gate_decide "strict" \
+		'[{"judge_id":"a","score":0,"passed":true}]' "0.90" "0.75" \
+		"$NO_META" "0.0" "0.25" 2>/dev/null)
+	[ "$(printf '%s' "$out" | jq -r '.passed')" = "true" ]
 }

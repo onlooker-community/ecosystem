@@ -350,3 +350,81 @@ SCORELESS_RUBRIC='{"criteria":[{"name":"correctness","weight":1.0,"min_pass":0.7
 	d=$(tribunal_disagreement '[{"judge_id":"a"},{"judge_id":"b"}]')
 	[ "$d" = "0" ]
 }
+
+# --- out-of-range verdict scores (ecosystem-7cl) --------------------------
+#
+# A .score outside [0,1] is malformed for the same reason a missing one is: it
+# is not a verdict this scale can read. The realistic trigger is a judge
+# emitting a percentage instead of a fraction — 95 rather than 0.95 — which is
+# an ordinary LLM formatting slip, not an adversarial input. Nothing at the
+# seam rejects it: TribunalVerdictPayload declares score in [0,1] but the
+# runtime emitter fails open (ADR-005), so the aggregate has to re-check.
+
+@test "an out-of-range verdict score is dropped, not averaged in" {
+	local out
+	out=$(tribunal_aggregate "mean" \
+		'[{"judge_id":"a","score":100},{"judge_id":"b","score":0.6}]' 2>/dev/null)
+	# Trusting 100 gives 50.3. Dropping it leaves b's 0.6.
+	awk -v a="$out" 'BEGIN { exit !(a > 0.599 && a < 0.601) }'
+}
+
+@test "a negative verdict score is dropped" {
+	local out
+	out=$(tribunal_aggregate "mean" \
+		'[{"judge_id":"a","score":-5},{"judge_id":"b","score":0.6}]' 2>/dev/null)
+	awk -v a="$out" 'BEGIN { exit !(a > 0.599 && a < 0.601) }'
+}
+
+@test "a whole panel of out-of-range scores aggregates to 0, not a passing score" {
+	# THE fail-open case. The mixed panel above happens to block, but only
+	# incidentally — dissent 99.4 trips the gate's dissent short-circuit. Once
+	# the entire panel is out of range there is no disagreement left to catch
+	# it, so every threshold cleared and the gate passed on garbage.
+	local all='[{"judge_id":"a","score":100},{"judge_id":"b","score":95}]'
+	local m
+	for m in mean weighted_mean median min; do
+		# --separate-stderr: the drop warning would otherwise land in $output.
+		run --separate-stderr tribunal_aggregate "$m" "$all" "$SCORELESS_RUBRIC"
+		[ "$status" -eq 0 ] || return 1
+		[ "$output" = "0" ] || return 1
+	done
+}
+
+@test "the range bounds themselves stay usable" {
+	# [0,1] is inclusive: a judge that scored 0 rejected the work, and one that
+	# scored 1 is not malformed. Dropping either would be its own fail-open —
+	# a 0 is exactly the verdict that must survive to drag the mean down.
+	local out
+	out=$(tribunal_aggregate "mean" \
+		'[{"judge_id":"a","score":0},{"judge_id":"b","score":1}]' 2>/dev/null)
+	awk -v a="$out" 'BEGIN { exit !(a > 0.499 && a < 0.501) }'
+}
+
+@test "weighted_mean does not count an out-of-range judge's criterion scores" {
+	# Same sharpest-form hazard as the scoreless case: once criterion_scores
+	# cover the rubric weighted_mean never reads .score, so a judge whose
+	# verdict was refused would otherwise still steer the aggregate.
+	local out
+	out=$(tribunal_aggregate "weighted_mean" '[
+	  {"judge_id":"a","score":100,"criterion_scores":{"correctness":0.9}}
+	]' "$SCORELESS_RUBRIC" 2>/dev/null)
+	[ "$out" = "0" ]
+}
+
+@test "dropping an out-of-range verdict is reported on stderr with its judge_id" {
+	run --separate-stderr tribunal_aggregate "mean" \
+		'[{"judge_id":"a","score":0.9},{"judge_id":"percent-judge","score":95}]'
+	[ "$status" -eq 0 ] || return 1
+	local re='percent-judge'
+	[[ "$stderr" =~ $re ]]
+}
+
+@test "disagreement ignores an out-of-range verdict" {
+	# Verified pre-fix: two judges at 100 and 0.1 reported dissent 99.9, which
+	# blocked for the wrong reason. Dissent must describe the panel that was
+	# actually scored.
+	local d
+	d=$(tribunal_disagreement \
+		'[{"judge_id":"a","score":100},{"judge_id":"b","score":0.2},{"judge_id":"c","score":0.8}]' 2>/dev/null)
+	awk -v d="$d" 'BEGIN { exit !(d > 0.599 && d < 0.601) }'
+}
