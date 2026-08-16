@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.7](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.2.6...tribunal-v1.2.7) (2026-08-16)
+
+
+### Bug Fixes
+
+* **tribunal:** let every blocking arm name the floor it tripped over :label: ([#166](https://github.com/onlooker-community/ecosystem/issues/166)) ([1819b5f](https://github.com/onlooker-community/ecosystem/commit/1819b5f7ad0348584bcb0e72e28c9af153ba3a4d))
+
 ## [1.2.6](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.2.5...tribunal-v1.2.6) (2026-08-16)
 
 
