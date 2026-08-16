@@ -607,3 +607,120 @@ RUBRIC_FLOOR='{"criteria":[{"name":"correctness","weight":0.5,"min_pass":0.7},{"
 	printf '%s' "$out" | jq -e '.reason == "low_score"' >/dev/null || return 1
 	printf '%s' "$out" | jq -e '.failed_criterion == "safety"' >/dev/null
 }
+
+# --- failed_criterion on the short-circuit arms (ecosystem-973) -----------
+#
+# floor_failed is computed near the top of the function, but floor_suffix was
+# not built until well below these three early returns, so they could not
+# reference it however much they wanted to. The result was two behaviors behind
+# one reason string: dissent_unresolved carried the criterion from the final
+# chain and dropped it from the short-circuit, which is the part most likely to
+# mislead someone reading gate.blocked events.
+#
+# A missing diagnostic, never a wrong verdict — none of these change whether
+# the gate blocks, only what it says about why.
+
+@test "meta_override reject names a violated floor" {
+	local meta='{"override_recommendation":"reject","bias_detected":false}'
+	local out
+	out=$(tribunal_gate_decide "meta_override" '[
+	  {"judge_id":"a","score":0.85,"passed":false,"criterion_scores":{"correctness":0.9,"safety":0.3}},
+	  {"judge_id":"b","score":0.85,"passed":false,"criterion_scores":{"correctness":0.9,"safety":0.3}}
+	]' "0.85" "0.75" "$meta" "0.0" "0.25" "$RUBRIC_FLOOR")
+	printf '%s' "$out" | jq -e '.reason == "meta_override"' >/dev/null || return 1
+	printf '%s' "$out" | jq -e '.failed_criterion == "safety"' >/dev/null
+}
+
+@test "bias_detected names a violated floor" {
+	local meta='{"override_recommendation":"reject","bias_detected":true,"bias_types":["verbosity"]}'
+	local out
+	out=$(tribunal_gate_decide "majority" '[
+	  {"judge_id":"a","score":0.85,"passed":false,"criterion_scores":{"correctness":0.9,"safety":0.3}},
+	  {"judge_id":"b","score":0.85,"passed":false,"criterion_scores":{"correctness":0.9,"safety":0.3}}
+	]' "0.85" "0.75" "$meta" "0.0" "0.25" "$RUBRIC_FLOOR")
+	printf '%s' "$out" | jq -e '.reason == "bias_detected"' >/dev/null || return 1
+	printf '%s' "$out" | jq -e '.failed_criterion == "safety"' >/dev/null
+}
+
+@test "the dissent short-circuit names a violated floor, like its chain twin" {
+	# THE inconsistency this bead is really about: the same reason string
+	# behaving two ways depending on which return produced it.
+	local out
+	out=$(tribunal_gate_decide "majority" '[
+	  {"judge_id":"a","score":0.85,"passed":false,"criterion_scores":{"correctness":0.9,"safety":0.3}},
+	  {"judge_id":"b","score":0.85,"passed":false,"criterion_scores":{"correctness":0.9,"safety":0.3}}
+	]' "0.85" "0.75" "$NO_META" "0.90" "0.25" "$RUBRIC_FLOOR")
+	printf '%s' "$out" | jq -e '.reason == "dissent_unresolved"' >/dev/null || return 1
+	printf '%s' "$out" | jq -e '.failed_criterion == "safety"' >/dev/null
+}
+
+@test "the short-circuit arms stay quiet when no floor was violated" {
+	# The suffix must remain a decoration, not become noise. Absent is still the
+	# right answer when there is nothing to name — and with the arms now
+	# reporting it, an absent field finally means what it says.
+	local out
+	local clean='[
+	  {"judge_id":"a","score":0.85,"passed":false,"criterion_scores":{"correctness":0.9,"safety":0.95}},
+	  {"judge_id":"b","score":0.85,"passed":false,"criterion_scores":{"correctness":0.9,"safety":0.95}}
+	]'
+	out=$(tribunal_gate_decide "meta_override" "$clean" "0.85" "0.75" \
+		'{"override_recommendation":"reject","bias_detected":false}' "0.0" "0.25" "$RUBRIC_FLOOR")
+	printf '%s' "$out" | jq -e 'has("failed_criterion") | not' >/dev/null || return 1
+
+	out=$(tribunal_gate_decide "majority" "$clean" "0.85" "0.75" \
+		'{"override_recommendation":"reject","bias_detected":true}' "0.0" "0.25" "$RUBRIC_FLOOR")
+	printf '%s' "$out" | jq -e 'has("failed_criterion") | not' >/dev/null || return 1
+
+	out=$(tribunal_gate_decide "majority" "$clean" "0.85" "0.75" \
+		"$NO_META" "0.90" "0.25" "$RUBRIC_FLOOR")
+	printf '%s' "$out" | jq -e 'has("failed_criterion") | not' >/dev/null
+}
+
+@test "every blocking arm that can see a violated floor names it" {
+	# The property the individual tests add up to, asserted as one thing so a
+	# newly-added arm that forgets the suffix is caught by an existing test
+	# rather than needing someone to remember to write a new one.
+	local panel='[
+	  {"judge_id":"a","score":0.85,"passed":false,"criterion_scores":{"correctness":0.9,"safety":0.3}},
+	  {"judge_id":"b","score":0.85,"passed":false,"criterion_scores":{"correctness":0.9,"safety":0.3}}
+	]'
+	local passing='[
+	  {"judge_id":"a","score":0.85,"passed":true,"criterion_scores":{"correctness":0.9,"safety":0.3}},
+	  {"judge_id":"b","score":0.85,"passed":true,"criterion_scores":{"correctness":0.9,"safety":0.3}}
+	]'
+	local reject='{"override_recommendation":"reject","bias_detected":false}'
+	local biased='{"override_recommendation":"reject","bias_detected":true}'
+
+	# Args are passed positionally rather than packed into a delimited string.
+	# An earlier version packed them and unpacked with eval, which stripped the
+	# JSON's own quotes: meta parsed as empty, the meta_override policy fell
+	# through to the chain, and two arms reported PASS without ever reaching the
+	# return they were meant to exercise.
+	_arm_names_floor() {
+		local label="$1" policy="$2" verdicts="$3" agg="$4" meta="$5" dissent="$6"
+		local out reason
+		out=$(tribunal_gate_decide "$policy" "$verdicts" "$agg" "0.75" \
+			"$meta" "$dissent" "0.25" "$RUBRIC_FLOOR")
+		reason=$(printf '%s' "$out" | jq -r '.reason // "none"')
+		# Guard the premise too: an arm that silently stopped being reachable
+		# would otherwise "pass" this by never being the arm under test.
+		[ "$reason" = "$label" ] || {
+			printf 'expected reason %s, got %s: %s\n' "$label" "$reason" "$out" >&2
+			return 1
+		}
+		printf '%s' "$out" | jq -e '.failed_criterion == "safety"' >/dev/null || {
+			printf 'arm %s dropped failed_criterion: %s\n' "$reason" "$out" >&2
+			return 1
+		}
+	}
+
+	# final chain
+	_arm_names_floor low_score          majority      "$panel"   0.30 "$NO_META" 0.0 || return 1
+	_arm_names_floor meta_override      majority      "$panel"   0.85 "$reject"  0.0 || return 1
+	_arm_names_floor dissent_unresolved majority      "$panel"   0.85 "$NO_META" 0.0 || return 1
+	_arm_names_floor criterion_floor    majority      "$passing" 0.85 "$NO_META" 0.0 || return 1
+	# short-circuit returns
+	_arm_names_floor meta_override      meta_override "$panel"   0.85 "$reject"  0.0 || return 1
+	_arm_names_floor bias_detected      majority      "$panel"   0.85 "$biased"  0.0 || return 1
+	_arm_names_floor dissent_unresolved majority      "$panel"   0.85 "$NO_META" 0.90
+}
