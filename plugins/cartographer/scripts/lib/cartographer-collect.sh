@@ -25,9 +25,16 @@ cartographer_collect_files() {
 	done < <(printf '%s' "$exclude_json" | jq -r '.[]' 2>/dev/null)
 
 	# Discover CLAUDE.md and AGENTS.md
+	#
+	# ${find_excludes[@]+"${find_excludes[@]}"} rather than "${find_excludes[@]}":
+	# under bash 3.2 (macOS system bash) with `set -u`, expanding a genuinely
+	# empty array with the plain form is an unbound-variable error, not an
+	# empty expansion — that's the case whenever exclude_json has zero entries
+	# (e.g. it is unset upstream, or a caller deliberately passes "[]"). The
+	# `+` form is the standard portable guard for bash <4.4.
 	find "$repo_root" -maxdepth "$max_depth" \
 		\( -name "CLAUDE.md" -o -name "AGENTS.md" \) \
-		"${find_excludes[@]}" \
+		${find_excludes[@]+"${find_excludes[@]}"} \
 		-type f 2>/dev/null
 
 	# Discover .claude/rules/*.md at repo level
