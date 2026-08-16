@@ -118,6 +118,22 @@ setup() {
   [ "$h1" = "$h2" ]
 }
 
+@test "flags an entity under a repo root whose path contains a space" {
+  # BATS_TEST_TMPDIR itself never contains a space, which is exactly why this
+  # was missed — build a fixture one level under it that does.
+  local spaced_repo="${BATS_TEST_TMPDIR}/my repo"
+  mkdir -p "${spaced_repo}/plugins/alpha" "${spaced_repo}/plugins/beta"
+  local doc="${spaced_repo}/CLAUDE.md"
+  printf '# Doc\nThe alpha plugin does things.\n' > "$doc"
+  local corpus
+  corpus=$(jq -n --arg f "$doc" '[$f]')
+
+  local out
+  out=$(cartographer_analyze_undocumented_entity \
+    "$corpus" "$spaced_repo" '["plugins/*/"]' '[]' 20)
+  [ "$(printf '%s' "$out" | jq -r '[.[] | select(.excerpt_a == "beta")] | length')" = "1" ]
+}
+
 # Stubs `claude` so the three LLM phases make no real call, then runs a full
 # audit. Any extra env the caller needs is exported before calling this.
 _run_audit() {

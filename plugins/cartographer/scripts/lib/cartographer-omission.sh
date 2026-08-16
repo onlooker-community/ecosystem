@@ -71,8 +71,10 @@ cartographer_analyze_undocumented_entity() {
 	local glob match
 	while IFS= read -r glob; do
 		[[ -z "$glob" ]] && continue
-		# shellcheck disable=SC2086 # unquoted on purpose: this is the glob expansion
-		for match in ${root}/$glob; do
+		# shellcheck disable=SC2086 # $glob unquoted on purpose: this is the glob
+		# expansion. ${root} IS quoted — a repo path containing a space must not
+		# word-split before the glob expands, or the match silently finds nothing.
+		for match in "${root}"/$glob; do
 			[[ -e "$match" ]] || continue
 
 			local trimmed="${match%/}"

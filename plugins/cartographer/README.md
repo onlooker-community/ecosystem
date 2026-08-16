@@ -81,7 +81,13 @@ Every other check reads the instruction files and tests what it finds against
 the filesystem. `undocumented_entity` runs the other way: it enumerates
 entities on disk and flags any whose name appears in no instruction file. That
 is the one kind of drift the other checks structurally cannot see — something
-absent produces no reference to follow.
+absent produces no reference to follow. The mention check is case-sensitive,
+so `plugins/foo/` documented only as "Foo" is still flagged as undocumented.
+
+This phase only runs as part of a full audit (SessionStart or manual
+`/cartographer`) — it is skipped on the targeted post-write audit that runs
+after you edit an instruction file, so editing `CLAUDE.md` never produces an
+omission finding on its own.
 
 ```json
 {
