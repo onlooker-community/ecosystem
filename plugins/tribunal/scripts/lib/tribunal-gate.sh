@@ -103,6 +103,22 @@ tribunal_gate_decide() {
 	local floor_failed
 	floor_failed=$(_tribunal_floor_failed "$verdicts" "$rubric")
 
+	# A violated floor is worth naming on whichever arm blocks: the worst
+	# failures drag the aggregate under the threshold too, so attaching
+	# failed_criterion only to the criterion_floor arm left the diagnostic
+	# absent exactly where it mattered most.
+	#
+	# Built HERE, beside floor_failed, rather than down with the final chain.
+	# It used to be defined below the short-circuit returns, which could
+	# therefore never reference it however much they should have — so
+	# dissent_unresolved carried the criterion from the chain arm and dropped it
+	# from the short-circuit, one reason string with two behaviors. See
+	# ecosystem-973. Every blocking return below now decorates, and the test
+	# "every blocking arm that can see a violated floor names it" holds a newly
+	# added arm to the same rule without anyone having to remember.
+	local floor_suffix=""
+	[[ -n "$floor_failed" ]] && floor_suffix=$(printf ',"failed_criterion":"%s"' "$floor_failed")
+
 	# meta_override policy: the Meta-Judge wins, regardless of jury.
 	if [[ "$policy" == "meta_override" ]]; then
 		case "$meta_override" in
@@ -120,7 +136,7 @@ tribunal_gate_decide() {
 				return 0
 				;;
 			reject)
-				printf '{"passed":false,"reason":"meta_override"}'
+				printf '{"passed":false,"reason":"meta_override"%s}' "$floor_suffix"
 				return 0
 				;;
 			re-evaluate|"")
@@ -131,7 +147,7 @@ tribunal_gate_decide() {
 
 	# Bias detection short-circuit (any policy).
 	if [[ "$meta_bias_detected" == "true" && "$meta_override" == "reject" ]]; then
-		printf '{"passed":false,"reason":"bias_detected"}'
+		printf '{"passed":false,"reason":"bias_detected"%s}' "$floor_suffix"
 		return 0
 	fi
 
@@ -140,7 +156,7 @@ tribunal_gate_decide() {
 	# retries with a fresh Actor pass.
 	if awk -v d="$dissent_score" -v t="$dissent_threshold" 'BEGIN { exit !(d > t) }' \
 		&& [[ -z "$meta_override" || "$meta_override" == "re-evaluate" ]]; then
-		printf '{"passed":false,"reason":"dissent_unresolved"}'
+		printf '{"passed":false,"reason":"dissent_unresolved"%s}' "$floor_suffix"
 		return 0
 	fi
 
@@ -230,13 +246,6 @@ tribunal_gate_decide() {
 				"$unscored_floors" >&2
 		fi
 	fi
-
-	# A violated floor is worth naming whichever reason wins the precedence
-	# contest below: the worst failures drag the aggregate under the threshold
-	# too, so attaching failed_criterion only to the criterion_floor arm left
-	# the diagnostic absent exactly where it mattered most.
-	local floor_suffix=""
-	[[ -n "$floor_failed" ]] && floor_suffix=$(printf ',"failed_criterion":"%s"' "$floor_failed")
 
 	# Pick the most informative blocking reason. Every arm here blocks — this
 	# chain only decides what the Actor is TOLD, never whether the work passes.
