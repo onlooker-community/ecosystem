@@ -117,3 +117,70 @@ setup() {
   [[ -n "$h1" ]] || return 1
   [ "$h1" = "$h2" ]
 }
+
+# Stubs `claude` so the three LLM phases make no real call, then runs a full
+# audit. Any extra env the caller needs is exported before calling this.
+_run_audit() {
+  local stub="${BATS_TEST_TMPDIR}/bin"
+  mkdir -p "$stub"
+  printf '#!/usr/bin/env bash\ncat >/dev/null\nprintf "[]"\n' > "${stub}/claude"
+  chmod +x "${stub}/claude"
+
+  PATH="${stub}:${PATH}" \
+  CARTOGRAPHER_DIR="${BATS_TEST_TMPDIR}/state" \
+  CARTOGRAPHER_REPO_ROOT="$FIXTURE_REPO" \
+  CARTOGRAPHER_TRIGGER="manual" \
+  CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" \
+    bash "${PLUGIN_ROOT}/scripts/run-audit.sh"
+}
+
+# run_emit writes findings with a bare `jq`, which pretty-prints — the file
+# contains `"type": "undocumented_entity"` with a space. Parse rather than grep.
+_findings_of_type() {
+  local dir="${BATS_TEST_TMPDIR}/state/findings"
+  local count=0 f
+  [[ -d "$dir" ]] || { printf '0'; return 0; }
+  for f in "$dir"/*.json; do
+    [[ -e "$f" ]] || continue
+    if [[ "$(jq -r '.type // ""' "$f" 2>/dev/null)" == "undocumented_entity" ]]; then
+      count=$(( count + 1 ))
+    fi
+  done
+  printf '%s' "$count"
+}
+
+# Names of every undocumented_entity finding on disk, sorted, space-separated.
+_findings_named() {
+  local dir="${BATS_TEST_TMPDIR}/state/findings"
+  local names=() f
+  [[ -d "$dir" ]] || return 0
+  for f in "$dir"/*.json; do
+    [[ -e "$f" ]] || continue
+    if [[ "$(jq -r '.type // ""' "$f" 2>/dev/null)" == "undocumented_entity" ]]; then
+      names+=("$(jq -r '.excerpt_a' "$f")")
+    fi
+  done
+  printf '%s' "$(printf '%s\n' "${names[@]+"${names[@]}"}" | sort | tr '\n' ' ' | sed 's/ $//')"
+}
+
+@test "integration: a full audit records the undocumented entities on disk" {
+  # alpha is documented; beta and solo are not, and the default globs cover
+  # both plugins/ and skills/. Assert identity, not just count — a bare count
+  # passes just as happily on two findings for the same entity.
+  _run_audit
+  [ "$(_findings_named)" = "beta solo" ]
+}
+
+@test "integration: a targeted post-write audit records no undocumented entity" {
+  export CARTOGRAPHER_TARGET_FILE="$DOC"
+  _run_audit
+  [ "$(_findings_of_type)" = "0" ]
+}
+
+@test "integration: enabled=false suppresses the phase" {
+  mkdir -p "${FIXTURE_REPO}/.claude"
+  printf '%s\n' '{"cartographer":{"undocumented_entity":{"enabled":false}}}' \
+    > "${FIXTURE_REPO}/.claude/settings.json"
+  _run_audit
+  [ "$(_findings_of_type)" = "0" ]
+}

@@ -8,7 +8,7 @@
 #   1. discover   — collect all auditable files
 #   2. extract    — per-file content hash (incremental cache key)
 #   3. relate     — contradiction + dead_rule analysis (LLM)
-#   4. synthesize — stale_ref + scope_collision + finding hash computation
+#   4. synthesize — stale_ref + scope_collision + undocumented_entity + hash
 #   5. emit       — persist findings atomically, emit events for new findings
 #
 # Environment:
@@ -30,6 +30,7 @@ source "$PLUGIN_ROOT/scripts/lib/cartographer-project-key.sh"
 source "$PLUGIN_ROOT/scripts/lib/cartographer-events.sh"
 source "$PLUGIN_ROOT/scripts/lib/cartographer-collect.sh"
 source "$PLUGIN_ROOT/scripts/lib/cartographer-analyze.sh"
+source "$PLUGIN_ROOT/scripts/lib/cartographer-omission.sh"
 
 CARTOGRAPHER_DIR="${CARTOGRAPHER_DIR:?CARTOGRAPHER_DIR must be set}"
 TRIGGER="${CARTOGRAPHER_TRIGGER:-manual}"
@@ -159,13 +160,41 @@ run_synthesize() {
 		   '$_model_synthesis' '$_max_tokens_synthesis' '$_phase_timeout'" \
 		2>>"$CARTOGRAPHER_DIR/audit.log") || scope_findings="[]"
 
+	# Disk → doc. Skipped on targeted post-write audits: DISCOVERED_FILES is a
+	# single file there, so grepping it for every entity name would report
+	# nearly the whole enumeration as undocumented, and the emit phase would
+	# dedup-sentinel those false findings permanently. scope_collision already
+	# no-ops on targeted runs for the same reason.
+	#
+	# Config is read inside the sub-shell rather than passed in, because the
+	# orchestrator's own config is never loaded (ecosystem-88v). PLUGIN_ROOT is
+	# assigned here because run-audit.sh does not export it, which is why the
+	# sibling phases' cartographer_config_load calls fail. Remove both
+	# workarounds when 88v lands.
+	local omission_findings="[]"
+	if [[ -z "$TARGET_FILE" ]]; then
+		omission_findings=$($_TIMEOUT_CMD "$_phase_timeout" bash -c \
+			"PLUGIN_ROOT='$PLUGIN_ROOT'
+			 source '$PLUGIN_ROOT/scripts/lib/cartographer-config.sh'
+			 source '$PLUGIN_ROOT/scripts/lib/cartographer-omission.sh'
+			 cartographer_config_load '$REPO_ROOT'
+			 [[ \"\$(cartographer_config_undocumented_enabled)\" == 'true' ]] \
+			   || { printf '[]'; exit 0; }
+			 cartographer_analyze_undocumented_entity '$DISCOVERED_FILES' '$REPO_ROOT' \
+			   \"\$(cartographer_config_undocumented_globs)\" \
+			   \"\$(cartographer_config_undocumented_exclude)\" \
+			   \"\$(cartographer_config_undocumented_max_findings)\"" \
+			2>>"$CARTOGRAPHER_DIR/audit.log") || omission_findings="[]"
+	fi
+
 	# Merge all raw findings
 	local raw_all
 	raw_all=$(jq -n \
 		--argjson relate "${RELATE_FINDINGS:-[]}" \
 		--argjson stale "${stale_findings:-[]}" \
 		--argjson scope "${scope_findings:-[]}" \
-		'$relate + $stale + $scope')
+		--argjson omission "${omission_findings:-[]}" \
+		'$relate + $stale + $scope + $omission')
 
 	# Add finding_hash to each finding
 	ALL_FINDINGS="[]"

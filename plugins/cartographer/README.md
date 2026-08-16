@@ -14,6 +14,7 @@ Every other Onlooker plugin is reactive. Cartographer is the exception.
 | `dead_rule` | A rule fully subsumed by a more specific rule elsewhere |
 | `stale_ref` | A reference to a file path, tool, or command that no longer exists |
 | `scope_collision` | A project rule that duplicates or silently overrides a global `~/.claude/CLAUDE.md` rule |
+| `undocumented_entity` | Something that exists on disk — a plugin, a skill — that no instruction file mentions |
 
 ## Installation
 
@@ -73,6 +74,37 @@ All options are optional. Defaults shown:
 ```
 
 **Note:** Overriding `exclude_paths` replaces the entire list. Repeat the defaults plus your additions if you want to extend rather than replace.
+
+### Detecting omissions
+
+Every other check reads the instruction files and tests what it finds against
+the filesystem. `undocumented_entity` runs the other way: it enumerates
+entities on disk and flags any whose name appears in no instruction file. That
+is the one kind of drift the other checks structurally cannot see — something
+absent produces no reference to follow.
+
+```json
+{
+  "cartographer": {
+    "undocumented_entity": {
+      "enabled": true,
+      "globs": ["plugins/*/", "skills/*/"],
+      "exclude": [],
+      "max_findings": 20
+    }
+  }
+}
+```
+
+`globs` are relative to the repository root, and a glob matching nothing is
+simply inert — the defaults do nothing in a repository without those
+directories. The list is deliberately opt-in: most of a repository has no
+business being named in `CLAUDE.md`, so only classes where you expect the
+documentation to be *complete* belong here.
+
+**Note:** as with `exclude_paths`, overriding `globs` or `exclude` replaces the
+entire list rather than extending it. Repeat the defaults alongside your
+additions if you mean to extend.
 
 ## Privacy
 
