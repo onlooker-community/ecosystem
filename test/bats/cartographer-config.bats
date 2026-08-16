@@ -80,3 +80,46 @@ setup() {
   echo "$v" | jq -e 'type == "array" and length > 0' >/dev/null
   echo "$v" | jq -e 'any(. == "node_modules")' >/dev/null
 }
+
+@test "undocumented_entity: defaults ship enabled with plugin and skill globs" {
+  cartographer_config_load ""
+  local enabled globs max
+  enabled=$(cartographer_config_undocumented_enabled)
+  globs=$(cartographer_config_undocumented_globs)
+  max=$(cartographer_config_undocumented_max_findings)
+  [ "$enabled" = "true" ]
+  [ "$max" = "20" ]
+  [ "$(printf '%s' "$globs" | jq -r 'length')" = "2" ] || return 1
+  [ "$(printf '%s' "$globs" | jq -r '.[0]')" = "plugins/*/" ]
+}
+
+@test "undocumented_entity: user settings can disable the phase" {
+  mkdir -p "${HOME}/.claude"
+  printf '%s\n' '{"cartographer":{"undocumented_entity":{"enabled":false}}}' \
+    > "${HOME}/.claude/settings.json"
+  cartographer_config_load ""
+  local enabled max
+  enabled=$(cartographer_config_undocumented_enabled)
+  max=$(cartographer_config_undocumented_max_findings)
+  [ "$enabled" = "false" ]
+  [ "$max" = "20" ]
+}
+
+@test "undocumented_entity: repo settings replace the glob list wholesale" {
+  local repo="${BATS_TEST_TMPDIR}/repo-glob"
+  mkdir -p "${repo}/.claude"
+  printf '%s\n' '{"cartographer":{"undocumented_entity":{"globs":["agents/*/"]}}}' \
+    > "${repo}/.claude/settings.json"
+  cartographer_config_load "$repo"
+  local globs
+  globs=$(cartographer_config_undocumented_globs)
+  [ "$(printf '%s' "$globs" | jq -r 'length')" = "1" ] || return 1
+  [ "$(printf '%s' "$globs" | jq -r '.[0]')" = "agents/*/" ]
+}
+
+@test "undocumented_entity: exclude defaults to empty" {
+  cartographer_config_load ""
+  local excl
+  excl=$(cartographer_config_undocumented_exclude)
+  [ "$(printf '%s' "$excl" | jq -r 'length')" = "0" ]
+}

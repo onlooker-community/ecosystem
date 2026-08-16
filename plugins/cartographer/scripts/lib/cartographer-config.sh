@@ -78,3 +78,29 @@ cartographer_config_max_output_tokens_synthesis() {
 	v=$(cartographer_config_get '.cartographer.synthesis.max_output_tokens')
 	printf '%s' "${v:-2048}"
 }
+
+# ── undocumented_entity phase ──────────────────────────────────────────────────
+# Disk → doc detection. Unlike the other phases these are read inside the
+# analysis sub-shell rather than by the orchestrator; see run-audit.sh and
+# ecosystem-88v for why.
+
+cartographer_config_undocumented_enabled() {
+	local v
+	v=$(cartographer_config_get '.cartographer.undocumented_entity.enabled')
+	printf '%s' "${v:-true}"
+}
+
+cartographer_config_undocumented_globs() {
+	cartographer_config_get_json \
+		'.cartographer.undocumented_entity.globs // ["plugins/*/","skills/*/"]'
+}
+
+cartographer_config_undocumented_exclude() {
+	cartographer_config_get_json '.cartographer.undocumented_entity.exclude // []'
+}
+
+cartographer_config_undocumented_max_findings() {
+	local v
+	v=$(cartographer_config_get '.cartographer.undocumented_entity.max_findings')
+	printf '%s' "${v:-20}"
+}
