@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.5](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.2.4...tribunal-v1.2.5) (2026-08-16)
+
+
+### Bug Fixes
+
+* **tribunal:** a floor you cannot read is a floor you cannot clear :lock: ([#162](https://github.com/onlooker-community/ecosystem/issues/162)) ([4ff2ec0](https://github.com/onlooker-community/ecosystem/commit/4ff2ec0f772af51ad4b5ea631ae2d3c68d229499))
+
 ## [1.2.4](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.2.3...tribunal-v1.2.4) (2026-08-16)
 
 
