@@ -538,3 +538,72 @@ RUBRIC_FLOOR='{"criteria":[{"name":"correctness","weight":0.5,"min_pass":0.7},{"
 		}
 	done
 }
+
+# --- blocking-reason precedence (ecosystem-4d3) ---------------------------
+#
+# Nothing pinned the order of these arms, so it could be reshuffled silently —
+# which is how criterion_floor came to sit ahead of the jury arms in #150 under
+# a comment claiming precedence was unchanged. Librarian's sibling gate already
+# settled this the other way ("lesson gate: jury policy still wins over
+# criterion_floor"); tribunal now matches.
+#
+# The jury arms report WHY the panel failed. A floor still blocks, and the
+# meta_override accept-veto still makes it unoverridable — those are about the
+# OUTCOME. This chain only picks which reason to name, and a Meta-Judge
+# rejection is the more actionable thing to hand the Actor on retry than which
+# criterion sat low. The floor rides along as failed_criterion either way.
+
+@test "a Meta-Judge rejection outranks a violated floor as the reason" {
+	# The bead's verified case. Both block; the question is what the Actor is
+	# told. Pre-fix this reported criterion_floor and the rejection vanished.
+	local meta='{"override_recommendation":"reject","bias_detected":false}'
+	local out
+	out=$(tribunal_gate_decide "majority" '[
+	  {"judge_id":"a","score":0.85,"passed":false,"criterion_scores":{"correctness":0.9,"safety":0.3}},
+	  {"judge_id":"b","score":0.85,"passed":false,"criterion_scores":{"correctness":0.9,"safety":0.3}}
+	]' "0.85" "0.75" "$meta" "0.0" "0.25" "$RUBRIC_FLOOR")
+	printf '%s' "$out" | jq -e '.passed == false' >/dev/null || return 1
+	printf '%s' "$out" | jq -e '.reason == "meta_override"' >/dev/null || return 1
+	# ...and the floor is not lost, it decorates. This is ecosystem-cs8: the
+	# suffix on this arm was unreachable dead code before the reorder.
+	printf '%s' "$out" | jq -e '.failed_criterion == "safety"' >/dev/null
+}
+
+@test "an unresolved jury outranks a violated floor as the reason" {
+	# The other jury arm, reached when no override was given and dissent sits
+	# below threshold. Same rule, and the same previously-dead suffix.
+	local out
+	out=$(tribunal_gate_decide "majority" '[
+	  {"judge_id":"a","score":0.85,"passed":false,"criterion_scores":{"correctness":0.9,"safety":0.3}},
+	  {"judge_id":"b","score":0.85,"passed":false,"criterion_scores":{"correctness":0.9,"safety":0.3}}
+	]' "0.85" "0.75" "$NO_META" "0.0" "0.25" "$RUBRIC_FLOOR")
+	printf '%s' "$out" | jq -e '.passed == false' >/dev/null || return 1
+	printf '%s' "$out" | jq -e '.reason == "dissent_unresolved"' >/dev/null || return 1
+	printf '%s' "$out" | jq -e '.failed_criterion == "safety"' >/dev/null
+}
+
+@test "criterion_floor is still the reason when the jury has no complaint" {
+	# Demoting the arm must not make it unreachable. A floor violated while the
+	# score clears and every judge passed is exactly the case criterion_floor
+	# exists for, and it is the whole point of the rubric's hard constraint.
+	local out
+	out=$(tribunal_gate_decide "majority" '[
+	  {"judge_id":"a","score":0.85,"passed":true,"criterion_scores":{"correctness":0.9,"safety":0.3}},
+	  {"judge_id":"b","score":0.80,"passed":true,"criterion_scores":{"correctness":0.9,"safety":0.3}}
+	]' "0.82" "0.75" "$NO_META" "0.05" "0.25" "$RUBRIC_FLOOR")
+	printf '%s' "$out" | jq -e '.reason == "criterion_floor"' >/dev/null || return 1
+	printf '%s' "$out" | jq -e '.failed_criterion == "safety"' >/dev/null
+}
+
+@test "low_score still outranks both, and still names the floor" {
+	# The one arm whose position is NOT changing. Pinned so the reorder cannot
+	# quietly take it along.
+	local meta='{"override_recommendation":"reject","bias_detected":false}'
+	local out
+	out=$(tribunal_gate_decide "majority" '[
+	  {"judge_id":"a","score":0.30,"passed":false,"criterion_scores":{"correctness":0.9,"safety":0.3}},
+	  {"judge_id":"b","score":0.30,"passed":false,"criterion_scores":{"correctness":0.9,"safety":0.3}}
+	]' "0.30" "0.75" "$meta" "0.0" "0.25" "$RUBRIC_FLOOR")
+	printf '%s' "$out" | jq -e '.reason == "low_score"' >/dev/null || return 1
+	printf '%s' "$out" | jq -e '.failed_criterion == "safety"' >/dev/null
+}
