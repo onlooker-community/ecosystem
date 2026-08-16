@@ -413,3 +413,128 @@ RUBRIC_FLOOR='{"criteria":[{"name":"correctness","weight":0.5,"min_pass":0.7},{"
 		"$NO_META" "0.0" "0.25" 2>/dev/null)
 	[ "$(printf '%s' "$out" | jq -r '.passed')" = "true" ]
 }
+
+# --- out-of-range criterion scores (ecosystem-5fy) ------------------------
+#
+# A floor is the rubric's hard constraint: nobody may be below it. An
+# unreadable report on a floored criterion means we cannot confirm that held,
+# and "cannot confirm" on a hard constraint has to fail closed.
+
+@test "an out-of-range criterion score cannot satisfy its floor" {
+	# THE verified case. safety 0.30 against an 0.8 floor blocks; the identical
+	# judgment written as 30 used to pass clean, because 30 < 0.8 is false.
+	local out
+	out=$(tribunal_gate_decide "majority" '[
+	  {"judge_id":"a","score":0.85,"passed":true,"criterion_scores":{"correctness":0.9,"safety":30}},
+	  {"judge_id":"b","score":0.85,"passed":true,"criterion_scores":{"correctness":0.9,"safety":30}}
+	]' "0.85" "0.75" "$NO_META" "0.0" "0.25" "$RUBRIC_FLOOR")
+	printf '%s' "$out" | jq -e '.passed == false' >/dev/null || return 1
+	printf '%s' "$out" | jq -e '.reason == "criterion_floor"' >/dev/null || return 1
+	printf '%s' "$out" | jq -e '.failed_criterion == "safety"' >/dev/null
+}
+
+@test "one judge's unreadable floor score is not diluted by judges who scored it fine" {
+	# The dilution failure the floor design exists to prevent, reproduced
+	# through a different mechanism. A security specialist emitting 30 — which
+	# may well mean 0.30, a violation — must not be silently discarded so that
+	# two generalists at 0.95 carry the floor. Filtering the bad value alone
+	# gives min([0.95,0.95]) and passes, which is why filtering is not enough.
+	local out
+	out=$(tribunal_gate_decide "majority" '[
+	  {"judge_id":"sec","score":0.85,"passed":true,"criterion_scores":{"correctness":0.9,"safety":30}},
+	  {"judge_id":"gen1","score":0.85,"passed":true,"criterion_scores":{"correctness":0.9,"safety":0.95}},
+	  {"judge_id":"gen2","score":0.85,"passed":true,"criterion_scores":{"correctness":0.9,"safety":0.95}}
+	]' "0.85" "0.75" "$NO_META" "0.0" "0.25" "$RUBRIC_FLOOR")
+	printf '%s' "$out" | jq -e '.passed == false' >/dev/null || return 1
+	printf '%s' "$out" | jq -e '.failed_criterion == "safety"' >/dev/null
+}
+
+@test "a non-numeric criterion score cannot satisfy its floor either" {
+	# Unreadable is unreadable — a string is no more confirmable than a 30.
+	local out
+	out=$(tribunal_gate_decide "majority" '[
+	  {"judge_id":"a","score":0.85,"passed":true,"criterion_scores":{"correctness":0.9,"safety":"high"}},
+	  {"judge_id":"b","score":0.85,"passed":true,"criterion_scores":{"correctness":0.9,"safety":"high"}}
+	]' "0.85" "0.75" "$NO_META" "0.0" "0.25" "$RUBRIC_FLOOR")
+	printf '%s' "$out" | jq -e '.passed == false' >/dev/null || return 1
+	printf '%s' "$out" | jq -e '.failed_criterion == "safety"' >/dev/null
+}
+
+@test "an unreadable floor score is not reported as one nobody scored" {
+	# The two are different and must not be conflated. The stderr warning says
+	# the floor DID NOT APPLY — true when the criterion is absent, and a false
+	# statement here, where it applied and blocked. Conflating them also means
+	# the one signal for "a floor was skipped" is emitted by the same defect
+	# that skipped it.
+	run --separate-stderr tribunal_gate_decide "majority" '[
+	  {"judge_id":"a","score":0.85,"passed":true,"criterion_scores":{"correctness":0.9,"safety":30}},
+	  {"judge_id":"b","score":0.85,"passed":true,"criterion_scores":{"correctness":0.9,"safety":30}}
+	]' "0.85" "0.75" "$NO_META" "0.0" "0.25" "$RUBRIC_FLOOR"
+	printf '%s' "$output" | jq -e '.passed == false' >/dev/null || return 1
+	local re='did not apply'
+	[[ ! "$stderr" =~ $re ]]
+}
+
+@test "meta_override accept cannot lift a floor it cannot confirm" {
+	# The accept-veto added in #152 exists because a floor is not the jury's
+	# opinion to overrule. An unconfirmable floor must sit behind the same veto,
+	# or the policy becomes a way to launder a malformed score into a pass.
+	local meta='{"override_recommendation":"accept","bias_detected":false}'
+	local out
+	out=$(tribunal_gate_decide "meta_override" '[
+	  {"judge_id":"a","score":0.85,"passed":true,"criterion_scores":{"correctness":0.9,"safety":30}},
+	  {"judge_id":"b","score":0.85,"passed":true,"criterion_scores":{"correctness":0.9,"safety":30}}
+	]' "0.85" "0.75" "$meta" "0.0" "0.25" "$RUBRIC_FLOOR")
+	printf '%s' "$out" | jq -e '.passed == false' >/dev/null || return 1
+	printf '%s' "$out" | jq -e '.failed_criterion == "safety"' >/dev/null
+}
+
+@test "the range bounds stay usable for criterion scores too" {
+	# [0,1] inclusive. A criterion scored exactly 0 already has its own test
+	# above (it blocks); this pins the other end, where 1.0 must read as a
+	# perfect score rather than as out-of-range garbage.
+	local out
+	out=$(tribunal_gate_decide "majority" '[
+	  {"judge_id":"a","score":0.85,"passed":true,"criterion_scores":{"correctness":1,"safety":1}},
+	  {"judge_id":"b","score":0.85,"passed":true,"criterion_scores":{"correctness":1,"safety":1}}
+	]' "0.85" "0.75" "$NO_META" "0.0" "0.25" "$RUBRIC_FLOOR")
+	printf '%s' "$out" | jq -e '.passed == true' >/dev/null
+}
+
+@test "readable criterion scores agree with tribunal_aggregate" {
+	# The criterion-level twin of "usable verdicts agree with tribunal_aggregate".
+	# weighted_mean's filter and _tribunal_floor_failed's `readable` live in
+	# different files with nothing keeping them in step, and them disagreeing IS
+	# ecosystem-5fy: aggregation refused to score 30 while the floor accepted it.
+	#
+	# Every shape below sits at or above the 0.7 floor when readable, so the
+	# gate blocks on unreadability alone and the two answers are comparable:
+	# a criterion the aggregate USED is exactly one the gate did not reject.
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/tribunal-aggregate.sh"
+
+	local rubric='{"criteria":[{"name":"correctness","weight":1.0,"min_pass":0.7}]}'
+	local shape agg out used blocked
+	for shape in '0.9' '1' '0.7' '100' '-1' '"high"' 'null'; do
+		local panel
+		panel="[{\"judge_id\":\"a\",\"score\":0.5,\"passed\":true,\"criterion_scores\":{\"correctness\":${shape}}}]"
+
+		# Did the aggregate use the criterion? If it did, the result is the
+		# criterion's own value; if it refused, weighted_mean degrades to the
+		# plain mean of .score, which is 0.5.
+		agg=$(tribunal_aggregate "weighted_mean" "$panel" "$rubric" 2>/dev/null)
+		used=$(awk -v a="$agg" 'BEGIN { print (a == 0.5) ? "no" : "yes" }')
+
+		# Did the gate reject it as unreadable? Handed an aggregate that clears
+		# the threshold, only the floor check can block.
+		out=$(tribunal_gate_decide "majority" "$panel" "0.90" "0.75" \
+			"$NO_META" "0.0" "0.25" "$rubric" 2>/dev/null)
+		blocked=$(printf '%s' "$out" | jq -r 'if .passed then "no" else "yes" end')
+
+		[ "$used" != "$blocked" ] || {
+			printf 'drift on correctness=%s: aggregate used=%s, gate blocked=%s\n' \
+				"$shape" "$used" "$blocked" >&2
+			return 1
+		}
+	done
+}
