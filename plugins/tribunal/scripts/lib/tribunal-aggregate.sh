@@ -61,20 +61,37 @@
 # — tribunal_aggregate returns a float — so the choice is between dropping and
 # inventing one. Dropping silently would be its own bug, hence the stderr line.
 #
-# Private to this file. See ecosystem-up8.
+# A score outside [0,1] is malformed for the same reason a missing one is: it is
+# not a verdict this scale can read. Dropping rather than clamping is what keeps
+# one rule in this file — the criterion-score path in weighted_mean already
+# filters to `number and >= 0 and <= 1` rather than clamping, and applying two
+# different validity rules to the same concept is what let this through. The
+# realistic trigger is a judge emitting a percentage instead of a fraction (95
+# rather than 0.95), an ordinary LLM formatting slip. Nothing else at the seam
+# rejects it: TribunalVerdictPayload declares score in [0,1], but the runtime
+# emitter fails open (ADR-005), so this is the only place that re-checks.
+#
+# Bounds are inclusive. A judge that scored 0 rejected the work and a judge that
+# scored 1 did not — dropping either would be its own fail-open, since 0 is
+# precisely the verdict that has to survive to drag the panel below threshold.
+#
+# Private to this file. See ecosystem-up8 (missing) and ecosystem-7cl (range).
 _tribunal_usable_verdicts() {
 	local verdicts="${1:-[]}"
+	local usable_def='def usable: (.score | type) == "number" and .score >= 0 and .score <= 1;'
 	local dropped
-	dropped=$(printf '%s' "$verdicts" | jq -r '
+	# One `def` reused by both passes, rather than the positive predicate here
+	# and a hand-negated copy below — that pair drifting is the whole bug class.
+	dropped=$(printf '%s' "$verdicts" | jq -r "$usable_def"'
 		[ .[]
-		  | select((.score | type) != "number")
+		  | select(usable | not)
 		  | (.judge_id // .judge_type // "unidentified") ] | join(", ")
 	' 2>/dev/null) || dropped=""
 	if [[ -n "$dropped" ]]; then
-		printf 'tribunal-aggregate: ignoring verdict(s) with no numeric score: %s\n' \
+		printf 'tribunal-aggregate: ignoring verdict(s) with no usable score (missing, non-numeric, or outside [0,1]): %s\n' \
 			"$dropped" >&2
 	fi
-	printf '%s' "$verdicts" | jq -c '[ .[] | select((.score | type) == "number") ]' \
+	printf '%s' "$verdicts" | jq -c "$usable_def"'[ .[] | select(usable) ]' \
 		2>/dev/null || printf '[]'
 }
 

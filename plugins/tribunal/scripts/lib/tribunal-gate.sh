@@ -122,10 +122,12 @@ tribunal_gate_decide() {
 	fi
 
 	# A verdict tribunal_aggregate refuses to score cannot vote to approve, but
-	# its SEAT STILL COUNTS. The `(.score | type) == "number"` test is the same
-	# one _tribunal_usable_verdicts applies in tribunal-aggregate.sh; the two
-	# must stay in step, and "usable verdicts agree with tribunal_aggregate" in
-	# the bats file is what catches them drifting.
+	# its SEAT STILL COUNTS. The usability test below is the same one
+	# _tribunal_usable_verdicts applies in tribunal-aggregate.sh — a numeric
+	# score inside [0,1], so a judge emitting 95 instead of 0.95 is as unusable
+	# as one that emitted nothing. The two copies must stay in step, and
+	# "usable verdicts agree with tribunal_aggregate" in the bats file is what
+	# catches them drifting.
 	#
 	# Denying the vote rather than dropping the verdict is deliberate, and it
 	# is NOT what ecosystem-y7y originally asked for. Making both halves agree
@@ -142,7 +144,8 @@ tribunal_gate_decide() {
 	local count passed_count
 	count=$(printf '%s' "$verdicts" | jq 'length' 2>/dev/null) || count=0
 	passed_count=$(printf '%s' "$verdicts" | jq '
-		[.[] | select(.passed == true and (.score | type) == "number")] | length
+		def usable: (.score | type) == "number" and .score >= 0 and .score <= 1;
+		[.[] | select(.passed == true and usable)] | length
 	' 2>/dev/null) || passed_count=0
 
 	local jury_ok=1  # 0 = ok, 1 = not ok (shell convention)
