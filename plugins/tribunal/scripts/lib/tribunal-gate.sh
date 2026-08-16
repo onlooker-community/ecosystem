@@ -234,24 +234,47 @@ tribunal_gate_decide() {
 	# A violated floor is worth naming whichever reason wins the precedence
 	# contest below: the worst failures drag the aggregate under the threshold
 	# too, so attaching failed_criterion only to the criterion_floor arm left
-	# the diagnostic absent exactly where it mattered most. Precedence itself is
-	# unchanged — this only decorates.
+	# the diagnostic absent exactly where it mattered most.
 	local floor_suffix=""
 	[[ -n "$floor_failed" ]] && floor_suffix=$(printf ',"failed_criterion":"%s"' "$floor_failed")
 
-	# Pick the most informative blocking reason. low_score first: if the
-	# aggregate missed the threshold, that is the more actionable thing to tell
-	# the Actor than any single criterion.
+	# Pick the most informative blocking reason. Every arm here blocks — this
+	# chain only decides what the Actor is TOLD, never whether the work passes.
+	# Keeping those two apart is the whole basis for the order:
+	#
+	#   low_score           — the aggregate missed the threshold, which is more
+	#                         actionable than any single criterion.
+	#   jury arms           — WHY the panel failed. A Meta-Judge rejection is
+	#                         the more useful thing to hand back on retry than
+	#                         which criterion sat low, and the floor still rides
+	#                         along as failed_criterion.
+	#   criterion_floor     — no jury complaint, so the floor IS the complaint.
+	#
+	# The jury arms sit ahead of criterion_floor deliberately (ecosystem-4d3),
+	# matching librarian's shipped decision — "lesson gate: jury policy still
+	# wins over criterion_floor". This does not weaken floors: a violated floor
+	# still blocks on the arm below, and `meta_override: accept` still cannot
+	# lift one, because that veto lives further up and returns before any of
+	# this. What changed is only that a floor no longer HIDES a rejection.
+	#
+	# Ordering it the other way is what made floor_suffix on the jury arms dead
+	# code (ecosystem-cs8): behind `elif [[ -n $floor_failed ]]`, floor_failed
+	# was guaranteed empty by the time those arms ran, so the suffix always
+	# rendered as the empty string while two shipped docs described it working.
+	#
+	# The tests under "blocking-reason precedence" pin every arm. Nothing pinned
+	# them before, which is how a new arm went in ahead of two others under a
+	# comment asserting the precedence was unchanged.
 	if [[ "$score_ok" -ne 0 ]]; then
 		printf '{"passed":false,"reason":"low_score"%s}' "$floor_suffix"
-	elif [[ -n "$floor_failed" ]]; then
-		printf '{"passed":false,"reason":"criterion_floor","failed_criterion":"%s"}' "$floor_failed"
 	elif [[ "$jury_ok" -ne 0 ]]; then
 		if [[ "$meta_override" == "reject" ]]; then
 			printf '{"passed":false,"reason":"meta_override"%s}' "$floor_suffix"
 		else
 			printf '{"passed":false,"reason":"dissent_unresolved"%s}' "$floor_suffix"
 		fi
+	elif [[ -n "$floor_failed" ]]; then
+		printf '{"passed":false,"reason":"criterion_floor","failed_criterion":"%s"}' "$floor_failed"
 	else
 		printf '{"passed":true}'
 	fi
