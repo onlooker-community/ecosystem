@@ -1,6 +1,6 @@
 ---
 name: cartographer
-description: Audit CLAUDE.md, AGENTS.md, and .claude/rules/ instruction files for contradictions, stale references, dead rules, scope collisions, and entities no instruction file mentions. Runs a full audit in the foreground (with lock). Use when the user explicitly invokes /cartographer, or when they want immediate feedback after editing an instruction file. Supports --scope, --phase, --verbose, --status, and --force flags.
+description: Audit CLAUDE.md, AGENTS.md, and .claude/rules/ instruction files for contradictions, stale references, dead rules, scope collisions, and entities no instruction file mentions. Runs a full audit in the foreground (with lock). Use when the user explicitly invokes /cartographer, or when they want immediate feedback after editing an instruction file. Supports --scope, --type, --verbose, --status, and --force flags.
 ---
 
 # Cartographer Skill
@@ -111,14 +111,31 @@ fi
 # Then proceed as a normal full audit
 ```
 
-### `/cartographer --phase=<phase>` — single phase
+### `/cartographer --type=<type>` — single finding type
 
-Runs only one analysis phase: `contradiction`, `stale_ref`, `dead_rule`, `scope_collision`, or `undocumented_entity`.
-Pass `CARTOGRAPHER_PHASE_FILTER` to run-audit.sh (the script checks this env var and skips other phases).
+Narrows the audit to one finding type: `contradiction`, `dead_rule`, `stale_ref`, `scope_collision`, or `undocumented_entity`. Export `CARTOGRAPHER_TYPE_FILTER` before running.
+
+```bash
+export CARTOGRAPHER_TYPE_FILTER="stale_ref"
+```
+
+Analyzers that cannot produce the requested type are skipped entirely, so this is cheaper than a full audit — each skipped analyzer is an LLM call not made. Useful for re-checking one class of drift after fixing it without paying for the rest.
+
+One caveat, because the saving is not uniform: `contradiction` and `dead_rule` come out of a single LLM pass, so asking for either runs that pass and discards the other type from the results. Requesting one of those two costs the same as running both; the other three types are genuinely skippable.
+
+An unrecognized type is an error rather than a filter that matches nothing — an empty audit looks exactly like a clean repo, so a typo would read as good news.
 
 ### `/cartographer --scope=<path>` — scoped audit
 
-Limits discovery to files under `<path>`. Set `CARTOGRAPHER_SCOPE_PATH` before running.
+Limits analysis to instruction files under `<path>`, relative to the repo root or absolute. Export `CARTOGRAPHER_SCOPE_PATH` before running.
+
+```bash
+export CARTOGRAPHER_SCOPE_PATH="plugins/tribunal"
+```
+
+The scope narrows which files are analyzed; it does not become the repo root. `stale_ref` resolves path-like tokens against the real root, and re-rooting would report every reference outside the scope as broken.
+
+Both flags compose, and both apply to manual runs only — the SessionStart and PostToolUse hooks always run unfiltered.
 
 ## Rendering Findings
 

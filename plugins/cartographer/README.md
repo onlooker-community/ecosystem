@@ -43,7 +43,7 @@ Findings appear in the next `/cartographer` invocation or in any event log consu
 /cartographer --verbose    # show all known findings (no bus events)
 /cartographer --status     # running state + last completion time
 /cartographer --force      # kill running audit and restart
-/cartographer --phase=contradiction   # single-phase audit
+/cartographer --type=stale_ref        # one finding type; skips the other analyzers
 /cartographer --scope=src/            # scoped to a subdirectory
 ```
 
