@@ -2,6 +2,13 @@
 
 All notable changes to the Cartographer plugin are documented here.
 
+## [0.4.3](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.4.2...cartographer-v0.4.3) (2026-08-17)
+
+
+### Bug Fixes
+
+* **cartographer:** make the audit read the settings you gave it :gear: ([#174](https://github.com/onlooker-community/ecosystem/issues/174)) ([dc57731](https://github.com/onlooker-community/ecosystem/commit/dc5773165fe561f77e87101ed1fbe6e13bb34c34))
+
 ## [0.4.2](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.4.1...cartographer-v0.4.2) (2026-08-17)
 
 

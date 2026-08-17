@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.41.3](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.41.2...ecosystem-v0.41.3) (2026-08-17)
+
+
+### Bug Fixes
+
+* **cartographer:** make the audit read the settings you gave it :gear: ([#174](https://github.com/onlooker-community/ecosystem/issues/174)) ([dc57731](https://github.com/onlooker-community/ecosystem/commit/dc5773165fe561f77e87101ed1fbe6e13bb34c34))
+* **release:** drop git config --global and switch to GITHUB_TOKEN with id-token:write ([#175](https://github.com/onlooker-community/ecosystem/issues/175)) ([b70668b](https://github.com/onlooker-community/ecosystem/commit/b70668b90cff7d33e012363ede673b0c3e9da29f))
+
 ## [0.41.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.41.1...ecosystem-v0.41.2) (2026-08-17)
 
 
