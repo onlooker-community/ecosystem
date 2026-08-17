@@ -28,6 +28,7 @@ source "$PLUGIN_ROOT/scripts/lib/cartographer-config.sh"
 source "$PLUGIN_ROOT/scripts/lib/cartographer-ulid.sh"
 source "$PLUGIN_ROOT/scripts/lib/cartographer-project-key.sh"
 source "$PLUGIN_ROOT/scripts/lib/cartographer-events.sh"
+source "$PLUGIN_ROOT/scripts/lib/cartographer-resolve.sh"
 source "$PLUGIN_ROOT/scripts/lib/cartographer-collect.sh"
 source "$PLUGIN_ROOT/scripts/lib/cartographer-analyze.sh"
 source "$PLUGIN_ROOT/scripts/lib/cartographer-omission.sh"
@@ -242,14 +243,11 @@ run_emit() {
 		now=$(date +%s)
 
 		if [[ -f "$dedup_sentinel" ]]; then
-			# Known finding — update last_seen_at atomically, no bus event
+			# Known finding — refresh it atomically, no bus event. Refreshing
+			# also reopens it; see cartographer_refresh_finding for why that is
+			# load-bearing rather than tidiness.
 			(( known_count++ )) || true
-			if [[ -f "$finding_file" ]]; then
-				local updated
-				updated=$(jq --argjson ts "$now" '.last_seen_at=$ts' "$finding_file" 2>/dev/null) || true
-				[[ -n "$updated" ]] && printf '%s\n' "$updated" >"${finding_file}.tmp" \
-					&& mv -f "${finding_file}.tmp" "$finding_file"
-			fi
+			cartographer_refresh_finding "$finding_file" "$now" || true
 		else
 			# New finding — write file atomically, emit bus event, then mark dedup
 			local with_ts
@@ -268,6 +266,14 @@ run_emit() {
 
 	log "phase=emit new=${new_count} known=${known_count}"
 
+	# Retire findings this run did not observe. Guarded inside against targeted
+	# audits and partial runs, both of which see too little to treat absence as
+	# evidence the drift is gone.
+	local resolved_count
+	resolved_count=$(cartographer_resolve_absent_findings \
+		"$FINDINGS_DIR" "$START_TS" "$TARGET_FILE" "${#PHASES_FAILED[@]}")
+	log "phase=emit resolved=${resolved_count}"
+
 	local end_ts duration_ms total_count
 	end_ts=$(date +%s)
 	duration_ms=$(( (end_ts - START_TS) * 1000 ))
@@ -280,11 +286,12 @@ run_emit() {
 		--arg trigger "$TRIGGER" \
 		--argjson new_finding_count "$new_count" \
 		--argjson known_finding_count "$known_count" \
+		--argjson resolved_finding_count "$resolved_count" \
 		--argjson total_finding_count "$total_count" \
 		--argjson duration_ms "$duration_ms" \
 		--argjson phases_completed "$(printf '%s\n' "${PHASES_COMPLETED[@]}" | jq -R . | jq -s .)" \
 		--argjson phases_failed "$(printf '%s\n' "${PHASES_FAILED[@]:-}" | jq -R . | jq -s .)" \
-		'{"audit_id":$audit_id,"trigger":$trigger,"new_finding_count":$new_finding_count,"known_finding_count":$known_finding_count,"total_finding_count":$total_finding_count,"duration_ms":$duration_ms,"phases_completed":$phases_completed,"phases_failed":$phases_failed}' \
+		'{"audit_id":$audit_id,"trigger":$trigger,"new_finding_count":$new_finding_count,"known_finding_count":$known_finding_count,"resolved_finding_count":$resolved_finding_count,"total_finding_count":$total_finding_count,"duration_ms":$duration_ms,"phases_completed":$phases_completed,"phases_failed":$phases_failed}' \
 		>"${run_file}.tmp" && mv -f "${run_file}.tmp" "$run_file"
 
 	emit_safe "cartographer.audit.complete" \
