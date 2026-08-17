@@ -24,22 +24,40 @@ setup() {
 
 	FIXTURE_REPO="${BATS_TEST_TMPDIR}/repo"
 	mkdir -p "${FIXTURE_REPO}/sub" "${FIXTURE_REPO}/.claude"
-	printf '# Root\nThe alpha plugin does things.\n' > "${FIXTURE_REPO}/CLAUDE.md"
-	printf '# Sub\n' > "${FIXTURE_REPO}/sub/CLAUDE.md"
+	# Path-like tokens and a global counterpart so all three LLM analyzers have
+	# something to chew on. Without them stale_ref and scope_collision
+	# short-circuit before calling the model, and the call counts below could
+	# not tell "skipped by the filter" apart from "had nothing to do".
+	printf '# Root\nAlways read scripts/lib/config-loader.sh first.\nNever use src/legacy/gone.ts.\n' \
+		> "${FIXTURE_REPO}/CLAUDE.md"
+	printf '# Sub\nSee plugins/tribunal/README.md for details.\n' > "${FIXTURE_REPO}/sub/CLAUDE.md"
+	mkdir -p "${CLAUDE_HOME}"
+	printf '# Global\nAlways prefer tabs.\n' > "${CLAUDE_HOME}/CLAUDE.md"
 
 	export CARTOGRAPHER_DIR="${BATS_TEST_TMPDIR}/cartographer"
 	mkdir -p "$CARTOGRAPHER_DIR"
 	AUDIT_LOG="${CARTOGRAPHER_DIR}/audit.log"
+
+	# The stub records each invocation so tests can assert on how many model calls
+	# an audit actually made — the only honest evidence that a filter skipped an
+	# analyzer rather than merely discarding its output.
+	export CLAUDE_CALL_LOG="${BATS_TEST_TMPDIR}/claude-calls"
+	: > "$CLAUDE_CALL_LOG"
 
 	STUB_BIN="${BATS_TEST_TMPDIR}/bin"
 	mkdir -p "$STUB_BIN"
 	cat > "${STUB_BIN}/claude" <<'STUB'
 #!/usr/bin/env bash
 cat >/dev/null
+echo call >> "$CLAUDE_CALL_LOG"
 printf '[]'
 STUB
 	chmod +x "${STUB_BIN}/claude"
 	export PATH="${STUB_BIN}:${PATH}"
+}
+
+_llm_calls() {
+	wc -l < "$CLAUDE_CALL_LOG" | tr -d ' '
 }
 
 _settings() {
@@ -143,6 +161,81 @@ _run_audit() {
 	CARTOGRAPHER_TARGET_FILE="${FIXTURE_REPO}/CLAUDE.md" \
 		CARTOGRAPHER_REPO_ROOT="$FIXTURE_REPO" bash "$AUDIT"
 	[ ! -f "${CARTOGRAPHER_DIR}/last_audit_at" ]
+}
+
+# ── --type and --scope ───────────────────────────────────────────────────────
+#
+# SKILL.md documented both flags while run-audit.sh read neither, so passing
+# them silently ran a full audit (ecosystem-9og). These assert on the count of
+# model calls, because that is what distinguishes a genuinely skipped analyzer
+# from one that ran and had its findings thrown away.
+
+@test "an unfiltered audit calls the model once per LLM analyzer" {
+	_run_audit
+	[ "$(_llm_calls)" = "3" ]
+}
+
+@test "a type filter skips the analyzers that cannot produce it" {
+	CARTOGRAPHER_TYPE_FILTER=stale_ref _run_audit
+	[ "$(_llm_calls)" = "1" ]
+}
+
+# undocumented_entity is a grep, not a model call, so narrowing to it should
+# cost nothing at all.
+@test "narrowing to undocumented_entity makes no model calls" {
+	CARTOGRAPHER_TYPE_FILTER=undocumented_entity _run_audit
+	[ "$(_llm_calls)" = "0" ]
+}
+
+# contradiction and dead_rule share one pass, so dead_rule must still run it —
+# skipping would silently return nothing for a legitimate request.
+@test "dead_rule still runs the contradiction analyzer" {
+	CARTOGRAPHER_TYPE_FILTER=dead_rule _run_audit
+	[ "$(_llm_calls)" = "1" ] || return 1
+	grep -q 'phase=relate starting' "$AUDIT_LOG" || return 1
+	run grep -c 'phase=relate skipped by type filter' "$AUDIT_LOG"
+	[ "$output" = "0" ]
+}
+
+@test "a type filter the relate phase cannot serve says so in the log" {
+	CARTOGRAPHER_TYPE_FILTER=scope_collision _run_audit
+	grep -q 'phase=relate skipped by type filter' "$AUDIT_LOG"
+}
+
+# A typo must not read as a clean repo.
+@test "an unknown type aborts instead of auditing nothing" {
+	run env CARTOGRAPHER_TYPE_FILTER=stale_refs CARTOGRAPHER_REPO_ROOT="$FIXTURE_REPO" bash "$AUDIT"
+	[ "$status" -ne 0 ] || return 1
+	grep -q "unknown type filter 'stale_refs'" "$AUDIT_LOG" || return 1
+	[ "$(_llm_calls)" = "0" ]
+}
+
+@test "the active filters are recorded in the log" {
+	CARTOGRAPHER_TYPE_FILTER=stale_ref CARTOGRAPHER_SCOPE_PATH=sub _run_audit
+	grep -q 'filter type=stale_ref' "$AUDIT_LOG" || return 1
+	grep -q 'filter scope=sub' "$AUDIT_LOG"
+}
+
+@test "a scope narrows the corpus without skipping analyzers" {
+	CARTOGRAPHER_SCOPE_PATH=sub _run_audit
+	grep -q 'phase=discover files=1' "$AUDIT_LOG" || return 1
+	[ "$(_llm_calls)" = "3" ]
+}
+
+@test "an absolute scope narrows the same way" {
+	CARTOGRAPHER_SCOPE_PATH="${FIXTURE_REPO}/sub" _run_audit
+	grep -q 'phase=discover files=1' "$AUDIT_LOG"
+}
+
+@test "the two filters compose" {
+	CARTOGRAPHER_TYPE_FILTER=stale_ref CARTOGRAPHER_SCOPE_PATH=sub _run_audit
+	grep -q 'phase=discover files=1' "$AUDIT_LOG" || return 1
+	[ "$(_llm_calls)" = "1" ]
+}
+
+@test "a scope matching nothing still completes cleanly" {
+	CARTOGRAPHER_SCOPE_PATH=does/not/exist run _run_audit
+	grep -q 'phase=discover files=0' "$AUDIT_LOG"
 }
 
 @test "the run record captures the trigger" {

@@ -29,6 +29,7 @@ source "$PLUGIN_ROOT/scripts/lib/cartographer-ulid.sh"
 source "$PLUGIN_ROOT/scripts/lib/cartographer-project-key.sh"
 source "$PLUGIN_ROOT/scripts/lib/cartographer-events.sh"
 source "$PLUGIN_ROOT/scripts/lib/cartographer-resolve.sh"
+source "$PLUGIN_ROOT/scripts/lib/cartographer-filter.sh"
 source "$PLUGIN_ROOT/scripts/lib/cartographer-collect.sh"
 source "$PLUGIN_ROOT/scripts/lib/cartographer-analyze.sh"
 source "$PLUGIN_ROOT/scripts/lib/cartographer-omission.sh"
@@ -37,6 +38,8 @@ CARTOGRAPHER_DIR="${CARTOGRAPHER_DIR:?CARTOGRAPHER_DIR must be set}"
 TRIGGER="${CARTOGRAPHER_TRIGGER:-manual}"
 TARGET_FILE="${CARTOGRAPHER_TARGET_FILE:-}"
 REPO_ROOT="${CARTOGRAPHER_REPO_ROOT:-$(pwd)}"
+TYPE_FILTER="${CARTOGRAPHER_TYPE_FILTER:-}"
+SCOPE_PATH="${CARTOGRAPHER_SCOPE_PATH:-}"
 AUDIT_ID=$(cartographer_ulid)
 START_TS=$(date +%s)
 
@@ -80,6 +83,16 @@ emit_safe() {
 	cartographer_emit_event "$1" "$2" 2>>"$CARTOGRAPHER_DIR/audit.log" || true
 }
 
+# Reject an unrecognized type rather than filtering everything away. An empty
+# audit is indistinguishable from a clean repo, so a typo would read as good
+# news — the same class of silent-nothing this flag was filed for.
+if [[ -n "$TYPE_FILTER" ]] && ! cartographer_filter_valid_type "$TYPE_FILTER"; then
+	log "error: unknown type filter '${TYPE_FILTER}' (expected one of: ${CARTOGRAPHER_FINDING_TYPES})"
+	exit 1
+fi
+[[ -n "$TYPE_FILTER" ]] && log "filter type=${TYPE_FILTER}"
+[[ -n "$SCOPE_PATH" ]] && log "filter scope=${SCOPE_PATH}"
+
 # ── Phase 1: Discover ──────────────────────────────────────────────────────────
 run_discover() {
 	log "phase=discover starting"
@@ -96,6 +109,14 @@ run_discover() {
 		local raw_global
 		raw_global=$(cartographer_collect_global_files)
 		GLOBAL_FILES=$(printf '%s\n' "$raw_global" | grep -v '^$' | jq -R . | jq -s .)
+	fi
+
+	# Scope narrows what gets analyzed, not what the repo root is: stale_ref
+	# resolves path tokens against the real root, and re-rooting would make
+	# every reference outside the scope look broken.
+	if [[ -n "$SCOPE_PATH" ]]; then
+		DISCOVERED_FILES=$(cartographer_filter_scope \
+			"$DISCOVERED_FILES" "$REPO_ROOT" "$SCOPE_PATH")
 	fi
 
 	local file_count
@@ -135,6 +156,16 @@ run_extract() {
 # ── Phase 3: Relate (contradiction + dead_rule) ────────────────────────────────
 run_relate() {
 	log "phase=relate starting"
+
+	# One LLM pass emits both contradiction and dead_rule, so asking for either
+	# runs it and the unwanted type is filtered out of the result below.
+	if ! cartographer_filter_wants "contradiction" "$TYPE_FILTER"; then
+		log "phase=relate skipped by type filter"
+		RELATE_FINDINGS="[]"
+		PHASES_COMPLETED+=("relate")
+		return 0
+	fi
+
 	local findings
 	findings=$($_TIMEOUT_CMD "$_phase_timeout" bash -c \
 		"source '$PLUGIN_ROOT/scripts/lib/cartographer-analyze.sh'
@@ -145,7 +176,7 @@ run_relate() {
 		PHASES_FAILED+=("relate")
 		return 1
 	}
-	RELATE_FINDINGS="${findings:-[]}"
+	RELATE_FINDINGS=$(cartographer_filter_findings "${findings:-[]}" "$TYPE_FILTER")
 	local count
 	count=$(printf '%s' "$RELATE_FINDINGS" | jq 'length' 2>/dev/null || printf '0')
 	log "phase=relate findings=${count}"
@@ -156,18 +187,24 @@ run_relate() {
 run_synthesize() {
 	log "phase=synthesize starting"
 
-	local stale_findings scope_findings
-	stale_findings=$($_TIMEOUT_CMD "$_phase_timeout" bash -c \
-		"source '$PLUGIN_ROOT/scripts/lib/cartographer-analyze.sh'
-		 cartographer_analyze_stale_ref '$DISCOVERED_FILES' '$REPO_ROOT' \
-		   '$_model_synthesis' '$_max_tokens_synthesis' '$_phase_timeout'" \
-		2>>"$CARTOGRAPHER_DIR/audit.log") || stale_findings="[]"
+	# Each analyzer skipped under a type filter is an LLM call not made, which
+	# is where the flag earns its keep.
+	local stale_findings="[]" scope_findings="[]"
+	if cartographer_filter_wants "stale_ref" "$TYPE_FILTER"; then
+		stale_findings=$($_TIMEOUT_CMD "$_phase_timeout" bash -c \
+			"source '$PLUGIN_ROOT/scripts/lib/cartographer-analyze.sh'
+			 cartographer_analyze_stale_ref '$DISCOVERED_FILES' '$REPO_ROOT' \
+			   '$_model_synthesis' '$_max_tokens_synthesis' '$_phase_timeout'" \
+			2>>"$CARTOGRAPHER_DIR/audit.log") || stale_findings="[]"
+	fi
 
-	scope_findings=$($_TIMEOUT_CMD "$_phase_timeout" bash -c \
-		"source '$PLUGIN_ROOT/scripts/lib/cartographer-analyze.sh'
-		 cartographer_analyze_scope_collision '$GLOBAL_FILES' '$DISCOVERED_FILES' \
-		   '$_model_synthesis' '$_max_tokens_synthesis' '$_phase_timeout'" \
-		2>>"$CARTOGRAPHER_DIR/audit.log") || scope_findings="[]"
+	if cartographer_filter_wants "scope_collision" "$TYPE_FILTER"; then
+		scope_findings=$($_TIMEOUT_CMD "$_phase_timeout" bash -c \
+			"source '$PLUGIN_ROOT/scripts/lib/cartographer-analyze.sh'
+			 cartographer_analyze_scope_collision '$GLOBAL_FILES' '$DISCOVERED_FILES' \
+			   '$_model_synthesis' '$_max_tokens_synthesis' '$_phase_timeout'" \
+			2>>"$CARTOGRAPHER_DIR/audit.log") || scope_findings="[]"
+	fi
 
 	# Disk → doc. Skipped on targeted post-write audits: DISCOVERED_FILES is a
 	# single file there, so grepping it for every entity name would report
@@ -175,7 +212,8 @@ run_synthesize() {
 	# dedup-sentinel those false findings permanently. scope_collision already
 	# no-ops on targeted runs for the same reason.
 	local omission_findings="[]"
-	if [[ -z "$TARGET_FILE" && "$_undocumented_enabled" == "true" ]]; then
+	if [[ -z "$TARGET_FILE" && "$_undocumented_enabled" == "true" ]] \
+		&& cartographer_filter_wants "undocumented_entity" "$TYPE_FILTER"; then
 		omission_findings=$($_TIMEOUT_CMD "$_phase_timeout" bash -c \
 			"source '$PLUGIN_ROOT/scripts/lib/cartographer-omission.sh'
 			 cartographer_analyze_undocumented_entity '$DISCOVERED_FILES' '$REPO_ROOT' \
