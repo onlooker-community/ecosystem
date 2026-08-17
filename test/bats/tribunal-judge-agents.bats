@@ -100,10 +100,20 @@ _agent_json() {
 }
 
 @test "the schema dependency admits criterion_scores" {
-	# criterion_scores and the criterion_floor reason land in 2.12.0. On ^2.11.0
+	# criterion_scores and the criterion_floor reason land in 2.12.0. Below that
 	# the runtime emitter rejects the payload wherever the package resolves.
-	local range
-	range=$(jq -r '.dependencies["@onlooker-community/schema"] // .devDependencies["@onlooker-community/schema"]' \
-		"${REPO_ROOT}/package.json")
-	[ "$range" = "^2.12.0" ]
+	#
+	# Asserted by validating a payload that carries criterion_scores rather than
+	# by matching the version range literally: the literal form pinned "^2.12.0"
+	# and so failed on the very next bump, which says nothing about whether the
+	# field is admitted. This checks the property the test is named for.
+	local payload
+	payload=$(jq -cn '{
+		task_id: "bats-task", score: 0.82, passed: true, judge_type: "adversarial",
+		criterion_scores: {"edge-cases": 0.7, "correctness": 0.9}
+	}')
+	jq -cn --argjson p "$payload" \
+		'{plugin: "tribunal", session_id: "bats", event_type: "tribunal.verdict", payload: $p}' \
+		| ONLOOKER_DIR="$ONLOOKER_DIR" \
+		  node "${REPO_ROOT}/scripts/lib/onlooker-event.mjs" emit >/dev/null
 }
