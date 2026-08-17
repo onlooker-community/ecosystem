@@ -12,7 +12,12 @@
 #
 # Config inputs (read via librarian_config_get from librarian_lesson_call):
 #   librarian.lesson_transform.model              Anthropic model id
-#   librarian.lesson_transform.timeout_seconds    Hard wall-clock ceiling
+#   librarian.lesson_transform.timeout_seconds    Per-call wall-clock ceiling
+#
+# timeout_seconds bounds one call, not a scan. The aggregate ceiling across a
+# whole SessionEnd is librarian.lesson_transform.total_budget_ms, enforced by
+# the caller in librarian-session-end.sh — a per-call timeout alone leaves
+# KEPT_COUNT of them unbounded end to end (ecosystem-qwi).
 
 # Fallback when config hasn't been loaded or leaves the key unset.
 _LIBRARIAN_LESSON_DEFAULT_TIMEOUT_SECONDS=20

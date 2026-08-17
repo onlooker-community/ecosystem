@@ -42,10 +42,17 @@ setup() {
   # based on the artifact's summary contents.
   STUB_BIN="${BATS_TEST_TMPDIR}/bin"
   mkdir -p "$STUB_BIN"
+  # Every invocation is recorded so budget tests can assert on how many model
+  # calls a scan actually made — the only evidence that distinguishes an
+  # analyzer skipped by the budget from one that ran and produced nothing.
+  export CLAUDE_CALL_LOG="${BATS_TEST_TMPDIR}/claude-calls"
+  : > "$CLAUDE_CALL_LOG"
+
   cat > "${STUB_BIN}/claude" <<'STUB'
 #!/usr/bin/env bash
 # Read the prompt from stdin and decide which classifier response to emit.
 prompt=$(cat)
+[[ -n "${CLAUDE_CALL_LOG:-}" ]] && echo call >> "$CLAUDE_CALL_LOG"
 if [[ "$prompt" == *"prefer-functional-stub"* ]]; then
   printf '%s' '{"type":"feedback","title":"Prefer functional patterns","body":"User prefers functional patterns over class-based.\n\n**Why:** Stated explicitly during code review.\n**How to apply:** Default to plain functions and composition.","confidence":0.84}'
 elif [[ "$prompt" == *"compliance-stub"* ]]; then
@@ -175,4 +182,88 @@ _hook_input() {
   # scan.complete reports empty outcome (zero proposals).
   grep '"event_type":"librarian.scan.complete"' "$ONLOOKER_EVENTS_LOG" \
     | jq -e '.payload.outcome == "empty" and .payload.candidates_proposed == 0 and .payload.candidates_dropped >= 1' >/dev/null
+}
+
+# ---------------------------------------------------------------------------
+# Stage 5 aggregate budget (ecosystem-qwi).
+#
+# Each lesson transform carries a 20s ceiling of its own, but nothing bounded
+# KEPT_COUNT of them end to end, so a backlog could hold SessionEnd open for
+# minutes. These assert on model call counts, because that is what separates
+# "the budget skipped the loop" from "the loop ran and found nothing".
+# ---------------------------------------------------------------------------
+
+_llm_calls() {
+  wc -l < "$CLAUDE_CALL_LOG" | tr -d ' '
+}
+
+_settings() {
+  cat > "${PROJECT_REPO}/.claude/settings.json"
+}
+
+# Carries the marker phrase the durability filter wants AND a version token,
+# without which the lesson pregate rejects it before any model call and the
+# budget tests could not tell the two states apart.
+_seed_lessonable() {
+  _seed_artifact "decisions" "01LESSONBUDGETARTIFACT000" \
+    "User prefers functional patterns prefer-functional-stub" \
+    "User explicitly said: always prefer plain functions over classes. Pinned vite 5.4.21 to avoid the regression."
+}
+
+@test "stage 5 runs a lesson transform when the budget allows" {
+  _seed_lessonable
+  run bash -c "printf '%s' '$(_hook_input)' | '$HOOK'"
+  [ "$status" -eq 0 ] || return 1
+  # One classifier call plus one lesson call.
+  [ "$(_llm_calls)" -ge 2 ]
+}
+
+# A zero budget trips on the first iteration, so stage 5 spends nothing. The
+# classifier call still happens, which is what makes this a measurement of the
+# stage 5 guard rather than of the scan being disabled.
+@test "a zero budget skips stage 5 entirely" {
+  echo '{"librarian":{"lesson_transform":{"total_budget_ms":0}}}' | _settings
+  _seed_lessonable
+  run bash -c "printf '%s' '$(_hook_input)' | '$HOOK'"
+  [ "$status" -eq 0 ] || return 1
+  [ "$(_llm_calls)" = "1" ]
+}
+
+# The guard must fail toward skipping stage 5, never toward skipping the
+# watermark advance — an unadvanced watermark re-scans the same backlog every
+# session, turning a one-time cost into a permanent one.
+@test "the watermark still advances when the budget trips" {
+  echo '{"librarian":{"lesson_transform":{"total_budget_ms":0}}}' | _settings
+  _seed_lessonable
+  run bash -c "printf '%s' '$(_hook_input)' | '$HOOK'"
+  [ "$status" -eq 0 ] || return 1
+  [ -f "${LIBRARIAN_DIR}/last_scan.json" ] || return 1
+  jq -e '.scanned_at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T")' "${LIBRARIAN_DIR}/last_scan.json" >/dev/null
+}
+
+@test "scan.complete is still emitted when the budget trips" {
+  echo '{"librarian":{"lesson_transform":{"total_budget_ms":0}}}' | _settings
+  _seed_lessonable
+  run bash -c "printf '%s' '$(_hook_input)' | '$HOOK'"
+  [ "$status" -eq 0 ] || return 1
+  grep '"event_type":"librarian.scan.complete"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e '.payload.outcome == "ok" or .payload.outcome == "empty"' >/dev/null
+}
+
+# Classification is upstream of stage 5, so a tripped lesson budget must not
+# cost the user their proposals.
+@test "a tripped lesson budget does not discard classifier proposals" {
+  echo '{"librarian":{"lesson_transform":{"total_budget_ms":0}}}' | _settings
+  _seed_lessonable
+  run bash -c "printf '%s' '$(_hook_input)' | '$HOOK'"
+  [ "$status" -eq 0 ] || return 1
+  grep '"event_type":"librarian.scan.complete"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e '.payload.candidates_proposed >= 1' >/dev/null
+}
+
+@test "the hook still exits 0 when the budget trips" {
+  echo '{"librarian":{"lesson_transform":{"total_budget_ms":0}}}' | _settings
+  _seed_lessonable
+  run bash -c "printf '%s' '$(_hook_input)' | '$HOOK'"
+  [ "$status" -eq 0 ]
 }
