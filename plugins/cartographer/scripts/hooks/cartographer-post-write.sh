@@ -66,18 +66,18 @@ export CARTOGRAPHER_TARGET_FILE="$CANONICAL"
 export CARTOGRAPHER_REPO_ROOT="$REPO_ROOT"
 export ONLOOKER_DIR
 
+# The launcher deliberately loads no config — see the matching note in
+# cartographer-session-start.sh. It execs run-audit.sh, which loads config once
+# for itself; anything loaded here is discarded by the exec, and could not have
+# resolved in the first place because PLUGIN_ROOT is not exported.
 if command -v setsid &>/dev/null; then
 	nohup setsid bash -c "
 	  trap 'source \"$PLUGIN_ROOT/scripts/lib/cartographer-lock.sh\"; cartographer_lock_release \"$LOCK_FILE\"' EXIT
-	  source \"$PLUGIN_ROOT/scripts/lib/cartographer-config.sh\"
-	  cartographer_config_load \"$REPO_ROOT\"
 	  exec \"$PLUGIN_ROOT/scripts/run-audit.sh\"
 	" >>"$CARTOGRAPHER_DIR/audit.log" 2>&1 &
 else
 	nohup bash -c "
 	  trap 'source \"$PLUGIN_ROOT/scripts/lib/cartographer-lock.sh\"; cartographer_lock_release \"$LOCK_FILE\"' EXIT
-	  source \"$PLUGIN_ROOT/scripts/lib/cartographer-config.sh\"
-	  cartographer_config_load \"$REPO_ROOT\"
 	  exec \"$PLUGIN_ROOT/scripts/run-audit.sh\"
 	" >>"$CARTOGRAPHER_DIR/audit.log" 2>&1 &
 fi

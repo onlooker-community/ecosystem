@@ -68,18 +68,21 @@ export CARTOGRAPHER_TRIGGER="$TRIGGER"
 export CARTOGRAPHER_REPO_ROOT="$REPO_ROOT"
 export ONLOOKER_DIR
 
+# The launcher deliberately loads no config. It execs run-audit.sh, which
+# replaces the process, and the config lives in a plain shell variable that is
+# never exported — so anything loaded here is discarded a line later. It also
+# could not have worked: PLUGIN_ROOT is not exported (only CLAUDE_PLUGIN_ROOT
+# is), so cartographer-config.sh resolved config-loader.sh against an empty
+# prefix in this sub-shell and appended two lines of noise to audit.log on every
+# audit. run-audit.sh loads config once, for itself.
 if command -v setsid &>/dev/null; then
 	nohup setsid bash -c "
 	  trap 'source \"$PLUGIN_ROOT/scripts/lib/cartographer-lock.sh\"; cartographer_lock_release \"$LOCK_FILE\"' EXIT
-	  source \"$PLUGIN_ROOT/scripts/lib/cartographer-config.sh\"
-	  cartographer_config_load \"$REPO_ROOT\"
 	  exec \"$PLUGIN_ROOT/scripts/run-audit.sh\"
 	" >>"$CARTOGRAPHER_DIR/audit.log" 2>&1 &
 else
 	nohup bash -c "
 	  trap 'source \"$PLUGIN_ROOT/scripts/lib/cartographer-lock.sh\"; cartographer_lock_release \"$LOCK_FILE\"' EXIT
-	  source \"$PLUGIN_ROOT/scripts/lib/cartographer-config.sh\"
-	  cartographer_config_load \"$REPO_ROOT\"
 	  exec \"$PLUGIN_ROOT/scripts/run-audit.sh\"
 	" >>"$CARTOGRAPHER_DIR/audit.log" 2>&1 &
 fi

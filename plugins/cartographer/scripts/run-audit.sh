@@ -51,6 +51,16 @@ PHASES_COMPLETED=()
 PHASES_FAILED=()
 ALL_FINDINGS="[]"
 
+# Load config before any accessor runs. Without this every accessor below falls
+# through to its hardcoded default, so exclude_paths, the timeouts, the models,
+# and the token caps were all silently unconfigurable — the orchestrator was the
+# one place that never loaded (ecosystem-88v).
+#
+# This is the single load for the whole audit. The analysis sub-shells take
+# their settings as positional parameters and read no config of their own, so
+# the values resolved here are the ones that take effect everywhere.
+cartographer_config_load "$REPO_ROOT"
+
 _phase_timeout=$(cartographer_config_phase_timeout)
 _total_timeout=$(cartographer_config_total_timeout)
 log() { printf '[cartographer] %s\n' "$*" >>"$CARTOGRAPHER_DIR/audit.log" 2>&1; }
@@ -61,6 +71,10 @@ _model_synthesis=$(cartographer_config_model_synthesis)
 _max_tokens_extraction=$(cartographer_config_max_output_tokens_extraction)
 _max_tokens_synthesis=$(cartographer_config_max_output_tokens_synthesis)
 _exclude_json=$(cartographer_config_exclude_paths)
+_undocumented_enabled=$(cartographer_config_undocumented_enabled)
+_undocumented_globs=$(cartographer_config_undocumented_globs)
+_undocumented_exclude=$(cartographer_config_undocumented_exclude)
+_undocumented_max=$(cartographer_config_undocumented_max_findings)
 
 emit_safe() {
 	cartographer_emit_event "$1" "$2" 2>>"$CARTOGRAPHER_DIR/audit.log" || true
@@ -123,9 +137,7 @@ run_relate() {
 	log "phase=relate starting"
 	local findings
 	findings=$($_TIMEOUT_CMD "$_phase_timeout" bash -c \
-		"source '$PLUGIN_ROOT/scripts/lib/cartographer-config.sh'
-		 source '$PLUGIN_ROOT/scripts/lib/cartographer-analyze.sh'
-		 cartographer_config_load '$REPO_ROOT'
+		"source '$PLUGIN_ROOT/scripts/lib/cartographer-analyze.sh'
 		 cartographer_analyze_contradiction '$DISCOVERED_FILES' \
 		   '$_model_extraction' '$_max_tokens_extraction' '$_phase_timeout'" \
 		2>>"$CARTOGRAPHER_DIR/audit.log") || {
@@ -146,17 +158,13 @@ run_synthesize() {
 
 	local stale_findings scope_findings
 	stale_findings=$($_TIMEOUT_CMD "$_phase_timeout" bash -c \
-		"source '$PLUGIN_ROOT/scripts/lib/cartographer-config.sh'
-		 source '$PLUGIN_ROOT/scripts/lib/cartographer-analyze.sh'
-		 cartographer_config_load '$REPO_ROOT'
+		"source '$PLUGIN_ROOT/scripts/lib/cartographer-analyze.sh'
 		 cartographer_analyze_stale_ref '$DISCOVERED_FILES' '$REPO_ROOT' \
 		   '$_model_synthesis' '$_max_tokens_synthesis' '$_phase_timeout'" \
 		2>>"$CARTOGRAPHER_DIR/audit.log") || stale_findings="[]"
 
 	scope_findings=$($_TIMEOUT_CMD "$_phase_timeout" bash -c \
-		"source '$PLUGIN_ROOT/scripts/lib/cartographer-config.sh'
-		 source '$PLUGIN_ROOT/scripts/lib/cartographer-analyze.sh'
-		 cartographer_config_load '$REPO_ROOT'
+		"source '$PLUGIN_ROOT/scripts/lib/cartographer-analyze.sh'
 		 cartographer_analyze_scope_collision '$GLOBAL_FILES' '$DISCOVERED_FILES' \
 		   '$_model_synthesis' '$_max_tokens_synthesis' '$_phase_timeout'" \
 		2>>"$CARTOGRAPHER_DIR/audit.log") || scope_findings="[]"
@@ -166,25 +174,12 @@ run_synthesize() {
 	# nearly the whole enumeration as undocumented, and the emit phase would
 	# dedup-sentinel those false findings permanently. scope_collision already
 	# no-ops on targeted runs for the same reason.
-	#
-	# Config is read inside the sub-shell rather than passed in, because the
-	# orchestrator's own config is never loaded (ecosystem-88v). PLUGIN_ROOT is
-	# assigned here because run-audit.sh does not export it, which is why the
-	# sibling phases' cartographer_config_load calls fail. Remove both
-	# workarounds when 88v lands.
 	local omission_findings="[]"
-	if [[ -z "$TARGET_FILE" ]]; then
+	if [[ -z "$TARGET_FILE" && "$_undocumented_enabled" == "true" ]]; then
 		omission_findings=$($_TIMEOUT_CMD "$_phase_timeout" bash -c \
-			"PLUGIN_ROOT='$PLUGIN_ROOT'
-			 source '$PLUGIN_ROOT/scripts/lib/cartographer-config.sh'
-			 source '$PLUGIN_ROOT/scripts/lib/cartographer-omission.sh'
-			 cartographer_config_load '$REPO_ROOT'
-			 [[ \"\$(cartographer_config_undocumented_enabled)\" == 'true' ]] \
-			   || { printf '[]'; exit 0; }
+			"source '$PLUGIN_ROOT/scripts/lib/cartographer-omission.sh'
 			 cartographer_analyze_undocumented_entity '$DISCOVERED_FILES' '$REPO_ROOT' \
-			   \"\$(cartographer_config_undocumented_globs)\" \
-			   \"\$(cartographer_config_undocumented_exclude)\" \
-			   \"\$(cartographer_config_undocumented_max_findings)\"" \
+			   '$_undocumented_globs' '$_undocumented_exclude' '$_undocumented_max'" \
 			2>>"$CARTOGRAPHER_DIR/audit.log") || omission_findings="[]"
 	fi
 
