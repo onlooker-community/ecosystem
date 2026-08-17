@@ -55,14 +55,15 @@ After the audit completes, read findings and render them to the conversation gro
 
 ### `/cartographer --verbose` — all findings
 
-Shows ALL known findings (new + previously seen) from `$CARTOGRAPHER_DIR/findings/`. Does NOT re-emit bus events — renders to in-conversation output only.
+Shows ALL known findings (new + previously seen) from `$CARTOGRAPHER_DIR/findings/`, including ones already resolved — that is what makes this the verbose view. Resolved findings are tagged so "did my fix take?" is answerable here. Does NOT re-emit bus events — renders to in-conversation output only.
 
 ```bash
 echo "## Known Cartographer Findings"
 echo ""
 for f in "$CARTOGRAPHER_DIR/findings/"*.json; do
   [[ -f "$f" ]] || continue
-  jq -r '"**[\(.severity | ascii_upcase)]** \(.type) — \(.description)\n  Files: \(.file_a // "n/a") / \(.file_b // "n/a")\n  Fix: \(.suggested_fix // "n/a")\n"' "$f" 2>/dev/null
+  jq -r '(if .resolved == true then "[RESOLVED] " else "" end) as $r |
+    "\($r)**[\(.severity | ascii_upcase)]** \(.type) — \(.description)\n  Files: \(.file_a // "n/a") / \(.file_b // "n/a")\n  Fix: \(.suggested_fix // "n/a")\n"' "$f" 2>/dev/null
 done
 ```
 
@@ -86,7 +87,10 @@ fi
 
 runs=$(ls "$CARTOGRAPHER_DIR/runs/" 2>/dev/null | wc -l | tr -d ' ')
 total=$(ls "$CARTOGRAPHER_DIR/findings/" 2>/dev/null | wc -l | tr -d ' ')
-echo "Total findings on disk: $total"
+open=$(cat "$CARTOGRAPHER_DIR/findings/"*.json 2>/dev/null \
+  | jq -s '[.[] | select(.resolved != true)] | length' 2>/dev/null || echo 0)
+echo "Open findings: $open"
+echo "Total findings on disk: $total (includes resolved)"
 echo "Audit runs recorded: $runs"
 ```
 
@@ -118,7 +122,9 @@ Limits discovery to files under `<path>`. Set `CARTOGRAPHER_SCOPE_PATH` before r
 
 ## Rendering Findings
 
-After a manual audit completes, render findings grouped by severity:
+After a manual audit completes, render findings grouped by severity. Resolved
+findings are skipped — a finding whose drift the user already fixed must stop
+appearing here, or the advice to fix it never stops being given:
 
 ```bash
 echo "## Cartographer Findings"
@@ -129,6 +135,7 @@ for severity in error warning informational; do
   output=""
   for f in "$CARTOGRAPHER_DIR/findings/"*.json; do
     [[ -f "$f" ]] || continue
+    jq -e '.resolved != true' "$f" >/dev/null 2>&1 || continue
     fsev=$(jq -r '.severity // "warning"' "$f" 2>/dev/null)
     [[ "$fsev" != "$severity" ]] && continue
     (( count++ )) || true

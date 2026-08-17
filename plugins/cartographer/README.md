@@ -130,9 +130,22 @@ additions if you mean to extend.
 └── dedup/                 # empty sentinel per emitted finding hash
 ```
 
+## Finding lifecycle
+
+A finding is born `resolved: false` and refreshed on every audit that observes it again. A **full** audit that completes without a failed phase then retires anything it did not observe: absence is the evidence that the drift is gone, so those records get `resolved: true` and a `resolved_at` stamp, and `/cartographer` stops rendering them. `/cartographer --verbose` still lists them, tagged `[RESOLVED]`, so you can confirm a fix took.
+
+Two runs deliberately retire nothing, because neither looked widely enough for absence to mean anything:
+
+- **Targeted post-write audits** evaluate a single file, so nearly every stored finding is absent for reasons unrelated to being fixed.
+- **Partial runs** (any phase timed out or errored) produce no findings for the phase that failed, which is indistinguishable from its findings being gone.
+
+Resolution is not terminal. The dedup sentinel outlives it, so drift that is reintroduced returns as a *known* finding — that path reopens the record (`resolved: false`, `resolved_at` cleared) rather than filing a new one, keeping `first_seen_at` intact. Without that, a recurring finding would stay hidden forever.
+
 ## Event delivery
 
 `cartographer.issue.found` events are delivered at-least-once. If the audit process crashes between emitting an event and writing the dedup sentinel, the finding is re-emitted once on the next run. Downstream consumers must deduplicate on `payload.finding_hash`.
+
+Resolution is currently **local only** — no event announces it, so a consumer reading the event log alone sees findings open forever. The run record's `resolved_finding_count` and the finding files carry the truth.
 
 ## Non-goals
 
