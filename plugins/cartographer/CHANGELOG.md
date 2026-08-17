@@ -2,6 +2,13 @@
 
 All notable changes to the Cartographer plugin are documented here.
 
+## [0.4.1](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.4.0...cartographer-v0.4.1) (2026-08-17)
+
+
+### Bug Fixes
+
+* **cartographer:** put its events on the bus for the first time :mega: ([#170](https://github.com/onlooker-community/ecosystem/issues/170)) ([91be8d2](https://github.com/onlooker-community/ecosystem/commit/91be8d2c9f171006db12842f3e582d001f9d4e27))
+
 ## [0.4.0](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.3.1...cartographer-v0.4.0) (2026-08-16)
 
 

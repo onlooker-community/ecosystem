@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.41.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.41.0...ecosystem-v0.41.1) (2026-08-17)
+
+
+### Bug Fixes
+
+* **cartographer:** put its events on the bus for the first time :mega: ([#170](https://github.com/onlooker-community/ecosystem/issues/170)) ([91be8d2](https://github.com/onlooker-community/ecosystem/commit/91be8d2c9f171006db12842f3e582d001f9d4e27))
+
 ## [0.41.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.40.8...ecosystem-v0.41.0) (2026-08-16)
 
 
