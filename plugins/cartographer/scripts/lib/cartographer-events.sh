@@ -44,6 +44,54 @@ _cartographer_session_id() {
 	printf 'unknown'
 }
 
+# Build the cartographer.issue.found payload for one finding record.
+#
+# Lives here rather than inline in run_emit so the test suite drives the same
+# construction production does. Two independent descriptions of one payload is
+# precisely how the published schema came to document events no code had ever
+# emitted; a single builder means a test that passes is evidence about the real
+# emission path, not about a copy of it.
+#
+# Usage: cartographer_issue_found_payload <audit_id> <finding_hash> <finding_json>
+cartographer_issue_found_payload() {
+	local audit_id="${1:-}" finding_hash="${2:-}" finding="${3:-}"
+	[[ -z "$audit_id" || -z "$finding_hash" || -z "$finding" ]] && return 1
+
+	local ftype fseverity ffile_a ffile_b fdesc
+	ftype=$(printf '%s' "$finding" | jq -r '.type // "unknown"')
+	fseverity=$(printf '%s' "$finding" | jq -r '.severity // "warning"')
+	ffile_a=$(printf '%s' "$finding" | jq -r '.file_a // ""')
+	ffile_b=$(printf '%s' "$finding" | jq -r '.file_b // null')
+	fdesc=$(printf '%s' "$finding" | jq -r '.description // ""')
+
+	jq -n \
+		--arg audit_id "$audit_id" \
+		--arg finding_hash "$finding_hash" \
+		--arg finding_type "$ftype" \
+		--arg severity "$fseverity" \
+		--argjson affected_files "$(jq -n --arg a "$ffile_a" --arg b "$ffile_b" \
+			'if $b == "null" or $b == "" then [$a] else [$a,$b] end')" \
+		--arg summary "$fdesc" \
+		'{"audit_id":$audit_id,"finding_hash":$finding_hash,"finding_type":$finding_type,"severity":$severity,"affected_files":$affected_files,"summary":$summary}'
+}
+
+# Build the cartographer.audit.complete payload for a finished run.
+#
+# Usage: cartographer_audit_complete_payload <audit_id> <trigger> <new_count> <total_count> <duration_ms>
+cartographer_audit_complete_payload() {
+	local audit_id="${1:-}" trigger="${2:-}"
+	local new_count="${3:-0}" total_count="${4:-0}" duration_ms="${5:-0}"
+	[[ -z "$audit_id" ]] && return 1
+
+	jq -n \
+		--arg audit_id "$audit_id" \
+		--arg trigger "$trigger" \
+		--argjson new_finding_count "$new_count" \
+		--argjson total_finding_count "$total_count" \
+		--argjson duration_ms "$duration_ms" \
+		'{"audit_id":$audit_id,"trigger":$trigger,"new_finding_count":$new_finding_count,"total_finding_count":$total_finding_count,"duration_ms":$duration_ms}'
+}
+
 cartographer_emit_event() {
 	local event_type="${1:-}"
 	local payload="${2:-}"

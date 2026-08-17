@@ -258,22 +258,8 @@ run_emit() {
 			printf '%s\n' "$with_ts" >"${finding_file}.tmp"
 			mv -f "${finding_file}.tmp" "$finding_file"
 
-			local ftype fseverity ffile_a ffile_b fdesc
-			ftype=$(printf '%s' "$finding" | jq -r '.type // "unknown"')
-			fseverity=$(printf '%s' "$finding" | jq -r '.severity // "warning"')
-			ffile_a=$(printf '%s' "$finding" | jq -r '.file_a // ""')
-			ffile_b=$(printf '%s' "$finding" | jq -r '.file_b // null')
-			fdesc=$(printf '%s' "$finding" | jq -r '.description // ""')
-
-			emit_safe "cartographer.issue.found" "$(jq -n \
-				--arg audit_id "$AUDIT_ID" \
-				--arg finding_hash "$fhash" \
-				--arg finding_type "$ftype" \
-				--arg severity "$fseverity" \
-				--argjson affected_files "$(jq -n --arg a "$ffile_a" --arg b "$ffile_b" \
-					'if $b == "null" or $b == "" then [$a] else [$a,$b] end')" \
-				--arg summary "$fdesc" \
-				'{"audit_id":$audit_id,"finding_hash":$finding_hash,"finding_type":$finding_type,"severity":$severity,"affected_files":$affected_files,"summary":$summary}')"
+			emit_safe "cartographer.issue.found" \
+				"$(cartographer_issue_found_payload "$AUDIT_ID" "$fhash" "$finding")"
 
 			touch "$dedup_sentinel"
 			(( new_count++ )) || true
@@ -301,13 +287,9 @@ run_emit() {
 		'{"audit_id":$audit_id,"trigger":$trigger,"new_finding_count":$new_finding_count,"known_finding_count":$known_finding_count,"total_finding_count":$total_finding_count,"duration_ms":$duration_ms,"phases_completed":$phases_completed,"phases_failed":$phases_failed}' \
 		>"${run_file}.tmp" && mv -f "${run_file}.tmp" "$run_file"
 
-	emit_safe "cartographer.audit.complete" "$(jq -n \
-		--arg audit_id "$AUDIT_ID" \
-		--arg trigger "$TRIGGER" \
-		--argjson new_finding_count "$new_count" \
-		--argjson total_finding_count "$total_count" \
-		--argjson duration_ms "$duration_ms" \
-		'{"audit_id":$audit_id,"trigger":$trigger,"new_finding_count":$new_finding_count,"total_finding_count":$total_finding_count,"duration_ms":$duration_ms}')"
+	emit_safe "cartographer.audit.complete" \
+		"$(cartographer_audit_complete_payload \
+			"$AUDIT_ID" "$TRIGGER" "$new_count" "$total_count" "$duration_ms")"
 
 	PHASES_COMPLETED+=("emit")
 }
