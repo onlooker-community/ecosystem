@@ -2,6 +2,18 @@
 
 All notable changes to the Cartographer plugin are documented here.
 
+## [0.5.0](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.4.3...cartographer-v0.5.0) (2026-08-18)
+
+
+### Features
+
+* **cartographer:** narrow an audit by finding type or subtree :mag: ([#177](https://github.com/onlooker-community/ecosystem/issues/177)) ([94764df](https://github.com/onlooker-community/ecosystem/commit/94764dfc8386521a06c8234bc506cb51a667588d))
+
+
+### Bug Fixes
+
+* **librarian:** stop stage 5 from holding a session open :hourglass: ([#178](https://github.com/onlooker-community/ecosystem/issues/178)) ([4f12a1e](https://github.com/onlooker-community/ecosystem/commit/4f12a1ee25300e0dc372542814e0922df5dbd335))
+
 ## [0.4.3](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.4.2...cartographer-v0.4.3) (2026-08-17)
 
 

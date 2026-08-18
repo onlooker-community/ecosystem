@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.13.2](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.13.1...librarian-v0.13.2) (2026-08-18)
+
+
+### Bug Fixes
+
+* **librarian:** put budget skips on the bus at last :satellite: ([#180](https://github.com/onlooker-community/ecosystem/issues/180)) ([bc91749](https://github.com/onlooker-community/ecosystem/commit/bc917495dab053cba825ea28ccdd1993fdacb3e9))
+* **librarian:** stop stage 5 from holding a session open :hourglass: ([#178](https://github.com/onlooker-community/ecosystem/issues/178)) ([4f12a1e](https://github.com/onlooker-community/ecosystem/commit/4f12a1ee25300e0dc372542814e0922df5dbd335))
+
 ## [0.13.1](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.13.0...librarian-v0.13.1) (2026-08-15)
 
 
