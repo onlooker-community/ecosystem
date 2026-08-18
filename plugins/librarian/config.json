@@ -18,7 +18,8 @@
     },
     "lesson_transform": {
       "model": "claude-haiku-4-5-20251001",
-      "timeout_seconds": 20
+      "timeout_seconds": 20,
+      "total_budget_ms": 8000
     },
     "lesson_judging": {
       "min_criterion_coverage": 0.6,

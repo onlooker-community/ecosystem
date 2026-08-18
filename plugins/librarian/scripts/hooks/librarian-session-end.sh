@@ -435,11 +435,30 @@ done
 #
 # Runs over the same durability survivors the classifier saw. Each artifact is
 # independent: a decline or an outage on one never stops the rest.
+#
+# Budgeted in aggregate, not just per call. Each transform carries a 20s
+# ceiling of its own, but nothing bounded KEPT_COUNT of them end to end, so a
+# backlog could hold SessionEnd open for minutes (ecosystem-qwi). The check is
+# per iteration rather than once before the loop: a pre-loop gate only decides
+# whether to start, and once started the cost is still unbounded — which is the
+# gap the classifier loop above still has.
+#
+# Skipping is the safe direction. Untransformed artifacts are reconsidered on a
+# later session, so the cost of stopping early is a delay; the cost of not
+# stopping is a session that will not close.
 # ---------------------------------------------------------------------------
 LESSON_PROPOSED=0
 LESSON_DECLINED=0
 
+LESSON_BUDGET_MS=$(librarian_config_get '.librarian.lesson_transform.total_budget_ms' 2>/dev/null)
+[[ -z "$LESSON_BUDGET_MS" || "$LESSON_BUDGET_MS" == "null" ]] && LESSON_BUDGET_MS=8000
+LESSON_START_MS=$(librarian_now_ms)
+
 for ((li = 0; li < KEPT_COUNT; li++)); do
+	if [[ $(( $(librarian_now_ms) - LESSON_START_MS )) -ge "$LESSON_BUDGET_MS" ]]; then
+		break
+	fi
+
 	LESSON_ARTIFACT=$(printf '%s' "$KEPT" | jq -c ".[$li]")
 	[[ -z "$LESSON_ARTIFACT" || "$LESSON_ARTIFACT" == "null" ]] && continue
 
@@ -449,6 +468,18 @@ for ((li = 0; li < KEPT_COUNT; li++)); do
 		declined:*) LESSON_DECLINED=$((LESSON_DECLINED + 1)) ;;
 	esac
 done
+
+# A truncated stage 5 emits nothing, deliberately. The published schema has no
+# vocabulary for a budget skip: candidate.dropped's reason enum does not carry
+# one and its payload is additionalProperties:false, so any such event would
+# fail validation and be swallowed — telemetry that looks present and is not.
+#
+# The same gap already bites the classifier gate above, which emits
+# outcome:"budget_exceeded" against an enum of ok/empty/skipped and has
+# therefore never reached the bus at all. One schema change fixes both; tracked
+# separately rather than folded in here, since it needs a release of
+# @onlooker-community/schema. Until then a truncated stage 5 is visible only as
+# a scan.complete whose duration_ms sits at the budget.
 
 # ----------------------------------------------------------------------------
 # Watermark advance + scan.complete.
