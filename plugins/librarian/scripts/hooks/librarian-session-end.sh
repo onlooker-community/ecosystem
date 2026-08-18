@@ -449,6 +449,7 @@ done
 # ---------------------------------------------------------------------------
 LESSON_PROPOSED=0
 LESSON_DECLINED=0
+LESSONS_SKIPPED=0
 
 LESSON_BUDGET_MS=$(librarian_config_get '.librarian.lesson_transform.total_budget_ms' 2>/dev/null)
 [[ -z "$LESSON_BUDGET_MS" || "$LESSON_BUDGET_MS" == "null" ]] && LESSON_BUDGET_MS=8000
@@ -456,6 +457,7 @@ LESSON_START_MS=$(librarian_now_ms)
 
 for ((li = 0; li < KEPT_COUNT; li++)); do
 	if [[ $(( $(librarian_now_ms) - LESSON_START_MS )) -ge "$LESSON_BUDGET_MS" ]]; then
+		LESSONS_SKIPPED=$(( KEPT_COUNT - li ))
 		break
 	fi
 
@@ -469,17 +471,10 @@ for ((li = 0; li < KEPT_COUNT; li++)); do
 	esac
 done
 
-# A truncated stage 5 emits nothing, deliberately. The published schema has no
-# vocabulary for a budget skip: candidate.dropped's reason enum does not carry
-# one and its payload is additionalProperties:false, so any such event would
-# fail validation and be swallowed — telemetry that looks present and is not.
-#
-# The same gap already bites the classifier gate above, which emits
-# outcome:"budget_exceeded" against an enum of ok/empty/skipped and has
-# therefore never reached the bus at all. One schema change fixes both; tracked
-# separately rather than folded in here, since it needs a release of
-# @onlooker-community/schema. Until then a truncated stage 5 is visible only as
-# a scan.complete whose duration_ms sits at the budget.
+# LESSONS_SKIPPED rides on scan.complete below rather than becoming an event of
+# its own. A truncated stage 5 is not a truncated scan: the scan finishes
+# normally and only this stage stops early, so the count belongs beside a
+# healthy outcome rather than replacing it.
 
 # ----------------------------------------------------------------------------
 # Watermark advance + scan.complete.
@@ -496,12 +491,14 @@ librarian_emit "librarian.scan.complete" "$SESSION_ID" "$(jq -cn \
 	--arg outcome "$OUTCOME" \
 	--argjson candidates_proposed "$PROPOSED_COUNT" \
 	--argjson candidates_dropped "$TOTAL_DROPPED" \
+	--argjson lessons_skipped "$LESSONS_SKIPPED" \
 	--argjson duration_ms "$DURATION_MS" \
 	--argjson artifact_count_in_window "$ARTIFACT_COUNT" \
 	'{
 		outcome: $outcome,
 		candidates_proposed: $candidates_proposed,
 		candidates_dropped: $candidates_dropped,
+		lessons_skipped: $lessons_skipped,
 		duration_ms: $duration_ms,
 		artifact_count_in_window: $artifact_count_in_window
 	}')"
