@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.42.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.41.3...ecosystem-v0.42.0) (2026-08-18)
+
+
+### Features
+
+* **cartographer:** narrow an audit by finding type or subtree :mag: ([#177](https://github.com/onlooker-community/ecosystem/issues/177)) ([94764df](https://github.com/onlooker-community/ecosystem/commit/94764dfc8386521a06c8234bc506cb51a667588d))
+
+
+### Bug Fixes
+
+* **librarian:** put budget skips on the bus at last :satellite: ([#180](https://github.com/onlooker-community/ecosystem/issues/180)) ([bc91749](https://github.com/onlooker-community/ecosystem/commit/bc917495dab053cba825ea28ccdd1993fdacb3e9))
+* **librarian:** stop stage 5 from holding a session open :hourglass: ([#178](https://github.com/onlooker-community/ecosystem/issues/178)) ([4f12a1e](https://github.com/onlooker-community/ecosystem/commit/4f12a1ee25300e0dc372542814e0922df5dbd335))
+
 ## [0.41.3](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.41.2...ecosystem-v0.41.3) (2026-08-17)
 
 
