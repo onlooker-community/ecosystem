@@ -267,3 +267,73 @@ _seed_lessonable() {
   run bash -c "printf '%s' '$(_hook_input)' | '$HOOK'"
   [ "$status" -eq 0 ]
 }
+
+# ---------------------------------------------------------------------------
+# Budget telemetry reaches the bus (ecosystem-1p1).
+#
+# librarian_emit swallows a validation failure and returns 0, appending to the
+# log only when the emitter accepted the payload. So presence on the bus is
+# proof the event validated — which is exactly the property that was missing:
+# the classifier gate's outcome:"budget_exceeded" was rejected by the schema
+# and silently dropped for as long as the gate has existed.
+# ---------------------------------------------------------------------------
+
+_scan_complete() {
+  grep '"event_type":"librarian.scan.complete"' "$ONLOOKER_EVENTS_LOG" | tail -1
+}
+
+@test "a truncated stage 5 reports how many artifacts it skipped" {
+  echo '{"librarian":{"lesson_transform":{"total_budget_ms":0}}}' | _settings
+  _seed_lessonable
+  run bash -c "printf '%s' '$(_hook_input)' | '$HOOK'"
+  [ "$status" -eq 0 ] || return 1
+  _scan_complete | jq -e '.payload.lessons_skipped >= 1' >/dev/null
+}
+
+# lessons_skipped accompanies a healthy outcome rather than replacing it: the
+# scan completed, only the one stage stopped early.
+@test "the skip count rides alongside a normal outcome" {
+  echo '{"librarian":{"lesson_transform":{"total_budget_ms":0}}}' | _settings
+  _seed_lessonable
+  run bash -c "printf '%s' '$(_hook_input)' | '$HOOK'"
+  [ "$status" -eq 0 ] || return 1
+  _scan_complete | jq -e '.payload.outcome == "ok" or .payload.outcome == "empty"' >/dev/null
+}
+
+@test "an untruncated scan reports zero skipped" {
+  _seed_lessonable
+  run bash -c "printf '%s' '$(_hook_input)' | '$HOOK'"
+  [ "$status" -eq 0 ] || return 1
+  _scan_complete | jq -e '.payload.lessons_skipped == 0' >/dev/null
+}
+
+# The regression guard for the original bug. This payload is what the classifier
+# gate builds verbatim; before schema 2.14.0 it failed validation and never
+# appeared on the bus at all.
+@test "the classifier gate's budget_exceeded payload reaches the bus" {
+  # shellcheck disable=SC1091
+  export _LIBRARIAN_EVENT_JS="${REPO_ROOT}/scripts/lib/onlooker-event.mjs"
+  source "${PLUGIN_ROOT}/scripts/lib/librarian-emit.sh"
+  mkdir -p "$(dirname "$ONLOOKER_EVENTS_LOG")"
+
+  librarian_emit "librarian.scan.complete" "sess-budget" "$(jq -cn \
+    '{ outcome: "budget_exceeded", duration_ms: 1200, candidates_proposed: 0,
+       candidates_dropped: 3, artifact_count_in_window: 5 }')"
+
+  _scan_complete | jq -e '.payload.outcome == "budget_exceeded"' >/dev/null
+}
+
+@test "an outcome outside the enum is still refused" {
+  export _LIBRARIAN_EVENT_JS="${REPO_ROOT}/scripts/lib/onlooker-event.mjs"
+  # shellcheck disable=SC1091
+  source "${PLUGIN_ROOT}/scripts/lib/librarian-emit.sh"
+  mkdir -p "$(dirname "$ONLOOKER_EVENTS_LOG")"
+
+  librarian_emit "librarian.scan.complete" "sess-bad" \
+    '{"outcome":"gave_up","duration_ms":5}'
+
+  # A refused payload never reaches the log, so the file may not exist at all.
+  # grep on a missing file errors rather than printing 0, which is why this
+  # asserts absence directly instead of comparing a count.
+  ! grep -q '"outcome":"gave_up"' "$ONLOOKER_EVENTS_LOG" 2>/dev/null
+}
