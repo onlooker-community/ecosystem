@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.42.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.42.1...ecosystem-v0.42.2) (2026-08-19)
+
+
+### Bug Fixes
+
+* **release:** publish with provenance so npm stops refusing us :unlock: ([#184](https://github.com/onlooker-community/ecosystem/issues/184)) ([0921118](https://github.com/onlooker-community/ecosystem/commit/0921118401a4c165ba07471a5d573dbe21a35119))
+
 ## [0.42.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.42.0...ecosystem-v0.42.1) (2026-08-19)
 
 
