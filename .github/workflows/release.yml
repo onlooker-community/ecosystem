@@ -39,7 +39,17 @@ jobs:
       - run: npm ci
         if: ${{ contains(fromJSON(steps.release.outputs.paths_released || '[]'), '.') }}
 
-      - run: npm publish
+      # --provenance is what makes the id-token: write permission above do
+      # anything. Without it npm never requests an OIDC token and the publish
+      # authenticates with NPM_TOKEN alone — a classic automation token, which
+      # this package's 2FA policy rejects with a 403. The permission has been
+      # granted since #175 and inert ever since, so every release from 0.35.0
+      # on tagged cleanly and never reached npm.
+      #
+      # --access public is a no-op on an already-public package; it is here for
+      # parity with onlooker-community/schema's publish-npm.yml, the one
+      # configuration in this org that publishes successfully.
+      - run: npm publish --provenance --access public
         if: ${{ contains(fromJSON(steps.release.outputs.paths_released || '[]'), '.') }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
