@@ -144,6 +144,50 @@ _finding() {
 	[ "$status" -ne 0 ]
 }
 
+# A finding that reaches the emit phase without a usable .type is a bug in
+# whichever analysis phase produced it. The builder used to paper over that with
+# finding_type "unknown" — a value no schema admits — so the payload was
+# rejected, emit_safe swallowed the rejection with `|| true`, and the finding
+# landed on disk with nothing on the bus. Failing here instead puts the problem
+# in audit.log where an operator can read it (ecosystem-ci0).
+#
+# Empty string is covered alongside null and absent because jq's `//` treats ""
+# as present, so it slipped past the old fallback and produced a payload just as
+# unvalidatable as "unknown", by a different route.
+@test "a finding with no usable type is rejected rather than defaulted" {
+	local shape
+	for shape in '{}' '{"type":null}' '{"type":""}'; do
+		run cartographer_issue_found_payload "$AUDIT_ID" "abc123" \
+			"$(jq -cn --argjson s "$shape" \
+				'$s + {severity:"warning", file_a:"CLAUDE.md", description:"d"}')"
+		[ "$status" -ne 0 ] || return 1
+	done
+}
+
+# End-to-end statement of the symptom. Note this one does NOT discriminate the
+# builder fix — before it, the schema rejected "unknown" downstream and the bus
+# stayed empty for that reason instead. What it guards is the schema side: it
+# fails if anyone ever admits "unknown" into the finding_type enum, which was
+# the tempting cheap fix ci0 rejected.
+@test "a typeless finding puts nothing on the bus" {
+	_require_cartographer_schema
+	run cartographer_emit_event "cartographer.issue.found" \
+		"$(cartographer_issue_found_payload "$AUDIT_ID" "abc123" \
+			'{"severity":"warning","file_a":"CLAUDE.md","description":"d"}')"
+	[ "$status" -ne 0 ] || return 1
+	[ ! -s "$ONLOOKER_EVENTS_LOG" ]
+}
+
+@test "the builder names the rejected finding on stderr" {
+	# Returning non-zero is not enough on its own — emit_safe appends this
+	# stream to audit.log, so the message is what an operator actually reads.
+	run cartographer_issue_found_payload "$AUDIT_ID" "abc123" \
+		'{"severity":"warning","file_a":"CLAUDE.md","description":"d"}'
+	[ "$status" -ne 0 ] || return 1
+	[[ "$output" == *"abc123"* ]] || return 1
+	[[ "$output" == *"carries no type"* ]]
+}
+
 @test "payload builders reject missing arguments" {
 	run cartographer_issue_found_payload "" "abc123" "$(_finding)"
 	[ "$status" -ne 0 ] || return 1

@@ -243,3 +243,21 @@ _run_audit() {
 	run bash -c "cat '${CARTOGRAPHER_DIR}/runs/'*.json | jq -r '.trigger'"
 	[ "$output" = "session_start_first_run" ]
 }
+
+# A typeless finding must not vanish. The builder refuses it (ecosystem-ci0),
+# but refusing is only half the fix: if the orchestrator discards that refusal
+# the event is still silently absent, one layer further up. The audit log is
+# where an operator would go looking for it.
+@test "a finding with no type is reported in the audit log" {
+	cat > "${STUB_BIN}/claude" <<'STUB'
+#!/usr/bin/env bash
+cat >/dev/null
+echo call >> "$CLAUDE_CALL_LOG"
+printf '[{"severity":"warning","file_a":"CLAUDE.md","excerpt_a":"Always prefer tabs.","description":"typeless"}]'
+STUB
+	chmod +x "${STUB_BIN}/claude"
+
+	run _run_audit
+	[ "$status" -eq 0 ] || return 1
+	grep -q 'carries no type' "$AUDIT_LOG"
+}

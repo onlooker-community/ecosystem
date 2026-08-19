@@ -289,8 +289,20 @@ run_emit() {
 			printf '%s\n' "$with_ts" >"${finding_file}.tmp"
 			mv -f "${finding_file}.tmp" "$finding_file"
 
-			emit_safe "cartographer.issue.found" \
-				"$(cartographer_issue_found_payload "$AUDIT_ID" "$fhash" "$finding")"
+			# Branch on the builder rather than passing its output straight
+			# to emit_safe. A typeless finding makes it return non-zero, and
+			# an unchecked substitution would hand emit_safe an empty payload
+			# that cartographer_emit_event rejects silently — relocating the
+			# silence this fix exists to end (ecosystem-ci0). Its stderr is
+			# appended to the same audit.log emit_safe writes to, because the
+			# substitution runs before emit_safe and escapes that redirect.
+			local found_payload
+			if found_payload=$(cartographer_issue_found_payload \
+				"$AUDIT_ID" "$fhash" "$finding" 2>>"$CARTOGRAPHER_DIR/audit.log"); then
+				emit_safe "cartographer.issue.found" "$found_payload"
+			else
+				log "emit: no issue.found for ${fhash} — finding carries no type"
+			fi
 
 			touch "$dedup_sentinel"
 			(( new_count++ )) || true

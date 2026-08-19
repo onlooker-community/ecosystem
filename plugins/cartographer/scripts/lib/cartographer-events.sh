@@ -58,7 +58,22 @@ cartographer_issue_found_payload() {
 	[[ -z "$audit_id" || -z "$finding_hash" || -z "$finding" ]] && return 1
 
 	local ftype fseverity ffile_a ffile_b fdesc
-	ftype=$(printf '%s' "$finding" | jq -r '.type // "unknown"')
+	# A finding with no usable type is malformed — the analysis phase that
+	# produced it has a bug. This used to default to "unknown", a value no
+	# schema admits, so the payload was built, rejected at emit, and the
+	# rejection swallowed by the caller's emit_safe: the finding reached disk
+	# and nothing reached the bus. Failing here puts it in audit.log instead,
+	# where an operator can read it (ecosystem-ci0).
+	#
+	# `// ""` collapses absent, null, and empty into one check. jq's `//`
+	# treats "" as present, so an empty type would otherwise slip through and
+	# produce a payload just as unvalidatable as "unknown", by another route.
+	ftype=$(printf '%s' "$finding" | jq -r '.type // ""')
+	if [[ -z "$ftype" ]]; then
+		printf 'cartographer-events: finding %s carries no type; refusing to emit issue.found\n' \
+			"$finding_hash" >&2
+		return 1
+	fi
 	fseverity=$(printf '%s' "$finding" | jq -r '.severity // "warning"')
 	ffile_a=$(printf '%s' "$finding" | jq -r '.file_a // ""')
 	ffile_b=$(printf '%s' "$finding" | jq -r '.file_b // null')
