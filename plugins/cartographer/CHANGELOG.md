@@ -2,6 +2,13 @@
 
 All notable changes to the Cartographer plugin are documented here.
 
+## [0.6.0](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.5.1...cartographer-v0.6.0) (2026-08-19)
+
+
+### Features
+
+* **cartographer:** announce a finding when its drift is gone :wave: ([#186](https://github.com/onlooker-community/ecosystem/issues/186)) ([f2b57f6](https://github.com/onlooker-community/ecosystem/commit/f2b57f67b3e09f7ec624bce0bb4a306c4e20df8b))
+
 ## [0.5.1](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.5.0...cartographer-v0.5.1) (2026-08-19)
 
 
