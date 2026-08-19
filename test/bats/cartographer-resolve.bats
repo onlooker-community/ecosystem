@@ -27,7 +27,22 @@ setup() {
 	# and finishes inside one second would otherwise make "before the run" and
 	# "during the run" indistinguishable.
 	AUDIT_START=2000
+
+	# Where the injected emitter records what it was asked to announce. The sweep
+	# runs inside a command substitution in production, so a stub that set a
+	# variable would lose it to the subshell — a file survives, which is exactly
+	# why the real emitter appends to the event log rather than returning.
+	ANNOUNCED="${BATS_TEST_TMPDIR}/announced"
+	: > "$ANNOUNCED"
 }
+
+_announce() { printf '%s\n' "$1" >> "$ANNOUNCED"; }
+
+# Deliberately writes to stdout, which would corrupt the count the sweep prints
+# if the call site did not redirect it.
+_noisy_announce() { printf '%s\n' "$1" >> "$ANNOUNCED"; printf 'NOISE'; }
+
+_announced() { cat "$ANNOUNCED" 2>/dev/null; }
 
 # Seed a finding record in the shape run_emit writes.
 _seed() {
@@ -200,4 +215,73 @@ _field() {
 	jq -e '.finding_hash == "stale" and .type == "undocumented_entity"
 	       and .first_seen_at == 1000 and .description == "d"' \
 		"${FINDINGS_DIR}/stale.json" >/dev/null
+}
+
+
+# ── Resolution reaching the bus (ecosystem-w2i) ──────────────────────────────
+
+# The guards are the substance here. A targeted or partial run sees too little
+# to treat absence as evidence, so it must announce nothing at all — announcing
+# a resolution the run did not establish tells every consumer to close a finding
+# that is still live.
+@test "the sound-resolution predicate holds only for a full, complete run" {
+	cartographer_resolution_is_sound "" 0 || return 1
+	! cartographer_resolution_is_sound "CLAUDE.md" 0 || return 1
+	! cartographer_resolution_is_sound "" 1 || return 1
+	! cartographer_resolution_is_sound "CLAUDE.md" 2
+}
+
+@test "a retired finding is announced through the injected emitter" {
+	_seed stale 1500
+	cartographer_resolve_absent_findings "$FINDINGS_DIR" "$AUDIT_START" "" 0 "" _announce >/dev/null
+	[ "$(_announced)" = "stale" ]
+}
+
+@test "every retired finding is announced, not just the first" {
+	_seed one 1500
+	_seed two 1600
+	cartographer_resolve_absent_findings "$FINDINGS_DIR" "$AUDIT_START" "" 0 "" _announce >/dev/null
+	[ "$(_announced | sort | tr '\n' ' ')" = "one two " ]
+}
+
+@test "a targeted audit announces nothing" {
+	_seed stale 1500
+	cartographer_resolve_absent_findings "$FINDINGS_DIR" "$AUDIT_START" "CLAUDE.md" 0 "" _announce >/dev/null
+	[ -z "$(_announced)" ]
+}
+
+@test "a partial run announces nothing" {
+	_seed stale 1500
+	cartographer_resolve_absent_findings "$FINDINGS_DIR" "$AUDIT_START" "" 1 "" _announce >/dev/null
+	[ -z "$(_announced)" ]
+}
+
+@test "a finding still observed this run is not announced" {
+	_seed fresh 2500
+	cartographer_resolve_absent_findings "$FINDINGS_DIR" "$AUDIT_START" "" 0 "" _announce >/dev/null
+	[ -z "$(_announced)" ]
+}
+
+# Delivery is at-least-once but re-announcing a finding that was already retired
+# would report a closure that did not happen this run.
+@test "an already-resolved finding is not announced again" {
+	_seed done 1500 true
+	cartographer_resolve_absent_findings "$FINDINGS_DIR" "$AUDIT_START" "" 0 "" _announce >/dev/null
+	[ -z "$(_announced)" ]
+}
+
+@test "the sweep still works with no emitter injected" {
+	_seed stale 1500
+	run cartographer_resolve_absent_findings "$FINDINGS_DIR" "$AUDIT_START" "" 0
+	[ "$output" = "1" ] || return 1
+	[ "$(_field stale resolved)" = "true" ]
+}
+
+# The sweep returns its count on stdout and the caller reads it through a
+# command substitution, so anything the emitter prints lands in that number.
+@test "a chatty emitter cannot corrupt the count" {
+	_seed one 1500
+	_seed two 1600
+	run cartographer_resolve_absent_findings "$FINDINGS_DIR" "$AUDIT_START" "" 0 "" _noisy_announce
+	[ "$output" = "2" ]
 }

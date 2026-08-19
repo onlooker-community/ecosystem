@@ -40,6 +40,14 @@ _require_cartographer_schema() {
 	fi
 }
 
+# Skip when the installed schema predates cartographer.issue.resolved (2.15.0).
+_require_resolution_schema() {
+	if ! grep -q "cartographer.issue.resolved" \
+		"${REPO_ROOT}/node_modules/@onlooker-community/schema/schemas/payload/plugins-memory.json" 2>/dev/null; then
+		skip "installed @onlooker-community/schema predates cartographer.issue.resolved"
+	fi
+}
+
 _validate_latest_event() {
 	local last
 	last=$(tail -n 1 "$ONLOOKER_EVENTS_LOG")
@@ -186,6 +194,57 @@ _finding() {
 	[ "$status" -ne 0 ] || return 1
 	[[ "$output" == *"abc123"* ]] || return 1
 	[[ "$output" == *"carries no type"* ]]
+}
+
+# A full audit retires findings it stopped observing, and that never reached the
+# bus: a consumer reading only the log saw every finding ever opened and none
+# ever closed (ecosystem-w2i).
+@test "cartographer.issue.resolved validates" {
+	_require_resolution_schema
+	cartographer_emit_event "cartographer.issue.resolved" \
+		"$(cartographer_issue_resolved_payload "$AUDIT_ID" "abc123")"
+	run _validate_latest_event
+	[ "$status" -eq 0 ]
+}
+
+# Symmetry with issue.found is the whole point: the same hash opens and closes a
+# finding, so a consumer can hold open/closed state from the log alone.
+@test "the resolved payload carries the hash a consumer closes on" {
+	_require_resolution_schema
+	cartographer_emit_event "cartographer.issue.resolved" \
+		"$(cartographer_issue_resolved_payload "$AUDIT_ID" "abc123")"
+	tail -n 1 "$ONLOOKER_EVENTS_LOG" \
+		| jq -e --arg a "$AUDIT_ID" \
+			'.payload.audit_id == $a and .payload.finding_hash == "abc123"' >/dev/null
+}
+
+@test "the resolved payload builder rejects missing arguments" {
+	run cartographer_issue_resolved_payload "" "abc123"
+	[ "$status" -ne 0 ] || return 1
+	run cartographer_issue_resolved_payload "$AUDIT_ID" ""
+	[ "$status" -ne 0 ]
+}
+
+@test "audit.complete carries resolved_finding_count when the sweep ran" {
+	_require_resolution_schema
+	cartographer_emit_event "cartographer.audit.complete" \
+		"$(cartographer_audit_complete_payload "$AUDIT_ID" "manual" 0 2 500 3)"
+	run _validate_latest_event
+	[ "$status" -eq 0 ] || return 1
+	tail -n 1 "$ONLOOKER_EVENTS_LOG" \
+		| jq -e '.payload.resolved_finding_count == 3' >/dev/null
+}
+
+# A targeted or partial run skips the sweep entirely, so it must report no count
+# rather than a zero that reads as "swept, found nothing to retire".
+@test "audit.complete omits resolved_finding_count when the sweep was skipped" {
+	_require_resolution_schema
+	cartographer_emit_event "cartographer.audit.complete" \
+		"$(cartographer_audit_complete_payload "$AUDIT_ID" "post_tool_use" 1 1 20)"
+	run _validate_latest_event
+	[ "$status" -eq 0 ] || return 1
+	tail -n 1 "$ONLOOKER_EVENTS_LOG" \
+		| jq -e '.payload | has("resolved_finding_count") | not' >/dev/null
 }
 
 @test "payload builders reject missing arguments" {
