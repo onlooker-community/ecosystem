@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.42.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.42.0...ecosystem-v0.42.1) (2026-08-19)
+
+
+### Bug Fixes
+
+* **cartographer:** refuse a typeless finding out loud :loudspeaker: ([#182](https://github.com/onlooker-community/ecosystem/issues/182)) ([35ee0af](https://github.com/onlooker-community/ecosystem/commit/35ee0af055fd360a70a77d6ef036bbeb91dcc945))
+
 ## [0.42.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.41.3...ecosystem-v0.42.0) (2026-08-18)
 
 

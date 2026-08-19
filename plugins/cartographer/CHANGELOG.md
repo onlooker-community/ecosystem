@@ -2,6 +2,13 @@
 
 All notable changes to the Cartographer plugin are documented here.
 
+## [0.5.1](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.5.0...cartographer-v0.5.1) (2026-08-19)
+
+
+### Bug Fixes
+
+* **cartographer:** refuse a typeless finding out loud :loudspeaker: ([#182](https://github.com/onlooker-community/ecosystem/issues/182)) ([35ee0af](https://github.com/onlooker-community/ecosystem/commit/35ee0af055fd360a70a77d6ef036bbeb91dcc945))
+
 ## [0.5.0](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.4.3...cartographer-v0.5.0) (2026-08-18)
 
 
