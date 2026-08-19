@@ -56,6 +56,30 @@ STUB
 	export PATH="${STUB_BIN}:${PATH}"
 }
 
+EVENTS_LOG_PATH() { printf '%s' "${ONLOOKER_DIR}/logs/onlooker-events.jsonl"; }
+
+# Seed a finding from an earlier run. last_seen_at sits far in the past, so the
+# current audit — whose stub returns no findings — will not observe it.
+_seed_stored_finding() {
+	local hash="$1" last_seen="${2:-1000}"
+	mkdir -p "${CARTOGRAPHER_DIR}/findings"
+	jq -n --arg h "$hash" --argjson ls "$last_seen" \
+		'{finding_hash:$h, type:"undocumented_entity", severity:"warning",
+		  file_a:"CLAUDE.md", file_b:null, description:"d", suggested_fix:"f",
+		  first_seen_at:500, last_seen_at:$ls, resolved:false}' \
+		> "${CARTOGRAPHER_DIR}/findings/${hash}.json"
+}
+
+_resolved_event_count() {
+	local n
+	n=$(grep -c '"event_type":"cartographer.issue.resolved"' "$(EVENTS_LOG_PATH)" 2>/dev/null) || n=0
+	printf '%s' "$n"
+}
+
+_last_audit_complete() {
+	grep '"event_type":"cartographer.audit.complete"' "$(EVENTS_LOG_PATH)" 2>/dev/null | tail -n 1
+}
+
 _llm_calls() {
 	wc -l < "$CLAUDE_CALL_LOG" | tr -d ' '
 }
@@ -260,4 +284,42 @@ STUB
 	run _run_audit
 	[ "$status" -eq 0 ] || return 1
 	grep -q 'carries no type' "$AUDIT_LOG"
+}
+
+
+# ── Resolution reaching the bus (ecosystem-w2i) ──────────────────────────────
+#
+# The resolution loop retired findings on disk but nothing announced it, so a
+# consumer reading only the log — counsel, by design — saw every finding ever
+# opened and none ever closed.
+
+@test "a full audit announces the findings it retired" {
+	_seed_stored_finding gonehash
+	_run_audit
+	grep '"event_type":"cartographer.issue.resolved"' "$(EVENTS_LOG_PATH)" \
+		| jq -e '.payload.finding_hash == "gonehash"' >/dev/null
+}
+
+@test "a completed full audit reports how many findings it retired" {
+	_seed_stored_finding gonehash
+	_run_audit
+	_last_audit_complete | jq -e '.payload.resolved_finding_count == 1' >/dev/null
+}
+
+# A targeted run sees one file, so nearly every stored finding is "unobserved"
+# for reasons unrelated to being fixed. It must neither retire nor announce.
+@test "a targeted audit announces no resolutions" {
+	_seed_stored_finding gonehash
+	CARTOGRAPHER_TARGET_FILE="${FIXTURE_REPO}/CLAUDE.md" \
+		CARTOGRAPHER_REPO_ROOT="$FIXTURE_REPO" bash "$AUDIT"
+	[ "$(_resolved_event_count)" = "0" ]
+}
+
+# Reporting zero would read as "swept, retired nothing". The field is absent
+# instead, because this run never swept.
+@test "a targeted audit reports no resolved count at all" {
+	_seed_stored_finding gonehash
+	CARTOGRAPHER_TARGET_FILE="${FIXTURE_REPO}/CLAUDE.md" \
+		CARTOGRAPHER_REPO_ROOT="$FIXTURE_REPO" bash "$AUDIT"
+	_last_audit_complete | jq -e '.payload | has("resolved_finding_count") | not' >/dev/null
 }

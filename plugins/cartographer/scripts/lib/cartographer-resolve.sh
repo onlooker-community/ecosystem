@@ -38,11 +38,34 @@ cartographer_refresh_finding() {
 	mv -f "${finding_file}.tmp" "$finding_file"
 }
 
+# Whether this run looked at enough for absence to mean anything.
+#
+# Two ways it does not. A targeted post-write audit evaluates a single file, so
+# almost every stored finding is "unobserved" for reasons that have nothing to
+# do with being fixed — letting it resolve would wipe the store on every edit.
+# And a phase that timed out or errored contributes no findings, which is
+# indistinguishable from its findings being gone.
+#
+# Named rather than inlined because run_emit needs the same answer to decide
+# whether cartographer.audit.complete may report a resolved count at all. Two
+# copies of this condition is precisely the kind of divergence that has bitten
+# this plugin before.
+#
+# Usage: cartographer_resolution_is_sound <target_file> <phases_failed>
+cartographer_resolution_is_sound() {
+	local target_file="${1:-}" phases_failed="${2:-0}"
+	[[ -z "$target_file" && "$phases_failed" -eq 0 ]]
+}
+
 # Mark findings not observed by this audit as resolved.
 #
 # Usage:
 #   cartographer_resolve_absent_findings <findings_dir> <cutoff_ts> \
-#                                        <target_file> <phases_failed_count> [now]
+#                                        <target_file> <phases_failed_count> \
+#                                        [now] [on_resolved]
+#
+# on_resolved, when given, is the name of a function called once per retired
+# finding with its hash. Its stdout is discarded; see the call site below.
 #
 # cutoff_ts is the audit's start time: a finding observed this run had its
 # last_seen_at refreshed to at-or-after it, so a record older than it was not
@@ -55,6 +78,7 @@ cartographer_resolve_absent_findings() {
 	local findings_dir="${1:-}" cutoff_ts="${2:-}"
 	local target_file="${3:-}" phases_failed="${4:-0}"
 	local now="${5:-}"
+	local on_resolved="${6:-}"
 	[[ -z "$now" ]] && now=$(date +%s)
 
 	[[ -z "$findings_dir" || -z "$cutoff_ts" ]] && return 1
@@ -63,18 +87,10 @@ cartographer_resolve_absent_findings() {
 		return 0
 	fi
 
-	# Guard 1: a targeted post-write audit evaluates a single file, so almost
-	# every stored finding is "unobserved" for reasons that have nothing to do
-	# with being fixed. Letting it resolve would wipe the store on every edit.
-	if [[ -n "$target_file" ]]; then
-		printf '0'
-		return 0
-	fi
-
-	# Guard 2: a phase that timed out or errored contributes no findings, which
-	# is indistinguishable from its findings being gone. A partial run is not
-	# evidence of resolution.
-	if [[ "$phases_failed" -gt 0 ]]; then
+	# Both guards live in the predicate. A run that fails either one retires
+	# nothing and announces nothing — announcing a resolution the run did not
+	# establish tells every consumer to close a finding that is still live.
+	if ! cartographer_resolution_is_sound "$target_file" "$phases_failed"; then
 		printf '0'
 		return 0
 	fi
@@ -93,6 +109,23 @@ cartographer_resolve_absent_findings() {
 		printf '%s\n' "$updated" >"${f}.tmp" || continue
 		mv -f "${f}.tmp" "$f" || continue
 		resolved=$(( resolved + 1 ))
+
+		# Announce inside the guarded loop, so a run that must not resolve also
+		# cannot announce. The emitter is injected rather than sourced: this
+		# module stays pure data, and a test can pass a stub without dragging
+		# the event bus in behind it.
+		#
+		# stdout is the count channel — the caller reads it through a command
+		# substitution — so the emitter is redirected away from it. That is also
+		# why announcing works at all here despite the subshell: appending to
+		# the event log is a filesystem effect, and unlike a variable it
+		# survives.
+		if [[ -n "$on_resolved" ]]; then
+			local fhash
+			fhash=$(printf '%s' "$updated" | jq -r '.finding_hash // ""')
+			[[ -z "$fhash" ]] && fhash=$(basename "$f" .json)
+			"$on_resolved" "$fhash" >/dev/null || true
+		fi
 	done
 
 	printf '%d' "$resolved"

@@ -83,6 +83,17 @@ emit_safe() {
 	cartographer_emit_event "$1" "$2" 2>>"$CARTOGRAPHER_DIR/audit.log" || true
 }
 
+# Announce one finding the resolution sweep retired.
+#
+# Passed to cartographer_resolve_absent_findings by name rather than called
+# after it, so the announcement happens inside the sweep's own guards — a run
+# that must not resolve cannot announce either. Handing over a function name
+# also keeps cartographer-resolve.sh free of any dependency on the event bus.
+_emit_resolved() {
+	emit_safe "cartographer.issue.resolved" \
+		"$(cartographer_issue_resolved_payload "$AUDIT_ID" "$1")"
+}
+
 # Reject an unrecognized type rather than filtering everything away. An empty
 # audit is indistinguishable from a clean repo, so a typo would read as good
 # news — the same class of silent-nothing this flag was filed for.
@@ -316,8 +327,17 @@ run_emit() {
 	# evidence the drift is gone.
 	local resolved_count
 	resolved_count=$(cartographer_resolve_absent_findings \
-		"$FINDINGS_DIR" "$START_TS" "$TARGET_FILE" "${#PHASES_FAILED[@]}")
+		"$FINDINGS_DIR" "$START_TS" "$TARGET_FILE" "${#PHASES_FAILED[@]}" "" _emit_resolved)
 	log "phase=emit resolved=${resolved_count}"
+
+	# Only a run that actually swept may report a count. A targeted or partial
+	# run leaves the field off entirely rather than reporting 0, which would
+	# read as "swept, found nothing to retire". This asks the same predicate the
+	# sweep guards on, so the two cannot drift apart on what the run proved.
+	local resolved_arg=""
+	if cartographer_resolution_is_sound "$TARGET_FILE" "${#PHASES_FAILED[@]}"; then
+		resolved_arg="$resolved_count"
+	fi
 
 	local end_ts duration_ms total_count
 	end_ts=$(date +%s)
@@ -341,7 +361,7 @@ run_emit() {
 
 	emit_safe "cartographer.audit.complete" \
 		"$(cartographer_audit_complete_payload \
-			"$AUDIT_ID" "$TRIGGER" "$new_count" "$total_count" "$duration_ms")"
+			"$AUDIT_ID" "$TRIGGER" "$new_count" "$total_count" "$duration_ms" "$resolved_arg")"
 
 	PHASES_COMPLETED+=("emit")
 }

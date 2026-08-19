@@ -90,12 +90,37 @@ cartographer_issue_found_payload() {
 		'{"audit_id":$audit_id,"finding_hash":$finding_hash,"finding_type":$finding_type,"severity":$severity,"affected_files":$affected_files,"summary":$summary}'
 }
 
+# Build the cartographer.issue.resolved payload for a retired finding.
+#
+# Deliberately just the pair: the envelope already carries a required timestamp
+# set at emit time, and this is emitted from the sweep that flips the record, so
+# a payload-level resolved_at would duplicate it while being free to disagree —
+# the record stores epoch seconds, the envelope ISO 8601. The schema rejects the
+# field for that reason (onlooker-community/schema#50).
+#
+# Usage: cartographer_issue_resolved_payload <audit_id> <finding_hash>
+cartographer_issue_resolved_payload() {
+	local audit_id="${1:-}" finding_hash="${2:-}"
+	[[ -z "$audit_id" || -z "$finding_hash" ]] && return 1
+
+	jq -n \
+		--arg audit_id "$audit_id" \
+		--arg finding_hash "$finding_hash" \
+		'{"audit_id":$audit_id,"finding_hash":$finding_hash}'
+}
+
 # Build the cartographer.audit.complete payload for a finished run.
 #
-# Usage: cartographer_audit_complete_payload <audit_id> <trigger> <new_count> <total_count> <duration_ms>
+# resolved_count is optional and omitted from the payload when empty. That is
+# the difference between "swept and retired nothing" and "never swept": a
+# targeted or partial run cannot treat a finding's absence as evidence, so it
+# must report no count rather than a zero that reads as the former.
+#
+# Usage: cartographer_audit_complete_payload <audit_id> <trigger> <new_count> <total_count> <duration_ms> [resolved_count]
 cartographer_audit_complete_payload() {
 	local audit_id="${1:-}" trigger="${2:-}"
 	local new_count="${3:-0}" total_count="${4:-0}" duration_ms="${5:-0}"
+	local resolved_count="${6:-}"
 	[[ -z "$audit_id" ]] && return 1
 
 	jq -n \
@@ -104,7 +129,9 @@ cartographer_audit_complete_payload() {
 		--argjson new_finding_count "$new_count" \
 		--argjson total_finding_count "$total_count" \
 		--argjson duration_ms "$duration_ms" \
-		'{"audit_id":$audit_id,"trigger":$trigger,"new_finding_count":$new_finding_count,"total_finding_count":$total_finding_count,"duration_ms":$duration_ms}'
+		--arg resolved "$resolved_count" \
+		'{"audit_id":$audit_id,"trigger":$trigger,"new_finding_count":$new_finding_count,"total_finding_count":$total_finding_count,"duration_ms":$duration_ms}
+		 + (if $resolved == "" then {} else {"resolved_finding_count": ($resolved|tonumber)} end)'
 }
 
 cartographer_emit_event() {

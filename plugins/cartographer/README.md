@@ -145,7 +145,11 @@ Resolution is not terminal. The dedup sentinel outlives it, so drift that is rei
 
 `cartographer.issue.found` events are delivered at-least-once. If the audit process crashes between emitting an event and writing the dedup sentinel, the finding is re-emitted once on the next run. Downstream consumers must deduplicate on `payload.finding_hash`.
 
-Resolution is currently **local only** — no event announces it, so a consumer reading the event log alone sees findings open forever. The run record's `resolved_finding_count` and the finding files carry the truth.
+`cartographer.issue.resolved` carries the same `finding_hash`, so a consumer can close the finding it opened and hold open/closed state from the log alone. It is emitted only by a run that looked everywhere: a targeted audit sees a single file and a run with a failed phase sees an incomplete corpus, so neither can treat a finding's absence as evidence its drift is gone.
+
+The payload carries no timestamp of its own. The envelope's required `timestamp` is the resolution time, since the event is emitted from the sweep that flips the record.
+
+`cartographer.audit.complete` reports `resolved_finding_count` for the same reason and under the same condition — a run that skipped the sweep omits the field entirely rather than reporting `0`, which would read as "swept, retired nothing".
 
 ## Non-goals
 
