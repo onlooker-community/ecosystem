@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.43.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.42.2...ecosystem-v0.43.0) (2026-08-19)
+
+
+### Features
+
+* **cartographer:** announce a finding when its drift is gone :wave: ([#186](https://github.com/onlooker-community/ecosystem/issues/186)) ([f2b57f6](https://github.com/onlooker-community/ecosystem/commit/f2b57f67b3e09f7ec624bce0bb4a306c4e20df8b))
+
 ## [0.42.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.42.1...ecosystem-v0.42.2) (2026-08-19)
 
 
