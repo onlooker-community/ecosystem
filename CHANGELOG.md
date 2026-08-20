@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.43.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.43.0...ecosystem-v0.43.1) (2026-08-20)
+
+
+### Bug Fixes
+
+* **release:** upgrade npm so trusted publishing runs :relieved: ([#188](https://github.com/onlooker-community/ecosystem/issues/188)) ([caf6dfd](https://github.com/onlooker-community/ecosystem/commit/caf6dfddc3d906708538c258755d9bd8297970c1))
+
 ## [0.43.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.42.2...ecosystem-v0.43.0) (2026-08-19)
 
 
