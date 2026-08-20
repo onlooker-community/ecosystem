@@ -39,17 +39,26 @@ jobs:
       - run: npm ci
         if: ${{ contains(fromJSON(steps.release.outputs.paths_released || '[]'), '.') }}
 
-      # --provenance is what makes the id-token: write permission above do
-      # anything. Without it npm never requests an OIDC token and the publish
-      # authenticates with NPM_TOKEN alone — a classic automation token, which
-      # this package's 2FA policy rejects with a 403. The permission has been
-      # granted since #175 and inert ever since, so every release from 0.35.0
-      # on tagged cleanly and never reached npm.
+      # Trusted publishing authenticates via OIDC, and the OIDC exchange lives
+      # in npm's lib/utils/oidc.js — added in npm 11.5.x. Node 22 bundles npm
+      # 10.9.8, which has no such module, so `npm publish` never even attempts
+      # the exchange and silently falls back to whatever token it finds. That
+      # is why every release from 0.35.0 on tagged cleanly and never reached
+      # npm: first as a 403 ("2FA is required but an automation token was
+      # specified"), then as a bare 404 once trusted publishing was switched on
+      # and the registry stopped accepting the automation token at all.
       #
-      # --access public is a no-op on an already-public package; it is here for
-      # parity with onlooker-community/schema's publish-npm.yml, the one
+      # a7c7a0e removed this upgrade because npm@latest was broken on hosted
+      # runners at the time (missing promise-retry) and provenance alone did
+      # work on the bundled npm. Provenance is not the problem — auth is.
+      - run: npm install -g npm@latest
+        if: ${{ contains(fromJSON(steps.release.outputs.paths_released || '[]'), '.') }}
+
+      # No NODE_AUTH_TOKEN here on purpose. With trusted publishing the token
+      # is the thing being replaced: npm trades the workflow's OIDC identity
+      # for a short-lived registry token at publish time. Supplying a static
+      # token invites npm to authenticate with it instead and fail closed.
+      # This mirrors onlooker-community/schema's publish-npm.yml, the one
       # configuration in this org that publishes successfully.
       - run: npm publish --provenance --access public
         if: ${{ contains(fromJSON(steps.release.outputs.paths_released || '[]'), '.') }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
