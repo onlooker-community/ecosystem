@@ -2,6 +2,7 @@ node_modules/
 test/tmp-schema-events/
 test/tmp-schema-sequence/
 test/tmp-schema-sequence-isolated/
+test/tmp-emission-report/
 .DS_Store
 .beads/
 
