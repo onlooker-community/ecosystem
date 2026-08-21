@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.43.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.43.1...ecosystem-v0.43.2) (2026-08-21)
+
+
+### Bug Fixes
+
+* **ci:** shellcheck every tracked script, not a stale list :broom: ([#190](https://github.com/onlooker-community/ecosystem/issues/190)) ([841a37c](https://github.com/onlooker-community/ecosystem/commit/841a37cfa2c8a0eb2ff540f67b4b5a10eb4ed161))
+
 ## [0.43.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.43.0...ecosystem-v0.43.1) (2026-08-20)
 
 
