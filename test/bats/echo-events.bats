@@ -111,7 +111,7 @@ TEST_ID="01J000000000000000000000TT"
 }
 
 @test "emission fails on unknown event type" {
-	run echo_emit_event "echo.no.such.event" '{"suite_id":"x"}'
+	expect_emission_rejected echo_emit_event "echo.no.such.event" '{"suite_id":"x"}'
 	[ "$status" -ne 0 ]
 }
 

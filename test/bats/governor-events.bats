@@ -233,6 +233,6 @@ AID="bats-agent-000"
 }
 
 @test "governor_emit_event returns nonzero for unknown event type" {
-	run governor_emit_event "governor.no_such_event" '{"session_id":"x"}'
+	expect_emission_rejected governor_emit_event "governor.no_such_event" '{"session_id":"x"}'
 	[ "$status" -ne 0 ]
 }

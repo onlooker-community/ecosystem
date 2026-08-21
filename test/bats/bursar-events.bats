@@ -68,6 +68,6 @@ _validate_latest_event() {
 }
 
 @test "bursar_emit_event returns nonzero for an unknown event type" {
-	run bursar_emit_event "bursar.no_such_event" '{"project_key":"x"}' "$SID"
+	expect_emission_rejected bursar_emit_event "bursar.no_such_event" '{"project_key":"x"}' "$SID"
 	[ "$status" -ne 0 ]
 }

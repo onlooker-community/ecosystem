@@ -146,7 +146,7 @@ _validate_latest_event() {
 }
 
 @test "emission rejects an unknown event type" {
-	run inspector_emit_event "inspector.no.such.event" '{"file_path":"x"}'
+	expect_emission_rejected inspector_emit_event "inspector.no.such.event" '{"file_path":"x"}'
 	[ "$status" -ne 0 ]
 }
 

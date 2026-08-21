@@ -147,7 +147,7 @@ _finding() {
 	_require_cartographer_schema
 	# Guards the direction of the fix: if someone "restores" the old schema,
 	# this is the test that objects.
-	run cartographer_emit_event "cartographer.issue.found" \
+	expect_emission_rejected cartographer_emit_event "cartographer.issue.found" \
 		'{"issue_type":"orphaned_plugin","file_path":"CLAUDE.md","severity":"warning"}'
 	[ "$status" -ne 0 ]
 }
@@ -257,7 +257,7 @@ _finding() {
 }
 
 @test "emission fails on unknown event type" {
-	run cartographer_emit_event "cartographer.no.such.event" '{"audit_id":"x"}'
+	expect_emission_rejected cartographer_emit_event "cartographer.no.such.event" '{"audit_id":"x"}'
 	[ "$status" -ne 0 ]
 }
 
