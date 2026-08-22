@@ -42,5 +42,11 @@
         "organizeImports": "on"
       }
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": [".claude/settings.json"],
+      "formatter": { "enabled": false }
+    }
+  ]
 }
