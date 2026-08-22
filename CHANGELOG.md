@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.43.3](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.43.2...ecosystem-v0.43.3) (2026-08-22)
+
+
+### Bug Fixes
+
+* **ci:** fence bd-managed blocks against lint churn :relieved: ([#194](https://github.com/onlooker-community/ecosystem/issues/194)) ([e09fcb6](https://github.com/onlooker-community/ecosystem/commit/e09fcb6836645999feb831a7494236d4a54ed318))
+
 ## [0.43.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.43.1...ecosystem-v0.43.2) (2026-08-21)
 
 
