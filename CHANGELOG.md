@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.43.4](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.43.3...ecosystem-v0.43.4) (2026-08-22)
+
+
+### Bug Fixes
+
+* **events:** route prompt_rule emission through the canonical emitter :relieved: ([#196](https://github.com/onlooker-community/ecosystem/issues/196)) ([c233bfa](https://github.com/onlooker-community/ecosystem/commit/c233bfa466cf400e767f4673e0143081618314a7))
+
 ## [0.43.3](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.43.2...ecosystem-v0.43.3) (2026-08-22)
 
 
