@@ -83,13 +83,27 @@ librarian_lesson_write_proposal() {
 # written by the transform have no verdict and simply lack the key — a format
 # failure has no jury.
 #
-# Usage: librarian_lesson_append_declined <key> <artifact_id> <reason> [detail] [verdict_json]
+# `lesson_id` names the PROPOSAL this verdict came from, and is null when there
+# is no proposal to name. The transform declines an artifact before any proposal
+# exists (transform_invalid, schema_invalid, and friends), so its rows carry
+# null here and are identified by artifact_id alone.
+#
+# It exists so promote's double-write guard can key on the proposal rather than
+# the artifact. Keyed on artifact_id, that guard could not tell "this artifact
+# was already declined" from "a DIFFERENT proposal for the same artifact was
+# already declined", and silently dropped the second verdict — see
+# ecosystem-bkj. Note this is the opposite of what librarian_lesson_seen wants:
+# that function asks "was this ARTIFACT already handled?" and correctly stays
+# keyed on artifact_id.
+#
+# Usage: librarian_lesson_append_declined <key> <artifact_id> <reason> [detail] [verdict_json] [lesson_id]
 librarian_lesson_append_declined() {
 	local key="$1"
 	local artifact_id="$2"
 	local reason="$3"
 	local detail="${4:-}"
 	local verdict="${5:-}"
+	local lesson_id="${6:-}"
 	[[ -z "$key" || -z "$artifact_id" || -z "$reason" ]] && return 1
 
 	librarian_lesson_storage_init "$key" || return 1
@@ -99,12 +113,14 @@ librarian_lesson_append_declined() {
 	if [[ -n "$verdict" ]]; then
 		line=$(jq -cn \
 			--arg artifact_id "$artifact_id" \
+			--arg lesson_id "$lesson_id" \
 			--arg reason "$reason" \
 			--arg detail "$detail" \
 			--arg at "$now" \
 			--argjson verdict "$verdict" \
 			'{
 				artifact_id: $artifact_id,
+				lesson_id: (if $lesson_id == "" then null else $lesson_id end),
 				reason: $reason,
 				detail: (if $detail == "" then null else $detail end),
 				declined_at: $at,
@@ -113,11 +129,13 @@ librarian_lesson_append_declined() {
 	else
 		line=$(jq -cn \
 			--arg artifact_id "$artifact_id" \
+			--arg lesson_id "$lesson_id" \
 			--arg reason "$reason" \
 			--arg detail "$detail" \
 			--arg at "$now" \
 			'{
 				artifact_id: $artifact_id,
+				lesson_id: (if $lesson_id == "" then null else $lesson_id end),
 				reason: $reason,
 				detail: (if $detail == "" then null else $detail end),
 				declined_at: $at

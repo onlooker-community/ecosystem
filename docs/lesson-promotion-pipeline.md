@@ -153,13 +153,21 @@ a floor a strong weighted mean cannot average away.
 ```
 ~/.onlooker/librarian/<project-key>/
   lessons/approved/<ulid>.json   jury passed; awaiting sync
-  lessons/declined.jsonl         artifact_id + verdict + reason
+  lessons/declined.jsonl         artifact_id + lesson_id + verdict + reason
 ```
 
 The declined ledger matters more than it looks. The watermark advances past a
 rejected artifact, so without a record a drop is either silently permanent or —
 on a rescan — re-pays Opus tokens to re-judge the same failures every session.
 Append-only, never re-judged automatically.
+
+`lesson_id` names the proposal a verdict came from, and is null when there is
+none — the transform declines an artifact before any proposal exists. Promote's
+double-write guard keys on it so two distinct proposals that share an
+artifact_id each get their own row; keyed on artifact_id it dropped the second
+verdict silently. `librarian_lesson_seen` deliberately stays keyed on
+artifact_id, because it asks a different question: was this *artifact* already
+handled?
 
 **"Judged and failed" is not "could not judge."** Only real verdicts go in
 `declined.jsonl`. A tribunal API error, or a jury below quorum, leaves the

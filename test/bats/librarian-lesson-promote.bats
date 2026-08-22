@@ -47,14 +47,20 @@ STUB
 _dir() { printf '%s' "$(librarian_lessons_dir "$PROJECT_KEY")"; }
 
 # A judged proposal. $1 = id, $2 = visibility, $3 = status,
-# $4 = verdict judges JSON array.
+# $4 = verdict judges JSON array, $5 = artifact_id (defaults to "art-<id>").
+#
+# $5 exists so a test can seed two DISTINCT proposals that share one
+# artifact_id. The default derives the artifact from the id, which makes that
+# collision unreachable — and the collision is the whole subject of the
+# declined-ledger guard tests below (ecosystem-bkj).
 _seed_judged() {
 	local id="$1" visibility="$2" status="$3" judges="$4"
+	local artifact_id="${5:-art-$1}"
 	local now
 	now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 	jq -n --arg id "$id" --arg v "$visibility" --arg s "$status" \
-		--arg t "$now" --argjson j "$judges" \
-		'{ id: $id, artifact_id: "art-\($id)", status: $s, visibility: $v,
+		--arg t "$now" --argjson j "$judges" --arg aid "$artifact_id" \
+		'{ id: $id, artifact_id: $aid, status: $s, visibility: $v,
 		   confirmed_at: $t, judged_at: $t,
 		   candidate: { claim: "Prefer jq -c for compact output",
 		                rationale: "Readable diffs",
@@ -549,4 +555,84 @@ _promote_refuses_shape() {
 	run bash "$script"
 	[ "$status" -eq 0 ]
 	[ -f "$(_dir)/approved/skill01.json" ]
+}
+
+# ── declined-ledger guard: per-proposal, not per-artifact (ecosystem-bkj) ─────
+#
+# The guard that stops a double-write into declined.jsonl used to key on
+# artifact_id. That cannot tell "this artifact was already declined" apart from
+# "a DIFFERENT proposal for the same artifact was already declined", so the
+# second of two colliding proposals found a matching row, skipped its append,
+# and returned 0 — both proposals stamped, one verdict on disk. The inverse of
+# the double-write the guard exists to prevent, and still data loss in the
+# per-judge detail declined.jsonl carries for rubric tuning.
+#
+# The approved branch never had this: its guard is approved/<lesson_id>.json,
+# which is per-proposal by construction. These tests hold the declined branch
+# to the same standard.
+
+@test "two rejected proposals sharing an artifact_id both reach the ledger" {
+	_seed_judged "dupa" "public" "rejected" "$(_split)" "art-shared"
+	_seed_judged "dupb" "public" "rejected" "$(_split)" "art-shared"
+
+	run librarian_lesson_promote "$PROJECT_KEY" "dupa"
+	[ "$status" -eq 0 ] || return 1
+	run librarian_lesson_promote "$PROJECT_KEY" "dupb"
+	[ "$status" -eq 0 ] || return 1
+
+	# Two distinct proposals were judged and rejected, so two verdicts are
+	# owed. Under the artifact_id-keyed guard this was 1.
+	[ "$(grep -c 'art-shared' "$(_dir)/declined.jsonl")" -eq 2 ] || return 1
+
+	# And they are distinguishable — a row per proposal, not two identical
+	# rows, which is what makes the ledger usable for rubric tuning.
+	local ids
+	ids=$(jq -r '.lesson_id' "$(_dir)/declined.jsonl" | sort | tr '\n' ' ')
+	[ "$ids" = "dupa dupb " ]
+}
+
+@test "the declined guard still blocks a true double-write for one proposal" {
+	# The behavior the guard was added for, which the re-key must not lose:
+	# a stamp that fails AFTER the declined row lands, then a standalone
+	# re-run. Same chmod shape as the artifact_id-keyed test above.
+	_seed_judged "rekey01" "public" "rejected" "$(_split)"
+
+	chmod 0500 "$(_dir)/proposals"
+	run --separate-stderr librarian_lesson_promote "$PROJECT_KEY" "rekey01"
+	chmod 0700 "$(_dir)/proposals"
+	[ "$status" -ne 0 ] || return 1
+	[ "$(grep -c 'art-rekey01' "$(_dir)/declined.jsonl")" -eq 1 ] || return 1
+
+	run librarian_lesson_promote "$PROJECT_KEY" "rekey01"
+	[ "$status" -eq 0 ] || return 1
+	[ "$(grep -c 'art-rekey01' "$(_dir)/declined.jsonl")" -eq 1 ]
+}
+
+@test "a legacy declined row without lesson_id still dedups by artifact_id" {
+	# Rows written before this change carry no lesson_id. Keying purely on
+	# lesson_id would make them match nothing, so an unstamped proposal left
+	# over from a historical stamp failure would double-write on re-run —
+	# trading this bug for the one the guard was built to stop. The fallback
+	# keeps the old artifact_id behavior for exactly those rows.
+	_seed_judged "legacy01" "public" "rejected" "$(_split)"
+	printf '%s\n' '{"artifact_id":"art-legacy01","reason":"rejected","detail":null,"declined_at":"2020-01-01T00:00:00Z"}' \
+		>> "$(_dir)/declined.jsonl"
+
+	run librarian_lesson_promote "$PROJECT_KEY" "legacy01"
+	[ "$status" -eq 0 ] || return 1
+	[ "$(grep -c 'art-legacy01' "$(_dir)/declined.jsonl")" -eq 1 ]
+}
+
+@test "librarian_lesson_seen still matches on artifact_id, not lesson_id" {
+	# seen() answers "was this ARTIFACT already handled?", which is correctly
+	# artifact-scoped — it is what stops transform from re-proposing. Adding
+	# lesson_id to the row must not perturb it.
+	_seed_judged "seen01" "public" "rejected" "$(_split)" "art-seen-shared"
+	run librarian_lesson_promote "$PROJECT_KEY" "seen01"
+	[ "$status" -eq 0 ] || return 1
+
+	run librarian_lesson_seen "$PROJECT_KEY" "art-seen-shared"
+	[ "$status" -eq 0 ] || return 1
+	run librarian_lesson_seen "$PROJECT_KEY" "art-never-declined"
+	[ "$status" -ne 0 ]
 }
