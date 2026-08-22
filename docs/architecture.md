@@ -93,9 +93,9 @@ Every observable event flows through `onlooker-event.mjs` before being written t
 
 The schema is versioned independently and published to npm. Plugin shell scripts invoke `onlooker-event.mjs` at runtime so schema validation always reflects the installed version.
 
-> **Note:** Every emission path that fires in normal operation routes through `onlooker-event.mjs`. `prompt_rule.*` was the last routine exception — `prompt_rules_emit` hand-built its envelope with `jq` and wrote straight to `$ONLOOKER_EVENTS_LOG`, so those lines carried none of the required `id`/`schema_version`/`runtime`/`machine_id`/`sequence` fields and added a `turn` field the envelope forbids. It now goes through the emitter like everything else.
+> **Note:** Every emission path in this repo routes through `onlooker-event.mjs`. Nothing hand-builds an envelope and appends it to the log. Two paths used to: `prompt_rules_emit` (ecosystem-aaz) and the `safe_emit` fallback in `scripts/lib/validate-path.sh` (ecosystem-0tm). Both wrote lines missing all five required `id`/`schema_version`/`runtime`/`machine_id`/`sequence` fields, plus fields the envelope forbids — `event.v1.json` is `additionalProperties: false`.
 >
-> One hand-built envelope remains, in the `safe_emit` fallback in `scripts/lib/validate-path.sh`. It is reached only when `$ONLOOKER_EMIT` is missing, which does not happen in a normal checkout or install, so it is latent rather than live — but if it ever fires it writes the same unvalidatable shape. Route new event types through the emitter rather than writing to the log directly: an envelope assembled anywhere else will drift from the schema without anything noticing.
+> Route a new event type the same way rather than writing to the log directly. The shape to copy is a `{plugin, session_id, event_type, payload}` params object piped to `onlooker-event.mjs emit`, whose output you append; the emitter owns envelope assembly so there is exactly one place for it to drift. When the emitter is unavailable, emit nothing and return non-zero — an unparseable line on the bus is worse than a missing one.
 
 ### Emission gates
 
