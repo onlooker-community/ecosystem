@@ -6,8 +6,21 @@
 # across the ecosystem.
 #
 # Usage:
-#   # In your plugin's config loader (e.g., plugins/bursar/scripts/lib/bursar-config.sh):
-#   source "${PLUGIN_ROOT}/../../scripts/lib/config-loader.sh"
+#   # In your plugin's config loader (e.g., plugins/bursar/scripts/lib/bursar-config.sh).
+#   # Locate this file from the sourcing file's OWN path, never from a
+#   # caller-supplied $PLUGIN_ROOT: that variable is read at source time from
+#   # whatever scope did the sourcing, so a sub-shell that inherits
+#   # CLAUDE_PLUGIN_ROOT but not PLUGIN_ROOT loses every accessor below while
+#   # still exiting 0 (see ecosystem-88v, ecosystem-7bj). Four levels up from
+#   # plugins/<name>/scripts/lib is the repo root.
+#   _BURSAR_CONFIG_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+#   # shellcheck source=scripts/lib/config-loader.sh
+#   source "${_BURSAR_CONFIG_LIB_DIR}/../../../../scripts/lib/config-loader.sh"
+#
+#   The shellcheck directive is repo-root-relative, not file-relative: shellcheck
+#   resolves source= against its own working directory, and `npm run
+#   test:shellcheck` runs it from the repo root. A file-relative path there
+#   silently degrades to SC1091 "not following", which `-S error` hides.
 #   config_load_plugin "bursar" "$repo_root" "_BURSAR_CONFIG"
 #   config_get "_BURSAR_CONFIG" '.bursar.window'  # returns value or empty string
 #
