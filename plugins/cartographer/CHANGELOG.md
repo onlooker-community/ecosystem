@@ -2,6 +2,13 @@
 
 All notable changes to the Cartographer plugin are documented here.
 
+## [0.6.1](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.6.0...cartographer-v0.6.1) (2026-08-22)
+
+
+### Bug Fixes
+
+* **config:** let every config lib find the loader from its own path :broom: ([#198](https://github.com/onlooker-community/ecosystem/issues/198)) ([249fe41](https://github.com/onlooker-community/ecosystem/commit/249fe41bf191db48239c2028ba77a10b3dcb03af))
+
 ## [0.6.0](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.5.1...cartographer-v0.6.0) (2026-08-19)
 
 

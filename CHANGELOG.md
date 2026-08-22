@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.43.5](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.43.4...ecosystem-v0.43.5) (2026-08-22)
+
+
+### Bug Fixes
+
+* **config:** let every config lib find the loader from its own path :broom: ([#198](https://github.com/onlooker-community/ecosystem/issues/198)) ([249fe41](https://github.com/onlooker-community/ecosystem/commit/249fe41bf191db48239c2028ba77a10b3dcb03af))
+* **librarian:** key the declined-ledger guard on the proposal, not the artifact :bug: ([#199](https://github.com/onlooker-community/ecosystem/issues/199)) ([47a195d](https://github.com/onlooker-community/ecosystem/commit/47a195da98a3a565018c35e9e5c6dde2405520de))
+
 ## [0.43.4](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.43.3...ecosystem-v0.43.4) (2026-08-22)
 
 
