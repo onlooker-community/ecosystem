@@ -71,11 +71,11 @@ _validate_latest_event() {
 	local p
 	p=$(jq -n --arg pk "$PK" --arg sid "$SID" \
 		'{project_key:$pk, session_id:$sid, file_path:"x", tool:"NotebookEdit", operation:"edit"}')
-	run lineage_emit_event "lineage.change.recorded" "$p" "$SID"
+	expect_emission_rejected lineage_emit_event "lineage.change.recorded" "$p" "$SID"
 	[ "$status" -ne 0 ]
 }
 
 @test "lineage_emit_event returns nonzero for an unknown event type" {
-	run lineage_emit_event "lineage.no_such_event" '{"project_key":"x"}' "$SID"
+	expect_emission_rejected lineage_emit_event "lineage.no_such_event" '{"project_key":"x"}' "$SID"
 	[ "$status" -ne 0 ]
 }

@@ -68,3 +68,25 @@ load_validate_path() {
     "$ONLOOKER_COMPACT_TRACKERS_DIR" \
     "$ONLOOKER_METRICS_DIR"
 }
+
+# Run a command that is expected to fail schema validation, without recording
+# the deliberate rejection in the suite-wide emission report.
+#
+# The report exists so a payload that drifts from the schema turns CI red. A
+# test that deliberately emits an invalid payload would otherwise write a
+# valid:false line indistinguishable from real drift, making the gate
+# permanently red from intentional tests. Unsetting the report directory for
+# the duration keeps the negative test honest — it still asserts the emitter
+# rejects — without polluting the gate.
+#
+# Sets $status and $output exactly as bats' `run` does.
+#
+# Usage: expect_emission_rejected <command> [args...]
+expect_emission_rejected() {
+  local saved="${ONLOOKER_TEST_REPORT_DIR:-}"
+  unset ONLOOKER_TEST_REPORT_DIR
+  run "$@"
+  if [ -n "$saved" ]; then
+    export ONLOOKER_TEST_REPORT_DIR="$saved"
+  fi
+}

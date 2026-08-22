@@ -204,6 +204,6 @@ JUDGE_ID="01J000000000000000000000JJ"
 }
 
 @test "emission fails loudly on bogus event_type (schema rejects)" {
-	run tribunal_emit_event "tribunal.no.such.event" '{"task_id":"x"}'
+	expect_emission_rejected tribunal_emit_event "tribunal.no.such.event" '{"task_id":"x"}'
 	[ "$status" -ne 0 ]
 }

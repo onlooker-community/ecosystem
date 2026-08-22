@@ -4,7 +4,7 @@
  * Uses @onlooker-community/schema for envelope shape and validation.
  */
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 // Canonical event-type constants, inlined rather than imported from
@@ -103,6 +103,41 @@ async function tryValidate(event) {
     return { available: false };
   }
   return { available: true, ...schema.validate(event) };
+}
+
+/**
+ * Test-only emission report.
+ *
+ * When ONLOOKER_TEST_REPORT_DIR is set, append one line per emission recording
+ * the event type, whether validation actually ran, and whether it passed.
+ *
+ * This exists because both signals the emitter produces on rejection — a
+ * non-zero exit and stderr — are destroyed by the hook's fail-soft exit 0,
+ * which leaves a dropped event indistinguishable from one that never fired.
+ * The report lives outside the per-test BATS_TEST_TMPDIR so the suite can gate
+ * on it after the fact.
+ *
+ * Production never sets the variable, so nothing is written there and the
+ * fail-open contract in ADR-005 is untouched. `validated` is recorded
+ * separately from `valid` so a run where the schema package never resolved is
+ * distinguishable from a run where everything passed — without it, a missing
+ * node_modules would make the gate pass while checking nothing.
+ */
+function recordEmission(event, check) {
+  const dir = process.env.ONLOOKER_TEST_REPORT_DIR;
+  if (!dir) return;
+  const record = {
+    event_type: event?.event_type ?? null,
+    validated: check.available === true,
+    valid: check.available === true ? check.valid === true : null,
+  };
+  if (check.available && !check.valid) record.errors = check.errors;
+  try {
+    mkdirSync(dir, { recursive: true });
+    appendFileSync(join(dir, 'emissions.jsonl'), `${JSON.stringify(record)}\n`);
+  } catch {
+    // A broken report must never break an emission.
+  }
 }
 
 function summarizeText(value, maxLen = 1000) {
@@ -510,6 +545,7 @@ async function main() {
     // Best-effort: reject when a validator is present (dev/CI), fail open in
     // installed plugins so the event is still emitted.
     const check = await tryValidate(mapped.event);
+    recordEmission(mapped.event, check);
     if (check.available && !check.valid) {
       console.error(JSON.stringify(check.errors, null, 2));
       process.exit(1);
@@ -538,6 +574,7 @@ async function main() {
     // Best-effort: reject when a validator is present (dev/CI), fail open in
     // installed plugins so the event is still emitted.
     const check = await tryValidate(event);
+    recordEmission(event, check);
     if (check.available && !check.valid) {
       console.error(JSON.stringify(check.errors, null, 2));
       process.exit(1);

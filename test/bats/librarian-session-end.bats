@@ -329,7 +329,7 @@ _scan_complete() {
   source "${PLUGIN_ROOT}/scripts/lib/librarian-emit.sh"
   mkdir -p "$(dirname "$ONLOOKER_EVENTS_LOG")"
 
-  librarian_emit "librarian.scan.complete" "sess-bad" \
+  expect_emission_rejected librarian_emit "librarian.scan.complete" "sess-bad" \
     '{"outcome":"gave_up","duration_ms":5}'
 
   # A refused payload never reaches the log, so the file may not exist at all.

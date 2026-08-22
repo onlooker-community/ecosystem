@@ -41,6 +41,9 @@ manifest. Nothing changes in production, which never sets the variable.
 | `test/node/emission-report.test.mjs` (create) | Proves the emitter records correctly and stays silent when unset |
 | `scripts/lint/check-bus-coverage.mjs` (create) | The gate runner — Gate A in Task 2, Gate B added in Task 4 |
 | `test/node/check-bus-coverage.test.mjs` (create) | Fixture-driven tests for the gate runner itself |
+| `test/helpers/setup.bash` (modify) | Add `expect_emission_rejected`, the opt-out for deliberate-rejection tests |
+| `test/bats/emission-report-optout.bats` (create) | Proves the opt-out suppresses a rejection and restores the report dir |
+| `test/bats/*-events.bats` (modify) | Convert negative emission call sites to the opt-out helper |
 | `test/bus-coverage.json` (create) | The committed manifest: `expected` list + `excluded` map |
 | `package.json` (modify) | Export the report dir; add `test:bus`; wire into `test:ci` |
 | `.gitignore` (modify) | Ignore `test/tmp-emission-report/` |
@@ -62,7 +65,7 @@ manifest. Nothing changes in production, which never sets the variable.
 - Produces: a report file at `$ONLOOKER_TEST_REPORT_DIR/emissions.jsonl`. Each
   line is `{ event_type: string|null, validated: boolean, valid: boolean|null,
   errors?: object[] }`. `validated` is whether the schema package resolved;
-  `valid` is `null` when it did not. Task 2 and Task 4 read this shape.
+  `valid` is `null` when it did not. Task 2 and Task 5 read this shape.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -140,9 +143,13 @@ describe('emission report', () => {
 
   it('writes nothing when the report dir is unset', () => {
     const dir = mkdtempSync(join(tmpdir(), 'emit-report-'));
+    emit(VALID, { reportDir: dir });
+    assert.equal(readReport(dir).length, 1);
+    // Same directory, but this emission is never told about it. The count must
+    // not move. Asserting on an untouched temp dir would pass either way.
     const r = emit(VALID);
     assert.equal(r.status, 0, r.stderr);
-    assert.equal(readReport(dir), null);
+    assert.equal(readReport(dir).length, 1);
   });
 
   it('appends across emissions rather than truncating', () => {
@@ -167,9 +174,10 @@ describe('emission report', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `node --test test/node/emission-report.test.mjs`
-Expected: FAIL — the first two tests fail because `readReport` returns `null`
-(no report file is written yet). The "writes nothing", "validate subcommand",
-and append tests may pass vacuously; that is fine, the first two are the gate.
+Expected: FAIL — every test that reads the report fails, because no report
+file is written yet. `readReport` returns `null` and the `.length` accesses
+throw. That is the correct failure: each test now depends on the report
+actually existing.
 
 - [ ] **Step 3: Add `appendFileSync` to the fs import**
 
@@ -285,7 +293,7 @@ a rejection outlives the hook's fail-soft exit.
 
 - Consumes: the report line shape from Task 1.
 - Produces: a CLI `check-bus-coverage.mjs [--report <dir>]` exiting 0 on pass,
-  1 on gate failure, 2 on bad arguments. Task 4 extends it with `--manifest`.
+  1 on gate failure, 2 on bad arguments. Task 5 extends it with `--manifest`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -462,7 +470,206 @@ run where validation never happened at all.
 
 ---
 
-## Task 3: Wire the report and the gate into the test scripts
+## Task 3: Keep deliberate rejections out of the report
+
+**Files:**
+
+- Modify: `test/helpers/setup.bash` (add `expect_emission_rejected`)
+- Create: `test/bats/emission-report-optout.bats`
+- Modify: every bats file with a negative emission assertion — discovered
+  empirically in Step 3, not from a fixed list
+
+**Interfaces:**
+
+- Consumes: the report shape from Task 1; the gate CLI from Task 2.
+- Produces: `expect_emission_rejected <command> [args...]`, a bats helper that
+  runs a command expected to fail validation with `ONLOOKER_TEST_REPORT_DIR`
+  unset, then restores it. Sets `$status` and `$output` exactly as `run` does.
+  Task 4 depends on this existing, or the first wired CI run is red.
+
+**Why this task exists:** ADR-005 names the negative tests — "emission fails
+loudly on a bogus event_type" — and the repo has roughly ten. Each deliberately
+emits an invalid event and asserts the emitter rejects it. Without an opt-out
+every one writes a `valid:false` line and Gate A is permanently red from
+intentional tests.
+
+Two flavors, and the second is why filtering by registered type does not work:
+
+- **Unregistered types**, e.g. `warden.bogus.event`, `bursar.no_such_event`.
+- **Registered types with deliberately bad payloads** —
+  `cartographer-events.bats` "the retired pre-implementation vocabulary no
+  longer validates" and "a typeless finding puts nothing on the bus" (both
+  `cartographer.issue.found`), and `lineage-events.bats` "an invalid tool enum
+  is rejected by the schema" (`lineage.change.recorded`). These are
+  indistinguishable from real drift, which is exactly what Gate A must catch.
+
+Note that "returns 1 when payload is empty" tests need no conversion: the bash
+wrapper returns 1 before reaching the emitter, so nothing is ever recorded.
+
+- [ ] **Step 1: Write the failing test**
+
+Create `test/bats/emission-report-optout.bats`:
+
+```bash
+#!/usr/bin/env bats
+
+setup() {
+  source "${BATS_TEST_DIRNAME}/../helpers/setup.bash"
+  setup_test_env
+
+  PLUGIN_ROOT="${REPO_ROOT}/plugins/warden"
+  export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
+  export ONLOOKER_ECOSYSTEM_ROOT="$REPO_ROOT"
+  source "${PLUGIN_ROOT}/scripts/lib/warden-events.sh"
+
+  export ONLOOKER_TEST_REPORT_DIR="${BATS_TEST_TMPDIR}/report"
+  mkdir -p "$ONLOOKER_TEST_REPORT_DIR"
+  REPORT="${ONLOOKER_TEST_REPORT_DIR}/emissions.jsonl"
+}
+
+_valid_payload() {
+  jq -cn '{source_type:"web_fetch", threat_type:"prompt_injection", confidence:0.5}'
+}
+
+# Positive control. Without this, the opt-out test below could pass because
+# nothing writes a report at all, rather than because the helper suppressed it.
+@test "a normal emission does write a report line" {
+  run warden_emit_event "warden.threat.detected" "$(_valid_payload)"
+  [ "$status" -eq 0 ] || return 1
+  [ -s "$REPORT" ]
+}
+
+@test "expect_emission_rejected keeps a deliberate rejection out of the report" {
+  expect_emission_rejected warden_emit_event "warden.bogus.event" "$(_valid_payload)"
+  [ "$status" -ne 0 ] || return 1
+  [ ! -f "$REPORT" ]
+}
+
+@test "expect_emission_rejected restores the report dir afterward" {
+  expect_emission_rejected warden_emit_event "warden.bogus.event" "$(_valid_payload)"
+  [ "$ONLOOKER_TEST_REPORT_DIR" = "${BATS_TEST_TMPDIR}/report" ] || return 1
+  run warden_emit_event "warden.threat.detected" "$(_valid_payload)"
+  [ "$status" -eq 0 ] || return 1
+  [ -s "$REPORT" ]
+}
+```
+
+- [ ] **Step 2: Run it to verify it fails**
+
+Run: `bats test/bats/emission-report-optout.bats`
+Expected: FAIL — `expect_emission_rejected: command not found`. The positive
+control should already pass; if it does not, Task 1 is broken and you should
+stop and report that rather than continuing.
+
+- [ ] **Step 3: Add the helper to `test/helpers/setup.bash`**
+
+Append after `load_validate_path`:
+
+```bash
+# Run a command that is expected to fail schema validation, without recording
+# the deliberate rejection in the suite-wide emission report.
+#
+# The report exists so a payload that drifts from the schema turns CI red. A
+# test that deliberately emits an invalid payload would otherwise write a
+# valid:false line indistinguishable from real drift, making the gate
+# permanently red from intentional tests. Unsetting the report directory for
+# the duration keeps the negative test honest — it still asserts the emitter
+# rejects — without polluting the gate.
+#
+# Sets $status and $output exactly as bats' `run` does.
+#
+# Usage: expect_emission_rejected <command> [args...]
+expect_emission_rejected() {
+  local saved="${ONLOOKER_TEST_REPORT_DIR:-}"
+  unset ONLOOKER_TEST_REPORT_DIR
+  run "$@"
+  if [ -n "$saved" ]; then
+    export ONLOOKER_TEST_REPORT_DIR="$saved"
+  fi
+}
+```
+
+- [ ] **Step 4: Run the test to verify it passes**
+
+Run: `bats test/bats/emission-report-optout.bats`
+Expected: PASS, 3 tests.
+
+- [ ] **Step 5: Discover every call site that needs converting**
+
+Do not work from a hand-written list — find them empirically, so the set is
+complete by construction:
+
+```bash
+rm -rf /tmp/optout-report
+ONLOOKER_TEST_REPORT_DIR=/tmp/optout-report bats test/bats
+node -e '
+const { readFileSync } = require("node:fs");
+const lines = readFileSync("/tmp/optout-report/emissions.jsonl", "utf8")
+  .trim().split("\n").filter(Boolean).map((l) => JSON.parse(l));
+const bad = lines.filter((l) => l.valid === false);
+console.log("rejected emissions recorded:", bad.length);
+for (const t of [...new Set(bad.map((l) => l.event_type))].sort()) console.log("  ", t);
+'
+```
+
+Every type printed corresponds to at least one negative test. Locate each with
+`grep -rn '<type>' test/bats/`.
+
+- [ ] **Step 6: Convert each negative call site**
+
+For each, replace the `run` with `expect_emission_rejected` and leave the
+assertions untouched. For example, in `test/bats/warden-events.bats`:
+
+```bash
+	run warden_emit_event "warden.bogus.event" "$p"
+	[ "$status" -ne 0 ]
+```
+
+becomes:
+
+```bash
+	expect_emission_rejected warden_emit_event "warden.bogus.event" "$p"
+	[ "$status" -ne 0 ]
+```
+
+Multi-line invocations keep their continuations — only the leading `run` word
+changes. Do **not** convert the "returns 1 when payload is empty" tests; they
+never reach the emitter.
+
+- [ ] **Step 7: Verify no rejection is recorded any more**
+
+Re-run the discovery command from Step 5.
+Expected: `rejected emissions recorded: 0`.
+
+If any remain, convert those call sites too and repeat until the count is zero.
+
+- [ ] **Step 8: Confirm the negative tests still fail for the right reason**
+
+The conversion must not have neutered them. Pick
+`test/bats/cartographer-events.bats` "a typeless finding puts nothing on the
+bus", temporarily change its expected status from `-ne 0` to `-eq 0`, and
+confirm the test now FAILS. Restore it afterward.
+
+This is the check that matters: a helper that silently swallowed the failure
+would leave the test passing either way, which is worse than no test.
+
+- [ ] **Step 9: Run the full suite**
+
+Run: `npm run test:bats && npm run test:schema`
+Expected: PASS, same test count as before your changes plus the 3 new ones.
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add test/helpers/setup.bash test/bats/emission-report-optout.bats test/bats/
+```
+
+Then run `/commit` with: keep deliberate rejections out of the emission report
+so the gate stays red only for real drift.
+
+---
+
+## Task 4: Wire the report and the gate into the test scripts
 
 **Files:**
 
@@ -471,9 +678,11 @@ run where validation never happened at all.
 
 **Interfaces:**
 
-- Consumes: the gate CLI from Task 2.
+- Consumes: the gate CLI from Task 2, and `expect_emission_rejected` from
+  Task 3 — without it this task's first green run is impossible, because the
+  negative tests would fill the report with deliberate rejections.
 - Produces: `test/tmp-emission-report/emissions.jsonl` populated by a real suite
-  run. Task 4 reads it to bootstrap the manifest.
+  run. Task 5 reads it to bootstrap the manifest.
 
 - [ ] **Step 1: Ignore the report directory**
 
@@ -549,7 +758,7 @@ on it in CI.
 
 ---
 
-## Task 4: The manifest and Gate B
+## Task 5: The manifest and Gate B
 
 **Files:**
 
@@ -559,14 +768,14 @@ on it in CI.
 
 **Interfaces:**
 
-- Consumes: the populated report from Task 3; `ALL_EVENT_TYPES` from
+- Consumes: the populated report from Task 4; `ALL_EVENT_TYPES` from
   `@onlooker-community/schema` (125 entries at time of writing).
 - Produces: `test/bus-coverage.json` with `{ expected: string[], excluded:
   Record<string, string> }`, and a `--manifest <path>` flag on the gate CLI.
 
 - [ ] **Step 1: Generate the manifest skeleton from a real run**
 
-With a clean report present from Task 3, run:
+With a clean report present from Task 4, run:
 
 ```bash
 node -e "
@@ -808,7 +1017,7 @@ covered by a test or excluded with a stated reason.
 
 ---
 
-## Task 5: Documentation
+## Task 6: Documentation
 
 **Files:**
 
@@ -818,7 +1027,7 @@ covered by a test or excluded with a stated reason.
 
 **Interfaces:**
 
-- Consumes: the finished harness from Tasks 1–4. Produces no code.
+- Consumes: the finished harness from Tasks 1–5. Produces no code.
 
 - [ ] **Step 1: Document the gates in `docs/architecture.md`**
 

@@ -93,7 +93,47 @@ Every observable event flows through `onlooker-event.mjs` before being written t
 
 The schema is versioned independently and published to npm. Plugin shell scripts invoke `onlooker-event.mjs` at runtime so schema validation always reflects the installed version.
 
-> **Note:** Not all events in the JSONL log are schema-validated. `prompt_rule.*` events are currently emitted outside the canonical schema pipeline (the event types are not yet defined in `@onlooker-community/schema`). Schema-first emission is the goal for all future event types.
+> **Note:** Not all events in the JSONL log are schema-validated. `prompt_rule.*` events are currently emitted outside the canonical schema pipeline (`prompt_rules_emit` in `scripts/lib/prompt-rules.sh` writes straight to `$ONLOOKER_EVENTS_LOG` via `jq`, bypassing `onlooker-event.mjs` entirely). Schema-first emission is the goal for all future event types.
+
+### Emission gates
+
+Payload drift used to be invisible. The emitter validates against
+`@onlooker-community/schema` wherever it resolves and rejects a bad event with
+a non-zero exit, but hooks fail soft and exit 0, so the rejection was destroyed
+and the event simply never appeared.
+
+Two CI gates close that hole. During the test suite `ONLOOKER_TEST_REPORT_DIR`
+is set, and the emitter appends one line per emission to `emissions.jsonl`
+recording whether validation ran (`validated`) and, if so, whether it passed
+(`valid`). `npm run test:bus` (`scripts/lint/check-bus-coverage.mjs`) reads
+that report and runs two gates against it, after `test:bats` and `test:schema`
+have populated the report:
+
+- **Gate A** fails if the report is empty, if nothing in it was actually
+  validated (the schema package never resolved — usually a missing
+  `npm ci`), or if any recorded emission was rejected, naming the type and
+  its ajv errors.
+- **Gate B** checks every event type in `@onlooker-community/schema`'s
+  `ALL_EVENT_TYPES` against `test/bus-coverage.json`, and fails when:
+  1. an `expected` type never produced a validated emission during the
+     suite;
+  2. a registered type is missing from both `expected` and `excluded` (or
+     the manifest names a type the schema doesn't register);
+  3. an `excluded` type carries an empty reason; or
+  4. an `excluded` type *did* emit and validate during the suite — without
+     this check, moving a genuinely-emitted type into `excluded` with any
+     non-empty reason would satisfy the other three, so coverage could be
+     silently under-claimed while CI stayed green.
+
+Gate B only runs when Gate A found at least one validated emission in the
+report. A merely non-empty report where nothing validated would otherwise
+bury the one real failure under one "expected type never emitted" line per
+expected type — 82 lines of noise for 1 real cause, measured against the
+current manifest.
+
+Adding an event type therefore requires triaging it into
+`test/bus-coverage.json` — as `expected`, meaning a test exercises the branch
+that emits it, or as `excluded` with a stated reason.
 
 ## Project keying
 

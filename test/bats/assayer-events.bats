@@ -89,7 +89,7 @@ AUDIT_ID="01J0000000000000000000AB34"
 }
 
 @test "emission fails on unknown event type" {
-	run assayer_emit_event "assayer.no.such.event" '{"audit_id":"x"}'
+	expect_emission_rejected assayer_emit_event "assayer.no.such.event" '{"audit_id":"x"}'
 	[ "$status" -ne 0 ]
 }
 

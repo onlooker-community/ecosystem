@@ -80,6 +80,6 @@ _validate_latest_event() {
 	# warden.* type must be rejected so typos never reach the log.
 	local p
 	p=$(jq -n '{source_type:"web_fetch", threat_type:"prompt_injection", confidence:0.5}')
-	run warden_emit_event "warden.bogus.event" "$p"
+	expect_emission_rejected warden_emit_event "warden.bogus.event" "$p"
 	[ "$status" -ne 0 ]
 }
