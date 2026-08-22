@@ -183,19 +183,39 @@ librarian_lesson_promote() {
 		# declined.jsonl, double-counting a rejected artifact in the
 		# rubric-tuning signal the ledger exists to carry.
 		#
+		# Keyed on lesson_id, not artifact_id. The approved branch's guard is
+		# approved/<lesson_id>.json — per-proposal by construction — and this
+		# one has to match it. Keyed on artifact_id it could not tell "this
+		# artifact was already declined" from "a DIFFERENT proposal for the
+		# same artifact was already declined", so the second of two colliding
+		# proposals skipped its append and returned 0: both stamped, one
+		# verdict on disk. That is the inverse of the double-write this guard
+		# exists to stop, and still loses the per-judge detail (ecosystem-bkj).
+		#
+		# The artifact_id clause is the fallback for rows that legitimately
+		# carry no lesson_id: those written before this change, and those the
+		# transform writes for an artifact rejected before any proposal
+		# existed. Dropping it would leave an unstamped pre-change proposal
+		# double-writing on re-run — trading this bug for the older one.
+		#
 		# Same scan shape as librarian_lesson_seen: -R/fromjson? survives a
 		# truncated trailing line from a process killed mid-append, and
 		# `objects` stops a valid-but-non-object line from erroring the whole
 		# invocation.
 		already_declined=false
 		if [[ -f "$declined_path" ]] \
-			&& jq -Re --arg a "$artifact_id" 'fromjson? | objects | select(.artifact_id == $a)' \
+			&& jq -Re --arg a "$artifact_id" --arg l "$lesson_id" \
+				'fromjson? | objects
+				 | select(
+				     ($l != "" and .lesson_id == $l)
+				     or ((.lesson_id // null) == null and .artifact_id == $a)
+				   )' \
 				"$declined_path" >/dev/null 2>&1; then
 			already_declined=true
 		fi
 
 		if [[ "$already_declined" == false ]]; then
-			librarian_lesson_append_declined "$key" "$artifact_id" "$reason" "" "$verdict" || {
+			librarian_lesson_append_declined "$key" "$artifact_id" "$reason" "" "$verdict" "$lesson_id" || {
 				printf 'Lesson %s: cannot append to the declined ledger.\n' "$lesson_id" >&2
 				return 1
 			}
