@@ -83,6 +83,11 @@ See `plugins/compass/docs/adr/001-evaluate-prompts-in-context.md` for the full d
    a test drives the branch that emits it, `excluded` with a reason when not.
    `npm run test:bus` fails on any registered type that appears in neither list.
 7. Fail-soft when `~/.onlooker/` is absent — plugins must not block a session they were not invited to.
+8. In `plugins/<name>/scripts/lib/<name>-config.sh`, locate `config-loader.sh` from the file's own
+   `${BASH_SOURCE[0]}`, never from a caller-supplied `$PLUGIN_ROOT`. That variable is read at source
+   time from whatever scope did the sourcing, so a sub-shell that inherits `CLAUDE_PLUGIN_ROOT` but not
+   `PLUGIN_ROOT` loses every accessor while still exiting 0 — config silently falls back to defaults.
+   `test/bats/config-lib-self-locating.bats` enforces this across every plugin.
 
 ## Development
 

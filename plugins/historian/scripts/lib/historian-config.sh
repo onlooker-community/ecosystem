@@ -14,8 +14,12 @@
 #
 # Settings overlay only touches the `historian.*` subtree of settings.json.
 
-# shellcheck source=../../../scripts/lib/config-loader.sh
-source "${PLUGIN_ROOT}/../../scripts/lib/config-loader.sh"
+# Resolve the shared loader from this file's own location. $PLUGIN_ROOT is
+# whatever the sourcing scope happened to set, so a sub-shell that inherits
+# CLAUDE_PLUGIN_ROOT but not PLUGIN_ROOT would lose every accessor silently.
+_HISTORIAN_CONFIG_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/lib/config-loader.sh
+source "${_HISTORIAN_CONFIG_LIB_DIR}/../../../../scripts/lib/config-loader.sh"
 
 _HISTORIAN_CONFIG="{}"
 
