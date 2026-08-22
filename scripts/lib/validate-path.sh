@@ -530,11 +530,32 @@ turn_state_next_tool() {
   fi
 }
 
-# Safely emit dev-os event (validates emit script exists)
-# Automatically exports turn state if not already set, so every emission
-# gets hook_type/turn/tool_call_seq in the envelope without callers needing
-# to call turn_state_export() explicitly.
-# Usage: echo "$INPUT" | safe_emit "event_type" '{"key":"value"}'
+# Safely emit an Onlooker event through the canonical emitter.
+#
+# Automatically exports turn state if not already set, so a caller does not have
+# to call turn_state_export() itself. Note the turn rides in the PAYLOAD, as
+# turn_number, for the event types whose schema declares it — the envelope has
+# no turn field and is additionalProperties:false.
+#
+# Returns non-zero and writes NOTHING when $ONLOOKER_EMIT is unavailable.
+#
+# There used to be a fallback here that hand-built an envelope with jq and
+# appended it directly. Every line it wrote was unvalidatable: it omitted all
+# five required id/schema_version/runtime/machine_id/sequence fields, and added
+# four the envelope forbids outright (hook_type, tool_name, turn,
+# tool_call_seq). It was reached only when $ONLOOKER_EMIT was missing — a file
+# that ships next to this one, so it never fired in a normal checkout or
+# install — which is how it stayed broken and unnoticed. See ecosystem-0tm.
+#
+# Dropping it rather than teaching it to call the emitter is the same
+# fail-closed choice made for prompt_rules_emit in ecosystem-aaz: an
+# unparseable line on the bus is worse than a missing one, and a second way to
+# build an envelope is a second thing to drift.
+#
+# Callers must tolerate a non-zero return — hooks run under `set -e`, so use
+# `safe_emit ... || true` when the emission is advisory.
+#
+# Usage: safe_emit "event_type" '{"key":"value"}'
 safe_emit() {
   local event_type="$1"
   local payload="$2"
@@ -544,38 +565,8 @@ safe_emit() {
     turn_state_export "$_HOOK_SESSION_ID"
   fi
 
-  if validate_file_exists "$ONLOOKER_EMIT"; then
-    "$ONLOOKER_EMIT" "$event_type" "$payload"
-  else
-    # Fallback: write directly to events log with envelope enrichment.
-    # Uses env vars set by hook_set_context() — NOT stdin (already consumed).
-    ensure_file_exists "$ONLOOKER_EVENTS_LOG" || return 1
-    local timestamp session_id plugin_name hook_type tool_name turn tool_seq
-    timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    session_id="${_HOOK_SESSION_ID:-}"
-    if [[ -z "$session_id" ]]; then
-      session_id=$(echo "$payload" | jq -r '.session_id // "unknown"' 2>/dev/null) || session_id="unknown"
-    fi
-    plugin_name="${ONLOOKER_PLUGIN_NAME:-unknown}"
-    hook_type="${ONLOOKER_HOOK_TYPE:-}"
-    tool_name="${ONLOOKER_TOOL_NAME:-}"
-    turn="${ONLOOKER_TURN_NUMBER:-}"
-    tool_seq="${ONLOOKER_TURN_TOOL_SEQ:-}"
-    jq -cn \
-      --arg ts "$timestamp" \
-      --arg sid "$session_id" \
-      --arg plugin "$plugin_name" \
-      --arg type "$event_type" \
-      --arg hook_type "$hook_type" \
-      --arg tool_name "$tool_name" \
-      --arg turn "$turn" \
-      --arg tool_seq "$tool_seq" \
-      --argjson payload "$payload" \
-      '{timestamp: $ts, session_id: $sid, plugin: $plugin, event_type: $type, payload: $payload}
-      + (if $hook_type != "" then {hook_type: $hook_type} else {} end)
-      + (if $tool_name != "" then {tool_name: $tool_name} else {} end)
-      + (if $turn != "" then {turn: ($turn | tonumber)} else {} end)
-      + (if $tool_seq != "" then {tool_call_seq: ($tool_seq | tonumber)} else {} end)
-      ' >> "$ONLOOKER_EVENTS_LOG"
+  if ! validate_file_exists "$ONLOOKER_EMIT"; then
+    return 1
   fi
+  "$ONLOOKER_EMIT" "$event_type" "$payload"
 }

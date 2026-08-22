@@ -108,6 +108,52 @@ setup() {
     >/dev/null
 }
 
+@test "safe_emit's line validates as a canonical envelope, not just a lookalike" {
+  # The assertion above spot-checks four fields. A hand-built envelope can pass
+  # that while still being rejected by the schema, which is exactly how the
+  # fallback below stayed broken. Validate the whole line instead.
+  export _HOOK_SESSION_ID="emit-session"
+  safe_emit "tool.file.read" '{"path":"/tmp/example.txt","read_mode":"full"}'
+  tail -n 1 "$ONLOOKER_EVENTS_LOG" \
+    | ONLOOKER_DIR="$ONLOOKER_DIR" node "${REPO_ROOT}/scripts/lib/onlooker-event.mjs" validate >/dev/null
+}
+
+@test "safe_emit writes nothing when the emit script is missing" {
+  # The degraded path. It used to hand-build an envelope with jq that omitted
+  # every required id/schema_version/runtime/machine_id/sequence field and added
+  # four the schema forbids (hook_type, tool_name, turn, tool_call_seq), on an
+  # envelope that is additionalProperties:false. An unparseable line on the bus
+  # is worse than a missing one, so this path now writes nothing at all.
+  # See ecosystem-0tm.
+  export _HOOK_SESSION_ID="emit-session"
+  export ONLOOKER_HOOK_TYPE="PreToolUse"
+  export ONLOOKER_TOOL_NAME="Read"
+  export ONLOOKER_TURN_NUMBER=4
+  export ONLOOKER_TURN_TOOL_SEQ=2
+  export ONLOOKER_EMIT="${BATS_TEST_TMPDIR}/no-such-emit.sh"
+
+  : >"$ONLOOKER_EVENTS_LOG"
+  run safe_emit "tool.file.read" '{"path":"/tmp/example.txt","read_mode":"full"}'
+  [ "$status" -ne 0 ] || return 1
+  [ ! -s "$ONLOOKER_EVENTS_LOG" ]
+}
+
+@test "safe_emit's failure to emit never aborts the calling hook" {
+  # safe_emit is substrate: returning non-zero must be absorbable by a caller
+  # running under `set -e`, the shape every hook uses. Assert the caller
+  # survives and reaches its next statement.
+  export ONLOOKER_EMIT="${BATS_TEST_TMPDIR}/no-such-emit.sh"
+  run bash -c "
+    set -euo pipefail
+    source '${REPO_ROOT}/scripts/lib/validate-path.sh'
+    export ONLOOKER_EMIT='${BATS_TEST_TMPDIR}/no-such-emit.sh'
+    safe_emit 'tool.file.read' '{\"path\":\"/x\",\"read_mode\":\"full\"}' || true
+    echo REACHED
+  "
+  [ "$status" -eq 0 ] || return 1
+  [[ "$output" == *"REACHED"* ]]
+}
+
 # ----------------------------------------------------------------------------
 # Hook health instrumentation: hook_register / hook_success / hook_failure
 # ----------------------------------------------------------------------------
