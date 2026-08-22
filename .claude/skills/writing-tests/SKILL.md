@@ -144,6 +144,24 @@ tail -n 1 "$ONLOOKER_EVENTS_LOG" \
 
 Production code must emit only through `scripts/lib/onlooker-event.mjs` (often via a plugin wrapper like `librarian_emit` / `assayer_emit_event`) — never by writing the log directly. New event types must be registered in `@onlooker-community/schema` before they validate.
 
+You no longer need a bespoke per-plugin test proving a payload validates. The
+suite gates every emission at once: `ONLOOKER_TEST_REPORT_DIR` is set during
+`test:bats` and `test:schema`, and `npm run test:bus` fails on any rejected
+emission. Write the test that drives the branch; the gate does the validating.
+
+What still matters is exercising the *rare* branches. A payload is only checked
+when some test makes the code emit it, so an enum bug on an error path stays
+invisible until a test reaches that path.
+
+If a test deliberately emits an invalid payload — proving a bad event type or
+malformed payload gets rejected — wrap the call in `expect_emission_rejected`
+(`test/helpers/setup.bash`) instead of calling it directly. It unsets
+`ONLOOKER_TEST_REPORT_DIR` for the duration of the call and restores it
+afterward, so the deliberate rejection never lands in `emissions.jsonl`. Skip
+this and Gate A fails: it counts every rejection in the report as a real
+regression, deliberate or not, and can't tell your negative test from schema
+drift.
+
 ### Seed fixtures and generate IDs
 
 Write fixtures with `jq -n` into the plugin's project-keyed directory, and generate IDs with the plugin's `*-ulid.sh` (ULIDs, not UUIDs — a repo-wide convention). A typical artifact seeder:
