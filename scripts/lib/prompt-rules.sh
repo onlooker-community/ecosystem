@@ -26,6 +26,13 @@
 export ONLOOKER_PROMPT_RULES_DIR="${ONLOOKER_PROMPT_RULES_DIR:-$ONLOOKER_DIR/prompt-rules}"
 export ONLOOKER_PROMPT_RULES_SESSIONS_DIR="$ONLOOKER_PROMPT_RULES_DIR/sessions"
 
+# The canonical emitter is a sibling file, so resolve it from this script's own
+# location rather than from a caller-supplied $CLAUDE_PLUGIN_ROOT. Sourcing this
+# lib from a scope that never set that variable then still yields a working
+# emit path instead of a silent no-op.
+_PROMPT_RULES_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_PROMPT_RULES_EVENT_JS="$_PROMPT_RULES_LIB_DIR/onlooker-event.mjs"
+
 # Path to the global rules file.
 # Usage: path=$(prompt_rules_global_path)
 prompt_rules_global_path() {
@@ -142,8 +149,24 @@ prompt_rules_pattern_matches() {
 }
 
 # Append a prompt-rule event to the global events log.
-# These event types (prompt_rule.matched, prompt_rule.applied) are not yet
-# in @onlooker-community/schema; once added, swap to onlooker_append_event.
+#
+# Routes through onlooker-event.mjs like every other emit path in the repo, so
+# the envelope is built once, in one place, and validated against
+# @onlooker-community/schema wherever that package resolves (dev, CI, tests).
+#
+# This used to hand-build a five-field envelope with jq. That envelope was
+# never valid: it omitted every required id/schema_version/runtime/machine_id/
+# sequence field, and it added a `turn` field the envelope forbids outright
+# (event.v1.json is additionalProperties:false and has no `turn`). The canonical
+# emitter carries a turn as `turn_number` INSIDE the payload, and neither
+# prompt_rule payload schema has that property, so a turn number has nowhere
+# valid to go on these two event types and is no longer recorded.
+#
+# Fails closed: if the emitter is missing or rejects the payload, nothing is
+# written. A dropped telemetry event beats an unparseable line on the bus, and
+# both callers in prompt-rule-injector.sh already discard the return with
+# `|| true` so a rejection can never block prompt submission.
+#
 # Usage: prompt_rules_emit "$session_id" "prompt_rule.matched" "$payload_json"
 prompt_rules_emit() {
   local session_id="${1:-unknown}"
@@ -155,22 +178,30 @@ prompt_rules_emit() {
   local payload_json="${3:-}"
   [ -z "$payload_json" ] && payload_json='{}'
   [[ -z "$event_type" ]] && return 1
-  ensure_file_exists "$ONLOOKER_EVENTS_LOG" || return 1
 
-  local timestamp plugin
-  timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  local event_js="$_PROMPT_RULES_EVENT_JS"
+  [[ -n "${_ONLOOKER_EVENT_JS:-}" && -f "${_ONLOOKER_EVENT_JS}" ]] && event_js="$_ONLOOKER_EVENT_JS"
+  [[ -f "$event_js" ]] || return 1
+
+  local plugin
   plugin="${ONLOOKER_PLUGIN_NAME:-onlooker}"
 
-  jq -cn \
-    --arg ts "$timestamp" \
-    --arg sid "$session_id" \
+  local params
+  params=$(jq -cn \
     --arg plugin "$plugin" \
+    --arg sid "$session_id" \
     --arg type "$event_type" \
     --argjson payload "$payload_json" \
-    --arg turn "${ONLOOKER_TURN_NUMBER:-}" \
-    '{timestamp: $ts, session_id: $sid, plugin: $plugin, event_type: $type, payload: $payload}
-     + (if $turn != "" then {turn: ($turn | tonumber)} else {} end)
-    ' >> "$ONLOOKER_EVENTS_LOG"
+    '{plugin: $plugin, session_id: $sid, event_type: $type, payload: $payload}') || return 1
+
+  local event
+  event=$(printf '%s' "$params" \
+    | ONLOOKER_DIR="$ONLOOKER_DIR" ONLOOKER_PLUGIN_NAME="$plugin" \
+      node "$event_js" emit 2>/dev/null) || return 1
+  [[ -z "$event" ]] && return 1
+
+  ensure_file_exists "$ONLOOKER_EVENTS_LOG" || return 1
+  printf '%s\n' "$event" >> "$ONLOOKER_EVENTS_LOG"
 }
 
 # Print a human-readable table of merged rules with their fired status.

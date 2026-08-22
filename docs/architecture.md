@@ -93,7 +93,9 @@ Every observable event flows through `onlooker-event.mjs` before being written t
 
 The schema is versioned independently and published to npm. Plugin shell scripts invoke `onlooker-event.mjs` at runtime so schema validation always reflects the installed version.
 
-> **Note:** Not all events in the JSONL log are schema-validated. `prompt_rule.*` events are currently emitted outside the canonical schema pipeline (`prompt_rules_emit` in `scripts/lib/prompt-rules.sh` writes straight to `$ONLOOKER_EVENTS_LOG` via `jq`, bypassing `onlooker-event.mjs` entirely). Schema-first emission is the goal for all future event types.
+> **Note:** Every emission path that fires in normal operation routes through `onlooker-event.mjs`. `prompt_rule.*` was the last routine exception — `prompt_rules_emit` hand-built its envelope with `jq` and wrote straight to `$ONLOOKER_EVENTS_LOG`, so those lines carried none of the required `id`/`schema_version`/`runtime`/`machine_id`/`sequence` fields and added a `turn` field the envelope forbids. It now goes through the emitter like everything else.
+>
+> One hand-built envelope remains, in the `safe_emit` fallback in `scripts/lib/validate-path.sh`. It is reached only when `$ONLOOKER_EMIT` is missing, which does not happen in a normal checkout or install, so it is latent rather than live — but if it ever fires it writes the same unvalidatable shape. Route new event types through the emitter rather than writing to the log directly: an envelope assembled anywhere else will drift from the schema without anything noticing.
 
 ### Emission gates
 
