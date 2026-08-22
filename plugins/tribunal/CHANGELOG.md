@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.8](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.2.7...tribunal-v1.2.8) (2026-08-22)
+
+
+### Bug Fixes
+
+* **config:** let every config lib find the loader from its own path :broom: ([#198](https://github.com/onlooker-community/ecosystem/issues/198)) ([249fe41](https://github.com/onlooker-community/ecosystem/commit/249fe41bf191db48239c2028ba77a10b3dcb03af))
+
 ## [1.2.7](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.2.6...tribunal-v1.2.7) (2026-08-16)
 
 

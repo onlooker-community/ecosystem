@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/onlooker-community/ecosystem/compare/echo-v0.3.1...echo-v0.3.2) (2026-08-22)
+
+
+### Bug Fixes
+
+* **config:** let every config lib find the loader from its own path :broom: ([#198](https://github.com/onlooker-community/ecosystem/issues/198)) ([249fe41](https://github.com/onlooker-community/ecosystem/commit/249fe41bf191db48239c2028ba77a10b3dcb03af))
+
 ## [0.3.1](https://github.com/onlooker-community/ecosystem/compare/echo-v0.3.0...echo-v0.3.1) (2026-08-01)
 
 
