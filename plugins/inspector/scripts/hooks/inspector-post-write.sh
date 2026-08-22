@@ -40,14 +40,10 @@ TOOL_TARGET=$(printf '%s' "$HOOK_INPUT" \
 	| jq -r '.tool_input.file_path // .tool_input.path // empty' 2>/dev/null)
 [[ -z "$TOOL_TARGET" ]] && exit 0
 
-# Canonicalize.
-if command -v realpath &>/dev/null; then
-	CANONICAL=$(realpath "$TOOL_TARGET" 2>/dev/null) || CANONICAL="$TOOL_TARGET"
-elif command -v readlink &>/dev/null; then
-	CANONICAL=$(readlink -f "$TOOL_TARGET" 2>/dev/null) || CANONICAL="$TOOL_TARGET"
-else
-	CANONICAL="$TOOL_TARGET"
-fi
+# Canonicalize through the same helper the repo root uses. The containment
+# check below is a prefix match, so both sides have to be resolved the same
+# way — see inspector_canonical_path and ecosystem-foi.
+CANONICAL=$(inspector_canonical_path "$TOOL_TARGET")
 export INSPECTOR_FILE="$CANONICAL"
 
 REPO_ROOT=$(inspector_project_repo_root "$CWD")

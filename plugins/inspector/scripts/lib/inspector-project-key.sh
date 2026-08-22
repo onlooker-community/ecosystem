@@ -23,11 +23,68 @@ _inspector_sha256_first12() {
 	fi
 }
 
+# Resolve a path to its physical form — symlinks expanded, no trailing slash.
+#
+# The hook decides whether a touched file lives inside the repo by prefix-
+# matching one canonicalized path against the other. Both sides MUST come
+# through this one function. They used to be canonicalized independently
+# (realpath for the file, `git rev-parse --show-toplevel` for the root), each
+# with its own fallback, and on macOS /var is a symlink to /private/var — so
+# whenever either mechanism fell back, the two sides landed in different
+# namespaces and the prefix match failed. The hook then reported not_in_repo
+# for a file plainly inside the repo, exiting 0 with no output. See
+# ecosystem-foi, where that surfaced as an intermittent test failure.
+#
+# The last resort is `cd` + `pwd -P`, a bash builtin that needs no external
+# tool, so this still returns a physical path when neither realpath nor a
+# GNU-style `readlink -f` is available.
+#
+# Usage: canonical=$(inspector_canonical_path "$some_path")
+inspector_canonical_path() {
+	local p="${1:-}"
+	[[ -z "$p" ]] && return 0
+
+	local out
+	if out=$(realpath "$p" 2>/dev/null) && [[ -n "$out" ]]; then
+		printf '%s' "$out"
+		return 0
+	fi
+	# BSD readlink has no -f, so this silently no-ops there and falls through.
+	if out=$(readlink -f "$p" 2>/dev/null) && [[ -n "$out" ]]; then
+		printf '%s' "$out"
+		return 0
+	fi
+
+	if [[ -d "$p" ]]; then
+		out=$(cd "$p" 2>/dev/null && pwd -P) && [[ -n "$out" ]] && {
+			printf '%s' "$out"
+			return 0
+		}
+	else
+		local dir base
+		dir=$(dirname "$p")
+		base=$(basename "$p")
+		out=$(cd "$dir" 2>/dev/null && pwd -P) && [[ -n "$out" ]] && {
+			printf '%s/%s' "$out" "$base"
+			return 0
+		}
+	fi
+
+	# Nothing resolved it — hand back the input rather than an empty string,
+	# so a caller comparing two of these still compares like with like.
+	printf '%s' "$p"
+}
+
 inspector_project_repo_root() {
 	local cwd="${1:-$(pwd)}"
 	local root
-	root=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) && printf '%s' "$root" && return 0
-	printf '%s' "$cwd"
+	# Canonicalize BOTH the git answer and the fallback. git already returns a
+	# physical path, so the first call is a no-op; the fallback is the caller's
+	# raw cwd, which is exactly the case that used to diverge.
+	root=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) \
+		&& [[ -n "$root" ]] \
+		&& { inspector_canonical_path "$root"; return 0; }
+	inspector_canonical_path "$cwd"
 }
 
 inspector_project_remote_url() {

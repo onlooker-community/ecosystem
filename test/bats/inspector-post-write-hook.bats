@@ -155,3 +155,95 @@ EOF
 	# The last argv slot should now hold the resolved touched file path.
 	[[ "$(echo "$argv" | jq -r '.[-1]')" == *"src/sample.ts" ]]
 }
+
+# ── path canonicalization (ecosystem-foi) ────────────────────────────────────
+#
+# The hook decides "is this file inside the repo?" by prefix-matching the
+# canonicalized file path against the repo root. Those two paths used to be
+# canonicalized by INDEPENDENT mechanisms — realpath for the file, `git
+# rev-parse --show-toplevel` for the root — each with its own fallback. On
+# macOS /var is a symlink to /private/var, so whenever either mechanism fell
+# back, the two sides landed in different namespaces, the prefix match failed,
+# and the hook reported not_in_repo for a file plainly inside the repo: exit 0,
+# no agent output, one misleading .skipped event.
+#
+# That is the exact signature of the intermittent failure in ecosystem-foi,
+# where the hook exited 0 but emitted no file header. These tests force each
+# fallback deterministically instead of waiting for the flake.
+
+_stub_dir() {
+	local d="${BATS_TEST_TMPDIR}/stub-$1"
+	mkdir -p "$d"
+	printf '%s' "$d"
+}
+
+_failing_check_settings() {
+	cat <<'EOF' | _settings
+{"inspector":{"checks":{".ts":[
+	{"name":"broken","kind":"lint","argv":["sh","-c","echo 'src/sample.ts:1:1 - Bad'; exit 2"]}
+]}}}
+EOF
+}
+
+@test "the repo-root fallback still finds a file inside the repo when git fails" {
+	# git rev-parse failing sends inspector_project_repo_root to its $cwd
+	# fallback, which is the caller-supplied (unresolved) path.
+	_failing_check_settings
+	local stub
+	stub=$(_stub_dir git)
+	printf '#!/bin/sh\nexit 1\n' >"${stub}/git"
+	chmod +x "${stub}/git"
+
+	run bash -c "printf '%s' '$(_input)' | PATH='${stub}:$PATH' ONLOOKER_DIR='$ONLOOKER_DIR' CLAUDE_PLUGIN_ROOT='$PLUGIN_ROOT' bash '$HOOK'"
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" == *"inspector: src/sample.ts"* ]] || return 1
+	[ "$(_event_count inspector.check.failed)" = "1" ]
+}
+
+@test "the file is still found inside the repo when realpath is unavailable" {
+	# realpath failing leaves the file path unresolved while the repo root,
+	# coming from git, is resolved — the same mismatch from the other side.
+	_failing_check_settings
+	local stub
+	stub=$(_stub_dir realpath)
+	printf '#!/bin/sh\nexit 1\n' >"${stub}/realpath"
+	chmod +x "${stub}/realpath"
+
+	run bash -c "printf '%s' '$(_input)' | PATH='${stub}:$PATH' ONLOOKER_DIR='$ONLOOKER_DIR' CLAUDE_PLUGIN_ROOT='$PLUGIN_ROOT' bash '$HOOK'"
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" == *"inspector: src/sample.ts"* ]] || return 1
+	[ "$(_event_count inspector.check.failed)" = "1" ]
+}
+
+@test "a file genuinely outside the repo still reports not_in_repo" {
+	# The containment check must still say no when the answer really is no —
+	# canonicalizing both sides must not turn it into a rubber stamp.
+	_failing_check_settings
+	local outside="${BATS_TEST_TMPDIR}/outside.ts"
+	printf 'x\n' >"$outside"
+
+	run _run_hook "$(_input "$REPO" "Edit" "$outside")"
+	[ "$status" -eq 0 ] || return 1
+	[ -z "$output" ] || return 1
+	[ "$(jq -r 'select(.event_type=="inspector.check.skipped").payload.reason' "$ONLOOKER_EVENTS_LOG")" = "not_in_repo" ]
+}
+
+@test "canonicalization survives with neither realpath nor readlink -f" {
+	# The last resort is `cd` + `pwd -P`, a builtin. Without it, a box with no
+	# GNU coreutils would hit the same namespace mismatch through a third door,
+	# and no other test forces this branch.
+	_failing_check_settings
+	local stub
+	stub=$(_stub_dir noresolvers)
+	printf '#!/bin/sh\nexit 1\n' >"${stub}/realpath"
+	printf '#!/bin/sh\nexit 1\n' >"${stub}/readlink"
+	chmod +x "${stub}/realpath" "${stub}/readlink"
+
+	run bash -c "printf '%s' '$(_input)' | PATH='${stub}:$PATH' ONLOOKER_DIR='$ONLOOKER_DIR' CLAUDE_PLUGIN_ROOT='$PLUGIN_ROOT' bash '$HOOK'"
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" == *"inspector: src/sample.ts"* ]] || return 1
+	# file_path_relative must still be repo-relative, not an absolute path —
+	# that is what proves the prefix strip found the root, rather than the
+	# header printing off a coincidentally-passing comparison.
+	[ "$(jq -r 'select(.event_type=="inspector.check.failed").payload.file_path_relative' "$ONLOOKER_EVENTS_LOG")" = "src/sample.ts" ]
+}
