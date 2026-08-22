@@ -6,9 +6,11 @@
 # and injects guidance for rules whose POSIX-ERE pattern matches the prompt.
 # Each rule fires at most once per session per rule_id.
 #
-# Emits canonical-ish events to ~/.onlooker/logs/onlooker-events.jsonl:
+# Emits canonical events to ~/.onlooker/logs/onlooker-events.jsonl:
 #   prompt_rule.matched — every match (including subsequent matches in-session)
 #   prompt_rule.applied — only when guidance is actually injected
+# Both route through onlooker-event.mjs and are schema-validated; a rejected
+# event is dropped rather than written, and never blocks prompt submission.
 #
 # Usage:
 #   echo "$INPUT" | prompt-rule-injector.sh
@@ -74,8 +76,14 @@ while IFS= read -r rule; do
     continue
   fi
 
+  # match_type and trigger_source are required by the prompt_rule.matched
+  # payload schema. Both are fixed for this hook rather than derived: rules
+  # match with bash `[[ =~ ]]`, which is POSIX ERE, and the only thing this
+  # UserPromptSubmit hook ever matches against is the prompt itself. A future
+  # vocabulary or file-path matcher would set them from the rule.
   prompt_rules_emit "$SESSION_ID" "prompt_rule.matched" \
-    "$(jq -cn --arg id "$RULE_ID" '{rule_id: $id}')" || true
+    "$(jq -cn --arg id "$RULE_ID" \
+      '{rule_id: $id, match_type: "regex", trigger_source: "prompt"}')" || true
 
   ALREADY_FIRED=$(echo "$FIRED" | jq --arg id "$RULE_ID" 'index($id) != null' 2>/dev/null)
   if [[ "$FIRE_ONCE" == "true" && "$ALREADY_FIRED" == "true" ]]; then

@@ -295,9 +295,13 @@ write_project_rules() {
   [ "$path" = "$expected" ]
 }
 
+# The canonical prompt_rule.matched payload. Both extra fields are required by
+# the schema, so every positive matched-event test has to carry them.
+MATCHED_PAYLOAD='{"rule_id":"rule-1","match_type":"regex","trigger_source":"prompt"}'
+
 @test "emit: appends a JSON event line with type, session, payload, and plugin" {
   : >"$ONLOOKER_EVENTS_LOG"
-  run prompt_rules_emit "sess-emit" "prompt_rule.matched" '{"rule_id":"rule-1"}'
+  run prompt_rules_emit "sess-emit" "prompt_rule.matched" "$MATCHED_PAYLOAD"
   [ "$status" -eq 0 ]
 
   local line
@@ -309,6 +313,22 @@ write_project_rules() {
   [ "$(echo "$line" | jq -r '.plugin')" = "onlooker" ]
 }
 
+@test "emit: writes a full canonical envelope, not a hand-built subset" {
+  : >"$ONLOOKER_EVENTS_LOG"
+  prompt_rules_emit "sess-envelope" "prompt_rule.matched" "$MATCHED_PAYLOAD"
+
+  local line
+  line=$(tail -1 "$ONLOOKER_EVENTS_LOG")
+  # The five fields the old jq-built envelope omitted. Each is required by
+  # event.v1.json, so their absence is what made those lines unvalidatable.
+  [ "$(echo "$line" | jq -r 'has("id")')" = "true" ]
+  [ "$(echo "$line" | jq -r 'has("schema_version")')" = "true" ]
+  [ "$(echo "$line" | jq -r 'has("runtime")')" = "true" ]
+  [ "$(echo "$line" | jq -r 'has("machine_id")')" = "true" ]
+  [ "$(echo "$line" | jq -r 'has("sequence")')" = "true" ]
+  [ "$(echo "$line" | jq -r '.sequence | type')" = "number" ]
+}
+
 @test "emit: honors ONLOOKER_PLUGIN_NAME for the plugin field" {
   : >"$ONLOOKER_EVENTS_LOG"
   ONLOOKER_PLUGIN_NAME="prompt-rules" prompt_rules_emit "sess-plugin" "prompt_rule.applied" '{"rule_id":"r9"}'
@@ -318,45 +338,28 @@ write_project_rules() {
   [ "$(echo "$line" | jq -r '.plugin')" = "prompt-rules" ]
 }
 
-@test "emit: defaults payload to an empty object when none is given" {
-  : >"$ONLOOKER_EVENTS_LOG"
-  run prompt_rules_emit "sess-nopayload" "prompt_rule.matched"
-  [ "$status" -eq 0 ]
-
-  local line
-  line=$(tail -1 "$ONLOOKER_EVENTS_LOG")
-  [ "$(echo "$line" | jq -c '.payload')" = "{}" ]
-}
-
 @test "emit: defaults session id to 'unknown' when none is given" {
   : >"$ONLOOKER_EVENTS_LOG"
-  prompt_rules_emit "" "prompt_rule.matched" '{}'
+  prompt_rules_emit "" "prompt_rule.matched" "$MATCHED_PAYLOAD"
 
   local line
   line=$(tail -1 "$ONLOOKER_EVENTS_LOG")
   [ "$(echo "$line" | jq -r '.session_id')" = "unknown" ]
 }
 
-@test "emit: includes a numeric turn field when ONLOOKER_TURN_NUMBER is exported" {
+# The old hand-built envelope added `turn` from ONLOOKER_TURN_NUMBER. event.v1.json
+# is additionalProperties:false and has no `turn`, so that field was one of the
+# reasons those lines could never validate. The canonical emitter carries a turn
+# as `turn_number` inside the payload, and neither prompt_rule payload schema
+# declares that property, so the turn has nowhere valid to live on these events.
+@test "emit: does not add a turn field the envelope schema forbids" {
   : >"$ONLOOKER_EVENTS_LOG"
-  ONLOOKER_TURN_NUMBER=7 prompt_rules_emit "sess-turn" "prompt_rule.matched" '{}'
+  ONLOOKER_TURN_NUMBER=7 prompt_rules_emit "sess-turn" "prompt_rule.matched" "$MATCHED_PAYLOAD"
 
   local line
   line=$(tail -1 "$ONLOOKER_EVENTS_LOG")
-  [ "$(echo "$line" | jq -r '.turn')" = "7" ]
-  [ "$(echo "$line" | jq -r '.turn | type')" = "number" ]
-}
-
-@test "emit: omits the turn field when ONLOOKER_TURN_NUMBER is unset" {
-  : >"$ONLOOKER_EVENTS_LOG"
-  # Guard against any ambient value leaking in from the environment.
-  unset ONLOOKER_TURN_NUMBER
-  prompt_rules_emit "sess-noturn" "prompt_rule.matched" '{}'
-
-  local line
-  line=$(tail -1 "$ONLOOKER_EVENTS_LOG")
-  [ "$(echo "$line" | jq -e 'has("turn")')" = "false" ] || \
-    [ "$(echo "$line" | jq 'has("turn")')" = "false" ]
+  [ "$(echo "$line" | jq -r 'has("turn")')" = "false" ]
+  [ "$(echo "$line" | jq -r '.payload | has("turn_number")')" = "false" ]
 }
 
 @test "emit: returns 1 and writes nothing when event_type is empty" {
@@ -364,4 +367,38 @@ write_project_rules() {
   run prompt_rules_emit "sess-empty" ""
   [ "$status" -eq 1 ]
   [ ! -s "$ONLOOKER_EVENTS_LOG" ]
+}
+
+# Fail-closed is the whole point of routing through the emitter: an event that
+# cannot be made valid must not reach the bus at all. Before this change the
+# same call wrote a line regardless.
+@test "emit: rejects a matched payload missing the schema's required fields" {
+  : >"$ONLOOKER_EVENTS_LOG"
+  expect_emission_rejected prompt_rules_emit "sess-bad" "prompt_rule.matched" '{"rule_id":"only-id"}'
+  [ "$status" -ne 0 ]
+  [ ! -s "$ONLOOKER_EVENTS_LOG" ]
+}
+
+@test "emit: rejects an empty payload for an event type that requires fields" {
+  : >"$ONLOOKER_EVENTS_LOG"
+  expect_emission_rejected prompt_rules_emit "sess-nopayload" "prompt_rule.matched"
+  [ "$status" -ne 0 ]
+  [ ! -s "$ONLOOKER_EVENTS_LOG" ]
+}
+
+@test "emit: rejects an unknown event type" {
+  : >"$ONLOOKER_EVENTS_LOG"
+  expect_emission_rejected prompt_rules_emit "sess-unknown" "prompt_rule.invented" '{}'
+  [ "$status" -ne 0 ]
+  [ ! -s "$ONLOOKER_EVENTS_LOG" ]
+}
+
+@test "emit: accepts prompt_rule.applied with the fields the injector sends" {
+  : >"$ONLOOKER_EVENTS_LOG"
+  run prompt_rules_emit "sess-applied" "prompt_rule.applied" '{"rule_id":"r9","guidance_chars":42}'
+  [ "$status" -eq 0 ]
+
+  local line
+  line=$(tail -1 "$ONLOOKER_EVENTS_LOG")
+  [ "$(echo "$line" | jq -r '.payload.guidance_chars')" = "42" ]
 }
