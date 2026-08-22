@@ -154,7 +154,7 @@ describe('check-bus-coverage gate B', () => {
     const missing = ALL_EVENT_TYPES.filter((t) => !accounted.has(t));
     assert.deepEqual(missing, [], `unaccounted event types: ${missing.join(', ')}`);
     for (const [type, reason] of Object.entries(committed.excluded)) {
-      assert.ok(reason && reason.trim() && reason !== 'FILL IN', `${type} needs a real reason`);
+      assert.ok(reason?.trim() && reason !== 'FILL IN', `${type} needs a real reason`);
     }
   });
 });

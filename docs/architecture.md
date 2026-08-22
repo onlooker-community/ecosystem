@@ -93,7 +93,7 @@ Every observable event flows through `onlooker-event.mjs` before being written t
 
 The schema is versioned independently and published to npm. Plugin shell scripts invoke `onlooker-event.mjs` at runtime so schema validation always reflects the installed version.
 
-> **Note:** Not all events in the JSONL log are schema-validated. `prompt_rule.*` events are currently emitted outside the canonical schema pipeline (the event types are not yet defined in `@onlooker-community/schema`). Schema-first emission is the goal for all future event types.
+> **Note:** Not all events in the JSONL log are schema-validated. `prompt_rule.*` events are currently emitted outside the canonical schema pipeline (`prompt_rules_emit` in `scripts/lib/prompt-rules.sh` writes straight to `$ONLOOKER_EVENTS_LOG` via `jq`, bypassing `onlooker-event.mjs` entirely). Schema-first emission is the goal for all future event types.
 
 ### Emission gates
 

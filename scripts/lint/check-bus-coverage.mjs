@@ -1,20 +1,23 @@
 #!/usr/bin/env node
-/**
- * Bus coverage gates.
- *
- * Gate A: no emission recorded during the suite was rejected by the schema.
- *
- * Reads the report the emitter writes when ONLOOKER_TEST_REPORT_DIR is set —
- * see recordEmission in scripts/lib/onlooker-event.mjs. A rejected emission is
- * invisible any other way: the emitter exits 1 and prints ajv errors, and the
- * hook's fail-soft exit 0 destroys both.
- *
- * Gate B: every registered event type is accounted for — either it produced
- * a validated emission during the suite, or the manifest excuses it with a
- * stated reason. See test/bus-coverage.json.
- *
- * Usage: check-bus-coverage.mjs [--report <dir>] [--manifest <path>]
- */
+// Bus coverage gates.
+//
+// Gate A: no emission recorded during the suite was rejected by the schema.
+//
+// Reads the report the emitter writes when ONLOOKER_TEST_REPORT_DIR is set —
+// see recordEmission in scripts/lib/onlooker-event.mjs. A rejected emission is
+// invisible any other way: the emitter exits 1 and prints ajv errors, and the
+// hook's fail-soft exit 0 destroys both.
+//
+// Gate B: every registered event type is accounted for — either it produced
+// a validated emission during the suite, or the manifest excuses it with a
+// stated reason. See test/bus-coverage.json.
+//
+// Exit codes:
+//   0  ok
+//   1  gate A or gate B failure
+//   2  unknown argument
+//
+// Usage: check-bus-coverage.mjs [--report <dir>] [--manifest <path>]
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
