@@ -129,9 +129,11 @@ async function main() {
   const args = parseArgs(process.argv);
   const lines = loadReport(args.report);
   const failures = gateA(lines);
-  // Skip Gate B when nothing was recorded. Every expected type would report
-  // as missing, burying the single failure that actually matters.
-  if (lines.length > 0) failures.push(...(await gateB(lines, args.manifest)));
+  // Skip Gate B unless something was genuinely validated. A merely
+  // non-empty report where nothing validated (schema package never
+  // resolved) would otherwise bury the one real failure under a spurious
+  // "expected type never emitted" line for every expected type.
+  if (lines.some((l) => l.validated === true)) failures.push(...(await gateB(lines, args.manifest)));
   if (failures.length) {
     for (const f of failures) process.stderr.write(`check-bus-coverage: ${f}\n`);
     process.exit(1);
