@@ -89,6 +89,10 @@ Add the marketplace, then install the plugins you want:
 /plugin install inspector@onlooker-community
 ```
 
+> Installation is through the marketplace only. `@onlooker-community/ecosystem`
+> exists on npm for historical reasons and is deprecated — it carries no entry
+> point and installs nothing. Nothing here is published to npm.
+
 `ecosystem` is the substrate every other plugin builds on — install it first. Most plugins are disabled by default; enable and tune them under their namespace key in `~/.claude/settings.json` (global) or `.claude/settings.json` (per-project). See [ADR-004](docs/adr/004-plugin-config-with-settings-overlay.md) for the configuration model.
 
 ### Onlooker CLI
