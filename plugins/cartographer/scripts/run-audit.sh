@@ -247,7 +247,29 @@ run_synthesize() {
 	while IFS= read -r finding; do
 		[[ -z "$finding" ]] && continue
 		local ftype ffile_a fexcerpt_a ffile_b fexcerpt_b
-		ftype=$(printf '%s' "$finding" | jq -r '.type // "unknown"')
+		# `// ""` collapses absent, null and empty into one check, the same way
+		# cartographer_issue_found_payload does — jq's `//` treats "" as
+		# present, so an empty type would otherwise slip past.
+		ftype=$(printf '%s' "$finding" | jq -r '.type // ""')
+
+		# A finding with no type is malformed: every analyzer writes a literal
+		# type, so this means the phase that produced it has a bug. Drop it here
+		# rather than hashing it.
+		#
+		# This used to default to "unknown". The emit path already refused to
+		# announce such a finding (ecosystem-ci0), but the orchestrator stored
+		# it anyway under a hash derived from a type it does not have, and then
+		# touched its dedup sentinel. That sentinel made the silence permanent:
+		# every later audit saw "known", took the refresh path, and emitted
+		# nothing — so the finding sat on disk forever, counted in
+		# new_finding_count, and could never be announced. Dropping it keeps the
+		# stored corpus honest and leaves the hash of every well-formed finding
+		# untouched, so no existing dedup sentinel is orphaned (ecosystem-0ty).
+		if [[ -z "$ftype" ]]; then
+			log "synthesize: dropped a finding that carries no type — the analyzer that produced it has a bug"
+			continue
+		fi
+
 		ffile_a=$(printf '%s' "$finding" | jq -r '.file_a // ""')
 		fexcerpt_a=$(printf '%s' "$finding" | jq -r '.excerpt_a // ""')
 		ffile_b=$(printf '%s' "$finding" | jq -r '.file_b // ""')

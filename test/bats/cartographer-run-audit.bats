@@ -268,10 +268,12 @@ _run_audit() {
 	[ "$output" = "session_start_first_run" ]
 }
 
-# A typeless finding must not vanish. The builder refuses it (ecosystem-ci0),
-# but refusing is only half the fix: if the orchestrator discards that refusal
-# the event is still silently absent, one layer further up. The audit log is
-# where an operator would go looking for it.
+# A typeless finding must not vanish. Since ecosystem-0ty the synthesize phase
+# drops it before it is hashed, so this line now comes from there rather than
+# from the emit-phase builder refusal that ecosystem-ci0 added. Both write
+# "carries no type" on purpose: what matters to an operator is that the audit
+# log says a finding was discarded and why, not which layer discarded it. The
+# builder's own refusal is still covered directly in cartographer-events.bats.
 @test "a finding with no type is reported in the audit log" {
 	cat > "${STUB_BIN}/claude" <<'STUB'
 #!/usr/bin/env bash
@@ -284,6 +286,50 @@ STUB
 	run _run_audit
 	[ "$status" -eq 0 ] || return 1
 	grep -q 'carries no type' "$AUDIT_LOG"
+}
+
+# Refusing to announce a typeless finding was only half of ecosystem-ci0. The
+# orchestrator still stored it under a hash computed from a type it does not
+# have, then touched its dedup sentinel — so on every later audit the sentinel
+# said "known", the refresh path ran, and no bus event ever fired again. The
+# finding sat on disk forever, counted in new_finding_count, and was
+# permanently unannounceable. These three assert it is dropped instead
+# (ecosystem-0ty).
+
+_typeless_stub() {
+	cat > "${STUB_BIN}/claude" <<'STUB'
+#!/usr/bin/env bash
+cat >/dev/null
+echo call >> "$CLAUDE_CALL_LOG"
+printf '[{"severity":"warning","file_a":"CLAUDE.md","excerpt_a":"Always prefer tabs.","description":"typeless"}]'
+STUB
+	chmod +x "${STUB_BIN}/claude"
+}
+
+@test "a finding with no type is never written to findings/" {
+	_typeless_stub
+	run _run_audit
+	[ "$status" -eq 0 ] || return 1
+	[ "$(find "${CARTOGRAPHER_DIR}/findings" -name '*.json' 2>/dev/null | wc -l | tr -d ' ')" = "0" ]
+}
+
+@test "a finding with no type leaves no dedup sentinel" {
+	# The sentinel is what made this permanent: with one on disk, a corrected
+	# finding that later hashes the same way would be seen as already known and
+	# silently refreshed instead of announced.
+	_typeless_stub
+	run _run_audit
+	[ "$status" -eq 0 ] || return 1
+	[ "$(find "${CARTOGRAPHER_DIR}/dedup" -type f 2>/dev/null | wc -l | tr -d ' ')" = "0" ]
+}
+
+@test "a finding with no type is not counted as a new finding" {
+	# audit.complete used to report a finding that produced no issue.found,
+	# so a consumer reading only the bus saw counts that its own event stream
+	# could not account for.
+	_typeless_stub
+	_run_audit
+	_last_audit_complete | jq -e '.payload.new_finding_count == 0' >/dev/null
 }
 
 
