@@ -10,4 +10,4 @@ run = "bats test/bats"
 
 [tasks."test:shellcheck"]
 description = "Run shellcheck on shell scripts"
-run = "shellcheck -S error -x install.sh scripts/common.sh scripts/hooks/*.sh scripts/lib/*.sh"
+run = "git ls-files -z '*.sh' | xargs -0 shellcheck -S error -x"

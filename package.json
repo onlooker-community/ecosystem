@@ -1,6 +1,7 @@
 {
   "name": "@onlooker-community/ecosystem",
   "version": "0.44.0",
+  "private": true,
   "description": "Agents, skills, hooks, commands, rules, and MCP configurations that power [Onlooker](https://onlooker.dev)",
   "author": {
     "name": "Onlooker Community",
@@ -14,9 +15,6 @@
   "homepage": "https://github.com/onlooker-community/ecosystem#readme",
   "bugs": {
     "url": "https://github.com/onlooker-community/ecosystem/issues"
-  },
-  "bin": {
-    "onlooker-install": "install.sh"
   },
   "scripts": {
     "test": "npm run test:bats && npm run test:schema",

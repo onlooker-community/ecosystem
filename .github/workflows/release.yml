@@ -7,7 +7,6 @@ on:
 permissions:
   contents: write
   pull-requests: write
-  id-token: write
 
 jobs:
   release-please:
@@ -18,47 +17,16 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # Only publish to npm when the ecosystem (root) package was released.
-      # Archivist (and future sibling plugins) are distributed via the Claude
-      # Code marketplace, not npm — a release for a sibling alone must not
-      # trigger `npm publish`, which would attempt to re-publish ecosystem at
-      # its existing version and fail.
-      #
-      # We check paths_released (a JSON array) rather than the per-path output
-      # key `.--release_created` because keys starting with `.` are silently
-      # dropped when release-please-action writes them to $GITHUB_OUTPUT.
-      - uses: actions/checkout@v4
-        if: ${{ contains(fromJSON(steps.release.outputs.paths_released || '[]'), '.') }}
-
-      - uses: actions/setup-node@v4
-        if: ${{ contains(fromJSON(steps.release.outputs.paths_released || '[]'), '.') }}
-        with:
-          node-version: '22'
-          registry-url: 'https://registry.npmjs.org'
-
-      - run: npm ci
-        if: ${{ contains(fromJSON(steps.release.outputs.paths_released || '[]'), '.') }}
-
-      # Trusted publishing authenticates via OIDC, and the OIDC exchange lives
-      # in npm's lib/utils/oidc.js — added in npm 11.5.x. Node 22 bundles npm
-      # 10.9.8, which has no such module, so `npm publish` never even attempts
-      # the exchange and silently falls back to whatever token it finds. That
-      # is why every release from 0.35.0 on tagged cleanly and never reached
-      # npm: first as a 403 ("2FA is required but an automation token was
-      # specified"), then as a bare 404 once trusted publishing was switched on
-      # and the registry stopped accepting the automation token at all.
-      #
-      # a7c7a0e removed this upgrade because npm@latest was broken on hosted
-      # runners at the time (missing promise-retry) and provenance alone did
-      # work on the bundled npm. Provenance is not the problem — auth is.
-      - run: npm install -g npm@latest
-        if: ${{ contains(fromJSON(steps.release.outputs.paths_released || '[]'), '.') }}
-
-      # No NODE_AUTH_TOKEN here on purpose. With trusted publishing the token
-      # is the thing being replaced: npm trades the workflow's OIDC identity
-      # for a short-lived registry token at publish time. Supplying a static
-      # token invites npm to authenticate with it instead and fail closed.
-      # This mirrors onlooker-community/schema's publish-npm.yml, the one
-      # configuration in this org that publishes successfully.
-      - run: npm publish --provenance --access public
-        if: ${{ contains(fromJSON(steps.release.outputs.paths_released || '[]'), '.') }}
+# Nothing is published to npm from here. The root package has no entry point
+# (no main/exports/types), and its only declared surface was a `bin` pointing at
+# an install.sh that copied from rules/ and .cursor/ — directories that never
+# existed in this repo. Plugins ship through the Claude Code marketplace, which
+# reads this repository over git, so npm was never on the install path. The
+# published package is deprecated on the registry; see ecosystem-enz.
+#
+# The guard against this coming back is the absence of a publish step here.
+# package.json also carries "private": true, npm's documented marker for a
+# package that must not be published — but treat that as intent, not as a
+# verified backstop: `npm publish --dry-run` does not exercise the check, and
+# the authenticated path errors on auth before reaching it, so neither could be
+# confirmed locally.
