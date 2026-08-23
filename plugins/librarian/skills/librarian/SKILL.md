@@ -141,10 +141,21 @@ For `lessons judge`, run the jury over confirmed candidates:
    those ids and list them at the end so the user knows to re-run. A broken judge
    must never become a rejection — the artifact's watermark has already moved,
    so a false rejection buries a good lesson permanently.
-5. Finish by reporting counts: approved, rejected, could-not-judge, and
-   **judged but not promoted** (verdict recorded, pool write still pending —
-   list these ids with `librarian_cli lessons promote <id>` as the next step).
-   Don't fold this bucket into "approved": a lesson here has no pool entry yet.
+5. **Finish on `librarian_cli lessons status`, not on your own tally.** It
+   prints one line — pending, confirmed, approved, rejected, and **awaiting
+   promotion** — read from disk, so it is the same kind of authoritative close
+   the review walk ends on. Report those numbers as it gives them; a long batch
+   is exactly where a running count kept in your head drifts.
+
+   Two things the call cannot tell you, which you must still report yourself:
+
+   - **could-not-judge** — those candidates stay `confirmed`, which on disk is
+     indistinguishable from a candidate that was never judged this run. Keep
+     the ids from step 4 and list them.
+   - **which** lessons are awaiting promotion. The call gives the count; you
+     have the ids. List them with `librarian_cli lessons promote <id>` as the
+     next step, and don't fold them into "approved" — a lesson here has no pool
+     entry yet. If your ids and the count disagree, trust the count and say so.
 
 `scope_accuracy` is the criterion that matters most on a `version_independent`
 candidate. The schema guarantees such a lesson **carries** a justification; this
