@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.0](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.13.3...librarian-v0.14.0) (2026-08-23)
+
+
+### Features
+
+* **librarian:** let lessons status close the judge walk :abacus: ([#205](https://github.com/onlooker-community/ecosystem/issues/205)) ([8da1cd7](https://github.com/onlooker-community/ecosystem/commit/8da1cd72a7e564aae44750efaa1e59f1ecd59641))
+
 ## [0.13.3](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.13.2...librarian-v0.13.3) (2026-08-22)
 
 
