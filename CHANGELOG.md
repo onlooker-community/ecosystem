@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.43.6](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.43.5...ecosystem-v0.43.6) (2026-08-22)
+
+
+### Bug Fixes
+
+* **events:** drop safe_emit's hand-built envelope fallback :broom: ([#202](https://github.com/onlooker-community/ecosystem/issues/202)) ([bad684a](https://github.com/onlooker-community/ecosystem/commit/bad684a4f7c535d72f91ed2b1d4928a4dd9a10e8))
+* **inspector:** canonicalize the file and repo root the same way :mag: ([0f850e9](https://github.com/onlooker-community/ecosystem/commit/0f850e92d7e620e4d7e06f512ef81efe4255f316))
+
 ## [0.43.5](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.43.4...ecosystem-v0.43.5) (2026-08-22)
 
 

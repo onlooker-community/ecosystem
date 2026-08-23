@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.4](https://github.com/onlooker-community/ecosystem/compare/inspector-v0.3.3...inspector-v0.3.4) (2026-08-22)
+
+
+### Bug Fixes
+
+* **inspector:** canonicalize the file and repo root the same way :mag: ([0f850e9](https://github.com/onlooker-community/ecosystem/commit/0f850e92d7e620e4d7e06f512ef81efe4255f316))
+
 ## [0.3.3](https://github.com/onlooker-community/ecosystem/compare/inspector-v0.3.2...inspector-v0.3.3) (2026-08-22)
 
 
