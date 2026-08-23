@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.43.7](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.43.6...ecosystem-v0.43.7) (2026-08-23)
+
+
+### Bug Fixes
+
+* **cartographer:** drop a typeless finding instead of hashing it as "unknown" :broom: ([#203](https://github.com/onlooker-community/ecosystem/issues/203)) ([a949d5d](https://github.com/onlooker-community/ecosystem/commit/a949d5d43f3ae3515ac6278b35d1be5cc468cb0e))
+
 ## [0.43.6](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.43.5...ecosystem-v0.43.6) (2026-08-22)
 
 

@@ -2,6 +2,13 @@
 
 All notable changes to the Cartographer plugin are documented here.
 
+## [0.6.2](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.6.1...cartographer-v0.6.2) (2026-08-23)
+
+
+### Bug Fixes
+
+* **cartographer:** drop a typeless finding instead of hashing it as "unknown" :broom: ([#203](https://github.com/onlooker-community/ecosystem/issues/203)) ([a949d5d](https://github.com/onlooker-community/ecosystem/commit/a949d5d43f3ae3515ac6278b35d1be5cc468cb0e))
+
 ## [0.6.1](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.6.0...cartographer-v0.6.1) (2026-08-22)
 
 
