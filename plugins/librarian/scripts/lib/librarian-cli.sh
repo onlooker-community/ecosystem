@@ -641,13 +641,44 @@ librarian_cli_lessons_defer() {
 	printf 'Deferred %s; it stays in the queue.\n' "$lesson_id"
 }
 
+# One authoritative line for the whole lesson queue.
+#
+# Reports a count per status rather than pending alone, because the judge walk
+# closes on this call. It used to close on counts the model had tallied itself
+# across the loop, with nothing to check them against — every other walk in the
+# skill ends on a CLI call, and this one had none to end on (ecosystem-sv3).
+#
+# `awaiting promotion` is the walk's fourth bucket: a lesson whose verdict is
+# recorded but whose pool entry or declined row has not landed. promote()
+# stamps promoted_at LAST, after the terminal record, so a terminal status with
+# no stamp is exactly that state — and it must not be folded into `approved`,
+# which would claim a pool entry that does not exist.
+#
+# The walk's remaining bucket, could-not-judge, is deliberately absent: such a
+# candidate stays `confirmed`, which is indistinguishable on disk from one that
+# was never judged this run. That count is run-scoped and stays the model's.
 librarian_cli_lessons_status() {
 	local cwd="${1:-}"
-	local key pending
+	local key
 	key=$(_librarian_cli_project_key "$cwd")
 	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
-	pending=$(librarian_lesson_list_pending "$key")
-	printf 'lessons pending: %s\n' "$(printf '%s' "$pending" | jq 'length')"
+
+	local s counts=()
+	for s in pending confirmed approved rejected; do
+		counts+=("$(librarian_lesson_list_by_status "$key" "$s" | jq 'length')")
+	done
+
+	# A terminal verdict whose promote() never stamped. Counted from the same
+	# per-status reads rather than a second directory walk.
+	local awaiting=0 n
+	for s in approved rejected; do
+		n=$(librarian_lesson_list_by_status "$key" "$s" \
+			| jq '[.[] | select(has("promoted_at") | not)] | length')
+		awaiting=$(( awaiting + n ))
+	done
+
+	printf 'lessons pending: %s, confirmed: %s, approved: %s, rejected: %s, awaiting promotion: %s\n' \
+		"${counts[0]}" "${counts[1]}" "${counts[2]}" "${counts[3]}" "$awaiting"
 }
 
 librarian_cli_lessons() {

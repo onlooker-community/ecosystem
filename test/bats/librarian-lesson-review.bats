@@ -387,11 +387,100 @@ _cli_setup() {
 	source "${PLUGIN_ROOT}/scripts/lib/librarian-cli.sh"
 }
 
+# ── lessons status: a count per status (ecosystem-sv3) ───────────────────────
+#
+# The judge walk used to close by reporting counts the model tracked itself
+# across the loop, with nothing to check them against — every other walk in the
+# skill ends on an authoritative CLI call. `lessons status` reported only a
+# pending count, so there was nothing to ground the summary on.
+
+# Force a proposal to a terminal status on disk. Reaching `approved` through
+# the real path means empaneling a jury, which is what the judge walk exists to
+# avoid doing twice; the status field is what the counter reads.
+_set_status() {
+	local id="$1" status="$2" promoted="${3:-}"
+	local f
+	f="$(librarian_lessons_dir "$PROJECT_KEY")/proposals/${id}.json"
+	local tmp="${f}.tmp"
+	if [[ -n "$promoted" ]]; then
+		jq --arg s "$status" --arg p "$promoted" '.status = $s | .promoted_at = $p' "$f" >"$tmp"
+	else
+		jq --arg s "$status" '.status = $s | del(.promoted_at)' "$f" >"$tmp"
+	fi
+	mv -f "$tmp" "$f"
+}
+
 @test "lessons status reports zero on an empty queue" {
 	_cli_setup
 	run librarian_cli lessons status "$PROJECT_REPO"
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"0"* ]] || return 1
+}
+
+@test "lessons status reports a count for every status, not just pending" {
+	_cli_setup
+	local a b c d
+	a=$(_seed_pending)
+	b=$(_seed_pending)
+	c=$(_seed_pending)
+	d=$(_seed_pending)
+	librarian_lesson_confirm "$PROJECT_KEY" "$b" "org"
+	_set_status "$c" "approved" "2026-08-01T00:00:00Z"
+	_set_status "$d" "rejected" "2026-08-01T00:00:00Z"
+
+	run librarian_cli lessons status "$PROJECT_REPO"
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" == *"pending: 1"* ]] || return 1
+	[[ "$output" == *"confirmed: 1"* ]] || return 1
+	[[ "$output" == *"approved: 1"* ]] || return 1
+	[[ "$output" == *"rejected: 1"* ]]
+}
+
+@test "lessons status counts a judged-but-unpromoted lesson separately" {
+	# The judge walk's fourth bucket. promote() stamps promoted_at LAST, after
+	# the terminal record lands, so a terminal status with no stamp is exactly
+	# the state the walk is told not to fold into "approved" — the lesson has
+	# no pool entry yet.
+	_cli_setup
+	local a b
+	a=$(_seed_pending)
+	b=$(_seed_pending)
+	_set_status "$a" "approved" "2026-08-01T00:00:00Z"
+	_set_status "$b" "approved"
+
+	run librarian_cli lessons status "$PROJECT_REPO"
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" == *"approved: 2"* ]] || return 1
+	[[ "$output" == *"awaiting promotion: 1"* ]]
+}
+
+@test "lessons status reports awaiting promotion for a rejected lesson too" {
+	# A rejected verdict also lands its terminal record (the declined row)
+	# before the stamp, so the same recovery state exists on that side.
+	_cli_setup
+	local a b
+	a=$(_seed_pending)
+	b=$(_seed_pending)
+	_set_status "$a" "rejected"
+	# A promoted sibling, so the count cannot come out right by counting every
+	# rejected lesson — without it this passes whether or not the stamp is read.
+	_set_status "$b" "rejected" "2026-08-01T00:00:00Z"
+
+	run librarian_cli lessons status "$PROJECT_REPO"
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" == *"rejected: 2"* ]] || return 1
+	[[ "$output" == *"awaiting promotion: 1"* ]]
+}
+
+@test "lessons status reports zeros across every status on an empty queue" {
+	_cli_setup
+	run librarian_cli lessons status "$PROJECT_REPO"
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" == *"pending: 0"* ]] || return 1
+	[[ "$output" == *"confirmed: 0"* ]] || return 1
+	[[ "$output" == *"approved: 0"* ]] || return 1
+	[[ "$output" == *"rejected: 0"* ]] || return 1
+	[[ "$output" == *"awaiting promotion: 0"* ]]
 }
 
 @test "lessons list shows a pending lesson" {
