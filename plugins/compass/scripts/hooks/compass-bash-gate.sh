@@ -7,7 +7,8 @@
 #
 # Hook contract (Claude Code PreToolUse protocol):
 #   - Always exits 0.
-#   - To block: compass_run_gate writes {"decision":"block","reason":"..."} to stdout.
+#   - To block: compass_run_gate writes the documented hookSpecificOutput
+#     deny payload to stdout (see compass-gate.sh for the contract).
 #   - To allow: nothing written to stdout.
 #   - Errors are written to stderr only.
 
