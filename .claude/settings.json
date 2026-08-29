@@ -1,6 +1,79 @@
 {
+  "extraKnownMarketplaces": {
+    "onlooker-community": {
+      "source": {
+        "source": "github",
+        "repo": "onlooker-community/ecosystem"
+      }
+    }
+  },
   "enabledPlugins": {
-    "ecosystem@onlooker-community": true
+    "ecosystem@onlooker-community": true,
+    "lineage@onlooker-community": true,
+    "inspector@onlooker-community": true,
+    "assayer@onlooker-community": true,
+    "echo@onlooker-community": true,
+    "tribunal@onlooker-community": true
+  },
+  "inspector": {
+    "checks": {
+      ".sh": [
+        {
+          "name": "shellcheck",
+          "kind": "lint",
+          "argv": [
+            "shellcheck",
+            "-S",
+            "error",
+            "-x",
+            "${file}"
+          ]
+        }
+      ],
+      ".mjs": [
+        {
+          "name": "biome",
+          "kind": "lint",
+          "argv": [
+            "biome",
+            "check",
+            "${file}"
+          ]
+        }
+      ],
+      ".js": [
+        {
+          "name": "biome",
+          "kind": "lint",
+          "argv": [
+            "biome",
+            "check",
+            "${file}"
+          ]
+        }
+      ],
+      ".json": [
+        {
+          "name": "biome",
+          "kind": "lint",
+          "argv": [
+            "biome",
+            "check",
+            "${file}"
+          ]
+        }
+      ],
+      ".md": [
+        {
+          "name": "markdownlint",
+          "kind": "lint",
+          "argv": [
+            "${repo_root}/node_modules/.bin/markdownlint",
+            "${file}"
+          ]
+        }
+      ]
+    }
   },
   "hooks": {
     "SessionStart": [
