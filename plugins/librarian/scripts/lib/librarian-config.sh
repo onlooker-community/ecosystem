@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Config resolution for Librarian.
 #
-# Uses the shared config loader from ecosystem. Reads five layers, latest wins:
+# Uses the vendored config loader (scripts/lib/config-loader.sh is canonical).
+# Reads five layers, latest wins:
 #   1. plugins/librarian/config.json (defaults shipped with the plugin)
 #   2. ~/.claude/settings.json
 #   3. ~/.claude/settings.local.json (local overrides user)
@@ -16,12 +17,20 @@
 # Settings overlay only touches the `librarian.*` subtree of settings.json so
 # it coexists with other plugins' configuration.
 
-# Resolve the shared loader from this file's own location. $PLUGIN_ROOT is
+# Resolve the vendored loader from this file's own location. $PLUGIN_ROOT is
 # whatever the sourcing scope happened to set, so a sub-shell that inherits
 # CLAUDE_PLUGIN_ROOT but not PLUGIN_ROOT would lose every accessor silently.
+# The loader is a sibling rather than a path up to the repo root, because an
+# installed plugin is its own tree with no ecosystem checkout above it.
 _LIBRARIAN_CONFIG_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=scripts/lib/config-loader.sh
-source "${_LIBRARIAN_CONFIG_LIB_DIR}/../../../../scripts/lib/config-loader.sh"
+_LIBRARIAN_CONFIG_LOADER="${_LIBRARIAN_CONFIG_LIB_DIR}/config-loader.sh"
+if [[ ! -f "$_LIBRARIAN_CONFIG_LOADER" ]]; then
+	printf 'librarian: missing %s — plugin package is incomplete\n' \
+		"$_LIBRARIAN_CONFIG_LOADER" >&2
+	exit 1
+fi
+# shellcheck source=plugins/librarian/scripts/lib/config-loader.sh
+source "$_LIBRARIAN_CONFIG_LOADER"
 
 _LIBRARIAN_CONFIG="{}"
 
