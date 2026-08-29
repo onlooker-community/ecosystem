@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.5](https://github.com/onlooker-community/ecosystem/compare/governor-v0.3.4...governor-v0.3.5) (2026-08-29)
+
+
+### Bug Fixes
+
+* **gates:** emit the documented permissionDecision deny shape :shield: ([#211](https://github.com/onlooker-community/ecosystem/issues/211)) ([c68e758](https://github.com/onlooker-community/ecosystem/commit/c68e758c48fbfe1359435ef7143724e3686968e2))
+
 ## [0.3.4](https://github.com/onlooker-community/ecosystem/compare/governor-v0.3.3...governor-v0.3.4) (2026-08-29)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.44.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.44.1...ecosystem-v0.44.2) (2026-08-29)
+
+
+### Bug Fixes
+
+* **gates:** emit the documented permissionDecision deny shape :shield: ([#211](https://github.com/onlooker-community/ecosystem/issues/211)) ([c68e758](https://github.com/onlooker-community/ecosystem/commit/c68e758c48fbfe1359435ef7143724e3686968e2))
+
 ## [0.44.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.44.0...ecosystem-v0.44.1) (2026-08-29)
 
 
