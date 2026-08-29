@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.9](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.2.8...tribunal-v1.2.9) (2026-08-29)
+
+
+### Bug Fixes
+
+* **plugins:** vendor config-loader.sh into every plugin :relieved: ([#209](https://github.com/onlooker-community/ecosystem/issues/209)) ([b23c291](https://github.com/onlooker-community/ecosystem/commit/b23c291a1283324171a6fd414a2ecc7b3e766eb4))
+
 ## [1.2.8](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.2.7...tribunal-v1.2.8) (2026-08-22)
 
 
