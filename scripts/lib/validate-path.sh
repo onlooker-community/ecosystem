@@ -48,160 +48,26 @@ fi
 export ONLOOKER_PLUGIN_NAME
 
 # ==============================================================================
-# Hook Health Monitoring
-# Track hook success/failure rates to identify flaky hooks.
+# Hook health instrumentation
 # ==============================================================================
+# The implementation lives in hook-health.sh, which is also vendored into every
+# plugin so plugin hooks report the same way. Sourced from this file's own
+# directory, never from a caller-supplied variable.
+# shellcheck source=hook-health.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/hook-health.sh"
 
-# These functions provide observability into hook execution health.
-# Usage:
-#   source "$CLAUDE_PLUGIN_ROOT/scripts/lib/validate-path.sh"
-#   hook_register "my-hook" "My Hook" "My hook description" # Call at start of hook
-#   # ... hook logic ...
-#   hook_success    # Call on successful completion (or let trap handle failure)
+# Back-compat aliases. Every ecosystem hook calls these names.
+hook_register() { hook_health_register "$@"; }
+hook_success()  { hook_health_success "$@"; }
+hook_failure()  { hook_health_failure "$@"; }
 
-# Current hook content (set by hook_register)
-_HOOK_NAME=""
-_HOOK_START_TIME=""
-
-# Extended hook context (set by hook_set_context; not cleared on re-source so
-# callers can set _HOOK_SESSION_ID before invoking onlooker-emit.sh).
-
-# Detect hook event from script path
-# Looks for known event directory names in the call stack
-_detect_hook_event() {
-  local script_path="${BASH_SOURCE[2]:-${BASH_SOURCE[1]:-}}"
-
-  # Known Claude Code hook events
-  local events="PreToolUse|PostToolUse|PostToolUseFailure|PermissionRequest|PermissionDenied|SessionStart|SessionEnd|Notification|SubagentStart|PreCompact|PostCompact|SubagentStop|ConfigChange|CwdChanged|FileChanged|StopFailure|InstructionsLoaded|Elicitation|ElicitationResult|UserPromptSubmit|Stop|TeammateIdle|TaskCreated|TaskCompleted|WorktreeCreate|WorktreeRemove"
-
-  if [[ "$script_path" =~ /($events)/ ]]; then
-    echo "${BASH_REMATCH[1]}"
-  else
-    echo ""
-  fi
-}
-
-# Set extended context from hook input JSON
-# Call this after reading stdin to capture session/tool context
-# Usage: hook_set_context "$INPUT"
-#    OR: hook_set_context "$INPUT" "PostToolUse"  # explicit event override
+# hook_set_context also exports the envelope variables onlooker-emit.sh reads.
 hook_set_context() {
-  local input="${1:-}"
-  local event_override="${2:-}"
-
-  [[ -z "$input" ]] && return 0
-
-  # Extract context from JSON input
-  _HOOK_SESSION_ID=$(echo "$input" | jq -r '.session_id // ""' 2>/dev/null) || _HOOK_SESSION_ID=""
-  _HOOK_TOOL_NAME=$(echo "$input" | jq -r '.tool_name // ""' 2>/dev/null) || _HOOK_TOOL_NAME=""
-
-  # Use explicit event or auto-detect from script path
-  if [[ -n "$event_override" ]]; then
-    _HOOK_EVENT="$event_override"
-  else
-    _HOOK_EVENT=$(_detect_hook_event)
-  fi
-
-  # Export for onlooker-emit.sh envelope enrichment
-  export ONLOOKER_HOOK_TYPE="${_HOOK_EVENT}"
-  export ONLOOKER_TOOL_NAME="${_HOOK_TOOL_NAME}"
-}
-
-
-# Register hook execution start
-# Usage: hook_register "hook-name"
-hook_register() {
-  _HOOK_NAME="${1:-unknown}"
-  # Get time in milliseconds (macOS compatible)
-  if [[ "$(uname)" == "Darwin" ]]; then
-    _HOOK_START_TIME=$(python3 -c 'import time; print(int(time.time() * 1000))' 2>/dev/null || date +%s)
-  else
-    _HOOK_START_TIME=$(date +%s%3N 2>/dev/null || date +%s)
-  fi
-
-  # Set up trap to catch failures
-  trap '_hook_on_exit $?' EXIT
-}
-
-# Log hook success (call explicitly or let trap determine)
-hook_success() {
-  _hook_log "success" ""
-  trap - EXIT  # Clear trap since we're handling it
-}
-
-# Log hook failure with optional error message
-# Usage: hook_failure "error message"
-hook_failure() {
-  local error_msg="${1:-}"
-  _hook_log "failure" "$error_msg"
-  trap - EXIT
-}
-
-# Internal: called by EXIT trap
-_hook_on_exit() {
-  local exit_code="$1"
-  if [[ $exit_code -eq 0 ]]; then
-    _hook_log "success" ""
-  else
-    _hook_log "failure" "exit_code=$exit_code"
-  fi
-  trap - EXIT
-}
-
-# Internal: write to health log
-_hook_log() {
-  local hook_status="$1"
-  local error_msg="$2"
-
-  [[ -z "$_HOOK_NAME" ]] && return 0
-
-  local end_time duration_ms timestamp
-  timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-
-  # Get end time in milliseconds (macOS compatible)
-  if [[ "$(uname)" == "Darwin" ]]; then
-    end_time=$(python3 -c 'import time; print(int(time.time() * 1000))' 2>/dev/null || date +%s)
-  else
-    end_time=$(date +%s%3N 2>/dev/null || date +%s)
-  fi
-
-  # Calculate duration (handle both ms and s timestamps)
-  if [[ ${#_HOOK_START_TIME} -gt 10 && ${#end_time} -gt 10 ]]; then
-    duration_ms=$((end_time - _HOOK_START_TIME))
-  else
-    # Fallback to seconds-based calculation
-    duration_ms=0
-  fi
-
-  ensure_file_exists "$ONLOOKER_HOOK_HEALTH_LOG" || return 0
-
-  jq -cn \
-    --arg ts "$timestamp" \
-    --arg hook "$_HOOK_NAME" \
-    --arg hook_status "$hook_status" \
-    --arg error "$error_msg" \
-    --argjson duration "$duration_ms" \
-    --arg session_id "$_HOOK_SESSION_ID" \
-    --arg hook_event "$_HOOK_EVENT" \
-    --arg tool_name "$_HOOK_TOOL_NAME" \
-    '{
-      timestamp: $ts,
-      hook: $hook,
-      status: $hook_status,
-      duration_ms: $duration,
-      error: (if $error == "" then null else $error end),
-      session_id: (if $session_id == "" then null else $session_id end),
-      hook_event: (if $hook_event == "" then null else $hook_event end),
-      tool_name: (if $tool_name == "" then null else $tool_name end)
-    }' \
-    >> "$ONLOOKER_HOOK_HEALTH_LOG" 2>/dev/null
-
-  # Reset context
-  _HOOK_NAME=""
-  _HOOK_START_TIME=""
-  _HOOK_SESSION_ID=""
-  _HOOK_EVENT=""
-  _HOOK_TOOL_NAME=""
+	hook_health_context "${1:-}"
+	[[ -n "${2:-}" ]] && _HOOK_EVENT="$2"
+	export ONLOOKER_HOOK_TYPE="${_HOOK_EVENT}"
+	export ONLOOKER_TOOL_NAME="${_HOOK_TOOL_NAME}"
+	return 0
 }
 
 # Get hook health summary for last N hours

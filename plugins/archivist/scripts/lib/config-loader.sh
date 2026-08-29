@@ -6,7 +6,7 @@
 #
 # This file is vendored. scripts/lib/config-loader.sh is canonical, and a
 # byte-identical copy sits in every plugins/<name>/scripts/lib/. Edit the
-# canonical one, then run scripts/sync-config-loader.sh to propagate it;
+# canonical one, then run scripts/sync-shared-libs.sh to propagate it;
 # test/bats/config-lib-self-locating.bats fails on any copy that drifts.
 #
 # Vendoring rather than sharing one file is deliberate. Each plugin publishes

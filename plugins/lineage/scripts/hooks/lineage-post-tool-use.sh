@@ -14,6 +14,9 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
+# shellcheck source=../lib/hook-health.sh
+source "${PLUGIN_ROOT}/scripts/lib/hook-health.sh"
+hook_health_register "lineage-post-tool-use"
 
 # shellcheck source=../lib/portable-lock.sh
 source "${PLUGIN_ROOT}/scripts/lib/portable-lock.sh"
@@ -31,6 +34,7 @@ source "${PLUGIN_ROOT}/scripts/lib/lineage-redact.sh"
 source "${PLUGIN_ROOT}/scripts/lib/lineage-record.sh"
 
 INPUT=$(cat)
+hook_health_context "$INPUT"
 _done() { exit 0; }
 
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SESSION_ID=""

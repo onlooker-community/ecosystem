@@ -15,6 +15,9 @@ export INSPECTOR_NESTED=1
 
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/../.." && pwd)}"
 export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
+# shellcheck source=../lib/hook-health.sh
+source "${PLUGIN_ROOT}/scripts/lib/hook-health.sh"
+hook_health_register "inspector-post-write"
 
 source "$PLUGIN_ROOT/scripts/lib/inspector-config.sh"
 source "$PLUGIN_ROOT/scripts/lib/inspector-project-key.sh"
@@ -22,6 +25,7 @@ source "$PLUGIN_ROOT/scripts/lib/inspector-events.sh"
 source "$PLUGIN_ROOT/scripts/lib/inspector-run.sh"
 
 HOOK_INPUT=$(cat)
+hook_health_context "$HOOK_INPUT"
 CWD=$(printf '%s' "$HOOK_INPUT" | jq -r '.cwd // empty' 2>/dev/null)
 _HOOK_SESSION_ID=$(printf '%s' "$HOOK_INPUT" | jq -r '.session_id // empty' 2>/dev/null)
 TOOL_NAME=$(printf '%s' "$HOOK_INPUT" | jq -r '.tool_name // empty' 2>/dev/null)

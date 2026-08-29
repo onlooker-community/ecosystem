@@ -47,6 +47,17 @@ if [[ -n "$_ECOSYSTEM_ROOT" && -f "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.
 	# shellcheck disable=SC1091
 	CLAUDE_PLUGIN_ROOT="$_ECOSYSTEM_ROOT" source "${_ECOSYSTEM_ROOT}/scripts/lib/onlooker-schema.sh"
 fi
+# shellcheck source=../lib/hook-health.sh
+source "${PLUGIN_ROOT}/scripts/lib/hook-health.sh"
+# PROMPT_FILE is declared here (empty) and its cleanup trap installed before
+# hook_health_register so the health EXIT trap is the one already in place
+# when PROMPT_FILE gets its real mktemp path below — trap installs replace,
+# they don't chain, and hook_health_register's own chaining only protects a
+# trap that predates it. `rm -f ""` is a harmless no-op if we never reach the
+# mktemp line.
+PROMPT_FILE=""
+trap 'rm -f "$PROMPT_FILE"' EXIT
+hook_health_register "assayer-stop"
 
 # shellcheck source=../lib/assayer-config.sh
 source "${PLUGIN_ROOT}/scripts/lib/assayer-config.sh"
@@ -64,6 +75,7 @@ source "${PLUGIN_ROOT}/scripts/lib/assayer-verify.sh"
 CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" source "${PLUGIN_ROOT}/scripts/lib/assayer-events.sh"
 
 INPUT=$(cat)
+hook_health_context "$INPUT"
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SESSION_ID=""
 TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | jq -r '.transcript_path // ""' 2>/dev/null) || TRANSCRIPT_PATH=""
@@ -111,7 +123,6 @@ EVAL_MODEL=$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" assayer_config_model)
 TIMEOUT_SECS=$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" assayer_config_timeout)
 
 PROMPT_FILE=$(mktemp -t assayer-prompt.XXXXXX 2>/dev/null) || PROMPT_FILE="/tmp/assayer-prompt.$$"
-trap 'rm -f "$PROMPT_FILE"' EXIT
 assayer_build_extraction_prompt "$FINAL_MESSAGE" "$MAX_CLAIMS" >"$PROMPT_FILE"
 
 CLAUDE_ARGS=(-p --max-turns 1)

@@ -162,7 +162,7 @@ setup() {
   hook_register "my-hook" "My Hook" "A description"
   trap - EXIT  # disarm the trap hook_register installed so it can't fire later
   [ "${_HOOK_NAME}" = "my-hook" ]
-  [ -n "${_HOOK_START_TIME}" ]
+  [ -n "${_HOOK_START_MS}" ]
 }
 
 @test "hook_success writes a success record to the hook-health log" {

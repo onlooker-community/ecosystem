@@ -40,6 +40,9 @@ if [[ -n "$_ECOSYSTEM_ROOT" && -f "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.
 	# shellcheck disable=SC1091
 	CLAUDE_PLUGIN_ROOT="$_ECOSYSTEM_ROOT" source "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.sh"
 fi
+# shellcheck source=../lib/hook-health.sh
+source "${PLUGIN_ROOT}/scripts/lib/hook-health.sh"
+hook_health_register "archivist-inject"
 
 # shellcheck source=../lib/archivist-project-key.sh
 source "${PLUGIN_ROOT}/scripts/lib/archivist-project-key.sh"
@@ -63,6 +66,7 @@ _emit() {
 }
 
 INPUT=$(cat)
+hook_health_context "$INPUT"
 
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 SOURCE=$(printf '%s' "$INPUT" | jq -r '.source // "startup"' 2>/dev/null) || SOURCE="startup"

@@ -20,6 +20,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
+# shellcheck source=../lib/hook-health.sh
+source "${PLUGIN_ROOT}/scripts/lib/hook-health.sh"
+hook_health_register "scribe-stop"
 
 # shellcheck source=../lib/scribe-config.sh
 source "${PLUGIN_ROOT}/scripts/lib/scribe-config.sh"
@@ -33,6 +36,7 @@ source "${PLUGIN_ROOT}/scripts/lib/scribe-extract.sh"
 source "${PLUGIN_ROOT}/scripts/lib/scribe-distill.sh"
 
 INPUT=$(cat)
+hook_health_context "$INPUT"
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SESSION_ID=""
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | jq -r '.transcript_path // ""' 2>/dev/null) || TRANSCRIPT_PATH=""
