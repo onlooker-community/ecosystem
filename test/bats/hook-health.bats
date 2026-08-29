@@ -74,3 +74,59 @@ setup() {
 	run hook_health_success
 	[ "$status" -eq 0 ]
 }
+
+@test "an exiting hook logs success without an explicit call" {
+	run bash -c "
+		source '${REPO_ROOT}/scripts/lib/hook-health.sh'
+		export ONLOOKER_HOOK_HEALTH_LOG='${HEALTH_LOG}'
+		hook_health_register 'trapped-hook'
+		exit 0
+	"
+	[ "$status" -eq 0 ] || return 1
+	tail -n 1 "$HEALTH_LOG" | jq -e '.hook == "trapped-hook" and .status == "success"' >/dev/null
+}
+
+@test "a nonzero exit is recorded as a failure with the exit code" {
+	run bash -c "
+		source '${REPO_ROOT}/scripts/lib/hook-health.sh'
+		export ONLOOKER_HOOK_HEALTH_LOG='${HEALTH_LOG}'
+		hook_health_register 'crashing-hook'
+		exit 7
+	"
+	[ "$status" -eq 7 ] || return 1
+	tail -n 1 "$HEALTH_LOG" | jq -e '.status == "failure" and .error == "exit_code=7"' >/dev/null
+}
+
+# The regression this whole task exists for. Modeled on the real pattern in
+# assayer-stop.sh and tribunal-stop-gate.sh.
+@test "a pre-existing EXIT trap still runs after registering" {
+	local victim="${BATS_TEST_TMPDIR}/prompt-file"
+	touch "$victim"
+	run bash -c "
+		source '${REPO_ROOT}/scripts/lib/hook-health.sh'
+		export ONLOOKER_HOOK_HEALTH_LOG='${HEALTH_LOG}'
+		trap 'rm -f \"${victim}\"' EXIT
+		hook_health_register 'polite-hook'
+		exit 0
+	"
+	[ "$status" -eq 0 ] || return 1
+	# The prior handler ran: the temp file is gone.
+	[ ! -f "$victim" ] || return 1
+	# And we still got our record.
+	tail -n 1 "$HEALTH_LOG" | jq -e '.hook == "polite-hook"' >/dev/null
+}
+
+@test "a pre-existing trap containing single quotes survives chaining" {
+	local victim="${BATS_TEST_TMPDIR}/quoted file"
+	touch "$victim"
+	run bash -c "
+		source '${REPO_ROOT}/scripts/lib/hook-health.sh'
+		export ONLOOKER_HOOK_HEALTH_LOG='${HEALTH_LOG}'
+		trap \"rm -f '${victim}'\" EXIT
+		hook_health_register 'quoted-hook'
+		exit 0
+	"
+	[ "$status" -eq 0 ] || return 1
+	[ ! -f "$victim" ] || return 1
+	tail -n 1 "$HEALTH_LOG" | jq -e '.hook == "quoted-hook"' >/dev/null
+}

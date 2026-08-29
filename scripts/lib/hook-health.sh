@@ -25,6 +25,7 @@ _HOOK_START_MS="${_HOOK_START_MS:-}"
 _HOOK_SESSION_ID="${_HOOK_SESSION_ID:-}"
 _HOOK_EVENT="${_HOOK_EVENT:-}"
 _HOOK_TOOL_NAME="${_HOOK_TOOL_NAME:-}"
+_HOOK_PRIOR_EXIT_CMD="${_HOOK_PRIOR_EXIT_CMD:-}"
 
 hook_health_log_path() {
 	printf '%s' "${ONLOOKER_HOOK_HEALTH_LOG:-${ONLOOKER_DIR:-$HOME/.onlooker}/logs/hook-health.jsonl}"
@@ -54,10 +55,46 @@ _hook_health_now_ms() {
 	printf '%s000' "$(date +%s 2>/dev/null || printf 0)"
 }
 
-# Start timing. Call as early in the hook as possible.
+# Start timing and arm the exit trap.
+#
+# Any EXIT trap already installed is preserved and run after we log. Six plugin
+# hooks depend on this: four remove a prompt file, and cartographer's two
+# release a lock, which a clobbered trap would strand.
 hook_health_register() {
 	_HOOK_NAME="${1:-unknown}"
 	_HOOK_START_MS=$(_hook_health_now_ms)
+
+	local prior
+	prior=$(trap -p EXIT 2>/dev/null)
+	if [[ -n "$prior" ]]; then
+		# Format is: trap -- 'cmd' EXIT
+		prior="${prior#trap -- }"
+		prior="${prior% EXIT}"
+		# The assignment unquotes bash's own quoting, including the '\'' form
+		# it emits for embedded single quotes.
+		eval "_HOOK_PRIOR_EXIT_CMD=$prior" 2>/dev/null || _HOOK_PRIOR_EXIT_CMD=""
+	fi
+
+	trap '_hook_health_on_exit $?' EXIT
+	return 0
+}
+
+# Log first, then hand control back to whatever trap we displaced. Logging
+# first keeps the prior handler running even if the write fails, at the cost of
+# excluding the hook's own cleanup from the recorded duration.
+_hook_health_on_exit() {
+	local exit_code="${1:-0}"
+	if [[ "$exit_code" -eq 0 ]]; then
+		_hook_health_write "success" ""
+	else
+		_hook_health_write "failure" "exit_code=${exit_code}"
+	fi
+	trap - EXIT
+	if [[ -n "$_HOOK_PRIOR_EXIT_CMD" ]]; then
+		local prior_cmd="$_HOOK_PRIOR_EXIT_CMD"
+		_HOOK_PRIOR_EXIT_CMD=""
+		eval "$prior_cmd" || true
+	fi
 	return 0
 }
 
