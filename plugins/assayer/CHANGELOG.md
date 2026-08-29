@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.5](https://github.com/onlooker-community/ecosystem/compare/assayer-v1.1.4...assayer-v1.1.5) (2026-08-29)
+
+
+### Bug Fixes
+
+* **plugins:** vendor config-loader.sh into every plugin :relieved: ([#209](https://github.com/onlooker-community/ecosystem/issues/209)) ([b23c291](https://github.com/onlooker-community/ecosystem/commit/b23c291a1283324171a6fd414a2ecc7b3e766eb4))
+
 ## [1.1.4](https://github.com/onlooker-community/ecosystem/compare/assayer-v1.1.3...assayer-v1.1.4) (2026-08-22)
 
 

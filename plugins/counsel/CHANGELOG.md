@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.3](https://github.com/onlooker-community/ecosystem/compare/counsel-v0.5.2...counsel-v0.5.3) (2026-08-29)
+
+
+### Bug Fixes
+
+* **plugins:** vendor config-loader.sh into every plugin :relieved: ([#209](https://github.com/onlooker-community/ecosystem/issues/209)) ([b23c291](https://github.com/onlooker-community/ecosystem/commit/b23c291a1283324171a6fd414a2ecc7b3e766eb4))
+
 ## [0.5.2](https://github.com/onlooker-community/ecosystem/compare/counsel-v0.5.1...counsel-v0.5.2) (2026-08-22)
 
 

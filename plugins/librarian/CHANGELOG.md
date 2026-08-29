@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.1](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.14.0...librarian-v0.14.1) (2026-08-29)
+
+
+### Bug Fixes
+
+* **plugins:** vendor config-loader.sh into every plugin :relieved: ([#209](https://github.com/onlooker-community/ecosystem/issues/209)) ([b23c291](https://github.com/onlooker-community/ecosystem/commit/b23c291a1283324171a6fd414a2ecc7b3e766eb4))
+
 ## [0.14.0](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.13.3...librarian-v0.14.0) (2026-08-23)
 
 
