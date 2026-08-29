@@ -44,6 +44,17 @@ if [[ -n "$_ECOSYSTEM_ROOT" && -f "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.
 	# shellcheck disable=SC1091
 	CLAUDE_PLUGIN_ROOT="$_ECOSYSTEM_ROOT" source "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.sh"
 fi
+# shellcheck source=../lib/hook-health.sh
+source "${PLUGIN_ROOT}/scripts/lib/hook-health.sh"
+# PROMPT_FILE is declared here (empty) and its cleanup trap installed before
+# hook_health_register so the health EXIT trap is the one already in place
+# when PROMPT_FILE gets its real mktemp path below — trap installs replace,
+# they don't chain, and hook_health_register's own chaining only protects a
+# trap that predates it. `rm -f ""` is a harmless no-op if we never reach the
+# mktemp line.
+PROMPT_FILE=""
+trap 'rm -f "$PROMPT_FILE"' EXIT
+hook_health_register "archivist-extract"
 
 # shellcheck source=../lib/archivist-project-key.sh
 source "${PLUGIN_ROOT}/scripts/lib/archivist-project-key.sh"
@@ -63,6 +74,7 @@ _approve() {
 }
 
 INPUT=$(cat)
+hook_health_context "$INPUT"
 trap '_approve "Archivist extraction errored out, compaction approved anyway"' ERR
 
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
@@ -117,7 +129,6 @@ fi
 
 PROMPT_FILE=$(mktemp -t archivist-prompt.XXXXXX 2>/dev/null) || PROMPT_FILE="/tmp/archivist-prompt.$$"
 trap 'rm -f "$PROMPT_FILE"; _approve "Archivist extraction errored out, compaction approved anyway"' ERR
-trap 'rm -f "$PROMPT_FILE"' EXIT
 
 {
 	printf '%s\n' 'You are extracting structured session memory from a Claude Code transcript that is about to be compacted (context truncated). Return JSON only — no prose, no markdown fences.'

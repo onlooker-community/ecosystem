@@ -40,6 +40,9 @@ if [[ -n "$_ECOSYSTEM_ROOT" && -f "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.
 fi
 
 export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
+# shellcheck source=../lib/hook-health.sh
+source "${PLUGIN_ROOT}/scripts/lib/hook-health.sh"
+hook_health_register "governor-session-start"
 
 # portable-lock.sh is vendored into this plugin's lib dir so the ledger's
 # atomic appends keep working when governor is installed standalone, where the
@@ -53,6 +56,7 @@ source "${PLUGIN_ROOT}/scripts/lib/governor-config.sh"
 source "${PLUGIN_ROOT}/scripts/lib/governor-events.sh"
 
 INPUT=$(cat)
+hook_health_context "$INPUT"
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SESSION_ID=""
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 

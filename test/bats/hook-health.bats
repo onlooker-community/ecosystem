@@ -159,3 +159,75 @@ setup() {
 	[ -f "$HEALTH_LOG" ] || return 1
 	[ "$(grep -c '\"hook\":\"librarian-session-end\"' "$HEALTH_LOG")" -eq 1 ]
 }
+
+# A real plugin hook, driven end to end, must name itself in the health log.
+@test "a real plugin hook records its own latency" {
+	local plugin_root="${REPO_ROOT}/plugins/lineage"
+	export CLAUDE_PLUGIN_ROOT="$plugin_root"
+	export ONLOOKER_HOOK_HEALTH_LOG="$HEALTH_LOG"
+
+	local target="${BATS_TEST_TMPDIR}/edited.txt"
+	printf 'hello\n' > "$target"
+
+	local input
+	input=$(jq -cn --arg f "$target" --arg cwd "$BATS_TEST_TMPDIR" \
+		'{session_id:"hh-test", cwd:$cwd, tool_name:"Write",
+		  hook_event_name:"PostToolUse",
+		  tool_input:{file_path:$f, content:"hello"}}')
+
+	run bash -c "printf '%s' '$input' | '${plugin_root}/scripts/hooks/lineage-post-tool-use.sh'"
+	[ "$status" -eq 0 ] || return 1
+	[ -f "$HEALTH_LOG" ] || return 1
+	grep -q '"hook":"lineage-post-tool-use"' "$HEALTH_LOG"
+}
+
+# Guard: a `trap ... EXIT` installed after hook_health_register silently
+# REPLACES the health-record trap instead of extending it — trap installs
+# replace, they don't stack, and hook_health_register's own chaining only
+# protects a trap that predates it. Four hooks hit this for real (assayer,
+# archivist, echo, tribunal all trap their own PROMPT_FILE cleanup on EXIT
+# after registering); this pins it so it can't come back.
+@test "no plugin hook installs a trap EXIT after hook_health_register" {
+	local hooks=()
+	while IFS= read -r -d '' f; do
+		hooks+=("$f")
+	done < <(find "${REPO_ROOT}/plugins" -path '*/scripts/hooks/*.sh' -print0)
+
+	# The glob must match at least one hook, or every assertion below passes
+	# vacuously over an empty list.
+	[ "${#hooks[@]}" -gt 0 ] || return 1
+
+	# cartographer's `trap ... EXIT` lines live inside a `nohup setsid bash -c
+	# "..."` string — a detached background child with its own trap table
+	# that the parent shell's hook_health_register never touches. Genuinely
+	# safe. Explicit allowlist rather than a regex that tries to detect
+	# string nesting: honest and won't rot.
+	local allowlisted=("cartographer-post-write.sh" "cartographer-session-start.sh")
+
+	local offenders=()
+	local f base register_line trap_line skip a
+	for f in "${hooks[@]}"; do
+		base=$(basename "$f")
+		skip=0
+		for a in "${allowlisted[@]}"; do
+			[ "$base" = "$a" ] && skip=1 && break
+		done
+		[ "$skip" -eq 1 ] && continue
+
+		# Match the actual call (a quote follows), not a comment that merely
+		# mentions hook_health_register — the fixed hooks below explain the
+		# hoist in a comment that names the function itself.
+		register_line=$(grep -nE 'hook_health_register[[:space:]]*"' "$f" | head -n1 | cut -d: -f1)
+		[ -z "$register_line" ] && continue
+
+		trap_line=$(grep -nE '^[[:space:]]*trap[[:space:]].*EXIT' "$f" \
+			| awk -F: -v rl="$register_line" '$1 > rl {print $1; exit}')
+		[ -n "$trap_line" ] && offenders+=("${f}:${trap_line} (register at ${register_line})")
+	done
+
+	if [ "${#offenders[@]}" -gt 0 ]; then
+		printf 'trap EXIT installed after hook_health_register:\n' >&2
+		printf '  %s\n' "${offenders[@]}" >&2
+		return 1
+	fi
+}

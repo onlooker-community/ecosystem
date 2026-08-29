@@ -53,6 +53,9 @@ if [[ -n "$_ECOSYSTEM_ROOT" && -f "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.
 	export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 	source "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.sh"
 fi
+# shellcheck source=../lib/hook-health.sh
+source "${PLUGIN_ROOT}/scripts/lib/hook-health.sh"
+hook_health_register "historian-prompt-submit"
 
 # shellcheck source=../lib/historian-config.sh
 source "${PLUGIN_ROOT}/scripts/lib/historian-config.sh"
@@ -83,6 +86,7 @@ _now_ms() {
 }
 
 INPUT=$(cat 2>/dev/null || true)
+hook_health_context "$INPUT"
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SESSION_ID=""
 PROMPT=$(printf '%s' "$INPUT" | jq -r '.prompt // .user_message // .message // ""' 2>/dev/null) || PROMPT=""

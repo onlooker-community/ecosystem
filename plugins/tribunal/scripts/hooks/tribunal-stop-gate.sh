@@ -41,6 +41,17 @@ if [[ -n "$_ECOSYSTEM_ROOT" && -f "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.
 	# shellcheck disable=SC1091
 	CLAUDE_PLUGIN_ROOT="$_ECOSYSTEM_ROOT" source "${_ECOSYSTEM_ROOT}/scripts/lib/onlooker-schema.sh"
 fi
+# shellcheck source=../lib/hook-health.sh
+source "${PLUGIN_ROOT}/scripts/lib/hook-health.sh"
+# PROMPT_FILE is declared here (empty) and its cleanup trap installed before
+# hook_health_register so the health EXIT trap is the one already in place
+# when PROMPT_FILE gets its real mktemp path below — trap installs replace,
+# they don't chain, and hook_health_register's own chaining only protects a
+# trap that predates it. `rm -f ""` is a harmless no-op if we never reach the
+# mktemp line.
+PROMPT_FILE=""
+trap 'rm -f "$PROMPT_FILE"' EXIT
+hook_health_register "tribunal-stop-gate"
 
 # shellcheck source=../lib/tribunal-config.sh
 source "${PLUGIN_ROOT}/scripts/lib/tribunal-config.sh"
@@ -54,6 +65,7 @@ source "${PLUGIN_ROOT}/scripts/lib/tribunal-events.sh"
 source "${PLUGIN_ROOT}/scripts/lib/tribunal-verdict.sh"
 
 INPUT=$(cat)
+hook_health_context "$INPUT"
 
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SESSION_ID=""
@@ -105,7 +117,6 @@ TRANSCRIPT_TAIL=$(tail -c 30000 "$TRANSCRIPT_PATH" 2>/dev/null) || TRANSCRIPT_TA
 DIFF_SUMMARY=$(git -C "$REPO_ROOT" diff --stat 2>/dev/null | tail -c 4000) || DIFF_SUMMARY=""
 
 PROMPT_FILE=$(mktemp -t tribunal-stop-prompt.XXXXXX 2>/dev/null) || PROMPT_FILE="/tmp/tribunal-stop-prompt.$$"
-trap 'rm -f "$PROMPT_FILE"' EXIT
 
 {
 	printf '%s\n' 'You are a Tribunal Standard Judge performing an advisory pass on a just-finished Claude Code turn. Return JSON only — no prose, no markdown fences.'

@@ -14,12 +14,16 @@ export CARTOGRAPHER_NESTED=1
 
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/../.." && pwd)}"
 export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
+# shellcheck source=../lib/hook-health.sh
+source "${PLUGIN_ROOT}/scripts/lib/hook-health.sh"
+hook_health_register "cartographer-post-write"
 
 source "$PLUGIN_ROOT/scripts/lib/cartographer-config.sh"
 source "$PLUGIN_ROOT/scripts/lib/cartographer-project-key.sh"
 source "$PLUGIN_ROOT/scripts/lib/cartographer-lock.sh"
 
 HOOK_INPUT=$(cat)
+hook_health_context "$HOOK_INPUT"
 CWD=$(printf '%s' "$HOOK_INPUT" | jq -r '.cwd // empty' 2>/dev/null)
 _HOOK_SESSION_ID=$(printf '%s' "$HOOK_INPUT" | jq -r '.session_id // empty' 2>/dev/null)
 export _HOOK_SESSION_ID

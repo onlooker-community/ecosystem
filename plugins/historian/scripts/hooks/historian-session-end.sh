@@ -40,6 +40,9 @@ if [[ -n "$_ECOSYSTEM_ROOT" && -f "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.
 	export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 	source "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.sh"
 fi
+# shellcheck source=../lib/hook-health.sh
+source "${PLUGIN_ROOT}/scripts/lib/hook-health.sh"
+hook_health_register "historian-session-end"
 
 # shellcheck source=../lib/historian-config.sh
 source "${PLUGIN_ROOT}/scripts/lib/historian-config.sh"
@@ -61,6 +64,7 @@ source "${PLUGIN_ROOT}/scripts/lib/historian-sanitizer.sh"
 source "${PLUGIN_ROOT}/scripts/lib/historian-embedder.sh"
 
 INPUT=$(cat 2>/dev/null || true)
+hook_health_context "$INPUT"
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SESSION_ID=""
 TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | jq -r '.transcript_path // ""' 2>/dev/null) || TRANSCRIPT_PATH=""

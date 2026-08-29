@@ -19,6 +19,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
+# shellcheck source=../lib/hook-health.sh
+source "${PLUGIN_ROOT}/scripts/lib/hook-health.sh"
+hook_health_register "warden-session-start"
 
 # shellcheck source=../lib/warden-config.sh
 source "${PLUGIN_ROOT}/scripts/lib/warden-config.sh"
@@ -26,6 +29,7 @@ source "${PLUGIN_ROOT}/scripts/lib/warden-config.sh"
 source "${PLUGIN_ROOT}/scripts/lib/warden-gate-state.sh"
 
 INPUT=$(cat)
+hook_health_context "$INPUT"
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SESSION_ID=""
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 
