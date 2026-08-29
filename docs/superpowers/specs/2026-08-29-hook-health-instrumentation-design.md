@@ -103,15 +103,41 @@ installs a composite that **logs first, then runs the prior handler**. Logging f
 recorded duration excludes the hook's own cleanup, and guarantees the prior handler still runs
 even if logging fails.
 
-### Restore, don't clear, in librarian
+### The librarian trap clear: investigated, not fixed
 
 `librarian-classifier.sh` and `librarian-lesson-transform.sh` each set a temp-file `EXIT` trap
-and then disarm it with a bare `trap - EXIT`. Both are reachable from a hook:
-`librarian-session-end.sh` sources them. A bare clear removes the health trap too, so
-librarian's `SessionEnd` record would go missing with no error.
+around a `claude -p` call and then disarm it with a bare `trap - EXIT`. The original premise
+here was that this bare clear would also strip a health trap installed by
+`hook_health_register`, silently dropping librarian's `SessionEnd` record. That premise is
+false for the code as it exists today, and the fix that premise motivated was not applied.
 
-Both libs change to save the prior handler before setting their own and restore it instead of
-clearing. Four sites total.
+Both call sites — `librarian-session-end.sh:222` and `:467` — invoke these functions through
+command substitution (`RESPONSE=$(librarian_classifier_call ...)`,
+`LESSON_RESULT=$(librarian_lesson_transform_one ...)`). Bash forks a subshell for command
+substitution, and that subshell inherits the caller's current `EXIT` trap at fork time. The
+bare `trap - EXIT` inside the classifier only clears the *subshell's own copy* of that
+inherited trap — it never touches the caller's trap table. So under the call shape that
+actually exists, the health trap installed by `hook_health_register` survives untouched and
+fires exactly once, correctly, when the real top-level hook script exits.
+
+The prescribed fix — capture the prior handler with `trap -p EXIT` and restore it with `eval`
+instead of clearing — makes this *worse*, not better. Restoring (re-arming) the trap inside the
+subshell means it also fires when that subshell exits, which happens immediately as the
+classifier function returns. The result is two records per hook run: one spurious, logged from
+inside the command-substitution subshell with a truncated duration, and one real, logged at the
+actual script exit. This was caught and independently reproduced outside of bats before landing:
+calling `librarian_classifier_call` via `RESPONSE=$(...)` after `hook_health_register` produces
+one correct record on the unfixed code and two records (one spurious) with the restore-fix
+applied.
+
+The bug the fix targeted — losing the record entirely — is real, but only for a call shape that
+doesn't exist anywhere in this codebase: calling `librarian_classifier_call` or
+`librarian_lesson_call` *directly*, without wrapping it in `$(...)`, in the same shell as
+`hook_health_register`. `test/bats/hook-health.bats` pins the call shape that does exist —
+`RESPONSE=$(librarian_classifier_call ...)` after `hook_health_register` must leave exactly one
+health record, not zero and not two. If a future refactor changes either call site to invoke
+these functions directly instead of through command substitution, the bare clear becomes
+unsafe again and that test will start failing, which is the signal to revisit this fix.
 
 ### One implementation, two consumers
 

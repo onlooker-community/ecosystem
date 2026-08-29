@@ -130,3 +130,32 @@ setup() {
 	[ ! -f "$victim" ] || return 1
 	tail -n 1 "$HEALTH_LOG" | jq -e '.hook == "quoted-hook"' >/dev/null
 }
+
+# librarian's classifier disarms its own EXIT trap with a bare `trap - EXIT`.
+# That is safe only because production always calls it inside a command
+# substitution, where the clear wipes the subshell's own copy and leaves the
+# caller's health trap intact. Calling it directly would eat the health trap, so
+# this pins the call shape: exactly one record. Real call sites are
+# librarian-session-end.sh:222 and :467.
+@test "librarian_classifier_call in a subshell leaves exactly one health record" {
+	local stub_bin="${BATS_TEST_TMPDIR}/bin"
+	mkdir -p "$stub_bin"
+	cat > "${stub_bin}/claude" <<-'STUB'
+		#!/usr/bin/env bash
+		printf '%s' '{"type":"project","title":"t","body":"b","confidence":0.9}'
+	STUB
+	chmod +x "${stub_bin}/claude"
+
+	run bash -c "
+		export PATH=\"${stub_bin}:\$PATH\"
+		export ONLOOKER_HOOK_HEALTH_LOG='${HEALTH_LOG}'
+		source '${REPO_ROOT}/scripts/lib/hook-health.sh'
+		source '${REPO_ROOT}/plugins/librarian/scripts/lib/librarian-classifier.sh'
+		hook_health_register 'librarian-session-end'
+		RESPONSE=\$(librarian_classifier_call '{\"summary\":\"s\",\"detail\":\"d\"}' '' 0.2 256)
+		exit 0
+	"
+	[ "$status" -eq 0 ] || return 1
+	[ -f "$HEALTH_LOG" ] || return 1
+	[ "$(grep -c '\"hook\":\"librarian-session-end\"' "$HEALTH_LOG")" -eq 1 ]
+}
