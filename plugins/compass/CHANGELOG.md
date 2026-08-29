@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.4](https://github.com/onlooker-community/ecosystem/compare/compass-v0.4.3...compass-v0.4.4) (2026-08-29)
+
+
+### Bug Fixes
+
+* **gates:** emit the documented permissionDecision deny shape :shield: ([#211](https://github.com/onlooker-community/ecosystem/issues/211)) ([c68e758](https://github.com/onlooker-community/ecosystem/commit/c68e758c48fbfe1359435ef7143724e3686968e2))
+
 ## [0.4.3](https://github.com/onlooker-community/ecosystem/compare/compass-v0.4.2...compass-v0.4.3) (2026-08-29)
 
 
