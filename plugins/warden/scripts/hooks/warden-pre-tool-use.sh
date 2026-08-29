@@ -8,7 +8,12 @@
 #
 # Hook contract (Claude Code PreToolUse protocol):
 #   - Always exits 0.
-#   - To block: write {"decision":"block","reason":"..."} to stdout.
+#   - To block: write a hookSpecificOutput deny payload to stdout, with
+#     hookEventName "PreToolUse" and permissionDecision "deny". This is the
+#     only documented way to deny a PreToolUse call; the legacy top-level
+#     {"decision":"block"} shape also works today but is undocumented, so it
+#     could be dropped without notice and silently turn this gate into a
+#     no-op. Pinned by test/bats/gate-block-contract.bats.
 #   - To allow: write nothing to stdout.
 #   - Errors are written to stderr only.
 
@@ -84,7 +89,7 @@ To proceed:
 
 jq -n \
 	--arg message "$MESSAGE" \
-	'{"decision":"block","reason":$message}' 2>/dev/null \
-	|| printf '{"decision":"block","reason":"Warden closed the content gate. Run /warden clear to reopen."}'
+	'{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$message}}' 2>/dev/null \
+	|| printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Warden closed the content gate. Run /warden clear to reopen."}}'
 
 exit 0

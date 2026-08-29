@@ -11,13 +11,18 @@
 #   - Allow if (consumed + estimated) <= budget_tokens.
 #   - Emit governor.gate.checked with decision and reason.
 #   - In "soft" enforcement: always allow, only emit the event.
-#   - In "hard" enforcement: block by returning {"decision": "block"} on
-#     stdout with exit 0 (Claude Code PreToolUse block protocol).
+#   - In "hard" enforcement: deny the spawn on stdout with exit 0
+#     (Claude Code PreToolUse permission protocol).
 #
 # Hook contract:
 #   - Exit 0 always.
-#   - To block: write {"decision": "block", "reason": "..."} to stdout.
-#   - To allow: write nothing (or {"decision": "allow"}) to stdout.
+#   - To block: write a hookSpecificOutput deny payload to stdout, with
+#     hookEventName "PreToolUse" and permissionDecision "deny". This is the
+#     only documented way to deny a PreToolUse call; the legacy top-level
+#     {"decision":"block"} shape also works today but is undocumented, so it
+#     could be dropped without notice and silently turn this gate into a
+#     no-op. Pinned by test/bats/gate-block-contract.bats.
+#   - To allow: write nothing to stdout.
 
 set -uo pipefail
 
@@ -68,7 +73,7 @@ _allow() { exit 0; }
 
 _block() {
 	local reason="${1:-budget_exceeded}"
-	printf '{"decision":"block","reason":"%s"}\n' "$reason"
+	printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\n' "$reason"
 	exit 0
 }
 
