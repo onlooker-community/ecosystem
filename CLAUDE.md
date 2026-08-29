@@ -91,8 +91,10 @@ See `plugins/compass/docs/adr/001-evaluate-prompts-in-context.md` for the full d
    sub-shell inheriting `CLAUDE_PLUGIN_ROOT` but not `PLUGIN_ROOT` loses it. A repo-root path resolves
    in this checkout and nowhere else: an installed plugin publishes rooted at `plugins/<name>` and has
    no ecosystem tree above it. Edit the canonical `scripts/lib/config-loader.sh`, then run
-   `scripts/sync-config-loader.sh` to propagate it. `test/bats/config-lib-self-locating.bats` enforces
-   all of this across every plugin, including from a copied-out standalone tree.
+   `scripts/sync-shared-libs.sh` to propagate it. `test/bats/config-lib-self-locating.bats` enforces
+   all of this across every plugin, including from a copied-out standalone tree. `hook-health.sh` is
+   vendored the same way and for the same reason, propagated by the same script and guarded by
+   `test/bats/shared-lib-vendoring.bats`.
 
 ## Development
 
