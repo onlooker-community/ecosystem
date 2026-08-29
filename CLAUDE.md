@@ -95,6 +95,13 @@ See `plugins/compass/docs/adr/001-evaluate-prompts-in-context.md` for the full d
    all of this across every plugin, including from a copied-out standalone tree. `hook-health.sh` is
    vendored the same way and for the same reason, propagated by the same script and guarded by
    `test/bats/shared-lib-vendoring.bats`.
+9. In the hook script itself, source the vendored `hook-health.sh` and call
+   `hook_health_register "<hook-filename-without-.sh>"` near the top of the script, before any real
+   work happens. Once stdin has been read, call `hook_health_context "$INPUT"` so the record picks up
+   `session_id`, `tool_name`, and `hook_event`. Skip either step and the hook is invisible to latency
+   measurement — it silently reports nothing to `hook-health.jsonl`, with no error and no test failure
+   to flag it. `test/bats/hook-health.bats` enforces that every hook under `plugins/*/scripts/hooks/*.sh`
+   calls `hook_health_register`.
 
 ## Development
 

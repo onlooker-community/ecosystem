@@ -160,6 +160,38 @@ setup() {
 	[ "$(grep -c '\"hook\":\"librarian-session-end\"' "$HEALTH_LOG")" -eq 1 ]
 }
 
+# librarian's lesson transform disarms its own EXIT trap the same way the
+# classifier does above (librarian-lesson-transform.sh:169 and :193). Safe
+# only because production always calls it inside a command substitution:
+# librarian-session-end.sh:471 calls librarian_lesson_transform_one, whose
+# own call to librarian_lesson_call at librarian-lesson-transform.sh:256 is
+# itself a command substitution. This pins that call shape: exactly one
+# record. If either level ever becomes a direct call, the health trap gets
+# eaten silently — this test exists to catch that.
+@test "librarian_lesson_call in a subshell leaves exactly one health record" {
+	local stub_bin="${BATS_TEST_TMPDIR}/bin"
+	mkdir -p "$stub_bin"
+	cat > "${stub_bin}/claude" <<-'STUB'
+		#!/usr/bin/env bash
+		printf '%s' '{"eligible":false,"reason":"no_versions"}'
+	STUB
+	chmod +x "${stub_bin}/claude"
+
+	run bash -c "
+		export PATH=\"${stub_bin}:\$PATH\"
+		export ONLOOKER_HOOK_HEALTH_LOG='${HEALTH_LOG}'
+		source '${REPO_ROOT}/scripts/lib/hook-health.sh'
+		source '${REPO_ROOT}/plugins/librarian/scripts/lib/librarian-config.sh'
+		source '${REPO_ROOT}/plugins/librarian/scripts/lib/librarian-lesson-transform.sh'
+		hook_health_register 'librarian-session-end'
+		RAW=\$(librarian_lesson_call '{\"summary\":\"s\",\"detail\":\"d\"}' '')
+		exit 0
+	"
+	[ "$status" -eq 0 ] || return 1
+	[ -f "$HEALTH_LOG" ] || return 1
+	[ "$(grep -c '\"hook\":\"librarian-session-end\"' "$HEALTH_LOG")" -eq 1 ]
+}
+
 # A real plugin hook, driven end to end, must name itself in the health log.
 @test "a real plugin hook records its own latency" {
 	local plugin_root="${REPO_ROOT}/plugins/lineage"
@@ -179,6 +211,39 @@ setup() {
 	[ "$status" -eq 0 ] || return 1
 	[ -f "$HEALTH_LOG" ] || return 1
 	grep -q '"hook":"lineage-post-tool-use"' "$HEALTH_LOG"
+}
+
+# Completeness guard: every plugin hook must call hook_health_register, or
+# it is invisible to latency measurement and every other test in this file
+# stays green regardless. The trap-ordering guard below only checks hooks
+# that already register — a hook merged without a register line at all skips
+# its own `continue` there and is never flagged. This is the test that
+# catches that hook. Not pinned to a count, so adding a plugin hook doesn't
+# fail this test by itself — only an unregistered one does.
+@test "every plugin hook calls hook_health_register" {
+	local hooks=()
+	while IFS= read -r -d '' f; do
+		hooks+=("$f")
+	done < <(find "${REPO_ROOT}/plugins" -path '*/scripts/hooks/*.sh' -print0)
+
+	# The glob must match at least one hook, or the loop below passes
+	# vacuously over an empty list.
+	[ "${#hooks[@]}" -gt 0 ] || return 1
+
+	local offenders=()
+	local f
+	for f in "${hooks[@]}"; do
+		# Match the actual call (a quote follows the name), not a comment
+		# that merely mentions hook_health_register — several hooks now
+		# explain the trap hoist in a comment that names the function.
+		grep -qE 'hook_health_register[[:space:]]*"' "$f" || offenders+=("$f")
+	done
+
+	if [ "${#offenders[@]}" -gt 0 ]; then
+		printf 'plugin hooks missing hook_health_register:\n' >&2
+		printf '  %s\n' "${offenders[@]}" >&2
+		return 1
+	fi
 }
 
 # Guard: a `trap ... EXIT` installed after hook_health_register silently
