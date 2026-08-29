@@ -2,6 +2,13 @@
 
 All notable changes to the Cartographer plugin are documented here.
 
+## [0.7.0](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.6.3...cartographer-v0.7.0) (2026-08-29)
+
+
+### Features
+
+* **hook-health:** measure latency for every plugin hook :bar_chart: ([#213](https://github.com/onlooker-community/ecosystem/issues/213)) ([afcc9ff](https://github.com/onlooker-community/ecosystem/commit/afcc9ffebb206a78330f03a17f82b20198873c37))
+
 ## [0.6.3](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.6.2...cartographer-v0.6.3) (2026-08-29)
 
 
