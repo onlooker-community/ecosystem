@@ -12,12 +12,20 @@
 #   cartographer_config_load <repo_root>
 #   cartographer_config_get_json ".cartographer.exclude_paths"
 
-# Resolve the shared loader from this file's own location. $PLUGIN_ROOT is
+# Resolve the vendored loader from this file's own location. $PLUGIN_ROOT is
 # whatever the sourcing scope happened to set, so a sub-shell that inherits
 # CLAUDE_PLUGIN_ROOT but not PLUGIN_ROOT would lose every accessor silently.
+# The loader is a sibling rather than a path up to the repo root, because an
+# installed plugin is its own tree with no ecosystem checkout above it.
 _CARTOGRAPHER_CONFIG_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=scripts/lib/config-loader.sh
-source "${_CARTOGRAPHER_CONFIG_LIB_DIR}/../../../../scripts/lib/config-loader.sh"
+_CARTOGRAPHER_CONFIG_LOADER="${_CARTOGRAPHER_CONFIG_LIB_DIR}/config-loader.sh"
+if [[ ! -f "$_CARTOGRAPHER_CONFIG_LOADER" ]]; then
+	printf 'cartographer: missing %s — plugin package is incomplete\n' \
+		"$_CARTOGRAPHER_CONFIG_LOADER" >&2
+	exit 1
+fi
+# shellcheck source=plugins/cartographer/scripts/lib/config-loader.sh
+source "$_CARTOGRAPHER_CONFIG_LOADER"
 
 _CARTOGRAPHER_CONFIG=""
 

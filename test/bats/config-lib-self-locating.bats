@@ -122,3 +122,105 @@ _config_libs() {
   [[ "$output" != *"command not found"* ]] || return 1
   [ "$output" -eq "$output" ] 2>/dev/null
 }
+
+# --- Installed marketplace layout (ecosystem-ber) ------------------------------
+#
+# The BASH_SOURCE sweep above fixed HOW the directory is derived but left the
+# depth alone: `${DIR}/../../../../scripts/lib/config-loader.sh`. Four levels up
+# from plugins/<name>/scripts/lib is the repo root, which holds in the monorepo
+# and nowhere else. Every plugin publishes rooted at ./plugins/<name>, so an
+# installed copy is its own tree and four levels up escapes it entirely — the
+# source fails, no accessor is defined, and config falls back to shipped
+# defaults while the hook exits 0. The same silence, one layer down.
+#
+# The tests above cannot see it: they source libs in place, from the one layout
+# where the path resolves.
+
+@test "no config lib reaches outside its own plugin for config-loader.sh" {
+  local offenders=""
+  local lib
+  while IFS= read -r lib; do
+    if grep -q '\.\./\.\./\.\./\.\..*config-loader\.sh' "$lib"; then
+      offenders+="${lib#"${REPO_ROOT}/"}"$'\n'
+    fi
+  done < <(_config_libs)
+
+  [ -z "$offenders" ] || {
+    printf 'config libs resolving config-loader.sh above their plugin root:\n%s' "$offenders" >&2
+    return 1
+  }
+}
+
+@test "every vendored config-loader.sh matches the canonical one" {
+  local canonical="${REPO_ROOT}/scripts/lib/config-loader.sh"
+  [ -f "$canonical" ] || return 1
+
+  local drifted=""
+  local lib
+  while IFS= read -r lib; do
+    local vendored="${lib%/*}/config-loader.sh"
+    if [ ! -f "$vendored" ]; then
+      drifted+="${vendored#"${REPO_ROOT}/"} (missing)"$'\n'
+    elif ! cmp -s "$canonical" "$vendored"; then
+      drifted+="${vendored#"${REPO_ROOT}/"} (differs)"$'\n'
+    fi
+  done < <(_config_libs)
+
+  [ -z "$drifted" ] || {
+    printf 'vendored copies out of sync with scripts/lib/config-loader.sh:\n%s' "$drifted" >&2
+    return 1
+  }
+}
+
+# The behavioral test for the layout that actually ships. Copies each plugin to
+# a tree outside $REPO_ROOT — which is exactly what installing it does — so a
+# path that only resolves inside the monorepo cannot resolve here by accident.
+@test "every config lib works from a standalone plugin tree" {
+  local failures=""
+  local lib
+  while IFS= read -r lib; do
+    local plugin_dir plugin_name standalone out
+    plugin_dir="${lib%/scripts/lib/*}"
+    plugin_name="$(basename "$plugin_dir")"
+
+    standalone="${BATS_TEST_TMPDIR}/standalone/${plugin_name}"
+    mkdir -p "$standalone"
+    cp -R "${plugin_dir}/." "${standalone}/"
+
+    out=$(env -u PLUGIN_ROOT CLAUDE_PLUGIN_ROOT="$standalone" HOME="$HOME" \
+      bash -c '
+        set -u
+        source "$1" 2>&1 || exit 1
+        type -t config_load_plugin >/dev/null 2>&1 || { echo "config_load_plugin undefined"; exit 1; }
+        type -t config_get >/dev/null 2>&1 || { echo "config_get undefined"; exit 1; }
+        type -t config_get_json >/dev/null 2>&1 || { echo "config_get_json undefined"; exit 1; }
+        config_load_plugin "$2" "" _PROBE || { echo "config_load_plugin failed"; exit 1; }
+        printf "%s" "$_PROBE" | jq -e "type == \"object\" and (length > 0)" >/dev/null \
+          || { echo "merged config empty: $_PROBE"; exit 1; }
+      ' _ "${standalone}/scripts/lib/${plugin_name}-config.sh" "$plugin_name" 2>&1) \
+      || failures+="${plugin_name}: ${out}"$'\n'
+  done < <(_config_libs)
+
+  [ -z "$failures" ] || {
+    printf 'config libs broken in the installed marketplace layout:\n%s' "$failures" >&2
+    return 1
+  }
+}
+
+# A vendored loader that goes missing is a packaging defect, not a runtime
+# condition to absorb. Silence is what made ecosystem-88v, ecosystem-7bj, and
+# ecosystem-ber each take months to surface, so this one path declines to
+# fail soft.
+@test "a config lib whose loader is missing fails loudly instead of degrading" {
+  local standalone="${BATS_TEST_TMPDIR}/no-loader/inspector"
+  mkdir -p "$standalone"
+  cp -R "${REPO_ROOT}/plugins/inspector/." "${standalone}/"
+  rm -f "${standalone}/scripts/lib/config-loader.sh"
+
+  run env -u PLUGIN_ROOT CLAUDE_PLUGIN_ROOT="$standalone" bash -c \
+    'source "'"${standalone}"'/scripts/lib/inspector-config.sh"; echo REACHED'
+
+  [ "$status" -ne 0 ] || return 1
+  [[ "$output" != *REACHED* ]] || return 1
+  [[ "$output" == *"config-loader.sh"* ]]
+}

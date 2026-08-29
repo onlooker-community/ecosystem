@@ -136,11 +136,16 @@ See `plugins/compass/docs/adr/001-evaluate-prompts-in-context.md` for the full d
    a test drives the branch that emits it, `excluded` with a reason when not.
    `npm run test:bus` fails on any registered type that appears in neither list.
 7. Fail-soft when `~/.onlooker/` is absent — plugins must not block a session they were not invited to.
-8. In `plugins/<name>/scripts/lib/<name>-config.sh`, locate `config-loader.sh` from the file's own
-   `${BASH_SOURCE[0]}`, never from a caller-supplied `$PLUGIN_ROOT`. That variable is read at source
-   time from whatever scope did the sourcing, so a sub-shell that inherits `CLAUDE_PLUGIN_ROOT` but not
-   `PLUGIN_ROOT` loses every accessor while still exiting 0 — config silently falls back to defaults.
-   `test/bats/config-lib-self-locating.bats` enforces this across every plugin.
+8. In `plugins/<name>/scripts/lib/<name>-config.sh`, source the **vendored** `config-loader.sh` that
+   sits beside it, resolved from the file's own `${BASH_SOURCE[0]}`. Never from a caller-supplied
+   `$PLUGIN_ROOT`, and never through a path that climbs to the repo root — both mistakes end the same
+   way, with every accessor undefined while the script still exits 0, so config silently falls back to
+   shipped defaults. `$PLUGIN_ROOT` is read at source time from whatever scope did the sourcing, so a
+   sub-shell inheriting `CLAUDE_PLUGIN_ROOT` but not `PLUGIN_ROOT` loses it. A repo-root path resolves
+   in this checkout and nowhere else: an installed plugin publishes rooted at `plugins/<name>` and has
+   no ecosystem tree above it. Edit the canonical `scripts/lib/config-loader.sh`, then run
+   `scripts/sync-config-loader.sh` to propagate it. `test/bats/config-lib-self-locating.bats` enforces
+   all of this across every plugin, including from a copied-out standalone tree.
 
 ## Development
 

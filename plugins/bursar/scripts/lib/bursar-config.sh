@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Config resolution for bursar.
 #
-# Uses the shared config loader from ecosystem. Reads five layers, latest wins:
+# Uses the vendored config loader (scripts/lib/config-loader.sh is canonical).
+# Reads five layers, latest wins:
 #   1. plugins/bursar/config.json (defaults shipped with the plugin)
 #   2. ~/.claude/settings.json
 #   3. ~/.claude/settings.local.json (local overrides user)
@@ -16,12 +17,20 @@
 #   bursar_config_surface_enabled      # 0 if bursar.surface_at_session_start is true
 #   bursar_config_week_start           # echoes "monday" or "sunday"
 
-# Resolve the shared loader from this file's own location. $PLUGIN_ROOT is
+# Resolve the vendored loader from this file's own location. $PLUGIN_ROOT is
 # whatever the sourcing scope happened to set, so a sub-shell that inherits
 # CLAUDE_PLUGIN_ROOT but not PLUGIN_ROOT would lose every accessor silently.
+# The loader is a sibling rather than a path up to the repo root, because an
+# installed plugin is its own tree with no ecosystem checkout above it.
 _BURSAR_CONFIG_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=scripts/lib/config-loader.sh
-source "${_BURSAR_CONFIG_LIB_DIR}/../../../../scripts/lib/config-loader.sh"
+_BURSAR_CONFIG_LOADER="${_BURSAR_CONFIG_LIB_DIR}/config-loader.sh"
+if [[ ! -f "$_BURSAR_CONFIG_LOADER" ]]; then
+	printf 'bursar: missing %s — plugin package is incomplete\n' \
+		"$_BURSAR_CONFIG_LOADER" >&2
+	exit 1
+fi
+# shellcheck source=plugins/bursar/scripts/lib/config-loader.sh
+source "$_BURSAR_CONFIG_LOADER"
 
 _BURSAR_CONFIG="{}"
 
