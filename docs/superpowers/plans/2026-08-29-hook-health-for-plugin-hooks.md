@@ -526,48 +526,52 @@ git commit -m "refactor(hook-health): source one timing implementation :recycle:
 
 Append to `test/bats/hook-health.bats`:
 
+This test drives the **real** `librarian_classifier_call`, not a hand-rolled
+imitation of its shape, so it fails against the current code and passes only once
+the trap is restored properly. `librarian-classifier.sh` sources nothing, so it can
+be sourced on its own. It returns early unless `claude` is on `PATH`, so the stub is
+required — without it the function never reaches its trap and the test would pass
+for the wrong reason.
+
 ```bash
-# librarian's classifier sets and disarms its own EXIT trap around a claude -p
-# call. A bare `trap - EXIT` would take the health trap with it.
-@test "a function that sets and restores its own trap leaves ours armed" {
+# librarian's classifier sets its own EXIT trap around a claude -p call and then
+# disarms it with a bare `trap - EXIT`, which takes the health trap with it and
+# drops the record with no error. librarian-session-end.sh sources this lib, so
+# the path is live.
+@test "librarian_classifier_call leaves the health trap armed" {
+	local stub_bin="${BATS_TEST_TMPDIR}/bin"
+	mkdir -p "$stub_bin"
+	cat > "${stub_bin}/claude" <<-'STUB'
+		#!/usr/bin/env bash
+		printf '%s' '{"type":"project","title":"t","body":"b","confidence":0.9}'
+	STUB
+	chmod +x "${stub_bin}/claude"
+
 	run bash -c "
-		source '${REPO_ROOT}/scripts/lib/hook-health.sh'
+		export PATH='${stub_bin}:\$PATH'
 		export ONLOOKER_HOOK_HEALTH_LOG='${HEALTH_LOG}'
-		hook_health_register 'librarian-style-hook'
-		inner() {
-			local prior
-			prior=\$(trap -p EXIT)
-			trap 'true' EXIT
-			# ... work ...
-			eval \"\${prior:-trap - EXIT}\"
-		}
-		inner
+		source '${REPO_ROOT}/scripts/lib/hook-health.sh'
+		source '${REPO_ROOT}/plugins/librarian/scripts/lib/librarian-classifier.sh'
+		hook_health_register 'librarian-session-end'
+		librarian_classifier_call '{\"summary\":\"s\",\"detail\":\"d\"}' '' 0.2 256 >/dev/null 2>&1
 		exit 0
 	"
 	[ "$status" -eq 0 ] || return 1
-	tail -n 1 "$HEALTH_LOG" | jq -e '.hook == "librarian-style-hook"' >/dev/null
+	[ -f "$HEALTH_LOG" ] || return 1
+	grep -q '"hook":"librarian-session-end"' "$HEALTH_LOG"
 }
 ```
 
-- [ ] **Step 2: Run and verify it passes already**
+- [ ] **Step 2: Run and verify it fails**
 
-Run: `bats test/bats/hook-health.bats -f "leaves ours armed"`
-Expected: PASS. This test documents the *correct* pattern; it is the shape librarian must adopt. Now prove the current librarian shape is broken:
+Run: `bats test/bats/hook-health.bats -f "librarian_classifier_call"`
+Expected: FAIL. `librarian_classifier_call` ends with a bare `trap - EXIT` that
+removes the health trap, so no record is ever written and the `[ -f "$HEALTH_LOG" ]`
+assertion fails.
 
-```bash
-bash -c "
-  source scripts/lib/hook-health.sh
-  export ONLOOKER_HOOK_HEALTH_LOG=/tmp/librarian-probe.jsonl
-  rm -f /tmp/librarian-probe.jsonl
-  hook_health_register 'broken-hook'
-  inner() { trap 'true' EXIT; trap - EXIT; }
-  inner
-  exit 0
-"
-test -f /tmp/librarian-probe.jsonl && echo "RECORD WRITTEN" || echo "RECORD LOST (current librarian behavior)"
-```
-
-Expected: `RECORD LOST`.
+If it fails on the `$status` assertion instead, the stub is not being found — fix
+that first, because a `claude`-less run returns before reaching the trap and would
+prove nothing.
 
 - [ ] **Step 3: Fix `librarian-classifier.sh`**
 
