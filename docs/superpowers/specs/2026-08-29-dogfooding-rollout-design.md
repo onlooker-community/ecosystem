@@ -111,6 +111,13 @@ work for a fresh clone:
 }
 ```
 
+`enabledPlugins` alone does not install anything. It marks a plugin enabled once the plugin
+is present; a name listed there but never installed registers no hooks and reports no error.
+Wave 1 sat in exactly that state — five of six entries enabled, one installed — and measured
+nothing for a day before anyone noticed (ecosystem-449.10). Install each plugin explicitly,
+then confirm against `~/.claude/plugins/installed_plugins.json` for this `projectPath`
+before trusting a wave's numbers.
+
 **Watch:** per-edit latency (baseline 180ms — lineage and inspector both land here, and
 inspector shells out to the project's lint and typecheck), `Stop` latency, and whether
 assayer and echo produce signal or noise on turns that changed nothing.
