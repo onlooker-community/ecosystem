@@ -371,3 +371,34 @@ setup() {
 	[ "$status" -eq 0 ] || return 1
 	[ -f "$victim" ]
 }
+
+# ecosystem-449.8: register at a consistent point, or the durations are not
+# comparable between plugins. Sourcing validate-path.sh costs ~7.4ms, so a hook
+# that registers after it under-reports by that much against one that does not
+# -- and the rollout compares plugins against each other and against one budget.
+# With the floor now at ~3.15ms, a 7.4ms placement gap is larger than the
+# instrument's own noise.
+#
+# hook-health.sh is self-contained and needs nothing but PLUGIN_ROOT, so it can
+# always be sourced first. Anything sourced before it lands inside the window.
+@test "every plugin hook registers before sourcing anything else" {
+	local hooks=()
+	while IFS= read -r f; do hooks+=("$f"); done \
+		< <(find "${REPO_ROOT}/plugins" -path '*/scripts/hooks/*.sh' -type f | sort)
+	[ "${#hooks[@]}" -gt 0 ] || return 1
+
+	local offenders="" f reg src
+	for f in "${hooks[@]}"; do
+		reg=$(grep -n '^[[:space:]]*hook_health_register "' "$f" | head -1 | cut -d: -f1)
+		# Completeness is a separate test; skip unwired hooks here.
+		[ -n "$reg" ] || continue
+		# Catches `source X`, `. X`, and `VAR=y source X`.
+		src=$(grep -nE '(^|[[:space:]])(source|\.)[[:space:]]+["$/a-zA-Z]' "$f" \
+			| grep -v 'hook-health.sh' | head -1 | cut -d: -f1)
+		[ -n "$src" ] || continue
+		if [ "$src" -lt "$reg" ]; then
+			offenders+="$(basename "$f")(src@${src}<reg@${reg}) "
+		fi
+	done
+	[ -z "$offenders" ] || { echo "registers after another source: $offenders" >&2; return 1; }
+}
