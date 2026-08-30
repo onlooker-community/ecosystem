@@ -39,7 +39,7 @@
 - `plugins/scribe/scripts/hooks/scribe-capture.sh:69-77` has an else-branch that creates the file with a full payload when it does not exist.
 - `plugins/scribe/scripts/lib/scribe-distill.sh:137-140` guards its read with `[[ -f "$state_file" ]]` and falls back to an empty `captured_prompt`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `test/bats/scribe-session-start.bats`:
 
@@ -98,7 +98,7 @@ _capture_input() {
 }
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 ```bash
 bats test/bats/scribe-session-start.bats
@@ -106,7 +106,7 @@ bats test/bats/scribe-session-start.bats
 
 Expected: the first two tests fail — `session start creates no state file` fails because the hook currently writes one. The last two should already pass.
 
-- [ ] **Step 3: Remove the eager write**
+- [x] **Step 3: Remove the eager write**
 
 In `plugins/scribe/scripts/hooks/scribe-session-start.sh`, delete these lines entirely:
 
@@ -137,7 +137,7 @@ _done
 
 Keep everything above it — `hook_health_register`, `scribe_config_load`, the `SCRIBE_SESSION_DIR` assignment and its `mkdir -p`.
 
-- [ ] **Step 4: Update the header comment to match**
+- [x] **Step 4: Update the header comment to match**
 
 Replace lines 2-8 of the same file:
 
@@ -159,7 +159,7 @@ Replace lines 2-8 of the same file:
 #   - Errors are written to stderr only; stdout is kept clean.
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 ```bash
 bats test/bats/scribe-session-start.bats
@@ -167,7 +167,7 @@ bats test/bats/scribe-session-start.bats
 
 Expected: all four PASS.
 
-- [ ] **Step 6: Confirm nothing else depended on the eager write**
+- [x] **Step 6: Confirm nothing else depended on the eager write**
 
 ```bash
 npm run test:bats
@@ -176,7 +176,7 @@ shellcheck -S error -x plugins/scribe/scripts/hooks/scribe-session-start.sh
 
 Expected: full bats suite green, shellcheck silent. `SESSION_ID` is now assigned and unused, which is fine — it feeds `hook_health_context`. If shellcheck disagrees, keep the assignment and do not delete the `hook_health_context "$INPUT"` call.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 Use the `/commit` skill. Suggested message:
 
@@ -212,7 +212,7 @@ Refs ecosystem-449.2
 
 **Why deleting a payload-free scribe file is always safe:** `scribe-capture.sh:69-77` recreates it with a full payload on the next prompt. Even if one belonged to a live session, nothing is lost.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `test/bats/onlooker-store-prune.bats`:
 
@@ -320,7 +320,7 @@ _age_days() {
 }
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 ```bash
 bats test/bats/onlooker-store-prune.bats
@@ -328,7 +328,7 @@ bats test/bats/onlooker-store-prune.bats
 
 Expected: all eight fail — `Cannot find module .../scripts/onlooker-store-prune.mjs`.
 
-- [ ] **Step 3: Write the script**
+- [x] **Step 3: Write the script**
 
 Create `scripts/onlooker-store-prune.mjs`:
 
@@ -486,7 +486,7 @@ function main() {
 main();
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 ```bash
 bats test/bats/onlooker-store-prune.bats
@@ -494,13 +494,13 @@ bats test/bats/onlooker-store-prune.bats
 
 Expected: all eight PASS.
 
-- [ ] **Step 5: Break one assertion on purpose to prove the tests gate**
+- [x] **Step 5: Break one assertion on purpose to prove the tests gate**
 
 Temporarily change `pruneEmptyScribe: true` to `false` in `STORES`, re-run, and confirm `deletes a payload-free scribe file but keeps one with a prompt` FAILS. Revert.
 
 This matters: a bats test whose non-final `[[ ]]` was left ungated passes whether or not the code works.
 
-- [ ] **Step 6: Add the npm entry point**
+- [x] **Step 6: Add the npm entry point**
 
 In `package.json`, add to `"scripts"` after `"coverage"`:
 
@@ -508,7 +508,7 @@ In `package.json`, add to `"scripts"` after `"coverage"`:
 "store:prune": "node scripts/onlooker-store-prune.mjs"
 ```
 
-- [ ] **Step 7: Verify lint and the full suite**
+- [x] **Step 7: Verify lint and the full suite**
 
 ```bash
 npm run lint:check
@@ -517,7 +517,7 @@ npm run test:bats
 
 Expected: biome clean on the new `.mjs`, full bats suite green. If biome reports formatting, run `npm run format` and re-check.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 Use the `/commit` skill. Suggested message:
 
@@ -549,7 +549,7 @@ Refs ecosystem-449.2
 - Consumes: `scripts/onlooker-store-prune.mjs` from Task 2.
 - Produces: before/after numbers for the `ecosystem-449.2` bead notes.
 
-- [ ] **Step 1: Record the before state**
+- [x] **Step 1: Record the before state**
 
 ```bash
 du -sh ~/.onlooker
@@ -560,7 +560,7 @@ done
 
 Save the output — it is the baseline the bead will cite.
 
-- [ ] **Step 2: Dry run first**
+- [x] **Step 2: Dry run first**
 
 ```bash
 npm run store:prune -- --dry-run
@@ -568,17 +568,17 @@ npm run store:prune -- --dry-run
 
 Expected: a per-store table. Sanity-check it before deleting anything — roughly 37.5k trackers and ~24k payload-free scribe files, and **zero** deletions attributed to historian, lineage, or logs (they should not even appear, since they are not in `STORES`).
 
-- [ ] **Step 3: Run it**
+- [x] **Step 3: Run it**
 
 ```bash
 npm run store:prune
 ```
 
-- [ ] **Step 4: Record the after state**
+- [x] **Step 4: Record the after state**
 
 Re-run the Step 1 commands. Confirm `~/.onlooker` dropped by roughly 250MB.
 
-- [ ] **Step 5: Write the result into the bead**
+- [x] **Step 5: Write the result into the bead**
 
 ```bash
 bd update ecosystem-449.2 --append-notes "<before/after numbers and the prune report>"
@@ -586,7 +586,7 @@ bd update ecosystem-449.2 --append-notes "<before/after numbers and the prune re
 
 Include the real measured reclaim, not the estimate. If it differs materially from the ~254MB the spec predicted, say so and explain why — a wrong prediction that goes unrecorded is how the next person inherits a bad number, which is exactly what happened to this bead's original diagnosis.
 
-- [ ] **Step 6: Full CI pass before the PR**
+- [x] **Step 6: Full CI pass before the PR**
 
 ```bash
 npm run test:ci
