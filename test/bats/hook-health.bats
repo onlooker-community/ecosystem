@@ -296,3 +296,78 @@ setup() {
 		return 1
 	fi
 }
+
+# ---------------------------------------------------------------------------
+# Measurement accuracy: ecosystem-449.7 (unmeasurable vs fast) and
+# ecosystem-449.9 (write-path subprocesses inside the measured window).
+# ---------------------------------------------------------------------------
+
+# A duration that could not be computed must be distinguishable from a hook
+# that genuinely took under a millisecond. Both used to write 0, so a bad
+# stamp or a backward clock step silently deflated the mean that
+# hook_health_summary reports and the rollout reads.
+@test "an unmeasurable duration records null, not zero" {
+	hook_health_register "bad-stamp-hook"
+	_HOOK_START_MS="not-a-number"
+	hook_health_success
+	tail -n 1 "$HEALTH_LOG" | jq -e '.duration_ms == null' >/dev/null
+}
+
+@test "a backward clock step records null rather than a bogus duration" {
+	hook_health_register "time-traveling-hook"
+	# A start stamp in the future is what a backward NTP correction looks like
+	# from inside the window.
+	_HOOK_START_MS=$(( $(_hook_health_now_ms) + 60000 ))
+	hook_health_success
+	tail -n 1 "$HEALTH_LOG" | jq -e '.duration_ms == null' >/dev/null
+}
+
+@test "a real hook records a numeric duration, not null" {
+	hook_health_register "real-hook"
+	hook_health_success
+	tail -n 1 "$HEALTH_LOG" | jq -e '(.duration_ms | type) == "number" and .duration_ms >= 0' >/dev/null
+}
+
+# The write path used to run dirname and mkdir -p between the two clock reads,
+# so their cost landed inside every reported duration. mkdir is now skipped
+# once the log exists -- this pins that the skip did not break first-write.
+@test "the log directory is created on first write and reused after" {
+	rm -rf "$(dirname "$HEALTH_LOG")"
+	hook_health_register "first-write-hook"
+	hook_health_success
+	[ -f "$HEALTH_LOG" ] || return 1
+
+	hook_health_register "second-write-hook"
+	hook_health_success
+	[ "$(wc -l < "$HEALTH_LOG" | tr -d ' ')" -eq 2 ]
+}
+
+# Loose bound only. The real improvement (a ~7.25ms floor down to ~3.15ms) is
+# not asserted numerically here: a tight timing assertion would be flaky on a
+# loaded machine or slower box, and a flaky test is worse than none. This
+# catches a catastrophic regression, nothing subtler.
+@test "a hook that does no work reports a small duration" {
+	hook_health_register "trivial-hook"
+	hook_health_success
+	tail -n 1 "$HEALTH_LOG" | jq -e '.duration_ms < 50' >/dev/null
+}
+
+# Re-registering in one process used to OVERWRITE _HOOK_PRIOR_EXIT_CMD with our
+# own handler, discarding the caller's original trap. The second register saw
+# `_hook_health_on_exit $?` as "the prior trap" and captured that instead. Net
+# effect: a hook that registers twice silently loses the cleanup it was
+# supposed to preserve — the exact failure chaining exists to prevent.
+@test "re-registering preserves the caller's original exit trap" {
+	local victim="${BATS_TEST_TMPDIR}/original-cleanup-ran"
+	run bash -c "
+		export ONLOOKER_HOOK_HEALTH_LOG='${HEALTH_LOG}'
+		source '${REPO_ROOT}/scripts/lib/hook-health.sh'
+		trap 'touch \"${victim}\"' EXIT
+		hook_health_register first;  hook_health_success
+		hook_health_register second; hook_health_success
+		hook_health_register third
+		exit 0
+	"
+	[ "$status" -eq 0 ] || return 1
+	[ -f "$victim" ]
+}

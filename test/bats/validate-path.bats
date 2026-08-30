@@ -278,3 +278,46 @@ setup() {
   turn_state_next_turn "$session_id"
   jq -e '.turn_number == 2 and .turn_tool_seq == 0' "$tracker" >/dev/null
 }
+
+# An unmeasurable duration is written as null (ecosystem-449.7). jq's `add`
+# treats null as identity but `length` still counts it, so averaging naively
+# divides a correct sum by an inflated count and under-reports every hook that
+# ever failed to measure. The rollout sets latency budgets off this number.
+@test "hook_health_summary excludes unmeasurable records from the average" {
+  # Two measurable records at a known duration, one unmeasurable.
+  hook_register "avg-hook"
+  _HOOK_START_MS=$(( $(_hook_health_now_ms) - 100 ))
+  hook_success
+  hook_register "avg-hook"
+  _HOOK_START_MS=$(( $(_hook_health_now_ms) - 100 ))
+  hook_success
+  hook_register "avg-hook"
+  _HOOK_START_MS="not-a-number"
+  hook_success
+
+  local summary
+  summary=$(hook_health_summary 24)
+  # The average must come from the two measurable records (~100ms), not be
+  # dragged toward zero by dividing their sum by three.
+  echo "$summary" | jq -e \
+    'map(select(.hook == "avg-hook"))
+     | .[0]
+     | .total == 3
+     and .unmeasurable == 1
+     and .avg_duration_ms >= 90' \
+    >/dev/null
+}
+
+@test "hook_health_summary reports null average when nothing was measurable" {
+  hook_register "all-bad-hook"
+  _HOOK_START_MS="not-a-number"
+  hook_success
+
+  local summary
+  summary=$(hook_health_summary 24)
+  echo "$summary" | jq -e \
+    'map(select(.hook == "all-bad-hook"))
+     | .[0]
+     | .unmeasurable == 1 and .avg_duration_ms == null' \
+    >/dev/null
+}
