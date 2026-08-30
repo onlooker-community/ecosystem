@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-29
 **Tracking:** `ecosystem-449` (epic)
-**Status:** Wave 0 complete, Waves 1–4 pending
+**Status:** Wave 0 re-baselined on ecosystem 0.45.2; Wave 1 retracted (`ecosystem-449.10`) and pending re-run; Waves 2–4 pending
 
 ## Problem
 
@@ -78,9 +78,43 @@ exact name parity with `plugins/` on disk.
 
 ## The waves
 
-Each wave lands as one commit to `.claude/settings.json`, runs for a stated soak period, and
-ends with a measurement read against the Wave 0 baseline. A wave does not advance until its
-exit criteria are met.
+Each wave lands as one commit to `.claude/settings.json` **plus an explicit install of that
+wave's plugins**, runs for a stated soak period, and ends with a measurement read against the
+Wave 0 baseline. A wave does not advance until its exit criteria are met.
+
+### Enabling is not installing
+
+`enabledPlugins` does not install anything. It marks a plugin as enabled *if* it is installed.
+Registration lives in `~/.claude-personal/plugins/installed_plugins.json`, and only
+`claude plugin install` writes there. A wave committed to `.claude/settings.json` and nothing
+else registers no hooks and measures nothing.
+
+This is not a theoretical gap — it is what happened to Wave 1 (`ecosystem-449.10`). The
+`autoUpdate` path is why it stayed invisible: it keeps the *cache* warm for every entry in
+`enabledPlugins`, so all six plugins had freshly fetched version directories under
+`plugins/cache/onlooker-community/` while five of them were absent from the install registry.
+A cache check reads as healthy. Only the registry tells the truth.
+
+So each wave needs an install step and a verification step:
+
+```bash
+# Install the wave's plugins. Scope must be passed explicitly.
+claude plugin install <plugin>@onlooker-community --scope project
+
+# Verify: every plugin the wave enables appears in the registry for this projectPath.
+claude plugin list
+
+# Restart, then confirm the hooks actually registered for the new session.
+python3 ~/.onlooker/logs/hook-rollup.py <session-id>
+```
+
+`claude plugin update` has the same trap in a sharper form: it defaults to `--scope user` and
+fails against a project-scoped plugin with `Plugin "<name>" is not installed at scope user`.
+Every plugin command in this rollout needs `--scope project` passed explicitly.
+
+**A wave is not live until a post-restart probe shows its plugins in `hook-health.jsonl`.**
+Installing is necessary, not sufficient — hooks register at session start, so an install
+performed mid-session changes nothing until the next one.
 
 ### Wave 1 — silent recorders
 
