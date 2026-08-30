@@ -17,6 +17,15 @@
 #
 # Fail-soft throughout: every function returns 0. A hook must never break
 # because its instrument broke.
+#
+# What duration_ms actually measures, since consumers cannot infer it:
+# from the clock read inside hook_health_register to the clock read at the top
+# of _hook_health_write. Both stamps cost a subprocess whose pre-read startup
+# lands inside that window, so a hook doing no work still reports about 3ms on
+# the development machine. Reaching zero needs a subprocess-free clock, which
+# means bash 5's $EPOCHREALTIME — unavailable under the #!/usr/bin/env bash
+# shebang that resolves to 3.2 on macOS. Treat small values as a floor, not a
+# measurement. duration_ms is null when it could not be computed at all.
 
 # Do not clobber values a caller already set — several plugins set
 # _HOOK_SESSION_ID before sourcing, and their *-events.sh libs read it.
@@ -46,6 +55,9 @@ _hook_health_now_ms() {
 		printf '%s%s' "$s" "${us:0:3}"
 		return 0
 	fi
+	if command -v jq >/dev/null 2>&1; then
+		jq -n '(now * 1000 | floor)' 2>/dev/null && return 0
+	fi
 	if command -v perl >/dev/null 2>&1; then
 		perl -MTime::HiRes -e 'printf "%d", Time::HiRes::time() * 1000' 2>/dev/null && return 0
 	fi
@@ -66,7 +78,11 @@ hook_health_register() {
 
 	local prior
 	prior=$(trap -p EXIT 2>/dev/null)
-	if [[ -n "$prior" ]]; then
+	# Skip when the installed trap is already ours. A second register would
+	# otherwise capture `_hook_health_on_exit` as "the prior trap" and
+	# overwrite the caller's real handler, silently discarding the cleanup
+	# chaining exists to preserve.
+	if [[ -n "$prior" && "$prior" != *_hook_health_on_exit* ]]; then
 		# Format is: trap -- 'cmd' EXIT
 		prior="${prior#trap -- }"
 		prior="${prior% EXIT}"
@@ -129,12 +145,22 @@ _hook_health_write() {
 	[[ -n "$_HOOK_NAME" ]] || return 0
 	command -v jq >/dev/null 2>&1 || return 0
 
+	# Stamp the end BEFORE any other work. Everything below — the path lookup,
+	# dirname, mkdir, and jq's own startup — used to run between the two clock
+	# reads and land inside every reported duration. Measured cost of that:
+	# dirname 1.4ms, mkdir 1.05ms, plus jq's pre-read startup.
+	local end
+	end=$(_hook_health_now_ms)
+
 	local path
 	path=$(hook_health_log_path)
-	mkdir -p "$(dirname "$path")" 2>/dev/null || return 0
+	# -f is a builtin. The dirname/mkdir pair costs ~2.4ms of subprocess and is
+	# only needed until the log exists, which is once per machine.
+	[[ -f "$path" ]] || mkdir -p "$(dirname "$path")" 2>/dev/null || return 0
 
 	local start="${_HOOK_START_MS:-0}"
 	[[ "$start" =~ ^[0-9]+$ ]] || start=0
+	[[ "$end" =~ ^[0-9]+$ ]] || end=0
 
 	jq -cn \
 		--arg hook "$_HOOK_NAME" \
@@ -144,12 +170,15 @@ _hook_health_write() {
 		--arg hook_event "$_HOOK_EVENT" \
 		--arg tool_name "$_HOOK_TOOL_NAME" \
 		--argjson start "$start" \
-		'(now * 1000 | floor) as $end
-		 | {
+		--argjson end "$end" \
+		'{
 			timestamp: (now | todate),
 			hook: $hook,
 			status: $hook_status,
-			duration_ms: (if $start > 0 and $end > $start then $end - $start else 0 end),
+			# null means "could not be measured" — a bad stamp or a backward
+			# clock step. 0 means a genuinely sub-millisecond hook. Collapsing
+			# both onto 0 silently deflated the average consumers read.
+			duration_ms: (if $start > 0 and $end >= $start then $end - $start else null end),
 			error: (if $error == "" then null else $error end),
 			session_id: (if $session_id == "" then null else $session_id end),
 			hook_event: (if $hook_event == "" then null else $hook_event end),

@@ -97,7 +97,18 @@ hook_health_summary() {
         total: length,
         success: map(select(.status == "success")) | length,
         failure: map(select(.status == "failure")) | length,
-        avg_duration_ms: (map(.duration_ms) | add / length | floor),
+        unmeasurable: (map(select(.duration_ms == null)) | length),
+        # Average only over records that were actually measured. jq treats
+        # null as identity in `add` but `length` still counts it, so the naive
+        # form divides a correct sum by an inflated count and under-reports
+        # every hook that ever failed to measure. null when nothing was.
+        avg_duration_ms: (
+          map(.duration_ms | select(. != null)) as $measured
+          | if ($measured | length) > 0
+            then ($measured | add / length | floor)
+            else null
+            end
+        ),
         last_error: (map(select(.error != null)) | last | .error // null)
       })
     | sort_by(-.failure)
