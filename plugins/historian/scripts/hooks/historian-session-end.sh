@@ -18,6 +18,10 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
+# shellcheck source=../lib/hook-health.sh
+source "${PLUGIN_ROOT}/scripts/lib/hook-health.sh"
+hook_health_register "historian-session-end"
+
 _ECOSYSTEM_ROOT="${ONLOOKER_ECOSYSTEM_ROOT:-}"
 if [[ -z "$_ECOSYSTEM_ROOT" ]]; then
 	_candidate="$(cd "${PLUGIN_ROOT}/../.." 2>/dev/null && pwd)"
@@ -40,9 +44,6 @@ if [[ -n "$_ECOSYSTEM_ROOT" && -f "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.
 	export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 	source "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.sh"
 fi
-# shellcheck source=../lib/hook-health.sh
-source "${PLUGIN_ROOT}/scripts/lib/hook-health.sh"
-hook_health_register "historian-session-end"
 
 # shellcheck source=../lib/historian-config.sh
 source "${PLUGIN_ROOT}/scripts/lib/historian-config.sh"

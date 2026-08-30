@@ -21,6 +21,18 @@ export ECHO_NESTED=1
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
+# shellcheck source=../lib/hook-health.sh
+source "${PLUGIN_ROOT}/scripts/lib/hook-health.sh"
+# PROMPT_FILE is declared here (empty) and its cleanup trap installed before
+# hook_health_register so the health EXIT trap is the one already in place
+# when PROMPT_FILE gets its real mktemp path below — trap installs replace,
+# they don't chain, and hook_health_register's own chaining only protects a
+# trap that predates it. `rm -f ""` is a harmless no-op if we never reach the
+# mktemp line.
+PROMPT_FILE=""
+trap 'rm -f "$PROMPT_FILE"' EXIT
+hook_health_register "echo-stop-gate"
+
 # Resolve the ecosystem root (sibling to this plugin's parent).
 _ECOSYSTEM_ROOT="${ONLOOKER_ECOSYSTEM_ROOT:-}"
 if [[ -z "$_ECOSYSTEM_ROOT" ]]; then
@@ -46,17 +58,6 @@ if [[ -n "$_ECOSYSTEM_ROOT" && -f "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.
 	# shellcheck disable=SC1091
 	CLAUDE_PLUGIN_ROOT="$_ECOSYSTEM_ROOT" source "${_ECOSYSTEM_ROOT}/scripts/lib/onlooker-schema.sh"
 fi
-# shellcheck source=../lib/hook-health.sh
-source "${PLUGIN_ROOT}/scripts/lib/hook-health.sh"
-# PROMPT_FILE is declared here (empty) and its cleanup trap installed before
-# hook_health_register so the health EXIT trap is the one already in place
-# when PROMPT_FILE gets its real mktemp path below — trap installs replace,
-# they don't chain, and hook_health_register's own chaining only protects a
-# trap that predates it. `rm -f ""` is a harmless no-op if we never reach the
-# mktemp line.
-PROMPT_FILE=""
-trap 'rm -f "$PROMPT_FILE"' EXIT
-hook_health_register "echo-stop-gate"
 
 # shellcheck source=../lib/echo-config.sh
 source "${PLUGIN_ROOT}/scripts/lib/echo-config.sh"

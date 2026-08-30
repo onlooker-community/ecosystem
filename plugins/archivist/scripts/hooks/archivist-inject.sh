@@ -19,6 +19,10 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
+# shellcheck source=../lib/hook-health.sh
+source "${PLUGIN_ROOT}/scripts/lib/hook-health.sh"
+hook_health_register "archivist-inject"
+
 _ECOSYSTEM_ROOT="${ONLOOKER_ECOSYSTEM_ROOT:-}"
 if [[ -z "$_ECOSYSTEM_ROOT" ]]; then
 	_candidate="$(cd "${PLUGIN_ROOT}/../.." 2>/dev/null && pwd)"
@@ -40,9 +44,6 @@ if [[ -n "$_ECOSYSTEM_ROOT" && -f "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.
 	# shellcheck disable=SC1091
 	CLAUDE_PLUGIN_ROOT="$_ECOSYSTEM_ROOT" source "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.sh"
 fi
-# shellcheck source=../lib/hook-health.sh
-source "${PLUGIN_ROOT}/scripts/lib/hook-health.sh"
-hook_health_register "archivist-inject"
 
 # shellcheck source=../lib/archivist-project-key.sh
 source "${PLUGIN_ROOT}/scripts/lib/archivist-project-key.sh"

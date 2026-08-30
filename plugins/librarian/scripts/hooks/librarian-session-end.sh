@@ -16,6 +16,10 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
+# shellcheck source=../lib/hook-health.sh
+source "${PLUGIN_ROOT}/scripts/lib/hook-health.sh"
+hook_health_register "librarian-session-end"
+
 # Source the ecosystem substrate so $ONLOOKER_DIR / $ONLOOKER_EVENTS_LOG
 # resolve correctly under the test harness's isolated temp home.
 _ECOSYSTEM_ROOT="${ONLOOKER_ECOSYSTEM_ROOT:-}"
@@ -40,9 +44,6 @@ if [[ -n "$_ECOSYSTEM_ROOT" && -f "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.
 	# shellcheck disable=SC1091
 	CLAUDE_PLUGIN_ROOT="$_ECOSYSTEM_ROOT" source "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.sh"
 fi
-# shellcheck source=../lib/hook-health.sh
-source "${PLUGIN_ROOT}/scripts/lib/hook-health.sh"
-hook_health_register "librarian-session-end"
 
 # shellcheck source=../lib/librarian-config.sh
 source "${PLUGIN_ROOT}/scripts/lib/librarian-config.sh"
