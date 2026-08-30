@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/onlooker-community/ecosystem/compare/lineage-v0.2.4...lineage-v0.3.0) (2026-08-29)
+
+
+### Features
+
+* **hook-health:** measure latency for every plugin hook :bar_chart: ([#213](https://github.com/onlooker-community/ecosystem/issues/213)) ([afcc9ff](https://github.com/onlooker-community/ecosystem/commit/afcc9ffebb206a78330f03a17f82b20198873c37))
+
 ## [0.2.4](https://github.com/onlooker-community/ecosystem/compare/lineage-v0.2.3...lineage-v0.2.4) (2026-08-29)
 
 
