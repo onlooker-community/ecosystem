@@ -54,7 +54,7 @@ Plugins communicate by emitting events to the JSONL log — they do not call eac
 
 ## Compass plugin (design phase)
 
-Compass is the pre-write alignment gate. It has no implementation yet. Design lives in `plugins/compass/docs/design.md`.
+Compass is the pre-write alignment gate. It ships four hooks, eight libs, a calibrated config, and five bats files; `plugins/compass/docs/design.md` is the design record, not a statement of what exists. It is implemented but **not enabled** — it lands in wave 4 of the dogfooding rollout, last and one gate at a time, because it is the most behaviorally aggressive plugin in the set.
 
 **What it does:** Fires on `PreToolUse` for write-class tools. Samples N=5 parallel Haiku evaluators to score intent clarity. Blocks when `confidence < 0.65 OR stddev > 0.20` and surfaces a clarification prompt.
 
