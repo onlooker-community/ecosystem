@@ -1108,6 +1108,209 @@ Refs ecosystem-449.13
 
 ---
 
+### Task 4.5: Pre-gate the Bash path so a no-op shell call stays cheap
+
+**Depends on:** Task 4.
+
+**Files:**
+
+- Modify: `plugins/lineage/scripts/hooks/lineage-post-tool-use.sh` — move the Bash branch above the shared setup and make that setup lazy
+- Modify: `plugins/lineage/scripts/lib/lineage-baseline.sh` — add `lineage_baseline_scope_id`
+- Test: `test/bats/lineage-shell-edit.bats` (extend), `test/bats/lineage-baseline.bats` (extend)
+
+**Why this task exists.** Measured on this repo (561 tracked files, 5 dirty) after Task 4:
+
+| path | cost | note |
+|---|---|---|
+| unmatched tool, early exit | ~60 ms | sourcing only |
+| Bash, nothing changed | ~370 ms | was 0 ms — no matcher existed before |
+| Edit | ~350 ms | unchanged by this work |
+| raw `git status --porcelain -z` | 34 ms | the actual new work |
+
+The detection is cheap. The ~310 ms above the sourcing floor is lineage's pre-existing
+per-invocation setup — `lineage_config_load`, `lineage_project_key`, and several config
+accessors that each spawn their own `jq`. Before this plan lineage never ran on `Bash` at all,
+so that cost went from never to every shell call, and `Bash` outruns `Edit` by roughly 30:1.
+
+The fix is ordering, not optimization: decide whether anything changed **before** paying for
+setup that is only needed to write a record.
+
+**The obstacle, and why the baseline gets its own scope id.** The baseline path currently
+derives from `PROJECT_KEY`, and resolving that is itself ~39 ms of the cost we are trying to
+skip. The baseline is per-session scratch and is never joined to the ledger, so it does not
+need to share the ledger's identity. Keying it off a cheap hash of the repo root is enough,
+and it keeps the whole pre-gate free of `lineage_project_key`.
+
+**A status-hash pre-gate would be wrong.** Comparing a hash of `git status` output alone
+cannot see a second edit to an already-modified file — identical status line, different
+content. That is the exact miss Task 2 was built to avoid. The pre-gate must compare per-path
+content hashes, which is what `lineage_changed_files` already does.
+
+**Interfaces:**
+
+- Consumes: `lineage_changed_files`, `lineage_baseline_build` from Task 2.
+- Produces: `lineage_baseline_scope_id <repo_root>` → first 12 hex of SHA-256 of the repo root.
+
+- [ ] **Step 1: Write the failing tests**
+
+Add to `test/bats/lineage-baseline.bats`:
+
+```bash
+@test "scope id is stable and 12 hex chars" {
+  a=$(lineage_baseline_scope_id "$PROJECT_REPO")
+  b=$(lineage_baseline_scope_id "$PROJECT_REPO")
+  [ "$a" = "$b" ] || return 1
+  [[ "$a" =~ ^[0-9a-f]{12}$ ]]
+}
+
+@test "scope id differs for a different repo root" {
+  other="${BATS_TEST_TMPDIR}/other"; mkdir -p "$other"
+  a=$(lineage_baseline_scope_id "$PROJECT_REPO")
+  b=$(lineage_baseline_scope_id "$other")
+  [ "$a" != "$b" ]
+}
+```
+
+Add to `test/bats/lineage-shell-edit.bats`:
+
+```bash
+@test "a no-change Bash call resolves no project key" {
+  _run_hook "echo seed"
+  run bash -c "printf '%s' '$(_bash_input "ls -la")' | LINEAGE_TRACE_SETUP=1 '$HOOK' 2>&1"
+  [ "$status" -eq 0 ] || return 1
+  [[ "$output" != *"SETUP_DONE"* ]]
+}
+
+@test "a changing Bash call does resolve the project key" {
+  _run_hook "echo seed"
+  printf 'two\n' >> "${PROJECT_REPO}/tracked.txt"
+  run bash -c "printf '%s' '$(_bash_input "cat >> tracked.txt <<EOF")' | LINEAGE_TRACE_SETUP=1 '$HOOK' 2>&1"
+  [ "$status" -eq 0 ] || return 1
+  [[ "$output" == *"SETUP_DONE"* ]]
+}
+```
+
+`LINEAGE_TRACE_SETUP` is a test-only probe: when set, the hook prints `SETUP_DONE` to stderr
+immediately after the lazy setup block runs. It is the only way to assert from the outside
+that the expensive path was skipped, since a skipped setup leaves no artifact.
+
+- [ ] **Step 2: Run the tests to verify they fail**
+
+```bash
+bats test/bats/lineage-baseline.bats test/bats/lineage-shell-edit.bats
+```
+
+Expected: the four new tests fail; every other test in both files still passes.
+
+- [ ] **Step 3: Add the scope id**
+
+In `plugins/lineage/scripts/lib/lineage-baseline.sh`, add beside `lineage_baseline_dir`:
+
+```bash
+# Cheap identity for the per-session baseline.
+#
+# Deliberately NOT lineage_project_key: resolving that shells out for the remote
+# URL and costs ~39ms, which is part of the setup the Bash pre-gate exists to
+# skip. The baseline is scratch and is never joined to the ledger, so it does
+# not need the ledger's identity — only stability within a session.
+lineage_baseline_scope_id() {
+	local root="${1:-unknown}"
+	lineage_sha256 "$root" | cut -c1-12
+}
+```
+
+Then change `lineage_baseline_path` to take a scope id rather than a project key. Its first
+argument is now the scope id; the body is otherwise unchanged.
+
+- [ ] **Step 4: Reorder the hook**
+
+In `plugins/lineage/scripts/hooks/lineage-post-tool-use.sh`, move the whole `if [[ "$TOOL" == "Bash" ]]` block
+to sit **immediately after** `REPO_ROOT=$(lineage_project_repo_root "$CWD")` (currently line 78)
+and **before** `lineage_config_load` and `PROJECT_KEY=$(lineage_project_key "$CWD")`.
+
+Inside the Bash block, the order becomes:
+
+1. `[[ -z "$REPO_ROOT" ]] && _done`
+2. `BASELINE_FILE=$(lineage_baseline_path "$(lineage_baseline_scope_id "$REPO_ROOT")" "$SESSION_ID")`
+3. read the baseline; if it has no `files` key, write a fresh one and `_done` (first call seeds)
+4. `CHANGED=$(lineage_changed_files "$REPO_ROOT" "$BASELINE")`
+5. **if `CHANGED` is empty: rewrite the baseline and `_done` — this is the pre-gate**
+6. only now: `lineage_config_load "$REPO_ROOT"`, `PROJECT_KEY=$(lineage_project_key "$CWD")`,
+   the accessors, and the existing per-file record loop
+7. rewrite the baseline and `_done`
+
+Immediately after step 6's setup calls, add the test probe:
+
+```bash
+	[[ -n "${LINEAGE_TRACE_SETUP:-}" ]] && printf 'SETUP_DONE\n' >&2
+```
+
+Keep `lineage_config_load` and `lineage_project_key` where they are for the
+`Edit`/`Write`/`MultiEdit` path — that path is unchanged by this task and must stay so.
+
+- [ ] **Step 5: Run the tests to verify they pass**
+
+```bash
+bats test/bats/lineage-baseline.bats test/bats/lineage-shell-edit.bats
+shellcheck -S error -x plugins/lineage/scripts/hooks/lineage-post-tool-use.sh
+shellcheck -S error -x plugins/lineage/scripts/lib/lineage-baseline.sh
+```
+
+Expected: all PASS, shellcheck silent.
+
+- [ ] **Step 6: Measure the improvement**
+
+```bash
+cd <this repo>
+INPUT=$(jq -cn --arg cwd "$PWD" '{cwd:$cwd, session_id:"lat", tool_name:"Bash", tool_input:{command:"echo hi"}, hook_event_name:"PostToolUse"}')
+for i in 1 2 3 4 5; do
+  s=$(python3 -c 'import time;print(int(time.time()*1000))')
+  printf '%s' "$INPUT" | env ONLOOKER_DIR=/tmp/lat-check CLAUDE_PLUGIN_ROOT="$PWD/plugins/lineage" \
+    bash plugins/lineage/scripts/hooks/lineage-post-tool-use.sh >/dev/null 2>&1
+  e=$(python3 -c 'import time;print(int(time.time()*1000))')
+  echo "run $i: $((e-s)) ms"
+done
+```
+
+Baseline to beat: ~370 ms. Target: under ~150 ms for the no-change case. Record the real
+numbers in the report. If it does not improve materially, say so rather than reporting the
+target — a pre-gate that does not gate is worth knowing about.
+
+- [ ] **Step 7: Full suite**
+
+```bash
+npm run test:bats
+```
+
+Do NOT pipe this through `tail` — `tail` on a pipe buffers until EOF, so the output stays
+empty for the whole run and looks like a hang. Redirect to a file and read it.
+
+- [ ] **Step 8: Commit**
+
+Use the `/commit` skill. Suggested message:
+
+```text
+perf(lineage): decide before paying setup on a shell call :zap:
+
+A Bash call that changed nothing cost ~370ms, because the hook resolved
+config and the project key before asking whether there was anything to
+record. lineage never ran on Bash before this plan, so that went from never
+to every shell call, and Bash outruns Edit about 30:1.
+
+The detection was never the expensive part -- git status is 34ms. Setup is,
+so the Bash path now runs the comparison first and only pays for setup when
+there is a record to write.
+
+The baseline gets its own cheap scope id rather than the project key, whose
+resolution is itself part of the cost being skipped. It is per-session
+scratch and never joined to the ledger, so it does not need the ledger's
+identity.
+
+Refs ecosystem-449.13
+```
+
+---
+
 ### Task 5: Prune the new store, document the limits, measure the cost
 
 **Depends on:** Task 4.
