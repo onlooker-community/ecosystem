@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.45.3](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.45.2...ecosystem-v0.45.3) (2026-08-30)
+
+
+### Bug Fixes
+
+* **memory-recall:** read the memory store Claude Code actually writes :open_file_folder: ([#220](https://github.com/onlooker-community/ecosystem/issues/220)) ([7dc0a83](https://github.com/onlooker-community/ecosystem/commit/7dc0a8325f51fe23abe4927796f857289cdce256))
+
 ## [0.45.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.45.1...ecosystem-v0.45.2) (2026-08-30)
 
 
