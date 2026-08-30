@@ -29,6 +29,7 @@
     "coverage:node": "node scripts/coverage/run-coverage.mjs",
     "coverage:bash": "node scripts/coverage/bash-coverage.mjs",
     "coverage": "npm run coverage:node && npm run coverage:bash",
+    "store:prune": "node scripts/onlooker-store-prune.mjs",
     "test:ci": "npm run test:shellcheck && npm run test:bats && npm run test:schema && npm run test:bus && npm run lint:managed-blocks && npm run lint:check && npm run lint:manifests && npm run lint:references && npm run lint:lesson-schema",
     "lint:check": "biome check . && markdownlint '**/*.md'",
     "lint": "biome lint --write && markdownlint --fix '**/*.md'",
