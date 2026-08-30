@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.3.0...tribunal-v1.3.1) (2026-08-30)
+
+
+### Bug Fixes
+
+* **hook-health:** make duration_ms mean what it claims :straight_ruler: ([#215](https://github.com/onlooker-community/ecosystem/issues/215)) ([0db5750](https://github.com/onlooker-community/ecosystem/commit/0db57505a8beb1fee915457875ed45018de0ec40))
+
 ## [1.3.0](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.2.9...tribunal-v1.3.0) (2026-08-29)
 
 

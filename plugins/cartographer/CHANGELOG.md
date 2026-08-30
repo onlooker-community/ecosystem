@@ -2,6 +2,13 @@
 
 All notable changes to the Cartographer plugin are documented here.
 
+## [0.7.1](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.7.0...cartographer-v0.7.1) (2026-08-30)
+
+
+### Bug Fixes
+
+* **hook-health:** make duration_ms mean what it claims :straight_ruler: ([#215](https://github.com/onlooker-community/ecosystem/issues/215)) ([0db5750](https://github.com/onlooker-community/ecosystem/commit/0db57505a8beb1fee915457875ed45018de0ec40))
+
 ## [0.7.0](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.6.3...cartographer-v0.7.0) (2026-08-29)
 
 
