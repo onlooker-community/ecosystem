@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.2](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.15.1...librarian-v0.15.2) (2026-08-30)
+
+
+### Bug Fixes
+
+* **hook-health:** register before sourcing so spans are comparable :straight_ruler: ([#217](https://github.com/onlooker-community/ecosystem/issues/217)) ([20e620a](https://github.com/onlooker-community/ecosystem/commit/20e620a0aacf018993130e05749e8b4e6199726c))
+
 ## [0.15.1](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.15.0...librarian-v0.15.1) (2026-08-30)
 
 
