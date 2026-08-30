@@ -37,6 +37,12 @@ setup_test_env() {
   unset ONLOOKER_SESSION_TRACKERS_DIR ONLOOKER_SESSION_HISTORY_DIR \
         ONLOOKER_SESSION_SUMMARIES_DIR ONLOOKER_COMPACT_TRACKERS_DIR \
         ONLOOKER_METRICS_DIR ONLOOKER_EVENTS_LOG ONLOOKER_HOOK_HEALTH_LOG
+
+  # Same reasoning for the config dir. CLAUDE_HOME is set above so the
+  # fallback chain in validate-path.sh short-circuits before reaching this,
+  # but a test that unsets CLAUDE_HOME would otherwise inherit the developer's
+  # real CLAUDE_CONFIG_DIR and read their actual memory store.
+  unset CLAUDE_CONFIG_DIR
 }
 
 # Produce an ISO-8601 UTC timestamp offset from "now" by N days into the past.
