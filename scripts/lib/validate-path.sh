@@ -11,7 +11,12 @@
 # Path Constants (exported for use by scripts that source this file)
 # ==============================================================================
 
-export CLAUDE_HOME="${CLAUDE_HOME:-$HOME/.claude}"
+# CLAUDE_CONFIG_DIR is what Claude Code actually exports to hook processes;
+# CLAUDE_HOME is not exported at all. Defaulting straight to $HOME/.claude
+# pointed at a directory Claude Code does not use on any install that
+# relocates its config dir, and the one consumer of this variable then found
+# no memory store and exited 0 reporting success (ecosystem-449.12).
+export CLAUDE_HOME="${CLAUDE_HOME:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}}"
 export ONLOOKER_DIR="${ONLOOKER_DIR:-$HOME/.onlooker}"
 # Derived from ONLOOKER_DIR, but an explicit value wins so a caller can
 # redirect one path without relocating the whole tree — previously these were

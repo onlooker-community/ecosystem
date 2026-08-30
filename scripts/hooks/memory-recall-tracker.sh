@@ -113,11 +113,17 @@ fi
 
 ENCODED="${CLAUDE_PROJECT_ENCODED:-}"
 if [[ -z "$ENCODED" ]]; then
-	# Encode the absolute cwd: drop leading slash, swap remaining `/` for
-	# `-`, prepend the leading `-`.
+	# Encode the absolute cwd the way Claude Code does: replace BOTH path
+	# separators and dots with `-`. Verified against the real directories
+	# under $CLAUDE_CONFIG_DIR/projects — none contains a literal dot, and
+	# every github.com path renders as github-com.
+	#
+	# Replacing only `/` produced a directory that cannot exist for any repo
+	# cloned under a github.com-style path, so this hook hit `! -d` and exited
+	# 0 reporting success while injecting nothing (ecosystem-449.12).
 	ABS_CWD=$(cd "$CWD" 2>/dev/null && pwd -P) || ABS_CWD=""
 	if [[ -n "$ABS_CWD" ]]; then
-		ENCODED=$(printf '%s' "$ABS_CWD" | sed -E 's#/#-#g')
+		ENCODED=$(printf '%s' "$ABS_CWD" | sed -E 's#[/.]#-#g')
 	fi
 fi
 
@@ -139,12 +145,20 @@ _extract_type() {
 	local path="$1"
 	[[ -f "$path" ]] || return 0
 	# Parse frontmatter type via awk + sed (no python dep, no yq dep).
+	#
+	# The pattern allows leading whitespace because Claude Code nests the
+	# field under `metadata:`, indented — anchoring on `^type:` matched only
+	# the shape these tests used to seed and nothing real, so every actual
+	# memory scored an empty type and was skipped (ecosystem-449.12).
+	#
+	# `node_type:` sits directly above `type:` in real frontmatter and must
+	# not match; requiring `type:` immediately after the indent keeps it out.
 	awk '
 		NR == 1 && /^---/ { in_fm = 1; next }
 		in_fm && /^---/ { exit }
 		in_fm
 	' "$path" 2>/dev/null \
-		| sed -nE 's/^type:[[:space:]]*(.*)$/\1/p' \
+		| sed -nE 's/^[[:space:]]*type:[[:space:]]*(.*)$/\1/p' \
 		| head -1 \
 		| tr -d '"' \
 		| tr -d "'"

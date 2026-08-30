@@ -361,3 +361,39 @@ setup() {
   [[ "$ONLOOKER_EVENTS_LOG" == "$ONLOOKER_DIR"/* ]] || return 1
   [[ "$ONLOOKER_SESSION_TRACKERS_DIR" == "$ONLOOKER_DIR"/* ]]
 }
+
+# ecosystem-449.12. Claude Code exports CLAUDE_CONFIG_DIR (here
+# ~/.claude-personal) and does NOT export CLAUDE_HOME. The substrate defaulted
+# straight to $HOME/.claude and never consulted CLAUDE_CONFIG_DIR, so on any
+# install that relocates the config directory, CLAUDE_HOME pointed at a
+# directory Claude Code does not use. Its one consumer, memory-recall-tracker,
+# then found no memory store and exited 0 reporting success.
+@test "CLAUDE_HOME falls back to CLAUDE_CONFIG_DIR before \$HOME/.claude" {
+  run bash -c "
+    unset CLAUDE_HOME
+    export CLAUDE_CONFIG_DIR='${BATS_TEST_TMPDIR}/relocated'
+    source '${REPO_ROOT}/scripts/lib/validate-path.sh'
+    printf '%s' \"\$CLAUDE_HOME\"
+  "
+  [ "$output" = "${BATS_TEST_TMPDIR}/relocated" ]
+}
+
+@test "an explicit CLAUDE_HOME still wins over CLAUDE_CONFIG_DIR" {
+  run bash -c "
+    export CLAUDE_HOME='${BATS_TEST_TMPDIR}/explicit'
+    export CLAUDE_CONFIG_DIR='${BATS_TEST_TMPDIR}/relocated'
+    source '${REPO_ROOT}/scripts/lib/validate-path.sh'
+    printf '%s' \"\$CLAUDE_HOME\"
+  "
+  [ "$output" = "${BATS_TEST_TMPDIR}/explicit" ]
+}
+
+@test "with neither set, CLAUDE_HOME still defaults under HOME" {
+  run bash -c "
+    unset CLAUDE_HOME CLAUDE_CONFIG_DIR
+    export HOME='${BATS_TEST_TMPDIR}/plainhome'
+    source '${REPO_ROOT}/scripts/lib/validate-path.sh'
+    printf '%s' \"\$CLAUDE_HOME\"
+  "
+  [ "$output" = "${BATS_TEST_TMPDIR}/plainhome/.claude" ]
+}

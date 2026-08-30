@@ -187,3 +187,92 @@ _seed_memory() {
 
   [ "$key" = "$key2" ]
 }
+
+# ecosystem-449.12. Claude Code encodes the project path by replacing BOTH
+# path separators and dots with `-`; the fallback encoder replaced only
+# slashes. Verified against real directories: none of the entries under
+# $CLAUDE_CONFIG_DIR/projects contains a literal dot, and every github.com
+# path renders as github-com.
+#
+# The consequence is a silent no-op. For any repo cloned under a
+# github.com-style path -- essentially all of them -- the hook computed a
+# directory that cannot exist, hit `! -d`, and exited 0 reporting success.
+#
+# The pre-existing tests could not catch this: they use a dot-free temp path
+# AND re-derive the expected directory with the same sed the hook uses, so the
+# expectation moves with the bug.
+@test "a project path containing a dot resolves to the dot-replaced memory dir" {
+  local dotted="${BATS_TEST_TMPDIR}/github.com/org/repo"
+  mkdir -p "$dotted"
+  git -C "$dotted" init -q
+  git -C "$dotted" config user.email t@example.com
+  git -C "$dotted" config user.name "Test"
+  git -C "$dotted" remote add origin git@github.com:org/dotted.git
+
+  local abs encoded memdir
+  abs=$(cd "$dotted" && pwd -P)
+  # Deliberately NOT the hook's encoder: dots become dashes too.
+  encoded=$(printf '%s' "$abs" | sed -E 's#[/.]#-#g')
+  memdir="${CLAUDE_HOME}/projects/${encoded}/memory"
+  mkdir -p "$memdir"
+
+  cat > "${memdir}/dotted-note.md" <<-'MEM'
+	---
+	name: dotted-note
+	description: a memory under a path containing a dot
+	metadata:
+	  type: project
+	---
+
+	body
+	MEM
+
+  local input
+  input=$(jq -cn --arg cwd "$dotted" --arg sid "sess-dotted" \
+    '{cwd:$cwd, session_id:$sid, source:"startup", hook_event_name:"SessionStart"}')
+  run bash -c "printf '%s' '$input' | '$HOOK'"
+  [ "$status" -eq 0 ] || return 1
+
+  # The encoded name must carry no literal dot, and the hook must have found
+  # the memory rather than silently exiting on a missing directory.
+  [[ "$encoded" != *.* ]] || return 1
+  grep -q '"event_type":"memory.recalled"' "$ONLOOKER_EVENTS_LOG"
+}
+
+# The real memory format nests type under metadata:, indented. Confirmed
+# against actual files written by Claude Code, e.g.
+#
+#   ---
+#   name: authors-own-claude-marketplace
+#   description: "..."
+#   metadata:
+#     node_type: memory
+#     type: user
+#   ---
+#
+# The extractor anchored on `^type:` at line start, so it matched the format
+# these tests happened to seed and nothing Claude Code actually writes. Every
+# real memory scored an empty type and was skipped by the `case` below it --
+# a second silent no-op stacked on the path bug (ecosystem-449.12).
+@test "a memory with type nested under metadata is recalled" {
+  printf -- '---\nname: nested\ndescription: "quoted desc"\nmetadata:\n  node_type: memory\n  type: user\n  modified: 2026-08-08T15:58:14.732Z\n---\n\nBody.\n' \
+    > "${MEM_DIR}/nested.md"
+
+  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  [ "$status" -eq 0 ] || return 1
+  grep '"event_type":"memory.recalled"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e 'select(.payload.memory_type == "user" and .payload.memory_file == "nested.md")' >/dev/null
+}
+
+# node_type sits directly above type in real frontmatter. A loosened pattern
+# must not mistake it for the type field.
+@test "node_type is not mistaken for type" {
+  printf -- '---\nname: nodetype-only\nmetadata:\n  node_type: memory\n---\n\nBody.\n' \
+    > "${MEM_DIR}/nodetype-only.md"
+
+  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  [ "$status" -eq 0 ] || return 1
+  # No valid type, so no event for this file.
+  ! grep '"event_type":"memory.recalled"' "$ONLOOKER_EVENTS_LOG" 2>/dev/null \
+    | jq -e 'select(.payload.memory_file == "nodetype-only.md")' >/dev/null
+}
