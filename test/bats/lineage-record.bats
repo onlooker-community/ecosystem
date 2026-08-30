@@ -77,3 +77,31 @@ c" ]
 	rec=$(lineage_build_record "CID5" "2026-06-12T00:00:00Z" 1781280000 "s" "1" "Write" "x" "$ti" 4000 false "")
 	[ "$(jq -r '.added_snippets[0]' <<<"$rec")" = "plain text body" ]
 }
+
+@test "operation maps Bash to shell_edit" {
+  run _lineage_operation "Bash"
+  [ "$output" = "shell_edit" ]
+}
+
+@test "build_record uses the added override when given" {
+  run lineage_build_record "cid1" "2026-01-01T00:00:00Z" "0" "sess" "1" \
+    "Bash" "/repo/f.txt" '{}' "4000" "false" "" "added from git" "authored" "delta"
+  [ "$status" -eq 0 ] || return 1
+  printf '%s' "$output" | jq -e '.added_snippets[0] == "added from git"' >/dev/null
+}
+
+@test "build_record carries provenance_kind and content_scope" {
+  run lineage_build_record "cid2" "2026-01-01T00:00:00Z" "0" "sess" "1" \
+    "Bash" "/repo/f.txt" '{}' "4000" "false" "" "x" "tool_generated" "cumulative"
+  [ "$status" -eq 0 ] || return 1
+  printf '%s' "$output" \
+    | jq -e '.provenance_kind == "tool_generated" and .content_scope == "cumulative"' >/dev/null
+}
+
+@test "build_record omits the new fields for a normal Edit" {
+  run lineage_build_record "cid3" "2026-01-01T00:00:00Z" "0" "sess" "1" \
+    "Edit" "/repo/f.txt" '{"new_string":"hello"}' "4000" "false" ""
+  [ "$status" -eq 0 ] || return 1
+  printf '%s' "$output" | jq -e 'has("provenance_kind") == false' >/dev/null || return 1
+  printf '%s' "$output" | jq -e '.added_snippets[0] == "hello"' >/dev/null
+}

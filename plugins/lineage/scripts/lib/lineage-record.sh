@@ -50,6 +50,7 @@ _lineage_operation() {
 		Edit) printf 'edit' ;;
 		MultiEdit) printf 'multi_edit' ;;
 		Write) printf 'create' ;;
+		Bash) printf 'shell_edit' ;;
 		*) printf 'edit' ;;
 	esac
 }
@@ -75,14 +76,26 @@ _lineage_removed() {
 
 # Build a change record JSON (pure — no I/O). Echoes the record.
 # Usage: lineage_build_record <change_id> <ts> <ts_epoch> <session_id> <turn>
-#          <tool> <file_path> <tool_input_json> <max_chars> <do_redact> <transcript_path>
+#          <tool> <file_path> <tool_input_json> <max_chars> <do_redact>
+#          <transcript_path> [added_override] [provenance_kind] [content_scope]
+#
+# added_override carries content git found for a shell-shaped edit, where
+# tool_input says nothing about what changed. provenance_kind and content_scope
+# are emitted only when set, so Edit/Write/MultiEdit records are byte-identical
+# to before this change.
 lineage_build_record() {
 	local change_id="$1" ts="$2" ts_epoch="$3" session_id="$4" turn="$5"
 	local tool="$6" file_path="$7" ti="$8" max_chars="$9" do_redact="${10}" transcript_path="${11}"
+	local added_override="${12:-}" prov_kind="${13:-}" content_scope="${14:-}"
 
 	local added removed added_red lines_added lines_removed bytes digest op edit_count
-	added=$(_lineage_added "$tool" "$ti")
-	removed=$(_lineage_removed "$tool" "$ti")
+	if [[ -n "$added_override" ]]; then
+		added="$added_override"
+		removed=""
+	else
+		added=$(_lineage_added "$tool" "$ti")
+		removed=$(_lineage_removed "$tool" "$ti")
+	fi
 	lines_added=$(_lineage_count_lines "$added")
 	lines_removed=$(_lineage_count_lines "$removed")
 	bytes=$(printf '%s' "$added" | wc -c | tr -d ' ')
@@ -98,6 +111,7 @@ lineage_build_record() {
 		--argjson la "${lines_added:-0}" --argjson lr "${lines_removed:-0}" \
 		--argjson by "${bytes:-0}" --arg digest "$digest" \
 		--argjson ec "${edit_count:-1}" --arg turn "$turn" \
+		--arg pk "$prov_kind" --arg cs "$content_scope" \
 		'{
 			change_id: $cid, ts: $ts, ts_epoch: $te,
 			session_id: $sid, tool: $tool, operation: $op, file_path: $fp,
@@ -105,7 +119,9 @@ lineage_build_record() {
 			edit_count: $ec, content_sha256: $digest,
 			added_snippets: [$snip], transcript_path: $tp
 		}
-		+ (if $turn != "" then {turn: ($turn | tonumber)} else {} end)' 2>/dev/null
+		+ (if $turn != "" then {turn: ($turn | tonumber)} else {} end)
+		+ (if $pk != "" then {provenance_kind: $pk} else {} end)
+		+ (if $cs != "" then {content_scope: $cs} else {} end)' 2>/dev/null
 }
 
 # Append a record to the project ledger under its write lock.
