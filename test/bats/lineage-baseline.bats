@@ -46,6 +46,35 @@ setup() {
   [ "$output" = "two words.txt" ]
 }
 
+# `git status --porcelain=v1 -z` emits a rename as the status-prefixed new
+# path followed by a SECOND, bare record holding only the old path. Slicing
+# that bare record like a normal one chops into the path text itself.
+@test "candidate_paths reports the new path for a rename" {
+  git -C "$PROJECT_REPO" mv tracked.txt renamed.txt
+  run lineage_candidate_paths "$PROJECT_REPO"
+  [ "$status" -eq 0 ] || return 1
+  [ "$output" = "renamed.txt" ]
+}
+
+@test "candidate_paths does not yield a mangled old path for a rename" {
+  git -C "$PROJECT_REPO" mv tracked.txt renamed.txt
+  run lineage_candidate_paths "$PROJECT_REPO"
+  [ "$status" -eq 0 ] || return 1
+  [[ "$output" != *"cked.txt"* ]] || return 1
+  [[ "$output" != *"tracked.txt"* ]]
+}
+
+@test "baseline_build writes no key for a path that does not exist on disk" {
+  git -C "$PROJECT_REPO" mv tracked.txt renamed.txt
+  base=$(lineage_baseline_build "$PROJECT_REPO")
+  missing=""
+  while IFS= read -r k; do
+    [ -z "$k" ] && continue
+    [ -f "${PROJECT_REPO}/${k}" ] || missing="${missing}${k},"
+  done < <(printf '%s' "$base" | jq -r '.files | keys[]')
+  [ -z "$missing" ]
+}
+
 @test "changed_files reports a newly created untracked file" {
   base=$(lineage_baseline_build "$PROJECT_REPO")
   printf 'brand new\n' > "${PROJECT_REPO}/created.txt"

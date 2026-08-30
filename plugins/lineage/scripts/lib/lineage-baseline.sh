@@ -49,18 +49,27 @@ lineage_file_sha() {
 # reports modified, staged, and untracked in one call.
 #
 # -z gives NUL-terminated records, so paths with spaces survive. Each record is
-# a 2-char status, a space, then the path; a rename record carries "old -> new",
-# and with -z the old path is a separate record, so taking the field after the
-# status is correct for both.
+# normally a 2-char status, a space, then the path -- EXCEPT for a rename or
+# copy (status starts with R or C): git emits that as the status-prefixed NEW
+# path followed by a SECOND, bare record holding only the OLD path, with no
+# status prefix at all. Slicing that bare record the same way (dropping its
+# first 3 characters) chops into the path itself and yields garbage, so it is
+# consumed and discarded instead of emitted -- the old path no longer exists
+# on disk, so there is nothing to hash for it anyway.
 lineage_candidate_paths() {
-	local root="$1" rec path
+	local root="$1" rec status path
 	[[ -z "$root" ]] && return 0
 	git -C "$root" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
 	while IFS= read -r -d '' rec; do
 		[[ -z "$rec" ]] && continue
+		status="${rec:0:2}"
 		path="${rec:3}"
 		[[ -z "$path" ]] && continue
 		printf '%s\n' "$path"
+		if [[ "$status" == *R* || "$status" == *C* ]]; then
+			# Discard the companion bare-old-path record a rename/copy emits.
+			read -r -d '' rec || true
+		fi
 	done < <(git -C "$root" status --porcelain=v1 -z 2>/dev/null) || true
 }
 
