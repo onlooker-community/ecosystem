@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/onlooker-community/ecosystem/compare/scribe-v0.5.1...scribe-v0.6.0) (2026-08-30)
+
+
+### Features
+
+* **storage:** bound the onlooker store and reclaim 255MB of block waste :broom: ([#223](https://github.com/onlooker-community/ecosystem/issues/223)) ([2dc3f53](https://github.com/onlooker-community/ecosystem/commit/2dc3f53f5c10ed4fd861e0d456a1db197819c277))
+
 ## [0.5.1](https://github.com/onlooker-community/ecosystem/compare/scribe-v0.5.0...scribe-v0.5.1) (2026-08-30)
 
 

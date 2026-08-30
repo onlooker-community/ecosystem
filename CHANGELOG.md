@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.46.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.45.3...ecosystem-v0.46.0) (2026-08-30)
+
+
+### Features
+
+* **storage:** bound the onlooker store and reclaim 255MB of block waste :broom: ([#223](https://github.com/onlooker-community/ecosystem/issues/223)) ([2dc3f53](https://github.com/onlooker-community/ecosystem/commit/2dc3f53f5c10ed4fd861e0d456a1db197819c277))
+
 ## [0.45.3](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.45.2...ecosystem-v0.45.3) (2026-08-30)
 
 
