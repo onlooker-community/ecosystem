@@ -288,6 +288,24 @@ setup() {
   [ "$output" = "two words.txt" ]
 }
 
+# A rename emits two records: "R  newname.txt" then a BARE "oldname.txt". Slicing
+# a status prefix off the second one turns it into "name.txt".
+@test "candidate_paths reports a rename's new path and not a mangled old one" {
+  git -C "$PROJECT_REPO" mv tracked.txt renamed.txt
+  run lineage_candidate_paths "$PROJECT_REPO"
+  [ "$status" -eq 0 ] || return 1
+  [[ "$output" == *"renamed.txt"* ]] || return 1
+  [[ "$output" != *"acked.txt"* ]]
+}
+
+@test "baseline_build writes no key for a path that does not exist on disk" {
+  git -C "$PROJECT_REPO" mv tracked.txt renamed.txt
+  base=$(lineage_baseline_build "$PROJECT_REPO")
+  run bash -c "printf '%s' '$base' | jq -r '.files | keys[]'"
+  [ "$status" -eq 0 ] || return 1
+  [[ "$output" != *"acked.txt"* ]]
+}
+
 @test "changed_files reports a newly created untracked file" {
   base=$(lineage_baseline_build "$PROJECT_REPO")
   printf 'brand new\n' > "${PROJECT_REPO}/created.txt"
@@ -448,16 +466,26 @@ lineage_file_sha() {
 # would be invisible — the same silent gap this bead exists to close. Porcelain
 # reports modified, staged, and untracked in one call.
 #
-# -z gives NUL-terminated records, so paths with spaces survive. Each record is
-# a 2-char status, a space, then the path; a rename record carries "old -> new",
-# and with -z the old path is a separate record, so taking the field after the
-# status is correct for both.
+# -z gives NUL-terminated records, so paths with spaces survive. A normal record
+# is a 2-char status, a space, then the path.
+#
+# A rename or copy is the exception and emits TWO records: "R  newpath", then a
+# BARE "oldpath" carrying no status prefix. Slicing ${rec:3} off that second
+# record eats three characters of a real filename — "oldname.txt" becomes
+# "name.txt" — so a rename must consume and discard its companion record. The
+# old path is gone from disk anyway, so there is nothing to hash.
 lineage_candidate_paths() {
-	local root="$1" rec path
+	local root="$1" rec path xy skip_next=0
 	[[ -z "$root" ]] && return 0
 	git -C "$root" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
 	while IFS= read -r -d '' rec; do
+		if [[ "$skip_next" -eq 1 ]]; then
+			skip_next=0
+			continue
+		fi
 		[[ -z "$rec" ]] && continue
+		xy="${rec:0:2}"
+		[[ "$xy" == *R* || "$xy" == *C* ]] && skip_next=1
 		path="${rec:3}"
 		[[ -z "$path" ]] && continue
 		printf '%s\n' "$path"
@@ -564,7 +592,7 @@ bats test/bats/lineage-baseline.bats
 shellcheck -S error -x plugins/lineage/scripts/lib/lineage-baseline.sh
 ```
 
-Expected: all 15 PASS, shellcheck silent.
+Expected: all 20 PASS, shellcheck silent.
 
 - [ ] **Step 5: Break one assertion on purpose to prove the tests gate**
 
