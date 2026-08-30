@@ -3,9 +3,13 @@
 #
 # Fires at every session start. Responsibilities:
 #   1. Create storage directories.
-#   2. Initialize session state file:
-#      - captured_prompt: null (populated by scribe-capture.sh on first turn)
-#      - captured_at: null
+#
+# Deliberately does NOT create the session state file. It used to, with
+# captured_prompt and captured_at both null, which meant every session that
+# never submitted a prompt left a payload-free file behind — 65% of scribe's
+# 37,403 files, 100MB of 4KB blocks holding zero information (ecosystem-449.2).
+# scribe-capture.sh creates the file with a real payload on the first prompt,
+# and scribe-distill.sh tolerates its absence, so nothing needs the empty one.
 #
 # Hook contract:
 #   - Always exits 0. Never blocks SessionStart.
@@ -38,20 +42,5 @@ export _HOOK_SESSION_ID="$SESSION_ID"
 ONLOOKER_DIR="${ONLOOKER_DIR:-${HOME}/.onlooker}"
 SCRIBE_SESSION_DIR="${ONLOOKER_DIR}/scribe/sessions"
 mkdir -p "$SCRIBE_SESSION_DIR" 2>/dev/null || true
-
-[[ -z "$SESSION_ID" ]] && _done
-
-STATE_FILE="${SCRIBE_SESSION_DIR}/${SESSION_ID}.json"
-
-jq -n \
-	--arg sid "$SESSION_ID" \
-	'{
-		session_id: $sid,
-		captured_prompt: null,
-		captured_at: null
-	}' 2>/dev/null > "$STATE_FILE" || {
-	printf 'scribe-session-start: failed to write state file %s\n' "$STATE_FILE" >&2
-	_done
-}
 
 _done
