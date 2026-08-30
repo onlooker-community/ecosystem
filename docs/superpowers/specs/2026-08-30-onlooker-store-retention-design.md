@@ -55,8 +55,8 @@ write path minting a 4KB block per empty file. Retention treats the symptom.
 
 ## Approach
 
-Fix the write path so the garbage is never written, prune the existing backlog
-once, and add a cheap recurring sweep as a backstop. Explicitly **not** in scope:
+Fix the write path so the garbage is never written, and prune the existing
+backlog once with a script run by hand. Explicitly **not** in scope:
 consolidating the per-session stores into append-only per-day logs. That is the
 larger win (~550MB) but it changes four plugins' storage formats and their
 lookup-by-session-id read paths — the substrate refactor the dogfooding rollout
@@ -77,7 +77,7 @@ This is safe because the two consumers already handle absence:
 No file exists until there is a prompt to record. As a side effect this removes
 one `jq` invocation from the `SessionStart` path.
 
-### 2. A deferred sweep, not deletion at SessionEnd
+### 2. Age out scratch, never delete it at SessionEnd
 
 The obvious fix for `session-trackers` — delete the tracker when its session ends
 — is a bug. `bursar-session-end.sh:55` reads
@@ -89,14 +89,11 @@ Trackers therefore age out on a window (default 48h) rather than being deleted
 at end of session. No cross-plugin hook ordering to get right, and an in-flight
 session is never touched because its tracker is by definition recent.
 
-### 3. Two components
+### 3. One component, run by hand
 
-The backlog and the steady state need different tools. 150,725 deletions cannot
-happen inside a hook with a 1.5s budget.
-
-**One-shot — `scripts/onlooker-store-prune.mjs`.** Run manually. No time budget.
-Handles the existing backlog, reports before/after counts and bytes. It applies
-the same windows as the recurring sweep, plus one rule the sweep does not need:
+**`scripts/onlooker-store-prune.mjs`.** Run manually. No time budget. Applies the
+windows in §4, reports before/after counts and bytes, plus one rule that is not
+about age at all:
 
 * **Payload-free scribe state files are deleted regardless of age.** A file whose
   `captured_prompt` is `null` carries zero information, so age is irrelevant to
@@ -106,15 +103,12 @@ the same windows as the recurring sweep, plus one rule the sweep does not need:
 Nothing modified inside its store's window is touched, which is what keeps
 in-flight sessions safe.
 
-**Recurring — `scripts/hooks/storage-gc.sh`, on `SessionEnd`.** A stamp file at
-`$ONLOOKER_DIR/.gc-stamp` gates it to once per 24h; when the stamp is fresh the
-hook exits immediately. Otherwise it sweeps under a wall-clock budget well
-inside `SessionEnd`'s 1.5s. It only ever has to keep up with one day's delta.
+A recurring sweep to keep the store bounded without anyone remembering to run
+this was designed and then deliberately cut — see §5. The consequence to accept
+is that between runs nothing enforces the windows, so §1 is doing the real work
+of keeping growth bounded and this script is a periodic reset.
 
-`SessionEnd` rather than `SessionStart` deliberately: `SessionStart` is already
-265ms and is one of the numbers the dogfooding waves are measuring.
-
-### 4. What GC touches
+### 4. What the prune touches
 
 | Store | Policy |
 |---|---|
@@ -123,56 +117,57 @@ inside `SessionEnd`'s 1.5s. It only ever has to keep up with one day's delta.
 | historian, lineage, archivist, librarian, curator | never — durable memory |
 | `buffer.db` | never — see below |
 
-Config lives in `config.json` under `ecosystem.storage.gc`, honoring
-`$ONLOOKER_DIR` so the test suite's isolated temp home is respected:
+The windows are flags with these defaults — `--scratch-max-age-hours 48`,
+`--retention-days 90` — rather than a `config.json` block. Nothing reads config
+here yet, and a settings key whose only consumer is a script you invoke by hand
+is a knob that mostly exists to drift. The recurring sweep in §5 is what would
+justify persisting them; it can add the block when it lands.
 
-```json
-{
-  "storage": {
-    "gc": {
-      "enabled": true,
-      "interval_hours": 24,
-      "budget_ms": 1000,
-      "scratch_max_age_hours": 48,
-      "retention_days": 90
-    }
-  }
-}
-```
-
-Both components fail soft. A missing `~/.onlooker`, an unreadable directory, or
-a blown budget ends the sweep without an error and without blocking the session.
+The script honors `$ONLOOKER_DIR` so the test suite's isolated temp home is
+respected, and fails soft: a missing `~/.onlooker` or an unreadable directory
+ends the run with a report and a zero exit, not an error.
 
 ### 5. Out of scope, filed separately
 
-* **Consolidation to per-day append-only logs.** The ~550MB win. Deferred until
+* **The recurring sweep** (`ecosystem-ave`). A `storage-gc.sh` on `SessionEnd`, stamp-gated to once
+  per 24h and budgeted well inside `SessionEnd`'s 1.5s, is what would keep the
+  store bounded without anyone remembering to run §3. Cut from this work on
+  purpose: wave 1 is about to characterize `SessionEnd` latency, and a new hook
+  on that cadence — even one that fast-exits 24 hours out of 25 — is a variable
+  in the measurement it would land in the middle of. Revisit after wave 1.
+* **Consolidation to per-day append-only logs** (`ecosystem-c95`). The ~550MB win. Deferred until
   after the dogfooding waves so it does not confound their measurements.
-* **`buffer.db` — 112MB, 115,520 rows, plus a 9MB WAL.** No script, hook, or
+* **`buffer.db`** (`ecosystem-s6f`) — 112MB, 115,520 rows, plus a 9MB WAL. No script, hook, or
   config in this repo reads or writes it. GC must not touch a store it cannot
   identify; its owner needs tracing first.
-* **historian's dead `retention_days`.** `plugins/historian/config.json` declares
+* **historian's dead `retention_days`** (`ecosystem-d8j`). `plugins/historian/config.json` declares
   `retention_days: 365` and nothing reads it. A knob that does nothing is worse
   than no knob.
 
 ## Testing
 
-Bats, against `test/helpers/setup.bash`'s isolated temp home:
+Against `test/helpers/setup.bash`'s isolated temp home:
 
-* GC exits fast when the stamp is fresh, sweeps when it is stale.
 * Scratch older than the window is pruned; scratch inside it survives.
-* Durable stores are untouched by a sweep that prunes everything else.
-* `$ONLOOKER_DIR` is honored — a sweep against a temp home never reads `$HOME`.
-* The one-shot prune skips recently modified files.
-* The one-shot prune deletes a payload-free scribe file but keeps one that has a
-  `captured_prompt`, even when both are the same age.
-* Regression: `scribe-session-start.sh` creates no state file, and
+* Durable stores are untouched by a run that prunes everything else.
+* `$ONLOOKER_DIR` is honored — a run against a temp home never reads `$HOME`.
+* A payload-free scribe file is deleted but one with a `captured_prompt` is kept,
+  even when both are the same age.
+* Recently modified files are skipped, which is the in-flight-session guarantee.
+* Regression, in bats: `scribe-session-start.sh` creates no state file, and
   `scribe-capture.sh` still creates one with a full payload on first prompt.
 
-New event types (`ecosystem.gc.completed`, `ecosystem.gc.skipped`) are registered
-in `@onlooker-community/schema` before emission and triaged into
-`test/bus-coverage.json`, per the plugin checklist.
+No new event types. Emission was tied to the recurring sweep, so nothing needs
+registering in `@onlooker-community/schema` or triaging into
+`test/bus-coverage.json` for this work.
 
 ## Expected result
 
-~254MB reclaimed, both worst producers bounded at the source, and no plugin's
-storage format changed — so the dogfooding waves stay attributable.
+~254MB reclaimed, the two worst producers bounded at the source, no plugin's
+storage format changed, and no new hook on any cadence — so the dogfooding waves
+stay attributable.
+
+What this does not deliver is the "enforced" half of the bead's acceptance
+criteria. §1 enforces bounded creation permanently, but with the recurring sweep
+cut, nothing applies the windows on a schedule; §3 is a reset you run. Closing
+that gap is the follow-up bead, after wave 1.
