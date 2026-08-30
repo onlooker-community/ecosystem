@@ -4,7 +4,7 @@
 
 **Goal:** Lineage records a change when a tracked file changes, regardless of which tool changed it — closing the gap where shell-shaped edits (heredoc, `sed -i`, `python -c`) are invisible to its `Edit`/`Write`/`MultiEdit` matcher.
 
-**Architecture:** Ask git what changed rather than parse shell commands. A new `PostToolUse` matcher on `Bash` runs one `git status --porcelain=v1` against a rolling per-session baseline; changed tracked files get real ledger records with content from `git diff HEAD`. Two new fields tag what the record is worth: `provenance_kind` (authored vs tool-generated) and `content_scope` (exact delta vs cumulative).
+**Architecture:** Ask git what changed rather than parse shell commands. A new `PostToolUse` matcher on `Bash` runs one `git status --porcelain=v1 -z` — which reports modified, staged, and untracked paths alike — and compares each path's content hash against a rolling per-session baseline. Changed files get real ledger records, with content from `git diff HEAD` for tracked files and the whole file for newly created ones. Two new fields tag what the record is worth: `provenance_kind` (authored vs tool-generated) and `content_scope` (exact delta vs cumulative).
 
 **Tech Stack:** bash hooks, `jq`, `git`, bats for tests. Schema work is TypeScript + JSON Schema + vitest in a second repo.
 
@@ -223,13 +223,15 @@ Expected: prints `2.16.0` or higher. **Do not start Task 3 before this prints.**
 - Consumes: `lineage_sha256` from `lineage-record.sh`.
 - Produces, for Task 4:
   - `lineage_baseline_path <project_key> <session_id>` → absolute path string
-  - `lineage_git_status_hash <repo_root>` → sha256 string, empty on failure
+  - `lineage_candidate_paths <repo_root>` → newline-separated repo-relative paths that differ from HEAD **or are untracked**
   - `lineage_file_sha <path>` → sha256 of file contents, empty if unreadable
+  - `lineage_baseline_build <repo_root>` → baseline JSON `{files:{path:sha}}`
   - `lineage_changed_files <repo_root> <baseline_json>` → newline-separated repo-relative paths
-  - `lineage_baseline_build <repo_root>` → baseline JSON `{status_hash, dirty:{path:sha}}`
   - `lineage_classify_command <command>` → `authored` | `tool_generated`
   - `lineage_content_scope <baseline_json> <rel_path>` → `delta` | `cumulative`
-  - `lineage_added_content <repo_root> <rel_path>` → added lines from `git diff HEAD`
+  - `lineage_added_content <repo_root> <rel_path>` → added lines (whole file when untracked)
+
+**Enumerate with `git status --porcelain`, not `git diff --name-only HEAD`.** The latter lists only *tracked* files that differ from HEAD, so a shell command creating a new file (`cat > new.md <<EOF`) leaves it untracked and invisible — reproducing the exact silent gap this bead closes. `git status --porcelain=v1` reports modified, staged, and untracked in one call, which is both more correct and one fewer subprocess on the hot path.
 
 This task is pure library code with no hook wiring, so it is testable and reviewable on its own.
 
@@ -267,18 +269,37 @@ setup() {
   [[ "$output" != *"/lineage/abc123"* ]]
 }
 
-@test "status hash is stable for an unchanged tree" {
-  a=$(lineage_git_status_hash "$PROJECT_REPO")
-  b=$(lineage_git_status_hash "$PROJECT_REPO")
-  [ -n "$a" ] || return 1
-  [ "$a" = "$b" ]
+@test "candidate_paths reports a modified tracked file" {
+  printf 'two\n' >> "${PROJECT_REPO}/tracked.txt"
+  run lineage_candidate_paths "$PROJECT_REPO"
+  [ "$output" = "tracked.txt" ]
 }
 
-@test "status hash changes when a tracked file is modified" {
-  a=$(lineage_git_status_hash "$PROJECT_REPO")
-  printf 'two\n' >> "${PROJECT_REPO}/tracked.txt"
-  b=$(lineage_git_status_hash "$PROJECT_REPO")
-  [ "$a" != "$b" ]
+# The gap a `git diff --name-only HEAD` enumeration would miss entirely.
+@test "candidate_paths reports an untracked new file" {
+  printf 'brand new\n' > "${PROJECT_REPO}/created.txt"
+  run lineage_candidate_paths "$PROJECT_REPO"
+  [ "$output" = "created.txt" ]
+}
+
+@test "candidate_paths handles a path with a space" {
+  printf 'x\n' > "${PROJECT_REPO}/two words.txt"
+  run lineage_candidate_paths "$PROJECT_REPO"
+  [ "$output" = "two words.txt" ]
+}
+
+@test "changed_files reports a newly created untracked file" {
+  base=$(lineage_baseline_build "$PROJECT_REPO")
+  printf 'brand new\n' > "${PROJECT_REPO}/created.txt"
+  run lineage_changed_files "$PROJECT_REPO" "$base"
+  [ "$output" = "created.txt" ]
+}
+
+@test "added_content returns the whole file for an untracked file" {
+  printf 'brand new\n' > "${PROJECT_REPO}/created.txt"
+  run lineage_added_content "$PROJECT_REPO" "created.txt"
+  [ "$status" -eq 0 ] || return 1
+  [[ "$output" == *"brand new"* ]]
 }
 
 @test "changed_files reports a file modified after the baseline" {
@@ -296,15 +317,16 @@ setup() {
   [ -z "$output" ]
 }
 
-# The case a git-status hash alone would miss: the file was ALREADY dirty at
-# baseline, so `git status` output is byte-identical after the second edit.
+# The case a hash of `git status` output alone would miss: the file was ALREADY
+# dirty at baseline, so its status line is byte-identical after the second edit
+# and only a per-path content sha can tell them apart.
 @test "changed_files catches a second edit to an already-dirty file" {
   printf 'two\n' >> "${PROJECT_REPO}/tracked.txt"
   base=$(lineage_baseline_build "$PROJECT_REPO")
-  status_before=$(printf '%s' "$base" | jq -r '.status_hash')
+  before=$(lineage_candidate_paths "$PROJECT_REPO")
   printf 'three\n' >> "${PROJECT_REPO}/tracked.txt"
-  status_after=$(lineage_git_status_hash "$PROJECT_REPO")
-  [ "$status_before" = "$status_after" ] || return 1   # status really is identical
+  after=$(lineage_candidate_paths "$PROJECT_REPO")
+  [ "$before" = "$after" ] || return 1   # the status listing really is identical
   run lineage_changed_files "$PROJECT_REPO" "$base"
   [ "$output" = "tracked.txt" ]
 }
@@ -356,8 +378,9 @@ setup() {
   [ "$output" = "authored" ]
 }
 
-@test "status hash is empty for a non-git directory" {
-  run lineage_git_status_hash "${BATS_TEST_TMPDIR}"
+@test "candidate_paths is empty for a non-git directory" {
+  run lineage_candidate_paths "${BATS_TEST_TMPDIR}"
+  [ "$status" -eq 0 ] || return 1
   [ -z "$output" ]
 }
 ```
@@ -412,78 +435,68 @@ lineage_baseline_path() {
 # Git state
 # ---------------------------------------------------------------------------
 
-# SHA of the porcelain status. Empty when the directory is not a work tree.
-lineage_git_status_hash() {
-	local root="$1" out
-	[[ -z "$root" ]] && return 0
-	git -C "$root" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
-	out=$(git -C "$root" status --porcelain=v1 2>/dev/null) || return 0
-	lineage_sha256 "$out"
-}
-
 lineage_file_sha() {
 	local path="$1"
 	[[ -f "$path" ]] || return 0
 	lineage_sha256 "$(cat "$path" 2>/dev/null)"
 }
 
-# Repo-relative paths of tracked files that differ from HEAD.
-_lineage_dirty_paths() {
-	local root="$1"
-	git -C "$root" diff --name-only HEAD 2>/dev/null || true
+# Repo-relative paths that differ from HEAD OR are untracked.
+#
+# `git status --porcelain=v1 -z` rather than `git diff --name-only HEAD`: the
+# latter reports only TRACKED files, so a shell command creating a new file
+# would be invisible — the same silent gap this bead exists to close. Porcelain
+# reports modified, staged, and untracked in one call.
+#
+# -z gives NUL-terminated records, so paths with spaces survive. Each record is
+# a 2-char status, a space, then the path; a rename record carries "old -> new",
+# and with -z the old path is a separate record, so taking the field after the
+# status is correct for both.
+lineage_candidate_paths() {
+	local root="$1" rec path
+	[[ -z "$root" ]] && return 0
+	git -C "$root" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
+	while IFS= read -r -d '' rec; do
+		[[ -z "$rec" ]] && continue
+		path="${rec:3}"
+		[[ -z "$path" ]] && continue
+		printf '%s\n' "$path"
+	done < <(git -C "$root" status --porcelain=v1 -z 2>/dev/null) || true
 }
 
-# Baseline JSON: { status_hash, dirty: { <rel_path>: <sha>, ... } }
+# Baseline JSON: { files: { <rel_path>: <sha>, ... } }
 lineage_baseline_build() {
-	local root="$1" status_hash dirty_json rel abs
-	status_hash=$(lineage_git_status_hash "$root")
-	dirty_json='{}'
+	local root="$1" files_json rel abs
+	files_json='{}'
 	while IFS= read -r rel; do
 		[[ -z "$rel" ]] && continue
 		abs="${root}/${rel}"
-		dirty_json=$(printf '%s' "$dirty_json" \
+		files_json=$(printf '%s' "$files_json" \
 			| jq -c --arg k "$rel" --arg v "$(lineage_file_sha "$abs")" '.[$k]=$v' 2>/dev/null) \
-			|| dirty_json='{}'
-	done < <(_lineage_dirty_paths "$root")
+			|| files_json='{}'
+	done < <(lineage_candidate_paths "$root")
 
-	jq -cn --arg sh "$status_hash" --argjson d "$dirty_json" \
-		'{status_hash: $sh, dirty: $d}' 2>/dev/null
+	jq -cn --argjson f "$files_json" '{files: $f}' 2>/dev/null
 }
 
-# Paths that changed since the baseline. Two checks, both required:
-#   1. the porcelain status hash moved (a file entered or left the dirty set)
-#   2. a path already in the dirty set has different contents
+# Paths whose contents differ from the baseline.
 #
-# Check 2 is what a status hash alone misses: editing an already-modified file
-# leaves `git status` byte-identical, so the second edit would be invisible —
-# the same class of silent miss this whole bead is about.
+# Compares per-path content shas rather than a hash of `git status` output. A
+# status hash cannot see a second edit to an already-modified file: the status
+# line is byte-identical both times, so the edit would vanish — the same class
+# of silent miss this bead is about. A path absent from the baseline is new to
+# the working tree and always reported.
 lineage_changed_files() {
-	local root="$1" base="$2" now_hash base_hash rel abs cur old
+	local root="$1" base="$2" rel abs cur old
 	[[ -z "$root" ]] && return 0
-	now_hash=$(lineage_git_status_hash "$root")
-	base_hash=$(printf '%s' "$base" | jq -r '.status_hash // ""' 2>/dev/null)
-
-	if [[ "$now_hash" != "$base_hash" ]]; then
-		# Dirty set changed: report every currently-dirty path not identical
-		# to its baseline sha.
-		while IFS= read -r rel; do
-			[[ -z "$rel" ]] && continue
-			abs="${root}/${rel}"
-			cur=$(lineage_file_sha "$abs")
-			old=$(printf '%s' "$base" | jq -r --arg k "$rel" '.dirty[$k] // ""' 2>/dev/null)
-			[[ "$cur" != "$old" ]] && printf '%s\n' "$rel"
-		done < <(_lineage_dirty_paths "$root")
-		return 0
-	fi
-
-	# Status identical: only an in-place content change is possible.
 	while IFS= read -r rel; do
 		[[ -z "$rel" ]] && continue
 		abs="${root}/${rel}"
 		cur=$(lineage_file_sha "$abs")
-		old=$(printf '%s' "$base" | jq -r --arg k "$rel" '.dirty[$k] // ""' 2>/dev/null)
+		[[ -z "$cur" ]] && continue   # deleted or unreadable: nothing to record
+		old=$(printf '%s' "$base" | jq -r --arg k "$rel" '.files[$k] // ""' 2>/dev/null)
 		[[ "$cur" != "$old" ]] && printf '%s\n' "$rel"
-	done < <(_lineage_dirty_paths "$root")
+	done < <(lineage_candidate_paths "$root")
 }
 
 # ---------------------------------------------------------------------------
@@ -497,16 +510,25 @@ lineage_changed_files() {
 #             returns nothing), and tagging keeps the imprecision auditable.
 lineage_content_scope() {
 	local base="$1" rel="$2" old
-	old=$(printf '%s' "$base" | jq -r --arg k "$rel" '.dirty[$k] // ""' 2>/dev/null)
+	old=$(printf '%s' "$base" | jq -r --arg k "$rel" '.files[$k] // ""' 2>/dev/null)
 	if [[ -n "$old" ]]; then printf 'cumulative'; else printf 'delta'; fi
 }
 
 # Added lines from the working tree against HEAD, '+' markers stripped.
+#
+# An untracked file has nothing in HEAD to diff against and `git diff` prints
+# nothing for it, so its whole content is the added content. Without this the
+# newly-created-file case would be detected and then silently skipped for
+# having no content — a miss disguised as a decision.
 lineage_added_content() {
 	local root="$1" rel="$2"
-	git -C "$root" diff --unified=0 HEAD -- "$rel" 2>/dev/null \
-		| sed -n 's/^+\([^+].*\)$/\1/p;s/^+$//p' \
-		|| true
+	if git -C "$root" ls-files --error-unmatch -- "$rel" >/dev/null 2>&1; then
+		git -C "$root" diff --unified=0 HEAD -- "$rel" 2>/dev/null \
+			| sed -n 's/^+\([^+].*\)$/\1/p' \
+			|| true
+	else
+		cat "${root}/${rel}" 2>/dev/null || true
+	fi
 }
 
 # authored | tool_generated, from the Bash command string.
@@ -968,7 +990,7 @@ if [[ "$TOOL" == "Bash" ]]; then
 
 	# No prior baseline means this is the session's first Bash call. Seed and
 	# stop: with nothing to compare against, every dirty file would look new.
-	if printf '%s' "$BASELINE" | jq -e 'has("status_hash")' >/dev/null 2>&1; then
+	if printf '%s' "$BASELINE" | jq -e 'has("files")' >/dev/null 2>&1; then
 		MAX_CHARS=$(lineage_config_max_snippet_chars)
 		DO_REDACT=true
 		lineage_config_redact_enabled || DO_REDACT=false
@@ -1224,7 +1246,7 @@ Refs ecosystem-449.13
 
 ## Self-review notes
 
-**Spec coverage.** §3 detection → Task 2 (`lineage_changed_files`, both checks) and Task 4 (wiring). §4 baseline location → Task 2 `lineage_baseline_dir`, asserted in Task 2 Step 1 and again in Task 4. §4 `provenance_kind` / `content_scope` → Tasks 2 and 3, emitted in Task 4. §5 schema → Task 1, gated by the Global Constraint that Task 3 waits for the release. §6 `git status` cost → Task 5 Step 6, with a stated abort threshold. §6 lockfile noise → Task 4 Step 4, both duplicated defaults. §6 non-git → Task 2 (`lineage_git_status_hash` returns empty) and Task 4 (`REPO_ROOT` guard), tested in both. §7 testing → every listed case appears in Task 2 Step 1 or Task 4 Step 1. §8 out of scope → inspector is `ecosystem-6dv`, not this plan.
+**Spec coverage.** §3 detection → Task 2 (`lineage_candidate_paths` enumerates modified AND untracked, `lineage_changed_files` compares per-path content shas) and Task 4 (wiring). §4 baseline location → Task 2 `lineage_baseline_dir`, asserted in Task 2 Step 1 and again in Task 4. §4 `provenance_kind` / `content_scope` → Tasks 2 and 3, emitted in Task 4. §5 schema → Task 1, gated by the Global Constraint that Task 3 waits for the release. §6 `git status` cost → Task 5 Step 6, with a stated abort threshold. §6 lockfile noise → Task 4 Step 4, both duplicated defaults. §6 non-git → Task 2 (`lineage_candidate_paths` returns empty) and Task 4 (`REPO_ROOT` guard), tested in both. §7 testing → every listed case appears in Task 2 Step 1 or Task 4 Step 1. §8 out of scope → inspector is `ecosystem-6dv`, not this plan.
 
 **Type consistency.** `lineage_build_record`'s three new trailing parameters are `added_override`, `prov_kind`, `content_scope` in Task 3's implementation, and are passed positionally in that order in Task 4's hook block. Record field names `provenance_kind` and `content_scope` match the schema enum values in Task 1 (`authored`/`tool_generated`, `delta`/`cumulative`) and the assertions in Tasks 2–4.
 
