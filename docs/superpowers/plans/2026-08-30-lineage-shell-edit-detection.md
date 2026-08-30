@@ -1127,10 +1127,27 @@ Refs ecosystem-449.13
 | Edit | ~350 ms | unchanged by this work |
 | raw `git status --porcelain -z` | 34 ms | the actual new work |
 
-The detection is cheap. The ~310 ms above the sourcing floor is lineage's pre-existing
-per-invocation setup — `lineage_config_load`, `lineage_project_key`, and several config
-accessors that each spawn their own `jq`. Before this plan lineage never ran on `Bash` at all,
-so that cost went from never to every shell call, and `Bash` outruns `Edit` by roughly 30:1.
+**This attribution was wrong, and the correction is recorded here rather than quietly dropped.**
+The table above is accurate; the diagnosis built on it was not. A later fork-free profile
+(`/opt/homebrew/bin/bash`, `$EPOCHREALTIME`, no subprocess per timestamp) found:
+
+```text
+  14 ms  source 9 libs          40 ms  lineage_baseline_build
+  19 ms  project_repo_root      34 ms  lineage_changed_files
+  16 ms  baseline_scope_id       5 ms  lineage_config_load   <- skipped by this task
+                                20 ms  lineage_project_key   <- skipped by this task
+                               148 ms  TOTAL in-process
+```
+
+`lineage_config_load` and `lineage_project_key` cost ~25 ms, not ~310 ms. So this task can
+save ~25 ms and no more. In-process work totals ~148 ms against ~390 ms end-to-end; the
+remaining ~240 ms is bash process startup, `jq` subprocesses, hook-health registration, and
+the baseline write — none of which reordering can touch, and all of which the `Edit` path
+pays too.
+
+The task is still worth doing: the reorder is correct and free. But it is a ~25 ms win, not a
+~220 ms one, and the real per-invocation cost belongs to its own investigation rather than
+being guessed at mid-plan.
 
 The fix is ordering, not optimization: decide whether anything changed **before** paying for
 setup that is only needed to write a record.
@@ -1353,7 +1370,7 @@ Expected: the new test fails — `lineage-baselines` is not in `STORES`, so noth
 
 - [ ] **Step 3: Add the store to the allowlist**
 
-Two changes are needed, not one. `pruneStore` currently does `if (!entry.isFile()) continue;`, so it reads only files sitting directly in the store directory. Every existing store is flat; `lineage-baselines` is partitioned by project key, so its files sit one level down and an allowlist entry alone would scan zero files and silently report success — exactly the failure this store-bounding effort exists to prevent.
+Two changes are needed, not one. `pruneStore` currently does `if (!entry.isFile()) continue;`, so it reads only files sitting directly in the store directory. Every existing store is flat; `lineage-baselines` is partitioned one level down (by the baseline scope id from Task 4.5), so an allowlist entry alone would scan zero files and silently report success — exactly the failure this store-bounding effort exists to prevent.
 
 First, add the entry to `STORES`. It is `scratch`, matching `session-trackers`: a baseline is meaningless once its session ends.
 
@@ -1372,8 +1389,8 @@ function pruneStore(root, store, opts, now) {
   const cutoff =
     store.policy === 'scratch' ? now - opts.scratchMaxAgeHours * HOUR_MS : now - opts.retentionDays * DAY_MS;
 
-  // Most stores are flat. lineage-baselines is partitioned by project key, so
-  // its files live one level down — a flat read would scan nothing and report
+  // Most stores are flat. lineage-baselines is partitioned one level down, by
+  // the per-repo baseline scope id — a flat read would scan nothing and report
   // success, which is how a store silently stops being pruned.
   let dirs = [base];
   if (store.nested === true) {
