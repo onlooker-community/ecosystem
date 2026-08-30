@@ -140,6 +140,20 @@ lineage_added_content() {
 	fi
 }
 
+# Removed lines from the working tree against HEAD, '-' markers stripped.
+#
+# Used ONLY to count lines_removed. The ledger stores added content, never
+# removed, so this never reaches a snippet. An untracked file has no removed
+# side, which is why this mirrors added_content's tracked-file check.
+lineage_removed_content() {
+	local root="$1" rel="$2"
+	if git -C "$root" ls-files --error-unmatch -- "$rel" >/dev/null 2>&1; then
+		git -C "$root" diff --unified=0 HEAD -- "$rel" 2>/dev/null \
+			| sed -n 's/^-\([^-].*\)$/\1/p' \
+			|| true
+	fi
+}
+
 # authored | tool_generated, from the Bash command string.
 #
 # DEFAULTS TO authored ON PURPOSE. If the unknown case defaulted to

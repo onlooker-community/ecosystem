@@ -78,20 +78,26 @@ _lineage_removed() {
 # Usage: lineage_build_record <change_id> <ts> <ts_epoch> <session_id> <turn>
 #          <tool> <file_path> <tool_input_json> <max_chars> <do_redact>
 #          <transcript_path> [added_override] [provenance_kind] [content_scope]
+#          [removed_override]
 #
-# added_override carries content git found for a shell-shaped edit, where
-# tool_input says nothing about what changed. provenance_kind and content_scope
-# are emitted only when set, so Edit/Write/MultiEdit records are byte-identical
-# to before this change.
+# added_override/removed_override carry content git found for a shell-shaped
+# edit, where tool_input says nothing about what changed. Either one alone is
+# enough to take the override branch — a pure deletion has empty added and
+# non-empty removed, and testing added_override alone would fall through to
+# the tool_input path and silently produce a zero-line record. removed_override
+# is only ever line-counted, never stored: the ledger holds added content, not
+# removed. provenance_kind and content_scope are emitted only when set, so
+# Edit/Write/MultiEdit records are byte-identical to before this change.
 lineage_build_record() {
 	local change_id="$1" ts="$2" ts_epoch="$3" session_id="$4" turn="$5"
 	local tool="$6" file_path="$7" ti="$8" max_chars="$9" do_redact="${10}" transcript_path="${11}"
 	local added_override="${12:-}" prov_kind="${13:-}" content_scope="${14:-}"
+	local removed_override="${15:-}"
 
 	local added removed added_red lines_added lines_removed bytes digest op edit_count
-	if [[ -n "$added_override" ]]; then
+	if [[ -n "$added_override" || -n "$removed_override" ]]; then
 		added="$added_override"
-		removed=""
+		removed="$removed_override"
 	else
 		added=$(_lineage_added "$tool" "$ti")
 		removed=$(_lineage_removed "$tool" "$ti")

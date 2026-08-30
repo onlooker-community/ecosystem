@@ -116,12 +116,16 @@ if [[ "$TOOL" == "Bash" ]]; then
 
 			SCOPE=$(lineage_content_scope "$BASELINE" "$REL")
 			ADDED=$(lineage_added_content "$REPO_ROOT" "$REL")
-			[[ -z "$ADDED" ]] && continue
+			REMOVED=$(lineage_removed_content "$REPO_ROOT" "$REL")
+			# Skip only when git reports neither side. A pure deletion has no
+			# added content, and skipping on that alone lost the change for
+			# good, since the baseline advances either way.
+			[[ -z "$ADDED" && -z "$REMOVED" ]] && continue
 
 			REC=$(lineage_build_record "$(lineage_ulid)" "$(lineage_now_iso)" \
 				"$(lineage_now_epoch)" "$SESSION_ID" "$TURN" "Bash" \
 				"${REPO_ROOT}/${REL}" '{}' "$MAX_CHARS" "$DO_REDACT" \
-				"$TRANSCRIPT_PATH" "$ADDED" "$PROV_KIND" "$SCOPE")
+				"$TRANSCRIPT_PATH" "$ADDED" "$PROV_KIND" "$SCOPE" "$REMOVED")
 			[[ -z "$REC" ]] && continue
 
 			if lineage_append "$PROJECT_KEY" "$REC"; then

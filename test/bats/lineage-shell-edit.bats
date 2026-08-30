@@ -100,6 +100,41 @@ _run_hook() { printf '%s' "$(_bash_input "$1")" | bash "$HOOK"; }
   [ "$status" -eq 0 ]
 }
 
+@test "a shell deletion is recorded, not dropped" {
+  printf 'one\ntwo\n' > "${PROJECT_REPO}/tracked.txt"
+  git -C "$PROJECT_REPO" add tracked.txt
+  git -C "$PROJECT_REPO" commit -qm "two lines"
+  _run_hook "echo seed"
+  printf 'one\n' > "${PROJECT_REPO}/tracked.txt"
+  _run_hook "sed -i '2d' tracked.txt"
+  [ -f "$LEDGER" ] || return 1
+  run jq -r 'select(.tool == "Bash") | "\(.lines_added) \(.lines_removed)"' "$LEDGER"
+  [ "$output" = "0 1" ]
+}
+
+@test "a shell deletion is tagged shell_edit and authored" {
+  printf 'one\ntwo\n' > "${PROJECT_REPO}/tracked.txt"
+  git -C "$PROJECT_REPO" add tracked.txt
+  git -C "$PROJECT_REPO" commit -qm "two lines"
+  _run_hook "echo seed"
+  printf 'one\n' > "${PROJECT_REPO}/tracked.txt"
+  _run_hook "sed -i '2d' tracked.txt"
+  run jq -r 'select(.tool == "Bash") | "\(.operation) \(.provenance_kind)"' "$LEDGER"
+  [ "$output" = "shell_edit authored" ]
+}
+
+@test "a shell edit that adds and removes lines records both counts" {
+  printf 'one\ntwo\n' > "${PROJECT_REPO}/tracked.txt"
+  git -C "$PROJECT_REPO" add tracked.txt
+  git -C "$PROJECT_REPO" commit -qm "two lines"
+  _run_hook "echo seed"
+  printf 'one\nthree\n' > "${PROJECT_REPO}/tracked.txt"
+  _run_hook "sed -i '2s/two/three/' tracked.txt"
+  [ -f "$LEDGER" ] || return 1
+  run jq -r 'select(.tool == "Bash") | "\(.lines_added) \(.lines_removed)"' "$LEDGER"
+  [ "$output" = "1 1" ]
+}
+
 @test "Edit still records exactly as before" {
   input=$(jq -cn --arg cwd "$PROJECT_REPO" --arg sid "sess-shell" \
     --arg fp "${PROJECT_REPO}/tracked.txt" \
