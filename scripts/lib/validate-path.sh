@@ -13,13 +13,22 @@
 
 export CLAUDE_HOME="${CLAUDE_HOME:-$HOME/.claude}"
 export ONLOOKER_DIR="${ONLOOKER_DIR:-$HOME/.onlooker}"
-export ONLOOKER_SESSION_TRACKERS_DIR="$ONLOOKER_DIR/session-trackers"
-export ONLOOKER_SESSION_HISTORY_DIR="$ONLOOKER_DIR/session-history"
-export ONLOOKER_SESSION_SUMMARIES_DIR="$ONLOOKER_DIR/session-summaries"
-export ONLOOKER_COMPACT_TRACKERS_DIR="$ONLOOKER_DIR/compact-trackers"
-export ONLOOKER_METRICS_DIR="$ONLOOKER_DIR/metrics"
-export ONLOOKER_EVENTS_LOG="$ONLOOKER_DIR/logs/onlooker-events.jsonl"
-export ONLOOKER_HOOK_HEALTH_LOG="$ONLOOKER_DIR/logs/hook-health.jsonl"
+# Derived from ONLOOKER_DIR, but an explicit value wins so a caller can
+# redirect one path without relocating the whole tree — previously these were
+# unconditional, so setting ONLOOKER_HOOK_HEALTH_LOG did nothing the moment
+# anything sourced this file (ecosystem-449.6).
+#
+# The guard means a stale value now survives a later ONLOOKER_DIR change, which
+# would silently point an isolated test at a real path. test/helpers/setup.bash
+# clears all of these in setup_test_env so that cannot happen; if you add one
+# here, add it there too. test/bats/validate-path.bats pins both directions.
+export ONLOOKER_SESSION_TRACKERS_DIR="${ONLOOKER_SESSION_TRACKERS_DIR:-$ONLOOKER_DIR/session-trackers}"
+export ONLOOKER_SESSION_HISTORY_DIR="${ONLOOKER_SESSION_HISTORY_DIR:-$ONLOOKER_DIR/session-history}"
+export ONLOOKER_SESSION_SUMMARIES_DIR="${ONLOOKER_SESSION_SUMMARIES_DIR:-$ONLOOKER_DIR/session-summaries}"
+export ONLOOKER_COMPACT_TRACKERS_DIR="${ONLOOKER_COMPACT_TRACKERS_DIR:-$ONLOOKER_DIR/compact-trackers}"
+export ONLOOKER_METRICS_DIR="${ONLOOKER_METRICS_DIR:-$ONLOOKER_DIR/metrics}"
+export ONLOOKER_EVENTS_LOG="${ONLOOKER_EVENTS_LOG:-$ONLOOKER_DIR/logs/onlooker-events.jsonl}"
+export ONLOOKER_HOOK_HEALTH_LOG="${ONLOOKER_HOOK_HEALTH_LOG:-$ONLOOKER_DIR/logs/hook-health.jsonl}"
 _VALIDATE_PATH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export ONLOOKER_EMIT="$_VALIDATE_PATH_DIR/onlooker-emit.sh"
 # Portable mutex (flock substitute) — every hook script that needs to write

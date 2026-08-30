@@ -29,6 +29,14 @@ setup_test_env() {
   export GIT_CONFIG_GLOBAL=/dev/null
   export GIT_CONFIG_SYSTEM=/dev/null
   unset XDG_CONFIG_HOME
+
+  # validate-path.sh derives these from ONLOOKER_DIR but lets an explicit value
+  # win (ecosystem-449.6). Clear them so a value inherited from the developer's
+  # shell cannot outlive the temp home we just built — without this, an isolated
+  # test could write into the real ~/.onlooker and nothing would fail.
+  unset ONLOOKER_SESSION_TRACKERS_DIR ONLOOKER_SESSION_HISTORY_DIR \
+        ONLOOKER_SESSION_SUMMARIES_DIR ONLOOKER_COMPACT_TRACKERS_DIR \
+        ONLOOKER_METRICS_DIR ONLOOKER_EVENTS_LOG ONLOOKER_HOOK_HEALTH_LOG
 }
 
 # Produce an ISO-8601 UTC timestamp offset from "now" by N days into the past.

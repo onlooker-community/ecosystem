@@ -321,3 +321,43 @@ setup() {
      | .unmeasurable == 1 and .avg_duration_ms == null' \
     >/dev/null
 }
+
+# ecosystem-449.6. The derived path exports were unconditional, so a caller who
+# set ONLOOKER_HOOK_HEALTH_LOG had it silently overwritten the moment anything
+# sourced validate-path.sh — you could not redirect one hook's records without
+# moving the whole ONLOOKER_DIR.
+#
+# The guard has to cut both ways. Honoring an explicit override is the point;
+# but the derived paths must still FOLLOW ONLOOKER_DIR when nothing set them,
+# because that invariant is what keeps every test in this suite inside its temp
+# home. setup_test_env therefore clears them, so a value inherited from an
+# outer shell cannot survive into an isolated run.
+@test "an explicit ONLOOKER_HOOK_HEALTH_LOG override survives sourcing validate-path" {
+  local custom="${BATS_TEST_TMPDIR}/custom-health.jsonl"
+  run bash -c "
+    export ONLOOKER_DIR='${ONLOOKER_DIR}'
+    export ONLOOKER_HOOK_HEALTH_LOG='${custom}'
+    source '${REPO_ROOT}/scripts/lib/validate-path.sh'
+    printf '%s' \"\$ONLOOKER_HOOK_HEALTH_LOG\"
+  "
+  [ "$output" = "$custom" ]
+}
+
+@test "derived paths follow ONLOOKER_DIR when nothing overrode them" {
+  local elsewhere="${BATS_TEST_TMPDIR}/elsewhere"
+  run bash -c "
+    unset ONLOOKER_HOOK_HEALTH_LOG ONLOOKER_EVENTS_LOG
+    export ONLOOKER_DIR='${elsewhere}'
+    source '${REPO_ROOT}/scripts/lib/validate-path.sh'
+    printf '%s|%s' \"\$ONLOOKER_HOOK_HEALTH_LOG\" \"\$ONLOOKER_EVENTS_LOG\"
+  "
+  [ "$output" = "${elsewhere}/logs/hook-health.jsonl|${elsewhere}/logs/onlooker-events.jsonl" ]
+}
+
+# The isolation guard. If a derived path ever escaped the temp home, tests would
+# write into the developer's real ~/.onlooker without anything failing.
+@test "no derived path escapes the temp home after setup_test_env" {
+  [[ "$ONLOOKER_HOOK_HEALTH_LOG" == "$ONLOOKER_DIR"/* ]] || return 1
+  [[ "$ONLOOKER_EVENTS_LOG" == "$ONLOOKER_DIR"/* ]] || return 1
+  [[ "$ONLOOKER_SESSION_TRACKERS_DIR" == "$ONLOOKER_DIR"/* ]]
+}
