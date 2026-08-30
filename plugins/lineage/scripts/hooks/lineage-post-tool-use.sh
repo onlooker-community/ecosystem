@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Lineage PostToolUse hook (Edit / Write / MultiEdit).
+# Lineage PostToolUse hook (Edit / Write / MultiEdit / Bash).
 #
 # Records per-change provenance into the per-project change ledger and emits a
 # lean lineage.change.recorded event. Kept cheap: metadata + a redacted,
 # size-capped snippet of the added content + a digest — no transcript parsing
-# (the prompt is resolved lazily at /lineage query time).
+# (the prompt is resolved lazily at /lineage query time). Bash is handled
+# separately: it carries no file_path or content in tool_input, so it diffs
+# the work tree against a rolling per-session baseline instead (see below).
 #
 # Hook contract: always exits 0; never blocks the tool. Skips silently when
 # disabled, when the path is ignored, or when the file is outside the repo.
@@ -32,6 +34,8 @@ source "${PLUGIN_ROOT}/scripts/lib/lineage-ulid.sh"
 source "${PLUGIN_ROOT}/scripts/lib/lineage-redact.sh"
 # shellcheck source=../lib/lineage-record.sh
 source "${PLUGIN_ROOT}/scripts/lib/lineage-record.sh"
+# shellcheck source=../lib/lineage-baseline.sh
+source "${PLUGIN_ROOT}/scripts/lib/lineage-baseline.sh"
 
 INPUT=$(cat)
 hook_health_context "$INPUT"
@@ -45,9 +49,30 @@ TOOL_USE_ID=$(printf '%s' "$INPUT" | jq -r '.tool_use_id // ""' 2>/dev/null) || 
 TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | jq -r '.transcript_path // ""' 2>/dev/null) || TRANSCRIPT_PATH=""
 
 case "$TOOL" in
-	Edit | Write | MultiEdit) ;;
+	Edit | Write | MultiEdit | Bash) ;;
 	*) _done ;;
 esac
+
+# Skip ignored paths. Supports the common glob shapes in config:
+#   **/<dir>/**  → path-segment match ;  **/*.<ext> → suffix match.
+#
+# Defined here, ahead of the Bash branch below, rather than at its original
+# call site further down: bash resolves function definitions at execution
+# time, and the Bash branch (which also calls this) runs before that point.
+_lineage_ignored() {
+	local path="$1" glob core
+	while IFS= read -r glob; do
+		[[ -z "$glob" ]] && continue
+		core="$glob"
+		core="${core#\*\*/}"
+		core="${core%/\*\*}"
+		case "$core" in
+			\*.*) [[ "$path" == *"${core#\*}" ]] && return 0 ;;
+			*) [[ "/$path/" == *"/$core/"* ]] && return 0 ;;
+		esac
+	done < <(lineage_config_ignore_globs)
+	return 1
+}
 
 [[ -z "$CWD" ]] && CWD="$(pwd)"
 REPO_ROOT=$(lineage_project_repo_root "$CWD")
@@ -55,6 +80,72 @@ lineage_config_load "$REPO_ROOT"
 
 PROJECT_KEY=$(lineage_project_key "$CWD")
 [[ -z "$PROJECT_KEY" ]] && _done
+
+# ---------------------------------------------------------------------------
+# Bash: git is the source of truth. A shell-shaped edit has no tool_input to
+# read a path or content from, so compare the work tree against a rolling
+# per-session baseline and record whatever moved (ecosystem-449.13).
+# ---------------------------------------------------------------------------
+if [[ "$TOOL" == "Bash" ]]; then
+	[[ -z "$REPO_ROOT" ]] && _done
+
+	BASELINE_FILE=$(lineage_baseline_path "$PROJECT_KEY" "$SESSION_ID")
+	mkdir -p "$(dirname "$BASELINE_FILE")" 2>/dev/null || _done
+
+	BASELINE='{}'
+	[[ -f "$BASELINE_FILE" ]] && BASELINE=$(cat "$BASELINE_FILE" 2>/dev/null) || true
+	[[ -z "$BASELINE" ]] && BASELINE='{}'
+
+	COMMAND=$(printf '%s' "$TOOL_INPUT" | jq -r '.command // ""' 2>/dev/null) || COMMAND=""
+	PROV_KIND=$(lineage_classify_command "$COMMAND")
+
+	# No prior baseline means this is the session's first Bash call. Seed and
+	# stop: with nothing to compare against, every dirty file would look new.
+	if printf '%s' "$BASELINE" | jq -e 'has("files")' >/dev/null 2>&1; then
+		MAX_CHARS=$(lineage_config_max_snippet_chars)
+		DO_REDACT=true
+		lineage_config_redact_enabled || DO_REDACT=false
+
+		TURN=""
+		TRACKER="${ONLOOKER_DIR:-$HOME/.onlooker}/session-trackers/${SESSION_ID}"
+		[[ -n "$SESSION_ID" && -f "$TRACKER" ]] && TURN=$(jq -r '.turn_number // empty' "$TRACKER" 2>/dev/null)
+
+		while IFS= read -r REL; do
+			[[ -z "$REL" ]] && continue
+			_lineage_ignored "$REL" && continue
+
+			SCOPE=$(lineage_content_scope "$BASELINE" "$REL")
+			ADDED=$(lineage_added_content "$REPO_ROOT" "$REL")
+			[[ -z "$ADDED" ]] && continue
+
+			REC=$(lineage_build_record "$(lineage_ulid)" "$(lineage_now_iso)" \
+				"$(lineage_now_epoch)" "$SESSION_ID" "$TURN" "Bash" \
+				"${REPO_ROOT}/${REL}" '{}' "$MAX_CHARS" "$DO_REDACT" \
+				"$TRANSCRIPT_PATH" "$ADDED" "$PROV_KIND" "$SCOPE")
+			[[ -z "$REC" ]] && continue
+
+			if lineage_append "$PROJECT_KEY" "$REC"; then
+				EV=$(printf '%s' "$REC" | jq -c --arg pk "$PROJECT_KEY" --arg tuid "$TOOL_USE_ID" '
+					{
+						project_key: $pk, session_id: .session_id, file_path: .file_path,
+						tool: .tool, operation: .operation, change_id: .change_id,
+						lines_added: .lines_added, lines_removed: .lines_removed,
+						bytes: .bytes, edit_count: .edit_count, content_sha256: .content_sha256,
+						provenance_kind: .provenance_kind, content_scope: .content_scope
+					}
+					+ (if .turn != null then {turn: .turn} else {} end)
+					+ (if $tuid != "" then {tool_use_id: $tuid} else {} end)
+				' 2>/dev/null)
+				[[ -n "$EV" ]] && lineage_emit_event "lineage.change.recorded" "$EV" "$SESSION_ID" || true
+			fi
+		done < <(lineage_changed_files "$REPO_ROOT" "$BASELINE")
+	fi
+
+	# Advance the baseline whether or not anything was recorded, so the next
+	# call diffs against current state rather than re-reporting the same edit.
+	lineage_baseline_build "$REPO_ROOT" > "$BASELINE_FILE" 2>/dev/null || true
+	_done
+fi
 
 FILE_PATH=""
 case "$TOOL" in
@@ -73,22 +164,7 @@ case "$TOOL" in
 esac
 [[ -z "$FILE_PATH" ]] && _done
 
-# Skip ignored paths. Supports the common glob shapes in config:
-#   **/<dir>/**  → path-segment match ;  **/*.<ext> → suffix match.
-_lineage_ignored() {
-	local path="$1" glob core
-	while IFS= read -r glob; do
-		[[ -z "$glob" ]] && continue
-		core="$glob"
-		core="${core#\*\*/}"
-		core="${core%/\*\*}"
-		case "$core" in
-			\*.*) [[ "$path" == *"${core#\*}" ]] && return 0 ;;
-			*) [[ "/$path/" == *"/$core/"* ]] && return 0 ;;
-		esac
-	done < <(lineage_config_ignore_globs)
-	return 1
-}
+# Skip ignored paths (function defined above, ahead of the Bash branch).
 _lineage_ignored "$FILE_PATH" && _done
 
 # Skip files outside the repo (best-effort). Resolve the file's directory to a

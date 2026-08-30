@@ -27,6 +27,15 @@
             "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hooks/lineage-post-tool-use.sh"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hooks/lineage-post-tool-use.sh"
+          }
+        ]
       }
     ]
   }

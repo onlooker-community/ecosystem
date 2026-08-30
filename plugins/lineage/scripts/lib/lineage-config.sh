@@ -66,5 +66,5 @@ lineage_config_prompt_source() {
 }
 
 lineage_config_ignore_globs() {
-	lineage_config_get_json '.lineage.ignore_globs // ["**/.git/**","**/node_modules/**","**/dist/**","**/*.lock"]' | jq -r '.[]'
+	lineage_config_get_json '.lineage.ignore_globs // ["**/.git/**","**/node_modules/**","**/dist/**","**/*.lock","**/package-lock.json","**/pnpm-lock.yaml","**/yarn.lock","**/bun.lockb"]' | jq -r '.[]'
 }

@@ -4,7 +4,16 @@
   "lineage": {
     "max_snippet_chars": 4000,
     "redact_secrets": true,
-    "ignore_globs": ["**/.git/**", "**/node_modules/**", "**/dist/**", "**/*.lock"],
+    "ignore_globs": [
+      "**/.git/**",
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/*.lock",
+      "**/package-lock.json",
+      "**/pnpm-lock.yaml",
+      "**/yarn.lock",
+      "**/bun.lockb"
+    ],
     "prompt_source": "historian_then_transcript"
   }
 }
