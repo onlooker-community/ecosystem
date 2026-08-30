@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.45.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.45.1...ecosystem-v0.45.2) (2026-08-30)
+
+
+### Bug Fixes
+
+* **hook-health:** register before sourcing so spans are comparable :straight_ruler: ([#217](https://github.com/onlooker-community/ecosystem/issues/217)) ([20e620a](https://github.com/onlooker-community/ecosystem/commit/20e620a0aacf018993130e05749e8b4e6199726c))
+
 ## [0.45.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.45.0...ecosystem-v0.45.1) (2026-08-30)
 
 
