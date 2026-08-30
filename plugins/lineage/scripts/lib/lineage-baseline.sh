@@ -31,6 +31,17 @@ lineage_baseline_path() {
 	printf '%s/%s.json' "$(lineage_baseline_dir "$key")" "$safe_sid"
 }
 
+# Cheap identity for the per-session baseline.
+#
+# Deliberately NOT lineage_project_key: resolving that shells out for the remote
+# URL and costs ~39ms, which is part of the setup the Bash pre-gate exists to
+# skip. The baseline is scratch and is never joined to the ledger, so it does
+# not need the ledger's identity — only stability within a session.
+lineage_baseline_scope_id() {
+	local root="${1:-unknown}"
+	lineage_sha256 "$root" | cut -c1-12
+}
+
 # ---------------------------------------------------------------------------
 # Git state
 # ---------------------------------------------------------------------------

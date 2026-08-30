@@ -170,3 +170,17 @@ setup() {
   [ "$status" -eq 0 ] || return 1
   [ -z "$output" ]
 }
+
+@test "scope id is stable and 12 hex chars" {
+  a=$(lineage_baseline_scope_id "$PROJECT_REPO")
+  b=$(lineage_baseline_scope_id "$PROJECT_REPO")
+  [ "$a" = "$b" ] || return 1
+  [[ "$a" =~ ^[0-9a-f]{12}$ ]]
+}
+
+@test "scope id differs for a different repo root" {
+  other="${BATS_TEST_TMPDIR}/other"; mkdir -p "$other"
+  a=$(lineage_baseline_scope_id "$PROJECT_REPO")
+  b=$(lineage_baseline_scope_id "$other")
+  [ "$a" != "$b" ]
+}

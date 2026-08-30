@@ -76,80 +76,110 @@ _lineage_ignored() {
 
 [[ -z "$CWD" ]] && CWD="$(pwd)"
 REPO_ROOT=$(lineage_project_repo_root "$CWD")
-lineage_config_load "$REPO_ROOT"
-
-PROJECT_KEY=$(lineage_project_key "$CWD")
-[[ -z "$PROJECT_KEY" ]] && _done
 
 # ---------------------------------------------------------------------------
 # Bash: git is the source of truth. A shell-shaped edit has no tool_input to
 # read a path or content from, so compare the work tree against a rolling
 # per-session baseline and record whatever moved (ecosystem-449.13).
+#
+# This branch runs BEFORE lineage_config_load / lineage_project_key on
+# purpose (ecosystem-449.13 task 4.5): that setup costs ~310ms per call
+# (config load + several jq-backed accessors + the project-key remote-URL
+# lookup), and Bash outruns Edit roughly 30:1. Deciding whether anything
+# changed first, via lineage_changed_files' per-path content shas, means a
+# no-op shell call — the common case — never pays for setup it doesn't need.
+# The baseline itself is keyed by a cheap scope id (a hash of the repo root)
+# rather than the project key, since resolving the project key is part of
+# the cost being skipped; the baseline is per-session scratch and is never
+# joined to the ledger, so it doesn't need the ledger's identity.
 # ---------------------------------------------------------------------------
 if [[ "$TOOL" == "Bash" ]]; then
 	[[ -z "$REPO_ROOT" ]] && _done
 
-	BASELINE_FILE=$(lineage_baseline_path "$PROJECT_KEY" "$SESSION_ID")
+	BASELINE_FILE=$(lineage_baseline_path "$(lineage_baseline_scope_id "$REPO_ROOT")" "$SESSION_ID")
 	mkdir -p "$(dirname "$BASELINE_FILE")" 2>/dev/null || _done
 
 	BASELINE='{}'
 	[[ -f "$BASELINE_FILE" ]] && BASELINE=$(cat "$BASELINE_FILE" 2>/dev/null) || true
 	[[ -z "$BASELINE" ]] && BASELINE='{}'
 
+	# No prior baseline means this is the session's first Bash call. Seed and
+	# stop: with nothing to compare against, every dirty file would look new.
+	if ! printf '%s' "$BASELINE" | jq -e 'has("files")' >/dev/null 2>&1; then
+		lineage_baseline_build "$REPO_ROOT" > "$BASELINE_FILE" 2>/dev/null || true
+		_done
+	fi
+
+	CHANGED=$(lineage_changed_files "$REPO_ROOT" "$BASELINE")
+
+	# Pre-gate: nothing moved, so there is nothing to record. Advance the
+	# baseline (a no-op here, but keeps the file's mtime/shape consistent)
+	# and stop before paying for config load or the project key.
+	if [[ -z "$CHANGED" ]]; then
+		lineage_baseline_build "$REPO_ROOT" > "$BASELINE_FILE" 2>/dev/null || true
+		_done
+	fi
+
+	lineage_config_load "$REPO_ROOT"
+	PROJECT_KEY=$(lineage_project_key "$CWD")
+	[[ -n "${LINEAGE_TRACE_SETUP:-}" ]] && printf 'SETUP_DONE\n' >&2
+	[[ -z "$PROJECT_KEY" ]] && _done
+
 	COMMAND=$(printf '%s' "$TOOL_INPUT" | jq -r '.command // ""' 2>/dev/null) || COMMAND=""
 	PROV_KIND=$(lineage_classify_command "$COMMAND")
 
-	# No prior baseline means this is the session's first Bash call. Seed and
-	# stop: with nothing to compare against, every dirty file would look new.
-	if printf '%s' "$BASELINE" | jq -e 'has("files")' >/dev/null 2>&1; then
-		MAX_CHARS=$(lineage_config_max_snippet_chars)
-		DO_REDACT=true
-		lineage_config_redact_enabled || DO_REDACT=false
+	MAX_CHARS=$(lineage_config_max_snippet_chars)
+	DO_REDACT=true
+	lineage_config_redact_enabled || DO_REDACT=false
 
-		TURN=""
-		TRACKER="${ONLOOKER_DIR:-$HOME/.onlooker}/session-trackers/${SESSION_ID}"
-		[[ -n "$SESSION_ID" && -f "$TRACKER" ]] && TURN=$(jq -r '.turn_number // empty' "$TRACKER" 2>/dev/null)
+	TURN=""
+	TRACKER="${ONLOOKER_DIR:-$HOME/.onlooker}/session-trackers/${SESSION_ID}"
+	[[ -n "$SESSION_ID" && -f "$TRACKER" ]] && TURN=$(jq -r '.turn_number // empty' "$TRACKER" 2>/dev/null)
 
-		while IFS= read -r REL; do
-			[[ -z "$REL" ]] && continue
-			_lineage_ignored "$REL" && continue
+	while IFS= read -r REL; do
+		[[ -z "$REL" ]] && continue
+		_lineage_ignored "$REL" && continue
 
-			SCOPE=$(lineage_content_scope "$BASELINE" "$REL")
-			ADDED=$(lineage_added_content "$REPO_ROOT" "$REL")
-			REMOVED=$(lineage_removed_content "$REPO_ROOT" "$REL")
-			# Skip only when git reports neither side. A pure deletion has no
-			# added content, and skipping on that alone lost the change for
-			# good, since the baseline advances either way.
-			[[ -z "$ADDED" && -z "$REMOVED" ]] && continue
+		SCOPE=$(lineage_content_scope "$BASELINE" "$REL")
+		ADDED=$(lineage_added_content "$REPO_ROOT" "$REL")
+		REMOVED=$(lineage_removed_content "$REPO_ROOT" "$REL")
+		# Skip only when git reports neither side. A pure deletion has no
+		# added content, and skipping on that alone lost the change for
+		# good, since the baseline advances either way.
+		[[ -z "$ADDED" && -z "$REMOVED" ]] && continue
 
-			REC=$(lineage_build_record "$(lineage_ulid)" "$(lineage_now_iso)" \
-				"$(lineage_now_epoch)" "$SESSION_ID" "$TURN" "Bash" \
-				"${REPO_ROOT}/${REL}" '{}' "$MAX_CHARS" "$DO_REDACT" \
-				"$TRANSCRIPT_PATH" "$ADDED" "$PROV_KIND" "$SCOPE" "$REMOVED")
-			[[ -z "$REC" ]] && continue
+		REC=$(lineage_build_record "$(lineage_ulid)" "$(lineage_now_iso)" \
+			"$(lineage_now_epoch)" "$SESSION_ID" "$TURN" "Bash" \
+			"${REPO_ROOT}/${REL}" '{}' "$MAX_CHARS" "$DO_REDACT" \
+			"$TRANSCRIPT_PATH" "$ADDED" "$PROV_KIND" "$SCOPE" "$REMOVED")
+		[[ -z "$REC" ]] && continue
 
-			if lineage_append "$PROJECT_KEY" "$REC"; then
-				EV=$(printf '%s' "$REC" | jq -c --arg pk "$PROJECT_KEY" --arg tuid "$TOOL_USE_ID" '
-					{
-						project_key: $pk, session_id: .session_id, file_path: .file_path,
-						tool: .tool, operation: .operation, change_id: .change_id,
-						lines_added: .lines_added, lines_removed: .lines_removed,
-						bytes: .bytes, edit_count: .edit_count, content_sha256: .content_sha256,
-						provenance_kind: .provenance_kind, content_scope: .content_scope
-					}
-					+ (if .turn != null then {turn: .turn} else {} end)
-					+ (if $tuid != "" then {tool_use_id: $tuid} else {} end)
-				' 2>/dev/null)
-				[[ -n "$EV" ]] && lineage_emit_event "lineage.change.recorded" "$EV" "$SESSION_ID" || true
-			fi
-		done < <(lineage_changed_files "$REPO_ROOT" "$BASELINE")
-	fi
+		if lineage_append "$PROJECT_KEY" "$REC"; then
+			EV=$(printf '%s' "$REC" | jq -c --arg pk "$PROJECT_KEY" --arg tuid "$TOOL_USE_ID" '
+				{
+					project_key: $pk, session_id: .session_id, file_path: .file_path,
+					tool: .tool, operation: .operation, change_id: .change_id,
+					lines_added: .lines_added, lines_removed: .lines_removed,
+					bytes: .bytes, edit_count: .edit_count, content_sha256: .content_sha256,
+					provenance_kind: .provenance_kind, content_scope: .content_scope
+				}
+				+ (if .turn != null then {turn: .turn} else {} end)
+				+ (if $tuid != "" then {tool_use_id: $tuid} else {} end)
+			' 2>/dev/null)
+			[[ -n "$EV" ]] && lineage_emit_event "lineage.change.recorded" "$EV" "$SESSION_ID" || true
+		fi
+	done < <(printf '%s\n' "$CHANGED")
 
 	# Advance the baseline whether or not anything was recorded, so the next
 	# call diffs against current state rather than re-reporting the same edit.
 	lineage_baseline_build "$REPO_ROOT" > "$BASELINE_FILE" 2>/dev/null || true
 	_done
 fi
+
+lineage_config_load "$REPO_ROOT"
+
+PROJECT_KEY=$(lineage_project_key "$CWD")
+[[ -z "$PROJECT_KEY" ]] && _done
 
 FILE_PATH=""
 case "$TOOL" in

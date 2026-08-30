@@ -11,6 +11,8 @@ setup() {
   HOOK="${PLUGIN_ROOT}/scripts/hooks/lineage-post-tool-use.sh"
 
   source "${PLUGIN_ROOT}/scripts/lib/lineage-project-key.sh"
+  source "${PLUGIN_ROOT}/scripts/lib/lineage-record.sh"
+  source "${PLUGIN_ROOT}/scripts/lib/lineage-baseline.sh"
 
   PROJECT_REPO="${BATS_TEST_TMPDIR}/repo"
   mkdir -p "$PROJECT_REPO"
@@ -24,6 +26,12 @@ setup() {
 
   PROJECT_KEY=$(lineage_project_key "$PROJECT_REPO")
   LEDGER="${ONLOOKER_DIR}/lineage/${PROJECT_KEY}/changes.jsonl"
+  # The baseline is keyed by a cheap scope id (a hash of the repo root), not
+  # the project key — resolving the project key is part of the setup the
+  # Bash pre-gate is built to skip (ecosystem-449.13 task 4.5). Hash the
+  # realpath-resolved root the hook itself derives, since PROJECT_REPO can
+  # differ from it under a symlinked tmpdir (e.g. macOS /var -> /private/var).
+  SCOPE_ID=$(lineage_baseline_scope_id "$(lineage_project_repo_root "$PROJECT_REPO")")
 }
 
 _bash_input() {
@@ -73,8 +81,8 @@ _run_hook() { printf '%s' "$(_bash_input "$1")" | bash "$HOOK"; }
 
 @test "the baseline lives under lineage-baselines, not lineage" {
   _run_hook "echo seed"
-  [ -f "${ONLOOKER_DIR}/lineage-baselines/${PROJECT_KEY}/sess-shell.json" ] || return 1
-  [ ! -d "${ONLOOKER_DIR}/lineage/${PROJECT_KEY}/sess-shell.json" ]
+  [ -f "${ONLOOKER_DIR}/lineage-baselines/${SCOPE_ID}/sess-shell.json" ] || return 1
+  [ ! -d "${ONLOOKER_DIR}/lineage/${SCOPE_ID}/sess-shell.json" ]
 }
 
 @test "lockfiles are ignored" {
@@ -133,6 +141,21 @@ _run_hook() { printf '%s' "$(_bash_input "$1")" | bash "$HOOK"; }
   [ -f "$LEDGER" ] || return 1
   run jq -r 'select(.tool == "Bash") | "\(.lines_added) \(.lines_removed)"' "$LEDGER"
   [ "$output" = "1 1" ]
+}
+
+@test "a no-change Bash call resolves no project key" {
+  _run_hook "echo seed"
+  run bash -c "printf '%s' '$(_bash_input "ls -la")' | LINEAGE_TRACE_SETUP=1 '$HOOK' 2>&1"
+  [ "$status" -eq 0 ] || return 1
+  [[ "$output" != *"SETUP_DONE"* ]]
+}
+
+@test "a changing Bash call does resolve the project key" {
+  _run_hook "echo seed"
+  printf 'two\n' >> "${PROJECT_REPO}/tracked.txt"
+  run bash -c "printf '%s' '$(_bash_input "cat >> tracked.txt <<EOF")' | LINEAGE_TRACE_SETUP=1 '$HOOK' 2>&1"
+  [ "$status" -eq 0 ] || return 1
+  [[ "$output" == *"SETUP_DONE"* ]]
 }
 
 @test "Edit still records exactly as before" {
