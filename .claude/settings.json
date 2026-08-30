@@ -1,11 +1,16 @@
 {
-  "extraKnownMarketplaces": {
-    "onlooker-community": {
-      "source": {
-        "source": "github",
-        "repo": "onlooker-community/ecosystem"
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bd prime --hook-json"
+          }
+        ]
       }
-    }
+    ]
   },
   "enabledPlugins": {
     "ecosystem@onlooker-community": true,
@@ -14,6 +19,15 @@
     "assayer@onlooker-community": true,
     "echo@onlooker-community": true,
     "tribunal@onlooker-community": true
+  },
+  "extraKnownMarketplaces": {
+    "onlooker-community": {
+      "source": {
+        "source": "github",
+        "repo": "onlooker-community/ecosystem"
+      },
+      "autoUpdate": true
+    }
   },
   "inspector": {
     "checks": {
@@ -74,18 +88,5 @@
         }
       ]
     }
-  },
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "command": "bd prime --hook-json",
-            "type": "command"
-          }
-        ],
-        "matcher": ""
-      }
-    ]
   }
 }
