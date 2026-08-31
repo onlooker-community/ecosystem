@@ -30,6 +30,7 @@ const STORES = [
   { name: 'scribe/sessions', segments: ['scribe', 'sessions'], policy: 'retention', pruneEmptyScribe: true },
   { name: 'bursar/sessions', segments: ['bursar', 'sessions'], policy: 'retention' },
   { name: 'compass/sessions', segments: ['compass', 'sessions'], policy: 'retention' },
+  { name: 'lineage-baselines', segments: ['lineage-baselines'], policy: 'scratch', nested: true },
 ];
 
 function parseArgs(argv) {
@@ -74,46 +75,62 @@ function isPayloadFreeScribeFile(path) {
 }
 
 function pruneStore(root, store, opts, now) {
-  const dir = join(root, ...store.segments);
+  const base = join(root, ...store.segments);
   const result = { name: store.name, scanned: 0, deleted: 0, reclaimedBytes: 0 };
-  if (!existsSync(dir)) return result;
+  if (!existsSync(base)) return result;
 
   const cutoff =
     store.policy === 'scratch' ? now - opts.scratchMaxAgeHours * HOUR_MS : now - opts.retentionDays * DAY_MS;
 
-  let entries;
-  try {
-    entries = readdirSync(dir, { withFileTypes: true });
-  } catch {
-    return result; // Unreadable directory: fail soft.
+  // Most stores are flat. lineage-baselines is partitioned one level down, by
+  // the per-repo baseline scope id — a flat read would scan nothing and report
+  // success, which is how a store silently stops being pruned.
+  let dirs = [base];
+  if (store.nested === true) {
+    try {
+      dirs = readdirSync(base, { withFileTypes: true })
+        .filter((e) => e.isDirectory())
+        .map((e) => join(base, e.name));
+    } catch {
+      return result; // Unreadable directory: fail soft.
+    }
   }
 
-  for (const entry of entries) {
-    if (!entry.isFile()) continue;
-    const path = join(dir, entry.name);
-    let st;
+  for (const dir of dirs) {
+    let entries;
     try {
-      st = statSync(path);
+      entries = readdirSync(dir, { withFileTypes: true });
     } catch {
-      continue;
+      continue; // Unreadable subdirectory: skip, don't fail the run.
     }
-    result.scanned += 1;
 
-    const tooOld = st.mtimeMs < cutoff;
-    const emptyScribe = store.pruneEmptyScribe === true && isPayloadFreeScribeFile(path);
-    if (!tooOld && !emptyScribe) continue;
-
-    // Report on-disk cost, not logical size — block waste is the whole point.
-    const onDisk = st.blocks * 512;
-    if (!opts.dryRun) {
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+      const path = join(dir, entry.name);
+      let st;
       try {
-        unlinkSync(path);
+        st = statSync(path);
       } catch {
-        continue; // Vanished or locked: skip without failing the run.
+        continue;
       }
+      result.scanned += 1;
+
+      const tooOld = st.mtimeMs < cutoff;
+      const emptyScribe = store.pruneEmptyScribe === true && isPayloadFreeScribeFile(path);
+      if (!tooOld && !emptyScribe) continue;
+
+      // Report on-disk cost, not logical size — block waste is the whole point.
+      const onDisk = st.blocks * 512;
+      if (!opts.dryRun) {
+        try {
+          unlinkSync(path);
+        } catch {
+          continue; // Vanished or locked: skip without failing the run.
+        }
+      }
+      result.deleted += 1;
+      result.reclaimedBytes += onDisk;
     }
-    result.deleted += 1;
-    result.reclaimedBytes += onDisk;
   }
   return result;
 }
