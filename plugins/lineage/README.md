@@ -15,7 +15,7 @@ observability substrate (`~/.onlooker/`) is present.
 
 | Hook | Matcher | What Lineage does |
 |------|---------|-------------------|
-| `PostToolUse` | `Edit`, `Write`, `MultiEdit`, `Bash` | Derives the project key from `cwd`, reads the current turn from the session tracker, extracts the change's added content, redacts secrets + caps size, and appends one record to the per-project change ledger. Emits a lean `lineage.change.recorded` (metadata + digest, never the content). Skips disabled sessions, ignored paths, and files outside the repo. |
+| `PostToolUse` | `Edit`, `Write`, `MultiEdit`, `Bash` | Derives the project key from `cwd`, reads the current turn from the session tracker, extracts the change's added content, redacts secrets + caps size, and appends a record to the per-project change ledger — one for an edit-tool call, one per changed file for a `Bash` call. Emits a lean `lineage.change.recorded` (metadata + digest, never the content). Skips disabled sessions, ignored paths, and files outside the repo. |
 
 The `/lineage` skill is the query side: it reads the ledger and resolves each
 change's originating prompt at query time. It makes no LLM call.

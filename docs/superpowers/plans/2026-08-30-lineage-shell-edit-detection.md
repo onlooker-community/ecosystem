@@ -1461,7 +1461,20 @@ python3 ~/.onlooker/logs/hook-rollup.py <new-session-id>
 
 Compare `PostToolUse / lineage-post-tool-use` on `Bash` against the ~35ms `tool-sequence-tracker` baseline. Record the p50 and p95 in `ecosystem-449.13`.
 
-If the p50 on Bash exceeds roughly 150ms, stop and report rather than shipping. Bash outruns `Edit` by about 30:1, so this cost is paid per shell call for a whole session — the "cheap per-edit loop" claim has to survive contact with a real number.
+**This step was executed early, and its threshold was wrong.** The ~150ms bar was set against
+`tool-sequence-tracker` (35ms), not against lineage's own `Edit` path, which already costs
+~350ms and ships today. Measured against the right comparison, the `Bash` path (~370ms) is no
+slower than what lineage already does on every edit.
+
+What actually happened: the measurement ran after Task 4, the result was surfaced rather than
+shipped past, and the human chose to add a pre-gate (Task 4.5). The pre-gate is correct but
+saves only ~25ms, because the cost was never where either diagnosis claimed. The real
+per-invocation cost — ~240ms of process startup, `jq` per config accessor, hook-health, and
+file writes, paid by the `Edit` path too — is tracked as `ecosystem-6ce`.
+
+So do not re-measure here. The gate was honored in substance: measured, reported, decided by a
+human. The number left in this step was the miscalibrated one, and is corrected rather than
+deleted so the next reader sees why a stated bar can be wrong.
 
 - [ ] **Step 7: Full CI pass**
 
