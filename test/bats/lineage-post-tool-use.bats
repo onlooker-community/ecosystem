@@ -21,6 +21,13 @@ setup() {
 	git -C "$REPO" remote add origin https://example.com/onlooker/lineage-test.git 2>/dev/null
 	KEY=$(lineage_project_key "$REPO")
 	SID="bats-lin-001"
+
+	# The spelling the ledger stores. The hook resolves every recorded path so
+	# Edit and Bash records of one file agree (ecosystem-htl), and under a
+	# symlinked tmpdir — macOS /var -> /private/var — that differs from $REPO.
+	# Asserted exactly rather than by suffix: a suffix match is what let the
+	# two spellings hide from a regression test in the first place.
+	REPO_REAL=$(cd "$REPO" && pwd -P)
 }
 
 _enable() {
@@ -43,7 +50,7 @@ _run() {
 	_run Edit "${REPO}/foo.py" "$(jq -nc --arg f "${REPO}/foo.py" '{file_path:$f, old_string:"x = 1", new_string:"x = 2"}')"
 	[ "$status" -eq 0 ]
 	[ -f "$(_ledger)" ]
-	[ "$(jq -rs '.[0].file_path' "$(_ledger)")" = "${REPO}/foo.py" ]
+	[ "$(jq -rs '.[0].file_path' "$(_ledger)")" = "${REPO_REAL}/foo.py" ]
 	[ "$(jq -rs '.[0].tool' "$(_ledger)")" = "Edit" ]
 }
 
@@ -53,7 +60,7 @@ _run() {
 		'{file_path:$f, edits:[{old_string:"a", new_string:"a1"},{old_string:"b", new_string:"b1"}]}')"
 	[ "$status" -eq 0 ]
 	[ -f "$(_ledger)" ]
-	[ "$(jq -rs '.[0].file_path' "$(_ledger)")" = "${REPO}/foo.py" ]
+	[ "$(jq -rs '.[0].file_path' "$(_ledger)")" = "${REPO_REAL}/foo.py" ]
 	[ "$(jq -rs '.[0].tool' "$(_ledger)")" = "MultiEdit" ]
 	[ "$(jq -rs '.[0].operation' "$(_ledger)")" = "multi_edit" ]
 }

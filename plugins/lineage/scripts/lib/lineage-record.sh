@@ -25,6 +25,27 @@ lineage_record_dir() {
 
 lineage_record_path() { printf '%s/changes.jsonl' "$(lineage_record_dir "$1")"; }
 
+# Resolve a file path to the one spelling the ledger stores.
+#
+# The Bash path builds "$REPO_ROOT/$REL" from a realpath-resolved root, while
+# Edit/Write/MultiEdit get file_path verbatim from the harness. Under a
+# symlinked working tree those disagree — macOS /var -> /private/var, and any
+# checkout under a symlink — so the same file accumulates history under two
+# absolute strings and a /lineage query returns whichever half it asked for
+# (ecosystem-htl). Normalizing here makes every writer agree.
+#
+# Only the directory is resolved, never the file itself: a symlinked file is a
+# distinct thing an author can edit on purpose, and collapsing it onto its
+# target would attribute the change to the wrong path. The directory must
+# exist — for a Write creating a new file it always does.
+lineage_resolve_path() {
+	local path="${1:-}" dir
+	[[ "$path" == /* ]] || { printf '%s' "$path"; return 0; }
+	dir=$(cd "$(dirname "$path")" 2>/dev/null && pwd -P) || dir=""
+	[[ -z "$dir" ]] && { printf '%s' "$path"; return 0; }
+	printf '%s/%s' "${dir%/}" "$(basename "$path")"
+}
+
 lineage_now_iso() { date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || printf ''; }
 lineage_now_epoch() { date +%s 2>/dev/null || printf '0'; }
 

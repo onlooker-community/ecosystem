@@ -49,6 +49,10 @@ resolved against the repo root.)
 ```bash
 FILE="REPLACE_WITH_FILE"
 [[ "$FILE" != /* && -n "$REPO_ROOT" ]] && FILE="$REPO_ROOT/$FILE"
+# Match the spelling the ledger stores. The lookup is an exact string compare,
+# and the hook resolves every path it records, so a symlinked checkout would
+# otherwise find nothing (ecosystem-htl).
+FILE=$(lineage_resolve_path "$FILE")
 
 echo "## Lineage — change history for \`$FILE\`"
 count=0
@@ -85,6 +89,10 @@ it to the change that introduced it.
 ```bash
 FILE="REPLACE_WITH_FILE"; LINE="REPLACE_WITH_LINE_NUMBER"
 [[ "$FILE" != /* && -n "$REPO_ROOT" ]] && FILE="$REPO_ROOT/$FILE"
+# Match the spelling the ledger stores. The lookup is an exact string compare,
+# and the hook resolves every path it records, so a symlinked checkout would
+# otherwise find nothing (ecosystem-htl).
+FILE=$(lineage_resolve_path "$FILE")
 
 line_text=$(sed -n "${LINE}p" "$FILE" 2>/dev/null)
 needle=$(printf '%s' "$line_text" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
@@ -129,6 +137,10 @@ reading a line from the file:
 ```bash
 FILE="REPLACE_WITH_FILE"; needle="REPLACE_WITH_TEXT"
 [[ "$FILE" != /* && -n "$REPO_ROOT" ]] && FILE="$REPO_ROOT/$FILE"
+# Match the spelling the ledger stores. The lookup is an exact string compare,
+# and the hook resolves every path it records, so a symlinked checkout would
+# otherwise find nothing (ecosystem-htl).
+FILE=$(lineage_resolve_path "$FILE")
 rec=$(lineage_match_line "$PROJECT_KEY" "$FILE" "$needle")
 # …render as in the line mode…
 ```

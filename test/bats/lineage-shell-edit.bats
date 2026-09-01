@@ -236,3 +236,98 @@ _run_hook() { printf '%s' "$(_bash_input "$1")" | bash "$HOOK"; }
   run jq -r 'select(.file_path | endswith("/tracked.txt")) | .tool' "$LEDGER"
   [ "$output" = "Edit" ]
 }
+
+# --- abandoned baseline locks (ecosystem-am1) ------------------------------
+#
+# The read → decide → rebuild lock is released by a script-level EXIT trap,
+# which bash does not fire on SIGKILL or a hard harness timeout. One killed
+# hook used to leave the lock behind and turn the rest of the session into a
+# provenance blackout that also cost 5s per shell call — exits 0, records
+# nothing, emits nothing. Exactly the failure family ecosystem-449.13 exists
+# to eliminate, reached through the mechanism added to fix it.
+
+_baseline_lock_dir() {
+  printf '%s.lock.d' "$(lineage_baseline_path "$SCOPE_ID" "sess-shell")"
+}
+
+_seed_baseline_lock() {
+  local holder_pid="$1" dir
+  dir=$(_baseline_lock_dir)
+  mkdir -p "$dir"
+  printf '%s\n' "$holder_pid" >"${dir}/holder"
+}
+
+@test "a baseline lock leaked by a killed hook does not black out later recording" {
+  _run_hook "echo seed"
+  printf 'two\n' >> "${PROJECT_REPO}/tracked.txt"
+
+  # A pid that is certainly gone — the signature of a SIGKILLed hook.
+  sleep 0 & local dead=$!; wait "$dead" 2>/dev/null || true
+  _seed_baseline_lock "$dead"
+
+  _run_hook "cat >> tracked.txt <<EOF"
+  [ -f "$LEDGER" ] || { echo "no ledger — the leaked lock blacked out recording"; return 1; }
+  run jq -r 'select(.tool == "Bash") | .file_path' "$LEDGER"
+  [[ "$output" == *"tracked.txt"* ]]
+}
+
+@test "a baseline lock that cannot be acquired is reported instead of swallowed" {
+  _run_hook "echo seed"
+  printf 'two\n' >> "${PROJECT_REPO}/tracked.txt"
+
+  # A live holder is never broken, so this acquire genuinely fails.
+  sleep 10 & local live=$!
+  _seed_baseline_lock "$live"
+
+  _run_hook "cat >> tracked.txt <<EOF"
+
+  kill "$live" 2>/dev/null || true
+  wait "$live" 2>/dev/null || true
+  rm -rf "$(_baseline_lock_dir)"
+
+  run jq -sr '[.[] | select(.hook == "lineage-post-tool-use" and .status == "failure")] | length' \
+    "${ONLOOKER_DIR}/logs/hook-health.jsonl"
+  [ "$output" -ge 1 ] || { echo "lock timeout left no trace in hook-health"; return 1; }
+  run jq -sr '[.[] | select(.hook == "lineage-post-tool-use" and .status == "failure") | .error] | join(",")' \
+    "${ONLOOKER_DIR}/logs/hook-health.jsonl"
+  [[ "$output" == *"lock"* ]]
+}
+
+# --- one file, one path spelling (ecosystem-htl) ---------------------------
+#
+# The Edit path records tool_input.file_path exactly as the harness supplied
+# it; the Bash path builds "$REPO_ROOT/$REL" from a realpath-resolved root.
+# Under a symlinked working tree — macOS /var -> /private/var, which every
+# temp-dir test hits, and any checkout living under a symlink — the same file
+# lands in the ledger under two different absolute strings, so /lineage <file>
+# returns half its history depending on which spelling is asked for.
+
+@test "a file touched by both Edit and Bash lands under one path string" {
+  # A symlinked root is the condition under test, so assert we actually have
+  # one rather than passing vacuously on a checkout where the two agree.
+  local resolved
+  resolved=$(cd "$PROJECT_REPO" && pwd -P)
+  [ "$resolved" != "$PROJECT_REPO" ] || skip "tmpdir is not symlinked here"
+
+  _run_hook "echo seed"
+
+  printf 'hello\n' > "${PROJECT_REPO}/tracked.txt"
+  local input
+  input=$(jq -cn --arg cwd "$PROJECT_REPO" --arg sid "sess-shell" \
+    --arg fp "${PROJECT_REPO}/tracked.txt" \
+    '{cwd: $cwd, session_id: $sid, tool_name: "Edit",
+      tool_input: {file_path: $fp, old_string: "one", new_string: "hello"},
+      hook_event_name: "PostToolUse"}')
+  run bash -c "printf '%s' '$input' | '$HOOK'"
+  [ "$status" -eq 0 ] || return 1
+
+  printf 'again\n' >> "${PROJECT_REPO}/tracked.txt"
+  _run_hook "cat >> tracked.txt <<EOF"
+
+  # Both tools must be represented, or the assertion below is vacuous.
+  run jq -sr '[.[] | .tool] | sort | unique | join(",")' "$LEDGER"
+  [ "$output" = "Bash,Edit" ] || { echo "expected both tools, got: $output"; return 1; }
+
+  run jq -sr '[.[] | .file_path] | unique | length' "$LEDGER"
+  [ "$output" = "1" ]
+}

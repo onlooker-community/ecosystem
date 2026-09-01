@@ -58,3 +58,37 @@ _plugin_dirs() {
 	tail -n 1 "${ONLOOKER_DIR}/logs/hook-health.jsonl" \
 		| jq -e '.hook == "standalone-hook"' >/dev/null
 }
+
+# portable-lock.sh is vendored on demand rather than into every plugin: only
+# four plugins lock anything. It went unsynced for long enough that governor,
+# cartographer, and lineage were all running a superseded generation of
+# lock_acquire (ecosystem-am1) — these two tests are what would have caught it.
+
+_plugins_sourcing_portable_lock() {
+	local d
+	while IFS= read -r d; do
+		grep -rlE '^[[:space:]]*(\.|source)[[:space:]].*portable-lock\.sh' \
+			"${d}/scripts" >/dev/null 2>&1 && basename "$d"
+	done < <(_plugin_dirs)
+}
+
+@test "every plugin that sources portable-lock.sh vendors a copy of it" {
+	local missing="" name
+	while IFS= read -r name; do
+		[ -z "$name" ] && continue
+		[ -f "${REPO_ROOT}/plugins/${name}/scripts/lib/portable-lock.sh" ] \
+			|| missing+="$name "
+	done < <(_plugins_sourcing_portable_lock)
+	[ -z "$missing" ] || { echo "sources it but does not vendor it: $missing"; return 1; }
+}
+
+@test "every vendored portable-lock.sh is byte-identical to the canonical copy" {
+	local canonical="${REPO_ROOT}/scripts/lib/portable-lock.sh"
+	local drifted="" d
+	while IFS= read -r d; do
+		[ -f "${d}/scripts/lib/portable-lock.sh" ] || continue
+		cmp -s "$canonical" "${d}/scripts/lib/portable-lock.sh" \
+			|| drifted+="$(basename "$d") "
+	done < <(_plugin_dirs)
+	[ -z "$drifted" ] || { echo "drifted: $drifted"; return 1; }
+}
