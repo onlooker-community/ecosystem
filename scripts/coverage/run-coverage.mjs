@@ -115,7 +115,12 @@ function main() {
       '--test',
       ...testGlob,
     ],
-    { encoding: 'utf8', cwd: root },
+    // Same conditions as `npm run test:schema`, the other way this suite runs.
+    // ONLOOKER_VALIDATE=1 is what makes the emitter validate at all (ADR-005's
+    // 2026-09-01 amendment). Without it the emission-report tests assert against
+    // an emitter that never validated — and they fail HERE while passing under
+    // test:ci, which does not include coverage.
+    { encoding: 'utf8', cwd: root, env: { ...process.env, ONLOOKER_VALIDATE: '1' } },
   );
 
   if (r.status !== 0) {
