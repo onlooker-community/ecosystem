@@ -44,3 +44,54 @@ Mechanisms considered to make the dependency available in the install: vendor a 
 - `node` is still required to emit (the emitter is JS), but **no npm packages are**. Hooks that shell out to `onlooker-event.mjs` work on a fresh clone with nothing installed.
 - The `validate` CLI subcommand and `onlooker_validate_event` still require the dev dependency; they are used only by the test suite, never on a runtime hook path.
 - `test:schema` now makes a network call to `schema.onlooker.dev`. It skips cleanly offline, so local and air-gapped runs are unaffected; CI with egress exercises the live contract.
+
+## Amendment (2026-09-01): the gate is `ONLOOKER_VALIDATE`, not resolvability
+
+The decision above stands — the emitter is dependency-free and fails open. The
+*mechanism* it specified does not, because the premise under it is false.
+
+**"It never runs `npm install`" is wrong.** The install does run it. Every
+cached ecosystem version from 0.33.1 through 0.47.0 carries
+`node_modules/@onlooker-community/schema`, and the install directory contains
+`node_modules/.package-lock.json` — a file npm itself writes — stamped with the
+install time. `node_modules/` being git-ignored is true and irrelevant: the
+installed plugin is not a git clone.
+
+So the "lazy import that degrades gracefully in production" never degraded.
+`@onlooker-community/schema` resolved in installed plugins exactly as it does
+in dev, and every emission loaded `ajv` + `ajv-formats` and compiled schemas in
+a fresh process that could not cache them.
+
+Measured on the installed 0.47.0 emitter:
+
+| | ms/event |
+|---|---|
+| resolves the package (what production actually did) | 100.1 |
+| package unresolvable | 26.7 |
+| **cost of the import** | **~73** |
+
+That is not a hot-path tax the ADR knowingly accepted; it is one it believed it
+had avoided. For scale, ecosystem's own `tool-history-tracker` measured 149 ms
+emitting a single event — roughly half its budget was `ajv` — against a
+recorded PostToolUse baseline of 140 ms. Every plugin that emits paid it, once
+per event.
+
+**Amended decision.** Validation is opt-in: the emitter validates when
+`ONLOOKER_VALIDATE=1`, and fails open otherwise. `test:bats` and `test:schema`
+set it, so dev and CI gate exactly as strictly as before — the negative tests
+across the plugins are unaffected. Nothing else sets it, so production never
+pays. This is what the original "best-effort keeps the dev-time guard"
+rationale intended; only the trigger changed, from an environmental accident to
+an explicit statement of intent.
+
+Two details worth keeping:
+
+- The `validate` subcommand bypasses the gate. Invoking it *is* the request to
+  validate, so gating it would have it report the package as missing while the
+  package sits right there. The Consequences bullet above still holds.
+- `check-bus-coverage.mjs` already fails the build when no emission in the
+  report was validated, so dropping `ONLOOKER_VALIDATE=1` from `package.json`
+  surfaces as a red build, not as a gate that silently checks nothing.
+
+See `ecosystem-aya`, and `ecosystem-ff7` / `ecosystem-449.14` for the two
+symptoms that led here.

@@ -82,20 +82,34 @@ export function buildCanonicalEvent({
 }
 
 /**
- * Best-effort schema validation.
+ * Best-effort schema validation, opt IN via ONLOOKER_VALIDATE=1.
  *
- * @onlooker-community/schema is a devDependency, so it resolves in dev, CI, and
- * tests — where we DO want emitter output gated against the contract (this is
- * what the negative tests across the plugins rely on) — but is absent in an
- * installed marketplace plugin. When it is absent we fail OPEN: build and emit
- * anyway, so schema drift can never silently kill telemetry the way a hard
+ * We DO want emitter output gated against the contract in dev, CI, and tests —
+ * that is what the negative tests across the plugins rely on — and we do NOT
+ * want to pay for it in a real session. Everywhere else we fail OPEN: build and
+ * emit anyway, so schema drift can never silently kill telemetry the way a hard
  * runtime dependency did. Drift is caught in CI, which validates emitter output
  * against the published schemas at https://schema.onlooker.dev.
  *
- * Returns { available: false } when no validator is installed, otherwise the
- * { valid, errors? } result from the schema package.
+ * The gate used to be "does @onlooker-community/schema resolve?", on the
+ * premise that it is a devDependency and so absent from an installed
+ * marketplace plugin. That premise is false: the published plugin ships its
+ * node_modules, and every cached ecosystem version from 0.33.1 through 0.47.0
+ * carries the package. So production resolved it and loaded ajv on every
+ * single event — ~73ms per emission, about half the measured PostToolUse
+ * budget, on a path that runs once per tool call. Resolvability was never a
+ * proxy for "this is a dev run"; an explicit variable is. See ecosystem-aya
+ * and ADR-005.
+ *
+ * `force` bypasses the env gate. The `validate` subcommand sets it, because
+ * invoking that command IS the request to validate — gating it would have it
+ * report the package as missing while the package sits right there.
+ *
+ * Returns { available: false } when validation was not requested or no
+ * validator is installed, otherwise the { valid, errors? } result.
  */
-async function tryValidate(event) {
+async function tryValidate(event, { force = false } = {}) {
+  if (!force && process.env.ONLOOKER_VALIDATE !== '1') return { available: false };
   let schema;
   try {
     schema = await import('@onlooker-community/schema');
@@ -522,7 +536,7 @@ async function main() {
   if (command === 'validate') {
     const raw = await readStdin();
     const parsed = JSON.parse(raw || '{}');
-    const check = await tryValidate(parsed);
+    const check = await tryValidate(parsed, { force: true });
     if (!check.available) {
       console.error('@onlooker-community/schema is not installed; cannot validate');
       process.exit(1);
