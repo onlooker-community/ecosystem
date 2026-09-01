@@ -5,7 +5,7 @@
 
 ### Bug Fixes
 
-* **lineage:** close two silent provenance gaps :bug: ([#227](https://github.com/onlooker-community/ecosystem/issues/227)) ([32bde03](https://github.com/onlooker-community/ecosystem/commit/32bde034bbb70d5f85120abceea2cfa337526d12))
+* **lock:** reclaim a lock whose holder was killed :relieved: ([#227](https://github.com/onlooker-community/ecosystem/issues/227)) ([32bde03](https://github.com/onlooker-community/ecosystem/commit/32bde034bbb70d5f85120abceea2cfa337526d12))
 
 ## [0.4.2](https://github.com/onlooker-community/ecosystem/compare/governor-v0.4.1...governor-v0.4.2) (2026-08-30)
 

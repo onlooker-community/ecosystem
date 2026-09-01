@@ -7,7 +7,7 @@ All notable changes to the Cartographer plugin are documented here.
 
 ### Bug Fixes
 
-* **lineage:** close two silent provenance gaps :bug: ([#227](https://github.com/onlooker-community/ecosystem/issues/227)) ([32bde03](https://github.com/onlooker-community/ecosystem/commit/32bde034bbb70d5f85120abceea2cfa337526d12))
+* **lock:** reclaim a lock whose holder was killed :relieved: ([#227](https://github.com/onlooker-community/ecosystem/issues/227)) ([32bde03](https://github.com/onlooker-community/ecosystem/commit/32bde034bbb70d5f85120abceea2cfa337526d12))
 
 ## [0.7.1](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.7.0...cartographer-v0.7.1) (2026-08-30)
 
