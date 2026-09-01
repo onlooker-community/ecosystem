@@ -133,9 +133,16 @@ below.
 
 `lineage-baselines/` is separate scratch state, never joined to the ledger: a
 cheap scope id (a hash of the repo root, not the project key) keyed per
-session, holding the content sha of every path git considers dirty as of the
-last `Bash` call. It exists only so the `Bash` path can tell what changed
-since it last looked, and is never read by `/lineage`.
+session, holding the content sha of every path git considers dirty. It exists
+only so the `Bash` path can tell what changed since it last looked, and is
+never read by `/lineage`.
+
+Every writer advances it, not just the `Bash` path. An `Edit`, `Write`, or
+`MultiEdit` stamps its file's new sha into the baseline after recording, so the
+next `Bash` call does not see that file as an unattributed change and record it
+a second time as a `shell_edit`. Without that, the newest record wins the
+content lookup and `/lineage` would answer "a Bash call" for a line an edit
+tool wrote.
 
 Lineage honors `$ONLOOKER_DIR`; it never hardcodes `~/.onlooker`, so the test
 suite's isolated temp home is respected.
