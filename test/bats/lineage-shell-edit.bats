@@ -61,6 +61,32 @@ _run_hook() { printf '%s' "$(_bash_input "$1")" | bash "$HOOK"; }
   [[ "$output" == *"tracked.txt"* ]]
 }
 
+# Before this fix, the baseline read → decide → rebuild cycle was unlocked:
+# every concurrent hook read the same not-yet-advanced baseline, independently
+# decided the same pending change was new, and appended its own record.
+# lineage_append's internal lock keeps any single write from corrupting the
+# ledger, but cannot stop that many well-formed duplicate records from landing
+# (ecosystem-449.13 I3). Four concurrent hooks against one pending change must
+# produce exactly one ledger record.
+@test "concurrent Bash hooks against one pending change record it exactly once (I3)" {
+  _run_hook "echo seed"
+  printf 'two\n' >> "${PROJECT_REPO}/tracked.txt"
+
+  local input pids=()
+  input="$(_bash_input "cat >> tracked.txt <<EOF")"
+  for _ in 1 2 3 4; do
+    bash -c "printf '%s' '$input' | '$HOOK'" &
+    pids+=("$!")
+  done
+  for pid in "${pids[@]}"; do
+    wait "$pid"
+  done
+
+  [ -f "$LEDGER" ] || return 1
+  run jq -rs '[ .[] | select(.tool == "Bash") ] | length' "$LEDGER"
+  [ "$output" = "1" ]
+}
+
 @test "the record is tagged shell_edit and authored" {
   _run_hook "echo seed"
   printf 'two\n' >> "${PROJECT_REPO}/tracked.txt"

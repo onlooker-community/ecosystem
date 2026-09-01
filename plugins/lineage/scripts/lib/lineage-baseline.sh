@@ -20,26 +20,42 @@
 # ---------------------------------------------------------------------------
 
 lineage_baseline_dir() {
-	local key="${1:-unknown}" safe
-	safe=$(printf '%s' "$key" | tr -c 'a-zA-Z0-9-' '_')
+	local scope_id="${1:-unknown}" safe
+	safe=$(printf '%s' "$scope_id" | tr -c 'a-zA-Z0-9-' '_')
 	printf '%s/lineage-baselines/%s' "${ONLOOKER_DIR:-${HOME}/.onlooker}" "$safe"
 }
 
 lineage_baseline_path() {
-	local key="$1" sid="${2:-unknown}" safe_sid
+	local scope_id="$1" sid="${2:-unknown}" safe_sid
 	safe_sid=$(printf '%s' "$sid" | tr -c 'a-zA-Z0-9-' '_')
-	printf '%s/%s.json' "$(lineage_baseline_dir "$key")" "$safe_sid"
+	printf '%s/%s.json' "$(lineage_baseline_dir "$scope_id")" "$safe_sid"
 }
 
 # Cheap identity for the per-session baseline.
 #
 # Deliberately NOT lineage_project_key: resolving that shells out for the remote
-# URL and costs ~39ms, which is part of the setup the Bash pre-gate exists to
-# skip. The baseline is scratch and is never joined to the ledger, so it does
+# URL and costs roughly 20ms, which is part of the setup the Bash pre-gate exists
+# to skip. The baseline is scratch and is never joined to the ledger, so it does
 # not need the ledger's identity — only stability within a session.
 lineage_baseline_scope_id() {
 	local root="${1:-unknown}"
 	lineage_sha256 "$root" | cut -c1-12
+}
+
+# Write baseline JSON atomically: temp file in the same directory, then
+# rename. A truncating `> file` redirect leaves a zero-byte baseline on any
+# failure between opening the file and writing to it (e.g. `jq` erroring out
+# mid-build), and a zero-byte baseline reads back as `{}` — indistinguishable
+# from "no prior baseline" — which silently reseeds and loses a window of
+# changes. Writing nothing on an empty/failed build is deliberate for the same
+# reason: it leaves the last-known-good baseline in place instead of
+# replacing it with an empty one.
+lineage_baseline_write() {
+	local path="$1" json="$2" tmp
+	[[ -z "$path" || -z "$json" ]] && return 1
+	tmp="${path}.tmp.$$"
+	printf '%s' "$json" > "$tmp" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 1; }
+	mv -f "$tmp" "$path" 2>/dev/null
 }
 
 # ---------------------------------------------------------------------------
@@ -142,6 +158,28 @@ lineage_content_scope() {
 	if [[ -n "$old" ]]; then printf 'cumulative'; else printf 'delta'; fi
 }
 
+# Body lines of a unified diff, one marker glyph (+ or -) stripped.
+#
+# Keys off hunk position, not the glyph pattern: everything before the first
+# `@@` is a diff header (`diff --git`, `index`, `--- `, `+++ `) and is
+# skipped unconditionally, so header lines never need a special-case pattern
+# even though `--- `/`+++ ` themselves start with the marker character. Once
+# inside a hunk, `\ No newline at end of file` is discarded, and a marker
+# line has exactly ONE leading character removed — never a second character
+# class on top of it — so an added/removed line whose own text starts with
+# `+` or `-`, or is empty, survives intact. The prior `sed` implementation
+# required a non-marker second character, which silently dropped both of
+# those cases.
+_lineage_diff_body_lines() {
+	local marker="$1"
+	awk -v marker="$marker" '
+		/^@@/ { in_hunk = 1; next }
+		!in_hunk { next }
+		/^\\ No newline/ { next }
+		index($0, marker) == 1 { print substr($0, 2) }
+	'
+}
+
 # Added lines from the working tree against HEAD, '+' markers stripped.
 #
 # An untracked file has nothing in HEAD to diff against and `git diff` prints
@@ -152,7 +190,7 @@ lineage_added_content() {
 	local root="$1" rel="$2"
 	if git -C "$root" ls-files --error-unmatch -- "$rel" >/dev/null 2>&1; then
 		git -C "$root" diff --unified=0 HEAD -- "$rel" 2>/dev/null \
-			| sed -n 's/^+\([^+].*\)$/\1/p' \
+			| _lineage_diff_body_lines '+' \
 			|| true
 	else
 		cat "${root}/${rel}" 2>/dev/null || true
@@ -168,7 +206,7 @@ lineage_removed_content() {
 	local root="$1" rel="$2"
 	if git -C "$root" ls-files --error-unmatch -- "$rel" >/dev/null 2>&1; then
 		git -C "$root" diff --unified=0 HEAD -- "$rel" 2>/dev/null \
-			| sed -n 's/^-\([^-].*\)$/\1/p' \
+			| _lineage_diff_body_lines '-' \
 			|| true
 	fi
 }

@@ -44,6 +44,15 @@ INPUT=$(cat)
 hook_health_context "$INPUT"
 _done() { exit 0; }
 
+# Held only while the Bash branch's baseline read → decide → rebuild cycle is
+# in flight (see below). Released on every exit path via the trap, including
+# the many early `_done` returns in that cycle — lock_release is a documented
+# no-op when nothing is held, so this fires harmlessly for every other exit
+# from the script too.
+_BASELINE_LOCK=""
+_release_baseline_lock() { [[ -n "$_BASELINE_LOCK" ]] && lock_release "$_BASELINE_LOCK"; }
+trap _release_baseline_lock EXIT
+
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SESSION_ID=""
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 TOOL=$(printf '%s' "$INPUT" | jq -r '.tool_name // ""' 2>/dev/null) || TOOL=""
@@ -86,7 +95,7 @@ REPO_ROOT=$(lineage_project_repo_root "$CWD")
 # per-session baseline and record whatever moved (ecosystem-449.13).
 #
 # This branch runs BEFORE lineage_config_load / lineage_project_key on
-# purpose (ecosystem-449.13 task 4.5): that setup costs ~310ms per call
+# purpose (ecosystem-449.13 task 4.5): that setup costs roughly 25ms per call
 # (config load + several jq-backed accessors + the project-key remote-URL
 # lookup), and Bash outruns Edit roughly 30:1. Deciding whether anything
 # changed first, via lineage_changed_files' per-path content shas, means a
@@ -95,12 +104,28 @@ REPO_ROOT=$(lineage_project_repo_root "$CWD")
 # rather than the project key, since resolving the project key is part of
 # the cost being skipped; the baseline is per-session scratch and is never
 # joined to the ledger, so it doesn't need the ledger's identity.
+#
+# The whole read → decide → rebuild cycle below runs under a lock on the
+# baseline file (ecosystem-449.13 I3). Parallel Bash calls within one turn
+# are routine, and without a lock every concurrent hook reads the same
+# not-yet-advanced baseline, independently decides the same pending change
+# is new, and records it once each — lineage_append's internal lock keeps any
+# single write from corrupting the ledger, but it can't stop that many
+# well-formed, duplicate records from landing. Holding this lock across the
+# full cycle (not just the read) means whichever hook gets there first fully
+# records the change and advances the baseline before anyone else is let in,
+# so the next hook to acquire the lock sees a baseline that already accounts
+# for the change and finds nothing left to do.
 # ---------------------------------------------------------------------------
 if [[ "$TOOL" == "Bash" ]]; then
 	[[ -z "$REPO_ROOT" ]] && _done
 
 	BASELINE_FILE=$(lineage_baseline_path "$(lineage_baseline_scope_id "$REPO_ROOT")" "$SESSION_ID")
 	mkdir -p "$(dirname "$BASELINE_FILE")" 2>/dev/null || _done
+
+	BASELINE_LOCK="${BASELINE_FILE}.lock"
+	lock_acquire "$BASELINE_LOCK" 5 || _done
+	_BASELINE_LOCK="$BASELINE_LOCK"
 
 	BASELINE='{}'
 	[[ -f "$BASELINE_FILE" ]] && BASELINE=$(cat "$BASELINE_FILE" 2>/dev/null) || true
@@ -109,7 +134,8 @@ if [[ "$TOOL" == "Bash" ]]; then
 	# No prior baseline means this is the session's first Bash call. Seed and
 	# stop: with nothing to compare against, every dirty file would look new.
 	if ! printf '%s' "$BASELINE" | jq -e 'has("files")' >/dev/null 2>&1; then
-		lineage_baseline_build "$REPO_ROOT" > "$BASELINE_FILE" 2>/dev/null || true
+		_seed=$(lineage_baseline_build "$REPO_ROOT")
+		[[ -n "$_seed" ]] && lineage_baseline_write "$BASELINE_FILE" "$_seed"
 		_done
 	fi
 
@@ -119,7 +145,8 @@ if [[ "$TOOL" == "Bash" ]]; then
 	# baseline (a no-op here, but keeps the file's mtime/shape consistent)
 	# and stop before paying for config load or the project key.
 	if [[ -z "$CHANGED" ]]; then
-		lineage_baseline_build "$REPO_ROOT" > "$BASELINE_FILE" 2>/dev/null || true
+		_noop=$(lineage_baseline_build "$REPO_ROOT")
+		[[ -n "$_noop" ]] && lineage_baseline_write "$BASELINE_FILE" "$_noop"
 		_done
 	fi
 
@@ -175,7 +202,8 @@ if [[ "$TOOL" == "Bash" ]]; then
 
 	# Advance the baseline whether or not anything was recorded, so the next
 	# call diffs against current state rather than re-reporting the same edit.
-	lineage_baseline_build "$REPO_ROOT" > "$BASELINE_FILE" 2>/dev/null || true
+	_final=$(lineage_baseline_build "$REPO_ROOT")
+	[[ -n "$_final" ]] && lineage_baseline_write "$BASELINE_FILE" "$_final"
 	_done
 fi
 
@@ -269,9 +297,19 @@ if lineage_append "$PROJECT_KEY" "$RECORD"; then
 			fi
 			_new_sha=$(lineage_file_sha "$FILE_PATH")
 			if [[ -n "$_new_sha" ]]; then
-				_updated_baseline=$(jq -c --arg k "$_rel_path" --arg v "$_new_sha" \
-					'.files[$k]=$v' "$_baseline_file" 2>/dev/null)
-				[[ -n "$_updated_baseline" ]] && printf '%s' "$_updated_baseline" > "$_baseline_file" 2>/dev/null || true
+				# Same lock the Bash branch's read → decide → rebuild cycle
+				# takes on this file (ecosystem-449.13 I3): without it, this
+				# read-modify-write could race a concurrent Bash hook's full
+				# rebuild and either clobber it or get clobbered, and — before
+				# the atomic write below — a failed `jq` here could leave a
+				# zero-byte baseline the same way a bare `>` redirect would.
+				_baseline_lock="${_baseline_file}.lock"
+				if lock_acquire "$_baseline_lock" 5; then
+					_updated_baseline=$(jq -c --arg k "$_rel_path" --arg v "$_new_sha" \
+						'.files[$k]=$v' "$_baseline_file" 2>/dev/null)
+					[[ -n "$_updated_baseline" ]] && lineage_baseline_write "$_baseline_file" "$_updated_baseline"
+					lock_release "$_baseline_lock"
+				fi
 			fi
 		fi
 	fi

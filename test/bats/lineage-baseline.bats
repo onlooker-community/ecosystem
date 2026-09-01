@@ -157,6 +157,34 @@ setup() {
   [[ "$output" != *"one"* ]]
 }
 
+# The previous `sed -n 's/^+\([^+].*\)$/\1/p'` required a non-'+' second
+# character and at least one character after it, so an added line whose own
+# text starts with '+' (diff line "++ bullet") and an added blank line (diff
+# line "+") were both silently dropped instead of recorded (ecosystem-449.13
+# I4). Reproduces the report's 4-line addition: a line starting with '+', one
+# starting with '-', a blank line, and a normal line.
+@test "added_content preserves a plus-prefixed line and a blank line (I4)" {
+  printf '%s\n' '+ plus bullet' '+- minus bullet' '' 'normal added' >> "${PROJECT_REPO}/tracked.txt"
+  run lineage_added_content "$PROJECT_REPO" "tracked.txt"
+  [ "$status" -eq 0 ] || return 1
+  [ "$(_lineage_count_lines "$output")" = "4" ] || return 1
+  [[ "$output" == *"+ plus bullet"* ]] || return 1
+  [[ "$output" == *"+- minus bullet"* ]] || return 1
+  [[ "$output" == *"normal added"* ]]
+}
+
+# Mirrors the added-side fix for the removed side: a removed line whose own
+# text starts with '-' must survive with exactly one leading '-' stripped.
+@test "removed_content preserves a minus-prefixed line (I4)" {
+  printf 'one\n- dash bullet\n' > "${PROJECT_REPO}/tracked.txt"
+  git -C "$PROJECT_REPO" add tracked.txt
+  git -C "$PROJECT_REPO" commit -qm "add dash line"
+  printf 'one\n' > "${PROJECT_REPO}/tracked.txt"
+  run lineage_removed_content "$PROJECT_REPO" "tracked.txt"
+  [ "$status" -eq 0 ] || return 1
+  [[ "$output" == *"- dash bullet"* ]]
+}
+
 @test "classify marks git switch as tool_generated" {
   run lineage_classify_command "git switch -c feat/x"
   [ "$output" = "tool_generated" ]
