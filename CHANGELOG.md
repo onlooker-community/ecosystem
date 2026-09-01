@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.47.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.46.0...ecosystem-v0.47.0) (2026-09-01)
+
+
+### Features
+
+* **lineage:** record the edits made through the shell :satellite: ([#225](https://github.com/onlooker-community/ecosystem/issues/225)) ([8c12231](https://github.com/onlooker-community/ecosystem/commit/8c12231f27d792a411a1933197b05302c910c28f))
+
 ## [0.46.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.45.3...ecosystem-v0.46.0) (2026-08-30)
 
 

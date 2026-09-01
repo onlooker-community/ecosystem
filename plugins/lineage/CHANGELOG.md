@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/onlooker-community/ecosystem/compare/lineage-v0.3.1...lineage-v0.4.0) (2026-09-01)
+
+
+### Features
+
+* **lineage:** record the edits made through the shell :satellite: ([#225](https://github.com/onlooker-community/ecosystem/issues/225)) ([8c12231](https://github.com/onlooker-community/ecosystem/commit/8c12231f27d792a411a1933197b05302c910c28f))
+
 ## [0.3.1](https://github.com/onlooker-community/ecosystem/compare/lineage-v0.3.0...lineage-v0.3.1) (2026-08-30)
 
 
