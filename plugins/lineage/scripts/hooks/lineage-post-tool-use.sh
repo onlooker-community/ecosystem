@@ -7,6 +7,9 @@
 # (the prompt is resolved lazily at /lineage query time). Bash is handled
 # separately: it carries no file_path or content in tool_input, so it diffs
 # the work tree against a rolling per-session baseline instead (see below).
+# The Edit/Write/MultiEdit path still records from tool_input as before, but
+# also advances that same baseline for the file it just touched, so a later
+# Bash call doesn't see the edit as new work and record it a second time.
 #
 # Hook contract: always exits 0; never blocks the tool. Skips silently when
 # disabled, when the path is ignored, or when the file is outside the repo.
@@ -240,6 +243,38 @@ if lineage_append "$PROJECT_KEY" "$RECORD"; then
 		+ (if $tuid != "" then {tool_use_id: $tuid} else {} end)
 	' 2>/dev/null)
 	[[ -n "$EV" ]] && lineage_emit_event "lineage.change.recorded" "$EV" "$SESSION_ID" || true
+
+	# Advance the Bash rolling baseline too, so a later Bash call — even one
+	# that writes nothing — does not see this Edit/Write/MultiEdit change as
+	# new work and re-record it as a "Bash"/shell_edit duplicate. Without
+	# this, that duplicate is the NEWER record, and lineage_match_line's
+	# newest-wins lookup returns it instead of the true Edit/Write/MultiEdit
+	# record it displaced (ecosystem-449.13 C2).
+	#
+	# Only when a baseline file already exists for this scope/session: if
+	# none exists yet, the Bash branch's own seed-and-stop step builds one
+	# from current disk state on its first call, which already reflects this
+	# change — nothing to advance ahead of.
+	if [[ -n "$REPO_ROOT" ]]; then
+		_baseline_scope_id=$(lineage_baseline_scope_id "$REPO_ROOT")
+		_baseline_file=$(lineage_baseline_path "$_baseline_scope_id" "$SESSION_ID")
+		if [[ -f "$_baseline_file" ]]; then
+			_rel_path="$FILE_PATH"
+			if [[ "$FILE_PATH" == /* ]]; then
+				_file_dir=$(cd "$(dirname "$FILE_PATH")" 2>/dev/null && pwd -P) || _file_dir=""
+				if [[ -n "$_file_dir" ]]; then
+					_abs_file_path="${_file_dir}/$(basename "$FILE_PATH")"
+					_rel_path="${_abs_file_path#"$REPO_ROOT"/}"
+				fi
+			fi
+			_new_sha=$(lineage_file_sha "$FILE_PATH")
+			if [[ -n "$_new_sha" ]]; then
+				_updated_baseline=$(jq -c --arg k "$_rel_path" --arg v "$_new_sha" \
+					'.files[$k]=$v' "$_baseline_file" 2>/dev/null)
+				[[ -n "$_updated_baseline" ]] && printf '%s' "$_updated_baseline" > "$_baseline_file" 2>/dev/null || true
+			fi
+		fi
+	fi
 fi
 
 _done

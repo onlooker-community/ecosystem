@@ -19,6 +19,10 @@ setup() {
   git -C "$PROJECT_REPO" init -q
   git -C "$PROJECT_REPO" config user.email t@example.com
   git -C "$PROJECT_REPO" config user.name "Test"
+  # Force git's own default rather than inheriting the developer machine's
+  # global config, which some dev boxes set to "all" — masking the untracked-
+  # directory collapse lineage_candidate_paths guards against.
+  git -C "$PROJECT_REPO" config status.showUntrackedFiles normal
   git -C "$PROJECT_REPO" remote add origin git@github.com:org/fixture.git
   printf 'one\n' > "${PROJECT_REPO}/tracked.txt"
   git -C "$PROJECT_REPO" add tracked.txt
@@ -168,4 +172,41 @@ _run_hook() { printf '%s' "$(_bash_input "$1")" | bash "$HOOK"; }
   [ "$status" -eq 0 ] || return 1
   run jq -r 'select(.tool == "Edit") | "\(.operation) \(has("provenance_kind"))"' "$LEDGER"
   [ "$output" = "edit false" ]
+}
+
+# Before this fix, the Edit path never advanced the Bash baseline, so the
+# next Bash call — even a no-op like `ls` — saw the Edit's file as changed
+# and appended a SECOND record with tool="Bash". lineage_match_line's
+# newest-wins lookup then returned that wrong Bash record instead of the
+# real Edit that introduced the line.
+@test "an Edit advances the baseline so a later no-op Bash call does not re-record it" {
+  _run_hook "echo seed"
+
+  # Mirror what the real Edit tool would have done on disk before the hook
+  # observes it — the hook's Edit path builds its record from tool_input
+  # alone and never reads the file, so without this the baseline comparison
+  # below would trivially see no diff regardless of whether the fix works.
+  printf 'hello\n' > "${PROJECT_REPO}/tracked.txt"
+  input=$(jq -cn --arg cwd "$PROJECT_REPO" --arg sid "sess-shell" \
+    --arg fp "${PROJECT_REPO}/tracked.txt" \
+    '{cwd: $cwd, session_id: $sid, tool_name: "Edit",
+      tool_input: {file_path: $fp, old_string: "one", new_string: "hello"},
+      hook_event_name: "PostToolUse"}')
+  run bash -c "printf '%s' '$input' | '$HOOK'"
+  [ "$status" -eq 0 ] || return 1
+
+  _run_hook "ls -la"
+
+  # Matched by suffix, not exact equality: the Edit path records tool_input's
+  # file_path literally, while the Bash path builds its own from a
+  # realpath-resolved REPO_ROOT, so the two can legitimately differ in a
+  # symlinked tmpdir (e.g. macOS /var -> /private/var) despite naming the
+  # same on-disk file. tracked.txt is the only file this fixture touches, so
+  # the suffix is unambiguous.
+  [ -f "$LEDGER" ] || return 1
+  run jq -rs '[ .[] | select(.file_path | endswith("/tracked.txt")) ] | length' "$LEDGER"
+  [ "$output" = "1" ] || return 1
+
+  run jq -r 'select(.file_path | endswith("/tracked.txt")) | .tool' "$LEDGER"
+  [ "$output" = "Edit" ]
 }
