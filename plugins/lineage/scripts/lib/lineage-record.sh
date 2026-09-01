@@ -5,7 +5,10 @@
 # change per line. Each record:
 #   { change_id, ts, ts_epoch, session_id, turn?, tool, operation, file_path,
 #     lines_added, lines_removed, bytes, edit_count, content_sha256,
-#     added_snippets[], transcript_path }
+#     added_snippets[], transcript_path, provenance_kind?, content_scope? }
+#
+# provenance_kind/content_scope are set only for the Bash path (see
+# lineage-baseline.sh) — omitted entirely for Edit/Write/MultiEdit records.
 #
 # The bus event (lineage.change.recorded) carries metadata + content_sha256
 # only; the added content lives here in the per-project ledger, where the

@@ -103,5 +103,6 @@ c" ]
     "Edit" "/repo/f.txt" '{"new_string":"hello"}' "4000" "false" ""
   [ "$status" -eq 0 ] || return 1
   printf '%s' "$output" | jq -e 'has("provenance_kind") == false' >/dev/null || return 1
+  printf '%s' "$output" | jq -e 'has("content_scope") == false' >/dev/null || return 1
   printf '%s' "$output" | jq -e '.added_snippets[0] == "hello"' >/dev/null
 }

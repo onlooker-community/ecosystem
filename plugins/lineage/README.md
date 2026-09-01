@@ -117,12 +117,25 @@ Config resolves in three layers, latest wins: plugin `config.json` →
 ~/.onlooker/lineage/<project-key>/
 ├── changes.jsonl        # append-only, one change record per line
 └── changes.jsonl.lock   # write lock
+
+~/.onlooker/lineage-baselines/<scope-id>/
+└── <session-id>.json    # rolling per-session content-sha baseline for Bash
 ```
 
 Each record: `{ change_id, ts, ts_epoch, session_id, turn?, tool, operation,
 file_path, lines_added, lines_removed, bytes, edit_count, content_sha256,
-added_snippets[], transcript_path }`. The added content lives only in this ledger;
-the bus event carries metadata and the `content_sha256` digest, never the content.
+added_snippets[], transcript_path, provenance_kind?, content_scope? }`. The added
+content lives only in this ledger; the bus event carries metadata and the
+`content_sha256` digest, never the content. `provenance_kind` and `content_scope`
+are set only for records the `Bash` path builds from a git diff — see [What
+shell-shaped edits can and cannot tell you](#what-shell-shaped-edits-can-and-cannot-tell-you)
+below.
+
+`lineage-baselines/` is separate scratch state, never joined to the ledger: a
+cheap scope id (a hash of the repo root, not the project key) keyed per
+session, holding the content sha of every path git considers dirty as of the
+last `Bash` call. It exists only so the `Bash` path can tell what changed
+since it last looked, and is never read by `/lineage`.
 
 Lineage honors `$ONLOOKER_DIR`; it never hardcodes `~/.onlooker`, so the test
 suite's isolated temp home is respected.
