@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.47.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.47.1...ecosystem-v0.47.2) (2026-09-01)
+
+
+### Performance Improvements
+
+* **emitter:** stop loading ajv on every event in production :zap: ([#229](https://github.com/onlooker-community/ecosystem/issues/229)) ([c166960](https://github.com/onlooker-community/ecosystem/commit/c1669607ed1d011855005101a6cb9054e597e444))
+
 ## [0.47.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.47.0...ecosystem-v0.47.1) (2026-09-01)
 
 
