@@ -60,3 +60,86 @@ setup() {
   [ "$lines" = "$n" ]
   awk 'length($0) != 100 { bad++ } END { exit (bad > 0) }' "$out"
 }
+
+# --- stale-lock breaking (ecosystem-am1) -----------------------------------
+#
+# lock_release runs from an EXIT trap, which bash fires on normal exit,
+# SIGTERM, and SIGINT — but not on SIGKILL or a hard harness timeout. Without
+# a breaker, one killed holder wedges the lock for the rest of the session:
+# every later acquire waits the full timeout and gives up. These cover the
+# three ways a lock can look abandoned.
+
+# A pid that is guaranteed not to be running: start a process, reap it, reuse
+# its number. Cheaper and more deterministic than picking a high number and
+# hoping.
+_dead_pid() {
+  local p
+  sleep 0 &
+  p=$!
+  wait "$p" 2>/dev/null || true
+  printf '%s' "$p"
+}
+
+_seed_lock() {
+  local holder="${1-}"
+  mkdir "${LOCK}.d"
+  [[ -n "$holder" ]] && printf '%s\n' "$holder" >"${LOCK}.d/holder"
+  return 0
+}
+
+@test "a lock whose holder process is gone is broken and re-acquired" {
+  _seed_lock "$(_dead_pid)"
+  run lock_acquire "$LOCK" 5
+  [ "$status" -eq 0 ] || return 1
+  [ -d "${LOCK}.d" ] || return 1
+  lock_release "$LOCK"
+}
+
+@test "a lock held by a live process is never broken" {
+  sleep 5 &
+  local live=$!
+  _seed_lock "$live"
+  run lock_acquire "$LOCK" 1
+  kill "$live" 2>/dev/null || true
+  wait "$live" 2>/dev/null || true
+  rm -rf "${LOCK}.d"
+  [ "$status" -eq 1 ]
+}
+
+@test "a lock with no holder metadata is broken once the stale window elapses" {
+  _seed_lock ""
+  run lock_acquire "$LOCK" 5 1
+  [ "$status" -eq 0 ] || return 1
+  lock_release "$LOCK"
+}
+
+@test "a lock with no holder metadata survives while it is still fresh" {
+  _seed_lock ""
+  run lock_acquire "$LOCK" 1 30
+  rm -rf "${LOCK}.d"
+  [ "$status" -eq 1 ]
+}
+
+@test "an acquired lock records the holder pid so a waiter can judge it" {
+  lock_acquire "$LOCK" 1
+  run cat "${LOCK}.d/holder"
+  lock_release "$LOCK"
+  [ "$output" = "$$" ] || return 1
+  [ "$status" -eq 0 ]
+}
+
+@test "lock_release removes the lock directory and its holder metadata" {
+  lock_acquire "$LOCK" 1
+  lock_release "$LOCK"
+  [ ! -e "${LOCK}.d" ]
+}
+
+@test "lock_release leaves a lock that a waiter already broke and re-took" {
+  # Our own stale lock was broken and re-acquired by another process; our
+  # late release must not evict the new holder.
+  _seed_lock "$(_dead_pid)"
+  run lock_release "$LOCK"
+  [ -d "${LOCK}.d" ] || return 1
+  rm -rf "${LOCK}.d"
+  [ "$status" -eq 0 ]
+}

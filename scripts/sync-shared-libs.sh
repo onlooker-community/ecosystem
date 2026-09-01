@@ -7,6 +7,13 @@
 # nothing, define no functions, and fail in silence (ecosystem-ber).
 # Edit the canonical copy, run this, commit the result.
 #
+# Two policies. SHARED_LIBS land in every plugin, because every hook uses
+# them. ON_DEMAND_LIBS land only where a copy already exists, because only a
+# few plugins lock and a copy nobody sources is noise that still has to be
+# kept in sync. The cost of that policy is that adopting one means copying it
+# in by hand first; shared-lib-vendoring.bats fails the build if a plugin
+# sources a lib it has not vendored, so the mistake cannot be silent.
+#
 # Drift is caught by test/bats/shared-lib-vendoring.bats and
 # test/bats/config-lib-self-locating.bats.
 #
@@ -18,22 +25,30 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SHARED_LIBS=(config-loader.sh hook-health.sh)
+ON_DEMAND_LIBS=(portable-lock.sh)
 
 check_only=0
 [[ "${1:-}" == "--check" ]] && check_only=1
 
 drift=0
 
-for lib in "${SHARED_LIBS[@]}"; do
+for lib in "${SHARED_LIBS[@]}" "${ON_DEMAND_LIBS[@]}"; do
 	canonical="${REPO_ROOT}/scripts/lib/${lib}"
 	[[ -f "$canonical" ]] || {
 		printf 'missing canonical lib: %s\n' "$canonical" >&2
 		exit 1
 	}
 
+	on_demand=0
+	for od in "${ON_DEMAND_LIBS[@]}"; do
+		[[ "$lib" == "$od" ]] && on_demand=1
+	done
+
 	while IFS= read -r plugin_dir; do
 		dest="${plugin_dir}/scripts/lib/${lib}"
 		[[ -d "${plugin_dir}/scripts/lib" ]] || continue
+		# On-demand libs are never created, only refreshed where vendored.
+		[[ "$on_demand" -eq 1 && ! -f "$dest" ]] && continue
 		cmp -s "$canonical" "$dest" 2>/dev/null && continue
 		drift=$((drift + 1))
 		if [[ "$check_only" -eq 1 ]]; then
