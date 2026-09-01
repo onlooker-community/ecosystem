@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.47.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.47.0...ecosystem-v0.47.1) (2026-09-01)
+
+
+### Bug Fixes
+
+* **lineage:** close two silent provenance gaps :bug: ([#227](https://github.com/onlooker-community/ecosystem/issues/227)) ([32bde03](https://github.com/onlooker-community/ecosystem/commit/32bde034bbb70d5f85120abceea2cfa337526d12))
+
 ## [0.47.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.46.0...ecosystem-v0.47.0) (2026-09-01)
 
 
