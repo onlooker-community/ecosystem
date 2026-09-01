@@ -19,6 +19,28 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
+
+# Held only while the Bash branch's baseline read → decide → rebuild cycle is
+# in flight (see below). Released on every exit path via the trap, including
+# the many early `_done` returns in that cycle — lock_release is a documented
+# no-op when nothing is held, so this fires harmlessly for every other exit
+# from the script too.
+#
+# Installed BEFORE hook_health_register (below), not after: hook-health's
+# register captures whatever EXIT trap is already in place and chains it
+# after logging (see hook-health.sh's hook_health_register). Installing our
+# trap after register would instead clobber hook-health's own EXIT trap —
+# our handler would still release the lock, but hook-health would never get
+# a turn, so it silently logs nothing to hook-health.jsonl. This is safe
+# even though _release_baseline_lock calls lock_release from
+# portable-lock.sh, sourced further below: bash resolves function bodies at
+# call time, and the trap itself only fires at exit, by which point
+# portable-lock.sh has been sourced (and if the script exits before that,
+# _BASELINE_LOCK is still empty, so the call is skipped entirely).
+_BASELINE_LOCK=""
+_release_baseline_lock() { [[ -n "$_BASELINE_LOCK" ]] && lock_release "$_BASELINE_LOCK"; }
+trap _release_baseline_lock EXIT
+
 # shellcheck source=../lib/hook-health.sh
 source "${PLUGIN_ROOT}/scripts/lib/hook-health.sh"
 hook_health_register "lineage-post-tool-use"
@@ -43,15 +65,6 @@ source "${PLUGIN_ROOT}/scripts/lib/lineage-baseline.sh"
 INPUT=$(cat)
 hook_health_context "$INPUT"
 _done() { exit 0; }
-
-# Held only while the Bash branch's baseline read → decide → rebuild cycle is
-# in flight (see below). Released on every exit path via the trap, including
-# the many early `_done` returns in that cycle — lock_release is a documented
-# no-op when nothing is held, so this fires harmlessly for every other exit
-# from the script too.
-_BASELINE_LOCK=""
-_release_baseline_lock() { [[ -n "$_BASELINE_LOCK" ]] && lock_release "$_BASELINE_LOCK"; }
-trap _release_baseline_lock EXIT
 
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SESSION_ID=""
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
