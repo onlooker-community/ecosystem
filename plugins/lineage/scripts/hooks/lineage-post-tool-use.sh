@@ -137,7 +137,22 @@ if [[ "$TOOL" == "Bash" ]]; then
 	mkdir -p "$(dirname "$BASELINE_FILE")" 2>/dev/null || _done
 
 	BASELINE_LOCK="${BASELINE_FILE}.lock"
-	lock_acquire "$BASELINE_LOCK" 5 || _done
+	if ! lock_acquire "$BASELINE_LOCK" 5; then
+		# Report rather than vanish. An abandoned lock is reclaimed by
+		# portable-lock.sh's breaker, so reaching here means a live holder is
+		# genuinely wedged — and the cost of staying quiet about it is a
+		# provenance blackout for the rest of the session that also charges
+		# the full timeout to every later shell call, with no symptom anyone
+		# would notice (ecosystem-am1).
+		#
+		# hook-health rather than the event bus: a new event type has to be
+		# registered in @onlooker-community/schema and released before it can
+		# be emitted, and this signal should not wait on that. hook-health is
+		# also where the rollout's latency and failure attribution is already
+		# being read from.
+		hook_health_failure "baseline_lock_unavailable"
+		_done
+	fi
 	_BASELINE_LOCK="$BASELINE_LOCK"
 
 	BASELINE='{}'
@@ -242,15 +257,20 @@ case "$TOOL" in
 esac
 [[ -z "$FILE_PATH" ]] && _done
 
+# Resolve to the one spelling the ledger stores, before anything reads it: the
+# ignore test, the in-repo test, the record, and the baseline key all have to
+# agree on a single string, and the Bash path already writes the resolved one
+# (ecosystem-htl).
+FILE_PATH=$(lineage_resolve_path "$FILE_PATH")
+
 # Skip ignored paths (function defined above, ahead of the Bash branch).
 _lineage_ignored "$FILE_PATH" && _done
 
-# Skip files outside the repo (best-effort). Resolve the file's directory to a
-# real path so the prefix test survives symlinked roots (e.g. macOS /var →
-# /private/var, where REPO_ROOT is already realpath-resolved).
+# Skip files outside the repo (best-effort). Both sides are realpath-resolved
+# now, so this is a plain prefix test.
 if [[ -n "$REPO_ROOT" && "$FILE_PATH" == /* ]]; then
-	_file_dir=$(cd "$(dirname "$FILE_PATH")" 2>/dev/null && pwd -P) || _file_dir=""
-	if [[ -n "$_file_dir" && "$_file_dir" != "$REPO_ROOT" && "$_file_dir"/ != "$REPO_ROOT"/* ]]; then
+	_file_dir=$(dirname "$FILE_PATH")
+	if [[ "$_file_dir" != "$REPO_ROOT" && "$_file_dir"/ != "$REPO_ROOT"/* ]]; then
 		_done
 	fi
 fi
@@ -299,30 +319,35 @@ if lineage_append "$PROJECT_KEY" "$RECORD"; then
 	if [[ -n "$REPO_ROOT" ]]; then
 		_baseline_scope_id=$(lineage_baseline_scope_id "$REPO_ROOT")
 		_baseline_file=$(lineage_baseline_path "$_baseline_scope_id" "$SESSION_ID")
+		# A cheap pre-check, not the deciding one: it keeps an Edit that
+		# precedes any Bash call in the session off the lock entirely. The
+		# test that governs the write is the one inside the lock below.
 		if [[ -f "$_baseline_file" ]]; then
-			_rel_path="$FILE_PATH"
-			if [[ "$FILE_PATH" == /* ]]; then
-				_file_dir=$(cd "$(dirname "$FILE_PATH")" 2>/dev/null && pwd -P) || _file_dir=""
-				if [[ -n "$_file_dir" ]]; then
-					_abs_file_path="${_file_dir}/$(basename "$FILE_PATH")"
-					_rel_path="${_abs_file_path#"$REPO_ROOT"/}"
+			# FILE_PATH and REPO_ROOT are both resolved by now, so the strip
+			# needs no further path work (ecosystem-htl).
+			_rel_path="${FILE_PATH#"$REPO_ROOT"/}"
+
+			# Same lock the Bash branch's read → decide → rebuild cycle
+			# takes on this file (ecosystem-449.13 I3): without it, this
+			# read-modify-write could race a concurrent Bash hook's full
+			# rebuild and either clobber it or get clobbered, and — before
+			# the atomic write below — a failed `jq` here could leave a
+			# zero-byte baseline the same way a bare `>` redirect would.
+			_baseline_lock="${_baseline_file}.lock"
+			if lock_acquire "$_baseline_lock" 5; then
+				# Existence and content hash are both read under the lock.
+				# Reading them outside it left a window where a parallel Bash
+				# call writing this same path had its content stamped into the
+				# baseline and went unrecorded (ecosystem-am1).
+				if [[ -f "$_baseline_file" ]]; then
+					_new_sha=$(lineage_file_sha "$FILE_PATH")
+					if [[ -n "$_new_sha" ]]; then
+						_updated_baseline=$(jq -c --arg k "$_rel_path" --arg v "$_new_sha" \
+							'.files[$k]=$v' "$_baseline_file" 2>/dev/null)
+						[[ -n "$_updated_baseline" ]] && lineage_baseline_write "$_baseline_file" "$_updated_baseline"
+					fi
 				fi
-			fi
-			_new_sha=$(lineage_file_sha "$FILE_PATH")
-			if [[ -n "$_new_sha" ]]; then
-				# Same lock the Bash branch's read → decide → rebuild cycle
-				# takes on this file (ecosystem-449.13 I3): without it, this
-				# read-modify-write could race a concurrent Bash hook's full
-				# rebuild and either clobber it or get clobbered, and — before
-				# the atomic write below — a failed `jq` here could leave a
-				# zero-byte baseline the same way a bare `>` redirect would.
-				_baseline_lock="${_baseline_file}.lock"
-				if lock_acquire "$_baseline_lock" 5; then
-					_updated_baseline=$(jq -c --arg k "$_rel_path" --arg v "$_new_sha" \
-						'.files[$k]=$v' "$_baseline_file" 2>/dev/null)
-					[[ -n "$_updated_baseline" ]] && lineage_baseline_write "$_baseline_file" "$_updated_baseline"
-					lock_release "$_baseline_lock"
-				fi
+				lock_release "$_baseline_lock"
 			fi
 		fi
 	fi

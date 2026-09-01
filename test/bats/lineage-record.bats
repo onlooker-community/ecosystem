@@ -106,3 +106,33 @@ c" ]
   printf '%s' "$output" | jq -e 'has("content_scope") == false' >/dev/null || return 1
   printf '%s' "$output" | jq -e '.added_snippets[0] == "hello"' >/dev/null
 }
+
+# --- lineage_resolve_path (ecosystem-htl) ----------------------------------
+
+@test "lineage_resolve_path resolves a symlinked directory to its real path" {
+	mkdir -p "${BATS_TEST_TMPDIR}/real"
+	ln -s "${BATS_TEST_TMPDIR}/real" "${BATS_TEST_TMPDIR}/link"
+	: >"${BATS_TEST_TMPDIR}/real/f.txt"
+	run lineage_resolve_path "${BATS_TEST_TMPDIR}/link/f.txt"
+	[ "$output" = "$(cd "${BATS_TEST_TMPDIR}/real" && pwd -P)/f.txt" ]
+}
+
+@test "lineage_resolve_path leaves a relative path untouched" {
+	run lineage_resolve_path "src/a.py"
+	[ "$output" = "src/a.py" ]
+}
+
+@test "lineage_resolve_path keeps a symlinked file distinct from its target" {
+	# A symlinked file is a thing an author can edit on purpose; collapsing it
+	# onto its target would attribute the change to the wrong path.
+	mkdir -p "${BATS_TEST_TMPDIR}/d"
+	: >"${BATS_TEST_TMPDIR}/d/target.txt"
+	ln -s "${BATS_TEST_TMPDIR}/d/target.txt" "${BATS_TEST_TMPDIR}/d/alias.txt"
+	run lineage_resolve_path "${BATS_TEST_TMPDIR}/d/alias.txt"
+	[[ "$output" == *"/alias.txt" ]]
+}
+
+@test "lineage_resolve_path returns the input when the directory does not exist" {
+	run lineage_resolve_path "/nonexistent-dir-xyz/f.txt"
+	[ "$output" = "/nonexistent-dir-xyz/f.txt" ]
+}
