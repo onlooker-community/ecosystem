@@ -15,6 +15,11 @@ setup() {
   git -C "$PROJECT_REPO" init -q
   git -C "$PROJECT_REPO" config user.email t@example.com
   git -C "$PROJECT_REPO" config user.name "Test"
+  # Force git's own default rather than inheriting the developer machine's
+  # global config, which some dev boxes set to "all" — masking the untracked-
+  # directory collapse this suite needs to catch (see the candidate_paths
+  # test below).
+  git -C "$PROJECT_REPO" config status.showUntrackedFiles normal
   printf 'one\n' > "${PROJECT_REPO}/tracked.txt"
   git -C "$PROJECT_REPO" add tracked.txt
   git -C "$PROJECT_REPO" commit -qm "seed"
@@ -38,6 +43,19 @@ setup() {
   printf 'brand new\n' > "${PROJECT_REPO}/created.txt"
   run lineage_candidate_paths "$PROJECT_REPO"
   [ "$output" = "created.txt" ]
+}
+
+# At git's default untracked-files setting ("normal"), a wholly-untracked
+# directory collapses to ONE porcelain entry (`?? docs/`) instead of listing
+# the files inside it. lineage_file_sha's `[[ -f ]]` guard then fails on that
+# directory path and the file is silently dropped from the baseline — a shell
+# command creating a file inside a brand-new directory is never recorded.
+@test "candidate_paths reports a file inside a brand-new untracked directory" {
+  mkdir -p "${PROJECT_REPO}/docs/plans"
+  printf 'plan\n' > "${PROJECT_REPO}/docs/plans/plan.md"
+  run lineage_candidate_paths "$PROJECT_REPO"
+  [ "$status" -eq 0 ] || return 1
+  [[ "$output" == *"docs/plans/plan.md"* ]]
 }
 
 @test "candidate_paths handles a path with a space" {

@@ -59,6 +59,14 @@ lineage_file_sha() {
 # would be invisible — the same silent gap this bead exists to close. Porcelain
 # reports modified, staged, and untracked in one call.
 #
+# --untracked-files=all overrides the user's status.showUntrackedFiles config
+# (default "normal"), which collapses a wholly-untracked directory into ONE
+# entry (`?? docs/`) instead of listing the files inside it. Left at that
+# default, a shell command creating a file inside a brand-new directory would
+# collapse to a directory path that fails lineage_file_sha's `[[ -f ]]` guard
+# and never get recorded — the exact silent gap the -z switch above exists to
+# close, reopened by a config knob this library must not depend on.
+#
 # -z gives NUL-terminated records, so paths with spaces survive. Each record is
 # normally a 2-char status, a space, then the path -- EXCEPT for a rename or
 # copy (status starts with R or C): git emits that as the status-prefixed NEW
@@ -81,7 +89,7 @@ lineage_candidate_paths() {
 			# Discard the companion bare-old-path record a rename/copy emits.
 			read -r -d '' rec || true
 		fi
-	done < <(git -C "$root" status --porcelain=v1 -z 2>/dev/null) || true
+	done < <(git -C "$root" status --porcelain=v1 -z --untracked-files=all 2>/dev/null) || true
 }
 
 # Baseline JSON: { files: { <rel_path>: <sha>, ... } }
