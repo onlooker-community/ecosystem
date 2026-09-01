@@ -15,7 +15,7 @@ observability substrate (`~/.onlooker/`) is present.
 
 | Hook | Matcher | What Lineage does |
 |------|---------|-------------------|
-| `PostToolUse` | `Edit`, `Write`, `MultiEdit` | Derives the project key from `cwd`, reads the current turn from the session tracker, extracts the change's added content, redacts secrets + caps size, and appends one record to the per-project change ledger. Emits a lean `lineage.change.recorded` (metadata + digest, never the content). Skips disabled sessions, ignored paths, and files outside the repo. |
+| `PostToolUse` | `Edit`, `Write`, `MultiEdit`, `Bash` | Derives the project key from `cwd`, reads the current turn from the session tracker, extracts the change's added content, redacts secrets + caps size, and appends a record to the per-project change ledger — one for an edit-tool call, one per changed file for a `Bash` call. Emits a lean `lineage.change.recorded` (metadata + digest, never the content). Skips disabled sessions, ignored paths, and files outside the repo. |
 
 The `/lineage` skill is the query side: it reads the ledger and resolves each
 change's originating prompt at query time. It makes no LLM call.
@@ -28,6 +28,28 @@ line's text and finds the most recent change whose added content contains it.
 This is honest about what it is: *what change introduced this content, and why* —
 not a git-blame-exact line mapping. If later edits move or rewrite the line, the
 match is the most recent change that introduced the matching text.
+
+### What shell-shaped edits can and cannot tell you
+
+Lineage watches `Bash` as well as the edit tools, so a change made with a
+heredoc, `sed -i`, or a short script still lands in the ledger. It gets there a
+different way: git is asked what changed, rather than the tool being asked what
+it did. Two fields say what that record is worth.
+
+`provenance_kind` separates an authored edit from mechanical churn — a
+formatter, a package manager, a branch switch. Classification reads the command
+string, and **anything unrecognized is recorded as `authored`**. An
+unclassified writer therefore shows up as noise rather than disappearing, which
+is the failure this exists to prevent.
+
+`content_scope` is the honest caveat. When the file was clean beforehand,
+`delta` means the captured content is exactly this change. When it was already
+modified, `cumulative` means the content also includes earlier uncommitted
+work, because git diffs against the last commit and not against the last edit.
+**`cumulative` is the common case**, since agents usually work with a dirty
+tree. The content-anchored lookup tolerates it — a line is attributed to a
+slightly later change rather than to nothing — but a `cumulative` record is a
+weaker claim than a `delta` one.
 
 ### The historian join
 
@@ -95,12 +117,32 @@ Config resolves in three layers, latest wins: plugin `config.json` →
 ~/.onlooker/lineage/<project-key>/
 ├── changes.jsonl        # append-only, one change record per line
 └── changes.jsonl.lock   # write lock
+
+~/.onlooker/lineage-baselines/<scope-id>/
+└── <session-id>.json    # rolling per-session content-sha baseline for Bash
 ```
 
 Each record: `{ change_id, ts, ts_epoch, session_id, turn?, tool, operation,
 file_path, lines_added, lines_removed, bytes, edit_count, content_sha256,
-added_snippets[], transcript_path }`. The added content lives only in this ledger;
-the bus event carries metadata and the `content_sha256` digest, never the content.
+added_snippets[], transcript_path, provenance_kind?, content_scope? }`. The added
+content lives only in this ledger; the bus event carries metadata and the
+`content_sha256` digest, never the content. `provenance_kind` and `content_scope`
+are set only for records the `Bash` path builds from a git diff — see [What
+shell-shaped edits can and cannot tell you](#what-shell-shaped-edits-can-and-cannot-tell-you)
+below.
+
+`lineage-baselines/` is separate scratch state, never joined to the ledger: a
+cheap scope id (a hash of the repo root, not the project key) keyed per
+session, holding the content sha of every path git considers dirty. It exists
+only so the `Bash` path can tell what changed since it last looked, and is
+never read by `/lineage`.
+
+Every writer advances it, not just the `Bash` path. An `Edit`, `Write`, or
+`MultiEdit` stamps its file's new sha into the baseline after recording, so the
+next `Bash` call does not see that file as an unattributed change and record it
+a second time as a `shell_edit`. Without that, the newest record wins the
+content lookup and `/lineage` would answer "a Bash call" for a line an edit
+tool wrote.
 
 Lineage honors `$ONLOOKER_DIR`; it never hardcodes `~/.onlooker`, so the test
 suite's isolated temp home is respected.

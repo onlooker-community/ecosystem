@@ -11,6 +11,7 @@ setup() {
            "${ONLOOKER_DIR}/scribe/sessions" \
            "${ONLOOKER_DIR}/historian/abc123/sessions" \
            "${ONLOOKER_DIR}/lineage/abc123" \
+           "${ONLOOKER_DIR}/lineage-baselines/abc123" \
            "${ONLOOKER_DIR}/logs"
 }
 
@@ -59,6 +60,17 @@ _age_days() {
   [ "$status" -eq 0 ] || return 1
   [ ! -f "${ONLOOKER_DIR}/scribe/sessions/empty.json" ] || return 1
   [ -f "${ONLOOKER_DIR}/scribe/sessions/full.json" ]
+}
+
+@test "prunes stale lineage baselines but keeps fresh ones" {
+  printf '{}' > "${ONLOOKER_DIR}/lineage-baselines/abc123/old.json"
+  printf '{}' > "${ONLOOKER_DIR}/lineage-baselines/abc123/fresh.json"
+  _age_days "${ONLOOKER_DIR}/lineage-baselines/abc123/old.json" 5
+
+  run node "$PRUNE" --dir "$ONLOOKER_DIR"
+  [ "$status" -eq 0 ] || return 1
+  [ ! -f "${ONLOOKER_DIR}/lineage-baselines/abc123/old.json" ] || return 1
+  [ -f "${ONLOOKER_DIR}/lineage-baselines/abc123/fresh.json" ]
 }
 
 @test "never touches durable stores or logs" {
