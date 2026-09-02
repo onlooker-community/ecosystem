@@ -15,6 +15,48 @@
 # Path helpers
 # ============================================================================
 
+# Resolve the typed memory store path from its config template.
+#
+# Usage: librarian_memory_resolve_path <template> [encoded]
+# Returns the resolved absolute path, or empty when the project placeholder
+# cannot be filled (callers treat empty as "skip").
+#
+# Two defects are fixed here, both of which had no coverage:
+#
+#   ecosystem-18f — this expansion used to be `eval echo "$template"` in
+#   librarian-session-end.sh. The template arrives from the config loader,
+#   whose chain includes <repo>/.claude/settings.json, so cloning a repo was
+#   enough to run a command as the user at SessionEnd. Parameter expansion
+#   cannot execute anything, which is a property you can read off the code
+#   rather than one you have to trust.
+#
+#   ecosystem-449.18 — the template hardcoded `.claude`. Claude Code exports
+#   CLAUDE_CONFIG_DIR to hook processes and it is not always $HOME/.claude, so
+#   librarian resolved a directory that could not exist. The fallback below is
+#   the same one validate-path.sh:19 uses, so a default install is unchanged
+#   and a legacy ${HOME}-based override still resolves.
+librarian_memory_resolve_path() {
+	local template="${1:-}"
+	[[ -z "$template" ]] && return 0
+	local encoded="${2:-${CLAUDE_PROJECT_ENCODED:-}}"
+	local config_dir="${CLAUDE_CONFIG_DIR:-${HOME:-}/.claude}"
+
+	# Bail before substituting, not after. The old guard tested for the
+	# placeholder in the ALREADY-SUBSTITUTED string, where an empty encoding
+	# has replaced it with nothing — so it never fired, and an unresolvable
+	# template silently produced ".../projects//memory": a real-looking path
+	# pointing at the wrong place, which a caller would happily mkdir.
+	if [[ -z "$encoded" && "$template" == *'${CLAUDE_PROJECT_ENCODED}'* ]]; then
+		return 0
+	fi
+
+	local resolved="$template"
+	resolved="${resolved//\$\{CLAUDE_CONFIG_DIR\}/${config_dir}}"
+	resolved="${resolved//\$\{HOME\}/${HOME:-}}"
+	resolved="${resolved//\$\{CLAUDE_PROJECT_ENCODED\}/${encoded}}"
+	printf '%s' "$resolved"
+}
+
 librarian_storage_root() {
 	local base="${ONLOOKER_DIR:-$HOME/.onlooker}"
 	printf '%s/librarian' "$base"

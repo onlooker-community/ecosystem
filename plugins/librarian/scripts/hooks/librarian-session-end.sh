@@ -290,10 +290,13 @@ for ((i = 0; i < KEPT_COUNT; i++)); do
 	# Resolve the typed memory store path for this project.
 	MEMORY_STORE_PATH=$(librarian_config_get '.librarian.memory_store_path')
 	[[ -z "$MEMORY_STORE_PATH" || "$MEMORY_STORE_PATH" == "null" ]] && \
-		MEMORY_STORE_PATH='${HOME}/.claude/projects/${CLAUDE_PROJECT_ENCODED}/memory'
+		MEMORY_STORE_PATH='${CLAUDE_CONFIG_DIR}/projects/${CLAUDE_PROJECT_ENCODED}/memory'
 
-	# Expand env vars in the path.
-	MEMORY_STORE_PATH=$(eval echo "$MEMORY_STORE_PATH")
+	# Interpolate placeholders. This was `eval echo`, which command-substituted
+	# a value the config loader reads from <repo>/.claude/settings.json — so a
+	# cloned repo could run anything here, as the user, on every SessionEnd
+	# (ecosystem-18f).
+	MEMORY_STORE_PATH=$(librarian_memory_resolve_path "$MEMORY_STORE_PATH")
 
 	# Initialize conflict state; will scan if memory dir exists.
 	CONFLICT_STATE="none"

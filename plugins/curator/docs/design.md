@@ -211,7 +211,7 @@ The pointer caps the inject at one line; findings details live in the skill, not
   "storage_path": "${ONLOOKER_DIR:-$HOME/.onlooker}",
   "curator": {
     "enabled": false,
-    "memory_store_path": "${HOME}/.claude/projects/${CLAUDE_PROJECT_ENCODED}/memory",
+    "memory_store_path": "${CLAUDE_CONFIG_DIR}/projects/${CLAUDE_PROJECT_ENCODED}/memory",
     "cheap_checks": {
       "enabled": true,
       "wall_clock_budget_ms": 500,

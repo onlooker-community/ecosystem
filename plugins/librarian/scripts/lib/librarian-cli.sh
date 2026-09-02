@@ -11,7 +11,7 @@
 #   librarian_cli status                       # one-line counts (pending / accepted / rejected)
 #
 # Memory store writes go to:
-#   ${HOME}/.claude/projects/${CLAUDE_PROJECT_ENCODED}/memory/<filename>
+#   ${CLAUDE_CONFIG_DIR}/projects/${CLAUDE_PROJECT_ENCODED}/memory/<filename>
 #
 # When CLAUDE_PROJECT_ENCODED is unset, the CLI derives the encoded form
 # from the current working directory (replace `/` with `-`). The MEMORY.md
@@ -47,7 +47,18 @@ _librarian_cli_memory_dir() {
 	fi
 	[[ -z "$encoded" ]] && return 0
 
-	printf '%s/.claude/projects/%s/memory' "${HOME:-}" "$encoded"
+	# Read the same configured template the SessionEnd hook uses. This used to
+	# build the path directly from $HOME, ignoring memory_store_path entirely —
+	# so overriding it in settings.json moved where the hook looked but not
+	# where /librarian accept actually wrote.
+	local template=""
+	if declare -F librarian_config_get >/dev/null 2>&1; then
+		template=$(librarian_config_get '.librarian.memory_store_path' 2>/dev/null)
+	fi
+	[[ -z "$template" || "$template" == "null" ]] && \
+		template='${CLAUDE_CONFIG_DIR}/projects/${CLAUDE_PROJECT_ENCODED}/memory'
+
+	librarian_memory_resolve_path "$template" "$encoded"
 }
 
 # ----------------------------------------------------------------------------

@@ -210,7 +210,7 @@ The provenance fields let curator later detect that a memory was librarian-promo
   "librarian": {
     "enabled": false,
     "auto_promote": false,
-    "memory_store_path": "${HOME}/.claude/projects/${CLAUDE_PROJECT_ENCODED}/memory",
+    "memory_store_path": "${CLAUDE_CONFIG_DIR}/projects/${CLAUDE_PROJECT_ENCODED}/memory",
     "scan": {
       "trigger": "SessionEnd",
       "bootstrap_lookback_days": 14,
