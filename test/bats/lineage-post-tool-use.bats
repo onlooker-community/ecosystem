@@ -114,3 +114,33 @@ _run() {
 	_run Edit "${REPO}/foo.py" "$(jq -nc --arg f "${REPO}/foo.py" '{file_path:$f, old_string:"a", new_string:"b"}')"
 	[ "$(jq -rs '.[0].session_id' "$(_ledger)")" = "bats-subagent-999" ]
 }
+
+# The hook resolves its whole payload in one jq pass and reads the fields
+# NUL-delimited (ecosystem-6ce). NUL is the only byte a path cannot contain,
+# and nothing is re-parsed as shell — so a path carrying shell metacharacters
+# has to survive intact rather than being expanded, word-split, or executed.
+@test "a file path containing shell metacharacters is recorded verbatim" {
+	_enable
+	# No embedded slash: dirname must still resolve to $REPO, or the hook skips
+	# the path for reasons unrelated to quoting (which is pre-existing behavior
+	# and would make this test pass vacuously).
+	local nasty="${REPO}/\$(whoami)\`id\`.py"
+	_run Edit "$nasty" "$(jq -nc --arg f "$nasty" \
+		'{file_path:$f, old_string:"x = 1", new_string:"x = 2"}')"
+	[ "$status" -eq 0 ]
+	[ -f "$(_ledger)" ] || return 1
+	# Stored verbatim: neither substitution ran, and nothing was word-split.
+	local stored
+	stored=$(jq -rs '.[0].file_path' "$(_ledger)")
+	[ "$stored" = "${REPO_REAL}/\$(whoami)\`id\`.py" ]
+}
+
+@test "a file path containing a single quote survives the one-pass parse" {
+	_enable
+	local quoted="${REPO}/it's a file.py"
+	_run Edit "$quoted" "$(jq -nc --arg f "$quoted" \
+		'{file_path:$f, old_string:"x = 1", new_string:"x = 2"}')"
+	[ "$status" -eq 0 ]
+	[ -f "$(_ledger)" ]
+	[ "$(jq -rs '.[0].file_path' "$(_ledger)")" = "${REPO_REAL}/it's a file.py" ]
+}
