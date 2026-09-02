@@ -75,8 +75,19 @@ config_load_plugin() {
 	# Missing files degrade to empty strings (handled by jq with //).
 	local default_txt="" home_txt="" home_local_txt="" repo_txt="" repo_local_txt=""
 	local default_file="${plugin_root}/config.json"
-	local home_file="${home_dir}/.claude/settings.json"
-	local home_local_file="${home_dir}/.claude/settings.local.json"
+	# Resolve the user config dir the same way validate-path.sh:19 does, and in
+	# the same order. This was a hardcoded "${home_dir}/.claude", but Claude Code
+	# exports CLAUDE_CONFIG_DIR to hook processes and it is not always
+	# $HOME/.claude — where it differs, $HOME/.claude typically does not exist at
+	# all, so layers 2 and 3 of the precedence chain below were unreachable and
+	# every user-level plugin override was silently ignored (ecosystem-68z).
+	#
+	# This lib is vendored standalone into every plugin and cannot source
+	# validate-path.sh, so the chain is mirrored rather than shared. The two are
+	# pinned together by test/bats/config-loader-config-dir.bats.
+	local claude_dir="${CLAUDE_HOME:-${CLAUDE_CONFIG_DIR:-${home_dir}/.claude}}"
+	local home_file="${claude_dir}/settings.json"
+	local home_local_file="${claude_dir}/settings.local.json"
 	local repo_file=""
 	local repo_local_file=""
 
