@@ -66,12 +66,46 @@ INPUT=$(cat)
 hook_health_context "$INPUT"
 _done() { exit 0; }
 
-SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SESSION_ID=""
-CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
-TOOL=$(printf '%s' "$INPUT" | jq -r '.tool_name // ""' 2>/dev/null) || TOOL=""
-TOOL_INPUT=$(printf '%s' "$INPUT" | jq -c '.tool_input // {}' 2>/dev/null) || TOOL_INPUT="{}"
-TOOL_USE_ID=$(printf '%s' "$INPUT" | jq -r '.tool_use_id // ""' 2>/dev/null) || TOOL_USE_ID=""
-TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | jq -r '.transcript_path // ""' 2>/dev/null) || TRANSCRIPT_PATH=""
+# One jq pass for every field this hook can need, instead of the ten it used
+# to spawn. jq was 25 forks and ~66ms of a ~227ms invocation (ecosystem-6ce);
+# ten of those were this file re-parsing the same payload one key at a time.
+#
+# Fields come back NUL-delimited and are read straight into variables. NUL is
+# the one byte a path cannot contain, and reading beats `eval "$(jq @sh ...)"`
+# because nothing here is ever re-parsed as shell -- a file path holding $(...)
+# or a quote is inert either way, but only this way is it obviously so.
+#
+# Order is load-bearing: it must match the assignments below.
+_LINEAGE_FIELDS=()
+while IFS= read -r -d '' _lineage_field; do
+	_LINEAGE_FIELDS+=("$_lineage_field")
+done < <(printf '%s' "$INPUT" | jq -j '
+	[ (.session_id // "")
+	, (.cwd // "")
+	, (.tool_name // "")
+	, ((.tool_input // {}) | tojson)
+	, (.tool_use_id // "")
+	, (.transcript_path // "")
+	, (.tool_input.command // "")
+	, (.tool_input.file_path // .tool_input.edits[0].file_path // "")
+	, ([.tool_input.edits[]?.file_path // empty] | unique | length | tostring)
+	, (.tool_input.file_path // .tool_input.path // "")
+	] | .[] | . + "\u0000"' 2>/dev/null)
+
+# Defaults cover a jq that failed outright, matching the old per-line `|| VAR=""`.
+SESSION_ID=${_LINEAGE_FIELDS[0]:-}
+CWD=${_LINEAGE_FIELDS[1]:-}
+TOOL=${_LINEAGE_FIELDS[2]:-}
+TOOL_INPUT=${_LINEAGE_FIELDS[3]:-}
+# NB: not ${_LINEAGE_FIELDS[3]:-{}} — bash appends a stray brace to the
+# SET case there, turning {"a":1} into {"a":1}} and corrupting the JSON.
+TOOL_USE_ID=${_LINEAGE_FIELDS[4]:-}
+TRANSCRIPT_PATH=${_LINEAGE_FIELDS[5]:-}
+_TI_COMMAND=${_LINEAGE_FIELDS[6]:-}
+_TI_MULTIEDIT_PATH=${_LINEAGE_FIELDS[7]:-}
+_TI_MULTIEDIT_UNIQUE=${_LINEAGE_FIELDS[8]:-0}
+_TI_FILE_PATH=${_LINEAGE_FIELDS[9]:-}
+[[ -z "$TOOL_INPUT" ]] && TOOL_INPUT="{}"
 
 case "$TOOL" in
 	Edit | Write | MultiEdit | Bash) ;;
@@ -183,7 +217,7 @@ if [[ "$TOOL" == "Bash" ]]; then
 	[[ -n "${LINEAGE_TRACE_SETUP:-}" ]] && printf 'SETUP_DONE\n' >&2
 	[[ -z "$PROJECT_KEY" ]] && _done
 
-	COMMAND=$(printf '%s' "$TOOL_INPUT" | jq -r '.command // ""' 2>/dev/null) || COMMAND=""
+	COMMAND=$_TI_COMMAND
 	PROV_KIND=$(lineage_classify_command "$COMMAND")
 
 	MAX_CHARS=$(lineage_config_max_snippet_chars)
@@ -245,14 +279,14 @@ case "$TOOL" in
 	MultiEdit)
 		# MultiEdit applies to one file via a top-level file_path; some shapes
 		# nest file_path per edit, so fall back to the first edit's.
-		FILE_PATH=$(printf '%s' "$TOOL_INPUT" | jq -r '.file_path // .edits[0].file_path // ""' 2>/dev/null) || FILE_PATH=""
+		FILE_PATH=$_TI_MULTIEDIT_PATH
 		# If edits carry distinct per-file paths spanning more than one file,
 		# skip to avoid misattribution. (Future: split into one record per file.)
-		unique_count=$(printf '%s' "$TOOL_INPUT" | jq -r '[.edits[]?.file_path // empty] | unique | length' 2>/dev/null) || unique_count=0
+		unique_count=$_TI_MULTIEDIT_UNIQUE
 		[[ "${unique_count:-0}" -gt 1 ]] && _done
 		;;
 	*)
-		FILE_PATH=$(printf '%s' "$TOOL_INPUT" | jq -r '.file_path // .path // ""' 2>/dev/null) || FILE_PATH=""
+		FILE_PATH=$_TI_FILE_PATH
 		;;
 esac
 [[ -z "$FILE_PATH" ]] && _done
