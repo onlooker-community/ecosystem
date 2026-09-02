@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.3](https://github.com/onlooker-community/ecosystem/compare/bursar-v0.4.2...bursar-v0.4.3) (2026-09-02)
+
+
+### Bug Fixes
+
+* **lock:** break the abandoned locks reclamation was built for :relieved: ([#233](https://github.com/onlooker-community/ecosystem/issues/233)) ([887e227](https://github.com/onlooker-community/ecosystem/commit/887e227c7f68c379e1ade239e9e9e322e7b2ce35))
+
 ## [0.4.2](https://github.com/onlooker-community/ecosystem/compare/bursar-v0.4.1...bursar-v0.4.2) (2026-09-01)
 
 
