@@ -53,6 +53,13 @@ bursar_epoch_to_iso() {
 bursar_ledger_record() {
 	local project_key="${1:-}"
 	local record="${2:-}"
+	# Third argument is the lock timeout in seconds. bursar-session-end.sh has
+	# always passed 1 here, to stay inside the CLI's 1.5s SessionEnd budget —
+	# but this function only declared two parameters, so that 1 was discarded
+	# and the 5s default applied. The hook then blew its budget and was
+	# cancelled mid-write, which is half of why ten ledgers stalled
+	# (ecosystem-2vo). The other half is in portable-lock.sh.
+	local lock_timeout="${3:-$BURSAR_LEDGER_LOCK_TIMEOUT}"
 	[[ -z "$project_key" || -z "$record" ]] && return 1
 
 	# Pull the session_id and the compacted record out in a single jq pass:
@@ -69,9 +76,18 @@ bursar_ledger_record() {
 	lock_path="${ledger_path}.lock"
 	mkdir -p "$dir" 2>/dev/null || return 1
 
-	if ! lock_acquire "$lock_path" "$BURSAR_LEDGER_LOCK_TIMEOUT"; then
+	if ! lock_acquire "$lock_path" "$lock_timeout"; then
 		return 1
 	fi
+
+	# Sweep temps abandoned by a writer that died between mktemp and mv. We hold
+	# the lock, so nothing else is mid-write in here and every .sessions.* that
+	# exists right now is orphaned — no mtime heuristic, no chance of deleting a
+	# live writer's file. One fork, and it runs before ours exists so it cannot
+	# eat it. Ten of these are on real machines, one per stalled ledger
+	# (ecosystem-2vo); the clamp in portable-lock.sh un-stalls the write, this
+	# clears what the abandonment left behind.
+	rm -f "${dir}"/.sessions.* 2>/dev/null || true
 
 	local tmp
 	tmp=$(mktemp "${dir}/.sessions.XXXXXX" 2>/dev/null) || { lock_release "$lock_path"; return 1; }

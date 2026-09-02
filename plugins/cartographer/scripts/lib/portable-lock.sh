@@ -122,6 +122,25 @@ lock_acquire() {
 	local stale_after="${3:-$LOCK_STALE_SECONDS}"
 	[[ -z "$lockpath" ]] && return 1
 
+	# A stale window longer than the acquire timeout is unsatisfiable: the loop
+	# below returns at `waited >= timeout`, so `waited` never reaches a larger
+	# stale_after and a holder-less lock can never age into being breakable.
+	# The shipped defaults were themselves such a pair (timeout 5, stale 30), so
+	# this was not a caller misconfiguration -- every caller taking the defaults
+	# inherited a reclamation path that could not fire.
+	#
+	# That is precisely the lock the reclamation exists for: one abandoned by
+	# code that predates holder files, which therefore has no holder to judge.
+	# Ten bursar ledgers stopped writing between Jun 20 and Aug 7 waiting on
+	# locks this could not break (ecosystem-2vo).
+	#
+	# Clamping rather than erroring, because breaking at `timeout` is strictly
+	# better than the alternative at that instant, which is giving up anyway.
+	# The freshness grace period survives -- it just cannot outlast the wait.
+	if ((stale_after > timeout)); then
+		stale_after="$timeout"
+	fi
+
 	local lockdir="${lockpath}.d"
 	local start_time
 	start_time=$(date +%s 2>/dev/null) || start_time=0

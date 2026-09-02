@@ -28,11 +28,17 @@ setup() {
   lock_release "$LOCK"
 }
 
+# "Still held" has to mean a live holder. This used to seed a bare directory
+# with no holder file, which is not a held lock but an abandoned one — the
+# exact shape ecosystem-2vo is about — and it only returned 1 because the
+# reclamation could never fire. Seeding the current pid keeps the property the
+# test is actually for: a lock someone is genuinely holding is waited on and
+# then given up on, never broken.
 @test "lock_acquire returns 1 when timeout elapses with the lock still held" {
-  mkdir "${LOCK}.d"
+  _seed_lock "$$"
   run lock_acquire "$LOCK" 1
   [ "$status" -eq 1 ]
-  rmdir "${LOCK}.d"
+  rm -rf "${LOCK}.d"
 }
 
 @test "lock_release is a no-op when the lock is not held" {
@@ -113,8 +119,39 @@ _seed_lock() {
   lock_release "$LOCK"
 }
 
-@test "a lock with no holder metadata survives while it is still fresh" {
+# This used to assert status 1 under the name "survives while it is still
+# fresh". Freshness was never what it tested: with timeout 1 and a stale window
+# of 30, `waited` returns at 1 and can never reach 30, so the lock was
+# unbreakable BY CONSTRUCTION rather than by being fresh. That green test sat
+# on top of ecosystem-2vo for as long as the bug existed -- ten bursar ledgers
+# stopped writing between Jun 20 and Aug 7 and none of it showed up here.
+#
+# A stale window longer than the acquire timeout is now clamped to the timeout,
+# so the combination is satisfiable and the abandoned lock gets broken.
+@test "a stale window longer than the timeout is clamped, not left unsatisfiable" {
   _seed_lock ""
+  run lock_acquire "$LOCK" 1 30
+  [ "$status" -eq 0 ] || return 1
+  lock_release "$LOCK"
+}
+
+# The exact shape that stalled bursar: BURSAR_LEDGER_LOCK_TIMEOUT=5 passed as
+# arg 2, arg 3 omitted so LOCK_STALE_SECONDS=30 applies, against a lock left
+# behind by pre-a4211b1 code that wrote no holder file. Uses 1 rather than 5 to
+# keep the suite quick; the ratio is what matters.
+@test "an abandoned holder-less lock is broken even when timeout < stale window" {
+  _seed_lock ""
+  LOCK_STALE_SECONDS=30
+  run lock_acquire "$LOCK" 1
+  [ "$status" -eq 0 ] || return 1
+  [ -d "${LOCK}.d" ] || return 1
+  lock_release "$LOCK"
+}
+
+# The clamp must not weaken the live-holder guarantee, which is the whole point
+# of not breaking locks on sight.
+@test "clamping still never breaks a lock held by a live process" {
+  _seed_lock "$$"
   run lock_acquire "$LOCK" 1 30
   rm -rf "${LOCK}.d"
   [ "$status" -eq 1 ]

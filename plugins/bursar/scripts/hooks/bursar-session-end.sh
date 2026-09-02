@@ -154,15 +154,18 @@ MODEL=""
 #
 # Use a short lock timeout (1s) to ensure the hook completes within the CLI's
 # 1.5s SessionEnd budget. If the lock is contended, fail fast and retain the
-# breadcrumb for retry on a future session. Retries on subsequent SessionStart
-# will eventually succeed when contention subsides; this prevents the hook from
-# being cancelled mid-execution by the CLI timeout.
+# breadcrumb rather than being cancelled mid-execution by the CLI timeout.
+#
+# The breadcrumb preserves the session -> project attribution, but nothing
+# replays it: SessionStart writes a breadcrumb for its own session and never
+# reads a stranded one, so a session lost here is lost for good and its file
+# stays behind. 116 such files are on this machine. Tracked separately.
 if [[ -n "$RECORD" ]]; then
 	if bursar_ledger_record "$PROJECT_KEY" "$RECORD" 1; then
 		[[ -n "$EV" ]] && bursar_emit_event "bursar.session.recorded" "$EV" "$SESSION_ID" || true
 		rm -f "$BREADCRUMB" 2>/dev/null || true
 	else
-		_log_error "ledger_record failed for session $SESSION_ID project $PROJECT_KEY (lock timeout after 60s?). Breadcrumb retained for retry."
+		_log_error "ledger_record failed for session $SESSION_ID project $PROJECT_KEY (lock contended past the 1s timeout, or the ledger write failed). Breadcrumb retained."
 	fi
 fi
 
