@@ -49,7 +49,7 @@ source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-cli.sh"
 librarian_cli "<action>" "<args...>"
 ```
 
-`librarian_cli` resolves the project key from the current working directory automatically and routes writes to the typed memory store under `${HOME}/.claude/projects/${CLAUDE_PROJECT_ENCODED}/memory/` (deriving the encoded path from `cwd` when the env var is unset).
+`librarian_cli` resolves the project key from the current working directory automatically and routes writes to the typed memory store under `${CLAUDE_CONFIG_DIR}/projects/${CLAUDE_PROJECT_ENCODED}/memory/` (falling back to `$HOME/.claude` when Claude Code exports no config dir) (deriving the encoded path from `cwd` when the env var is unset).
 
 ## The review walkthrough
 

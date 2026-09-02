@@ -4,7 +4,7 @@
   "librarian": {
     "auto_promote": false,
     "auto_promote_threshold": 0.85,
-    "memory_store_path": "${HOME}/.claude/projects/${CLAUDE_PROJECT_ENCODED}/memory",
+    "memory_store_path": "${CLAUDE_CONFIG_DIR}/projects/${CLAUDE_PROJECT_ENCODED}/memory",
     "scan": {
       "trigger": "SessionEnd",
       "bootstrap_lookback_days": 14,

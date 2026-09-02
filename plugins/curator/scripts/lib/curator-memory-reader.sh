@@ -40,22 +40,40 @@ _curator_memory_unsafe_filename() {
 # Resolve the memory store path. The runtime resolves
 # $CLAUDE_PROJECT_ENCODED — when unset, the caller provides it explicitly.
 #
-# Usage: curator_memory_resolve_path <memory_store_path_template>
+# Usage: curator_memory_resolve_path <memory_store_path_template> [encoded]
 # Returns the resolved absolute path, or empty if it can't be resolved.
+#
+# ${CLAUDE_CONFIG_DIR} is the placeholder that matters. Claude Code exports
+# CLAUDE_CONFIG_DIR to hook processes and it is not always $HOME/.claude — this
+# machine uses ~/.claude-personal. The template used to hardcode that segment,
+# so curator audited a directory that could not exist and reported nothing
+# (ecosystem-449.18). The fallback matches validate-path.sh:19 exactly, so the
+# default install is unaffected.
+#
+# Interpolation is parameter expansion, never eval: the template reaches here
+# from <repo>/.claude/settings.json, so a repo could otherwise supply
+# $(...) and have it run (ecosystem-18f).
 curator_memory_resolve_path() {
 	local template="$1"
 	[[ -z "$template" ]] && return 0
-	local encoded="${CLAUDE_PROJECT_ENCODED:-}"
-	# Best-effort interpolation. The template may contain ${HOME} and
-	# ${CLAUDE_PROJECT_ENCODED}.
-	local resolved
-	resolved="${template//\$\{HOME\}/${HOME:-}}"
-	resolved="${resolved//\$\{CLAUDE_PROJECT_ENCODED\}/${encoded}}"
-	# If the encoded var is missing, the path still contains the literal
-	# placeholder; caller treats empty as "skip the audit".
-	if [[ "$resolved" == *'${CLAUDE_PROJECT_ENCODED}'* ]]; then
+	local encoded="${2:-${CLAUDE_PROJECT_ENCODED:-}}"
+	local config_dir="${CLAUDE_CONFIG_DIR:-${HOME:-}/.claude}"
+
+	# Bail before substituting, not after. The old guard tested for the
+	# placeholder in the ALREADY-SUBSTITUTED string, where an empty encoding
+	# has replaced it with nothing — so it never fired, and an unresolvable
+	# template silently produced ".../projects//memory": a real-looking path
+	# pointing at the wrong place, which a caller would happily mkdir.
+	if [[ -z "$encoded" && "$template" == *'${CLAUDE_PROJECT_ENCODED}'* ]]; then
 		return 0
 	fi
+
+	# Best-effort interpolation. The template may contain ${CLAUDE_CONFIG_DIR},
+	# ${HOME} and ${CLAUDE_PROJECT_ENCODED}.
+	local resolved
+	resolved="${template//\$\{CLAUDE_CONFIG_DIR\}/${config_dir}}"
+	resolved="${resolved//\$\{HOME\}/${HOME:-}}"
+	resolved="${resolved//\$\{CLAUDE_PROJECT_ENCODED\}/${encoded}}"
 	printf '%s' "$resolved"
 }
 
