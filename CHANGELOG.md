@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.47.3](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.47.2...ecosystem-v0.47.3) (2026-09-02)
+
+
+### Performance Improvements
+
+* **lineage:** stop re-parsing the same payload ten times :zap: ([#231](https://github.com/onlooker-community/ecosystem/issues/231)) ([036c43f](https://github.com/onlooker-community/ecosystem/commit/036c43fe1d475ae1a7f2b42d7ba058bc39084b79))
+
 ## [0.47.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.47.1...ecosystem-v0.47.2) (2026-09-01)
 
 
