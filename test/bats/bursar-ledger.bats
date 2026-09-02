@@ -114,3 +114,100 @@ _record() {
 	[ "$(bursar_fmt_tokens 42000)" = "42k" ]
 	[ "$(bursar_fmt_tokens 3100000)" = "3.1M" ]
 }
+
+# bursar-session-end.sh calls `bursar_ledger_record "$KEY" "$RECORD" 1` and
+# documents why: "a short lock timeout (1s) to ensure the hook completes within
+# the CLI's 1.5s SessionEnd budget". The function took two parameters, so that
+# 1 went nowhere and the hardcoded BURSAR_LEDGER_LOCK_TIMEOUT=5 applied — the
+# hook then waited 5s inside a 1.5s budget and was cancelled. Combined with an
+# abandoned holder-less lock, that stalled ten project ledgers between Jun 20
+# and Aug 7 (ecosystem-2vo).
+#
+# Asserted by capturing the argument rather than by timing: a wall-clock
+# assertion here would be both slow and flaky, and the contract under test is
+# "the caller's timeout reaches lock_acquire", not "it took N seconds".
+@test "bursar_ledger_record passes the caller's lock timeout through" {
+	_CAPTURED_TIMEOUT=""
+	lock_acquire() { _CAPTURED_TIMEOUT="$2"; return 0; }
+	lock_release() { return 0; }
+
+	bursar_ledger_record "$KEY" "$(_record s1 1.5 100 1000)" 1
+
+	[ "$_CAPTURED_TIMEOUT" = "1" ]
+}
+
+@test "bursar_ledger_record falls back to its default timeout when none is given" {
+	_CAPTURED_TIMEOUT=""
+	lock_acquire() { _CAPTURED_TIMEOUT="$2"; return 0; }
+	lock_release() { return 0; }
+
+	bursar_ledger_record "$KEY" "$(_record s1 1.5 100 1000)"
+
+	[ "$_CAPTURED_TIMEOUT" = "$BURSAR_LEDGER_LOCK_TIMEOUT" ]
+}
+
+# The acceptance case for ecosystem-2vo, end to end: a ledger that has been
+# stalled behind an abandoned lock must start writing again, AND must do it
+# fast enough to matter.
+#
+# The lock shape is the one found on real machines — an empty <ledger>.lock.d
+# with no holder file, left by code that predates holder files.
+#
+# The elapsed-time bound is the load-bearing part. Without it this test passes
+# on the clamp alone, because bats imposes no deadline and a 5s break still
+# eventually writes the record — but production does impose one: the CLI gives
+# SessionEnd 1.5s, and 110 of 119 real runs died at ~1500ms having written
+# nothing. So "it resumes" is only true if the break fits the budget, which
+# needs the caller's 1s to actually reach lock_acquire as well.
+#
+# 3s is deliberately loose: the fixed path takes ~0.85s and the broken one
+# ~5s, so the bound sits well clear of both and does not turn CI load into a
+# false failure.
+@test "a ledger stalled behind an abandoned lock resumes writing, within budget" {
+	local dir ledger lock
+	dir=$(bursar_ledger_dir "$KEY")
+	mkdir -p "$dir"
+	ledger="${dir}/sessions.jsonl"
+	lock="${ledger}.lock"
+
+	# Exactly what is on disk in the wild: the directory, and nothing in it.
+	mkdir "${lock}.d"
+	[ ! -e "${lock}.d/holder" ] || return 1
+
+	local start end elapsed
+	start=$(date +%s)
+	bursar_ledger_record "$KEY" "$(_record s-resume 2.5 200 1000)" 1
+	end=$(date +%s)
+	elapsed=$((end - start))
+
+	[ -f "$ledger" ] || return 1
+	[ "$(jq -rs '.[0].session_id' "$ledger")" = "s-resume" ] || return 1
+	[ "$elapsed" -lt 3 ]
+}
+
+# The other half of ecosystem-2vo's remediation. A writer killed between mktemp
+# and mv leaves its temp file behind forever — that is exactly how each of the
+# ten ledgers died, and two of those temps are still on the real machine
+# (.sessions.Vuu1nb, 0 bytes, Aug 2; .sessions.VqjmCn, 20480 bytes, Aug 7).
+# Nothing has ever swept them, so the litter is one file per abandonment and
+# only grows.
+#
+# The clamp in portable-lock.sh un-stalls the ledger but leaves the litter, so
+# the next successful write is the place to clear it: inside the lock this
+# process owns the directory exclusively, which makes any .sessions.* that is
+# not the one we just created abandoned by definition. No mtime heuristic
+# needed, and no risk of deleting a live writer's temp.
+@test "a successful write sweeps temp files abandoned by a killed writer" {
+	local dir
+	dir=$(bursar_ledger_dir "$KEY")
+	mkdir -p "$dir"
+	printf 'half a ledger\n' >"${dir}/.sessions.Vuu1nb"
+	: >"${dir}/.sessions.VqjmCn"
+
+	bursar_ledger_record "$KEY" "$(_record s1 1.0 100 "$(date +%s)")" || return 1
+
+	[ ! -e "${dir}/.sessions.Vuu1nb" ] || return 1
+	[ ! -e "${dir}/.sessions.VqjmCn" ] || return 1
+	# The sweep must not take the ledger with it.
+	[ "$(jq -rs '.[0].session_id' "$(bursar_ledger_path "$KEY")")" = "s1" ]
+}
