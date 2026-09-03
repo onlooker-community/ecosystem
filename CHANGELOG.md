@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.47.8](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.47.7...ecosystem-v0.47.8) (2026-09-03)
+
+
+### Bug Fixes
+
+* **hooks:** make the claude re-entrancy guard a rule, not a habit :repeat: ([#244](https://github.com/onlooker-community/ecosystem/issues/244)) ([e75fe74](https://github.com/onlooker-community/ecosystem/commit/e75fe74d4006b5adb4bdcdebbd3a397c49684a9c))
+
 ## [0.47.7](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.47.6...ecosystem-v0.47.7) (2026-09-03)
 
 
