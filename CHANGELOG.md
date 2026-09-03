@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.47.7](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.47.6...ecosystem-v0.47.7) (2026-09-03)
+
+
+### Bug Fixes
+
+* **tribunal:** stop the Stop gate from judging its own judge :see_no_evil: ([#242](https://github.com/onlooker-community/ecosystem/issues/242)) ([ed9974e](https://github.com/onlooker-community/ecosystem/commit/ed9974e88e2d83a3eeefb7561374b7d2f13ce3a6))
+
 ## [0.47.6](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.47.5...ecosystem-v0.47.6) (2026-09-03)
 
 
