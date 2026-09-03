@@ -81,16 +81,24 @@ setup() {
   echo "$v" | jq -e 'any(. == "node_modules")' >/dev/null
 }
 
-@test "undocumented_entity: defaults ship enabled with plugin and skill globs" {
+# Asserts intent rather than an exact list. The previous version pinned
+# length == 2 and .[0] == "plugins/*/", which is precisely the repo-shaped
+# default ecosystem-449.15 is about — so it held the bug in place and would
+# have failed any fix. Pinning the marketplace globs AND at least one
+# plain-project glob keeps the coverage without re-freezing the shape.
+@test "undocumented_entity: defaults ship enabled and cover more than this repo" {
   cartographer_config_load ""
   local enabled globs max
   enabled=$(cartographer_config_undocumented_enabled)
   globs=$(cartographer_config_undocumented_globs)
   max=$(cartographer_config_undocumented_max_findings)
-  [ "$enabled" = "true" ]
-  [ "$max" = "20" ]
-  [ "$(printf '%s' "$globs" | jq -r 'length')" = "2" ] || return 1
-  [ "$(printf '%s' "$globs" | jq -r '.[0]')" = "plugins/*/" ]
+  [ "$enabled" = "true" ] || return 1
+  [ "$max" = "20" ] || return 1
+  # This repo's marketplace layout still covered.
+  printf '%s' "$globs" | jq -e 'any(. == "plugins/*/")' >/dev/null || return 1
+  printf '%s' "$globs" | jq -e 'any(. == "skills/*/")' >/dev/null || return 1
+  # And a project that is not a plugin marketplace.
+  printf '%s' "$globs" | jq -e 'any(startswith(".claude/"))' >/dev/null
 }
 
 @test "undocumented_entity: user settings can disable the phase" {

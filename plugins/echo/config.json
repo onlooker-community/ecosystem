@@ -2,7 +2,18 @@
   "plugin_name": "echo",
   "storage_path": "~/.onlooker",
   "echo": {
-    "watch_paths": ["plugins/*/agents/*.md"],
+    "watch_paths": [
+      ".claude/agents/*.md",
+      ".claude/commands/*.md",
+      ".claude/skills/*/SKILL.md",
+      ".agents/*.md",
+      ".agents/skills/*/SKILL.md",
+      "agents/*.md",
+      "skills/*/SKILL.md",
+      "plugins/*/agents/*.md",
+      "plugins/*/commands/*.md",
+      "plugins/*/skills/*/SKILL.md"
+    ],
     "exclude_paths": [],
     "drift_threshold": 0.05,
     "evaluation": {
