@@ -13,6 +13,14 @@
 
 set -uo pipefail
 
+# Recursion guard — must be first, above hook_health_register, so a nested
+# invocation is not measured as a real hook run (ecosystem-449.23).
+#
+# librarian reaches claude through librarian-classifier.sh. The nested session
+# ends, firing SessionEnd and re-entering this hook.
+[[ "${LIBRARIAN_NESTED:-}" == "1" ]] && exit 0
+export LIBRARIAN_NESTED=1
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
