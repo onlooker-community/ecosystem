@@ -42,6 +42,50 @@ _counsel_brief_mtime_epoch() {
 	fi
 }
 
+# Path of the most recent brief for a project, or empty when there is none.
+# Public wrapper over _counsel_latest_brief_path, for callers that hold a
+# project key rather than a directory.
+counsel_brief_latest() {
+	local project_key="${1:-}"
+	local briefs_dir
+	briefs_dir=$(counsel_project_dir "$project_key") || return 0
+	_counsel_latest_brief_path "$briefs_dir" 2>/dev/null || return 0
+}
+
+# Injection bookkeeping. The brief is a weekly digest, so it should reach the
+# user once — not on every session start until it ages out. The marker records
+# the basename of the last brief injected, so a NEW brief is injected even
+# though an older one already was.
+#
+# Basename rather than full path: the briefs directory is derived from the
+# project key on both sides, so the filename is the only part that varies.
+_counsel_injected_marker() {
+	local project_key="${1:-}"
+	local dir
+	dir=$(counsel_project_dir "$project_key") || return 1
+	printf '%s/.last-injected' "$dir"
+}
+
+counsel_brief_was_injected() {
+	local project_key="${1:-}" brief_path="${2:-}"
+	[[ -n "$brief_path" ]] || return 1
+	local marker
+	marker=$(_counsel_injected_marker "$project_key") || return 1
+	[[ -f "$marker" ]] || return 1
+	local seen
+	seen=$(cat "$marker" 2>/dev/null) || return 1
+	[[ "$seen" == "$(basename "$brief_path")" ]]
+}
+
+counsel_brief_mark_injected() {
+	local project_key="${1:-}" brief_path="${2:-}"
+	[[ -n "$brief_path" ]] || return 1
+	local marker
+	marker=$(_counsel_injected_marker "$project_key") || return 1
+	mkdir -p "$(dirname "$marker")" 2>/dev/null || return 1
+	printf '%s' "$(basename "$brief_path")" >"$marker" 2>/dev/null || return 1
+}
+
 counsel_brief_is_stale() {
 	local project_key="${1:-}"
 	local interval_days="${2:-7}"
