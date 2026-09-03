@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.5](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.3.4...tribunal-v1.3.5) (2026-09-03)
+
+
+### Bug Fixes
+
+* **tribunal:** stop the Stop gate from judging its own judge :see_no_evil: ([#242](https://github.com/onlooker-community/ecosystem/issues/242)) ([ed9974e](https://github.com/onlooker-community/ecosystem/commit/ed9974e88e2d83a3eeefb7561374b7d2f13ce3a6))
+
 ## [1.3.4](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.3.3...tribunal-v1.3.4) (2026-09-03)
 
 
