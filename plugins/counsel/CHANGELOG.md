@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.5](https://github.com/onlooker-community/ecosystem/compare/counsel-v0.6.4...counsel-v0.6.5) (2026-09-03)
+
+
+### Performance Improvements
+
+* **counsel:** stop blocking SessionStart on a 90s LLM call :hourglass: ([#246](https://github.com/onlooker-community/ecosystem/issues/246)) ([ef55fd9](https://github.com/onlooker-community/ecosystem/commit/ef55fd944774987305547ca433d847acfc28d52c))
+
 ## [0.6.4](https://github.com/onlooker-community/ecosystem/compare/counsel-v0.6.3...counsel-v0.6.4) (2026-09-03)
 
 

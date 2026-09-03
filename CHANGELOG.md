@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.47.9](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.47.8...ecosystem-v0.47.9) (2026-09-03)
+
+
+### Performance Improvements
+
+* **counsel:** stop blocking SessionStart on a 90s LLM call :hourglass: ([#246](https://github.com/onlooker-community/ecosystem/issues/246)) ([ef55fd9](https://github.com/onlooker-community/ecosystem/commit/ef55fd944774987305547ca433d847acfc28d52c))
+
 ## [0.47.8](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.47.7...ecosystem-v0.47.8) (2026-09-03)
 
 
