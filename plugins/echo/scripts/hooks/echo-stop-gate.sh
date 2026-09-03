@@ -160,7 +160,7 @@ TIMEOUT_SECS=$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" echo_config_timeout)
 DRIFT_THRESHOLD=$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" echo_config_drift_threshold)
 
 SUITE_ID=$(echo_ulid)
-SUITE_START=$(python3 -c 'import time; print(int(time.time()*1000))' 2>/dev/null || echo 0)
+SUITE_START=$(_hook_health_now_ms 2>/dev/null || jq -n '(now * 1000 | floor)' 2>/dev/null || echo 0)
 FIRST_CHANGED="${WATCHED_CHANGED[0]}"
 
 suite_started_payload=$(jq -n \
@@ -305,7 +305,7 @@ done
 # Emit suite events
 # ---------------------------------------------------------------------------
 
-SUITE_END=$(python3 -c 'import time; print(int(time.time()*1000))' 2>/dev/null || echo 0)
+SUITE_END=$(_hook_health_now_ms 2>/dev/null || jq -n '(now * 1000 | floor)' 2>/dev/null || echo 0)
 DURATION_MS=$(( SUITE_END - SUITE_START ))
 
 MERGE_RECOMMENDED="false"

@@ -23,7 +23,21 @@ _cartographer_ulid_encode() {
 
 cartographer_ulid() {
 	local ts_ms
-	if date +%s%3N &>/dev/null && [[ "$(date +%s%3N)" =~ ^[0-9]{13}$ ]]; then
+	# Cheapest clock first (ecosystem-449.20). hook-health.sh ships the full
+	# ladder -- $EPOCHREALTIME with no fork, then jq -- and is vendored into
+	# every plugin and sourced by every hook before anything else, so it is
+	# normally already in scope. The branches below reached straight for
+	# python3 on macOS at ~21ms a call; jq answers in ~2.1ms.
+	#
+	# The jq rung is repeated here rather than delegated because these helpers
+	# are also sourced outside hooks (cartographer/scripts/run-audit.sh, the
+	# librarian CLI), where hook-health.sh is not loaded.
+	if declare -F _hook_health_now_ms >/dev/null 2>&1; then
+		ts_ms=$(_hook_health_now_ms)
+	elif command -v jq >/dev/null 2>&1 && ts_ms=$(jq -n '(now * 1000 | floor)' 2>/dev/null) \
+		&& [[ "${ts_ms}" =~ ^[0-9]{13}$ ]]; then
+		: # jq answered
+	elif date +%s%3N &>/dev/null && [[ "$(date +%s%3N)" =~ ^[0-9]{13}$ ]]; then
 		ts_ms=$(date +%s%3N)
 	else
 		ts_ms=$(python3 -c 'import time; print(int(time.time() * 1000))')
