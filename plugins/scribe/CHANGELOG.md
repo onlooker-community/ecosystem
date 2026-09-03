@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.3](https://github.com/onlooker-community/ecosystem/compare/scribe-v0.6.2...scribe-v0.6.3) (2026-09-03)
+
+
+### Bug Fixes
+
+* **hooks:** make the claude re-entrancy guard a rule, not a habit :repeat: ([#244](https://github.com/onlooker-community/ecosystem/issues/244)) ([e75fe74](https://github.com/onlooker-community/ecosystem/commit/e75fe74d4006b5adb4bdcdebbd3a397c49684a9c))
+
 ## [0.6.2](https://github.com/onlooker-community/ecosystem/compare/scribe-v0.6.1...scribe-v0.6.2) (2026-09-03)
 
 

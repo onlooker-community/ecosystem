@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.5](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.15.4...librarian-v0.15.5) (2026-09-03)
+
+
+### Bug Fixes
+
+* **hooks:** make the claude re-entrancy guard a rule, not a habit :repeat: ([#244](https://github.com/onlooker-community/ecosystem/issues/244)) ([e75fe74](https://github.com/onlooker-community/ecosystem/commit/e75fe74d4006b5adb4bdcdebbd3a397c49684a9c))
+
 ## [0.15.4](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.15.3...librarian-v0.15.4) (2026-09-03)
 
 
