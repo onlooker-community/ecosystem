@@ -16,6 +16,14 @@
 
 set -uo pipefail
 
+# Recursion guard — must be first, above hook_health_register, so a nested
+# invocation is not measured as a real hook run (ecosystem-449.23).
+#
+# scribe reaches claude through scribe-extract.sh. The nested session stops,
+# firing Stop and re-entering this hook.
+[[ "${SCRIBE_NESTED:-}" == "1" ]] && exit 0
+export SCRIBE_NESTED=1
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 

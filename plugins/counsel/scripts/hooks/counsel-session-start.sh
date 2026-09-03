@@ -17,6 +17,14 @@
 
 set -uo pipefail
 
+# Recursion guard — must be first, above hook_health_register, so a nested
+# invocation is not measured as a real hook run (ecosystem-449.23).
+#
+# counsel reaches claude through counsel-synthesize.sh. The nested `claude -p`
+# is a real session, so it fires SessionStart and re-enters this hook.
+[[ "${COUNSEL_NESTED:-}" == "1" ]] && exit 0
+export COUNSEL_NESTED=1
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
