@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/onlooker-community/ecosystem/compare/scribe-v0.6.0...scribe-v0.6.1) (2026-09-03)
+
+
+### Bug Fixes
+
+* **config:** honor CLAUDE_CONFIG_DIR for user settings :mag: ([#237](https://github.com/onlooker-community/ecosystem/issues/237)) ([057a40d](https://github.com/onlooker-community/ecosystem/commit/057a40d65d221dadef9d6fda235c87e032375235))
+
 ## [0.6.0](https://github.com/onlooker-community/ecosystem/compare/scribe-v0.5.1...scribe-v0.6.0) (2026-08-30)
 
 

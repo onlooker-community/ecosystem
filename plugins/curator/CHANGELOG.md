@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.3](https://github.com/onlooker-community/ecosystem/compare/curator-v0.3.2...curator-v0.3.3) (2026-09-03)
+
+
+### Bug Fixes
+
+* **config:** honor CLAUDE_CONFIG_DIR for user settings :mag: ([#237](https://github.com/onlooker-community/ecosystem/issues/237)) ([057a40d](https://github.com/onlooker-community/ecosystem/commit/057a40d65d221dadef9d6fda235c87e032375235))
+* **memory:** stop eval-expanding a path a cloned repo can set :lock: ([#236](https://github.com/onlooker-community/ecosystem/issues/236)) ([c5b238f](https://github.com/onlooker-community/ecosystem/commit/c5b238fb58e43fb8f350649d27c1fc1f6fcb4d89))
+
 ## [0.3.2](https://github.com/onlooker-community/ecosystem/compare/curator-v0.3.1...curator-v0.3.2) (2026-08-30)
 
 

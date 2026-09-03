@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.4](https://github.com/onlooker-community/ecosystem/compare/lineage-v0.4.3...lineage-v0.4.4) (2026-09-03)
+
+
+### Bug Fixes
+
+* **config:** honor CLAUDE_CONFIG_DIR for user settings :mag: ([#237](https://github.com/onlooker-community/ecosystem/issues/237)) ([057a40d](https://github.com/onlooker-community/ecosystem/commit/057a40d65d221dadef9d6fda235c87e032375235))
+
 ## [0.4.3](https://github.com/onlooker-community/ecosystem/compare/lineage-v0.4.2...lineage-v0.4.3) (2026-09-02)
 
 

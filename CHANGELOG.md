@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.47.5](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.47.4...ecosystem-v0.47.5) (2026-09-03)
+
+
+### Bug Fixes
+
+* **config:** honor CLAUDE_CONFIG_DIR for user settings :mag: ([#237](https://github.com/onlooker-community/ecosystem/issues/237)) ([057a40d](https://github.com/onlooker-community/ecosystem/commit/057a40d65d221dadef9d6fda235c87e032375235))
+* **memory:** stop eval-expanding a path a cloned repo can set :lock: ([#236](https://github.com/onlooker-community/ecosystem/issues/236)) ([c5b238f](https://github.com/onlooker-community/ecosystem/commit/c5b238fb58e43fb8f350649d27c1fc1f6fcb4d89))
+
 ## [0.47.4](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.47.3...ecosystem-v0.47.4) (2026-09-02)
 
 

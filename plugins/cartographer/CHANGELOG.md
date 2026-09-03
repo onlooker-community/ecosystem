@@ -2,6 +2,13 @@
 
 All notable changes to the Cartographer plugin are documented here.
 
+## [0.7.4](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.7.3...cartographer-v0.7.4) (2026-09-03)
+
+
+### Bug Fixes
+
+* **config:** honor CLAUDE_CONFIG_DIR for user settings :mag: ([#237](https://github.com/onlooker-community/ecosystem/issues/237)) ([057a40d](https://github.com/onlooker-community/ecosystem/commit/057a40d65d221dadef9d6fda235c87e032375235))
+
 ## [0.7.3](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.7.2...cartographer-v0.7.3) (2026-09-02)
 
 
