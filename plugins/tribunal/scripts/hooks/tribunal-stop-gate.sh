@@ -9,8 +9,17 @@
 #   - Skips silently if disabled, no git context, no transcript, or skip_if_no_file_changes
 #     is true and the last turn did not modify files.
 #   - Errors from `claude -p` are swallowed; worst case is "no verdict for this stop".
+#   - Recursion guard: exits immediately if TRIBUNAL_NESTED=1. This hook runs
+#     `claude` below, and that nested session's own Stop re-enters this hook —
+#     which is how tribunal ended up judging its own judge (ecosystem-449.22).
+#     echo and assayer carry the same guard for the same reason.
 
 set -uo pipefail
+
+# Recursion guard — must be first, above hook_health_register, so a nested
+# invocation is not measured as a real Stop-cadence hook run.
+[[ "${TRIBUNAL_NESTED:-}" == "1" ]] && exit 0
+export TRIBUNAL_NESTED=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
