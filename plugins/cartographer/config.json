@@ -18,7 +18,16 @@
     "exclude_paths": ["node_modules", ".git", "vendor", ".venv", "dist", ".next", ".nuxt", "build", "__pycache__"],
     "undocumented_entity": {
       "enabled": true,
-      "globs": ["plugins/*/", "skills/*/"],
+      "globs": [
+        ".claude/agents/",
+        ".claude/commands/",
+        ".claude/skills/*/",
+        ".agents/skills/*/",
+        "agents/",
+        "commands/",
+        "plugins/*/",
+        "skills/*/"
+      ],
       "exclude": [],
       "max_findings": 20
     }
