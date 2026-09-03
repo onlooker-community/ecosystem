@@ -10,12 +10,43 @@
 
 set -uo pipefail
 
+# Milliseconds since the epoch, cheapest source first.
+#
+# This is the hottest clock in the ecosystem: inspector_run reads it five times
+# per checked edit (run start, the loop budget check, check start, check end,
+# run end). It used to probe `date +%s%3N`, which BSD date answers with a
+# literal trailing "N" (17883932153N) rather than failing — so the 13-digit
+# regex rejected it and every single call fell through to python3 at ~15ms, on
+# top of two wasted date forks. Roughly 105ms per edit spent reading a clock.
+#
+# hook-health.sh carries the full ladder and is sourced by every hook before
+# anything else, so it is normally in scope; the jq rung repeats it for the
+# tests and any caller that sources this lib on its own. See ecosystem-449.20.
 _inspector_now_ms() {
-	if date +%s%3N &>/dev/null && [[ "$(date +%s%3N)" =~ ^[0-9]{13}$ ]]; then
-		date +%s%3N
-	else
-		python3 -c 'import time; print(int(time.time() * 1000))'
+	local ms
+	if declare -F _hook_health_now_ms >/dev/null 2>&1; then
+		_hook_health_now_ms
+		return 0
 	fi
+	if command -v jq >/dev/null 2>&1 \
+		&& ms=$(jq -n '(now * 1000 | floor)' 2>/dev/null) \
+		&& [[ "$ms" =~ ^[0-9]{13}$ ]]; then
+		printf '%s' "$ms"
+		return 0
+	fi
+	# GNU date supports %3N; BSD date does not, hence the regex rather than a
+	# bare exit-status check.
+	if ms=$(date +%s%3N 2>/dev/null) && [[ "$ms" =~ ^[0-9]{13}$ ]]; then
+		printf '%s' "$ms"
+		return 0
+	fi
+	if command -v perl >/dev/null 2>&1; then
+		perl -MTime::HiRes -e 'printf "%d", Time::HiRes::time() * 1000' 2>/dev/null && return 0
+	fi
+	if command -v python3 >/dev/null 2>&1; then
+		python3 -c 'import time; print(int(time.time() * 1000))' 2>/dev/null && return 0
+	fi
+	printf '%s000' "$(date +%s 2>/dev/null || printf 0)"
 }
 
 # Substitute ${file}, ${file_relative}, ${repo_root} in each argv element.

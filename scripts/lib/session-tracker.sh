@@ -4,13 +4,31 @@
 # Source after validate-path.sh, onlooker-schema.sh, and tool-history.sh:
 #   source "$CLAUDE_PLUGIN_ROOT/scripts/lib/session-tracker.sh"
 
-# Milliseconds since epoch (macOS-compatible).
+# Milliseconds since epoch, cheapest source first (ecosystem-449.20).
+#
+# The Darwin branch used to go straight to python3, ~15ms a call plus a uname
+# fork. hook-health.sh carries the full ladder ($EPOCHREALTIME, then jq) and is
+# sourced by every hook before anything else, so it is normally in scope; the
+# jq rung repeats it for callers that source this lib on its own.
 session_tracker_now_ms() {
-	if [[ "$(uname)" == "Darwin" ]]; then
-		python3 -c 'import time; print(int(time.time() * 1000))' 2>/dev/null || date +%s000
-	else
-		date +%s%3N 2>/dev/null || date +%s000
+	local ms
+	if declare -F _hook_health_now_ms >/dev/null 2>&1; then
+		_hook_health_now_ms
+		return 0
 	fi
+	if command -v jq >/dev/null 2>&1 \
+		&& ms=$(jq -n '(now * 1000 | floor)' 2>/dev/null) \
+		&& [[ "$ms" =~ ^[0-9]{13}$ ]]; then
+		printf '%s' "$ms"
+		return 0
+	fi
+	# GNU date supports %3N; BSD date answers with a literal trailing "N"
+	# rather than failing, hence the regex instead of a bare status check.
+	if ms=$(date +%s%3N 2>/dev/null) && [[ "$ms" =~ ^[0-9]{13}$ ]]; then
+		printf '%s' "$ms"
+		return 0
+	fi
+	python3 -c 'import time; print(int(time.time() * 1000))' 2>/dev/null || date +%s000
 }
 
 # Optional git_branch and git_commit for a working directory (empty when not a repo).
