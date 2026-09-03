@@ -76,17 +76,42 @@ if [[ -z "$PROJECT_KEY" ]]; then
 	exit 0
 fi
 
-_generate_rc=0
-OUTPUT_PATH=$(counsel_generate_brief "$SESSION_ID" "$CWD") || _generate_rc=$?
+# Refresh detached when the brief has aged out. Synthesis is never run inline:
+# the evaluator ships timeout 90 and this is SessionStart, so an inline call
+# blocked the user for up to a minute and a half (ecosystem-449.19). The
+# interval gate bounds how often that happened, not how long it took.
+#
+# Nothing waits on the spawn, and this session injects whatever brief already
+# exists. The refreshed one lands at the next session start — a weekly digest
+# does not care about a one-session delay.
+INTERVAL_DAYS=$(counsel_config_get '.counsel.synthesis_interval_days')
+[[ -z "$INTERVAL_DAYS" || "$INTERVAL_DAYS" == "null" ]] && INTERVAL_DAYS="7"
 
-if [[ $_generate_rc -ne 0 ]]; then
-	# rc=2 means stale check passed (brief is fresh) or too few events — silent skip.
-	[[ $_generate_rc -ne 2 ]] && printf 'counsel-session-start: brief generation failed for session %s\n' "$SESSION_ID" >&2
+if counsel_brief_is_stale "$PROJECT_KEY" "$INTERVAL_DAYS"; then
+	REFRESH="${PLUGIN_ROOT}/scripts/counsel-refresh.sh"
+	if [[ -x "$REFRESH" ]]; then
+		# setsid detaches from the controlling terminal so closing the session
+		# does not SIGHUP the synthesis mid-flight; nohup alone on macOS, where
+		# setsid needs coreutils. Same shape as cartographer's ADR-001.
+		if command -v setsid >/dev/null 2>&1; then
+			nohup setsid "$REFRESH" "$SESSION_ID" "$CWD" "$PROJECT_KEY" >/dev/null 2>&1 &
+		else
+			nohup "$REFRESH" "$SESSION_ID" "$CWD" "$PROJECT_KEY" >/dev/null 2>&1 &
+		fi
+		disown 2>/dev/null || true
+	fi
+fi
+
+OUTPUT_PATH=$(counsel_brief_latest "$PROJECT_KEY" 2>/dev/null) || OUTPUT_PATH=""
+
+if [[ -z "$OUTPUT_PATH" || ! -f "$OUTPUT_PATH" ]]; then
 	_emit ""
 	exit 0
 fi
 
-if [[ -z "$OUTPUT_PATH" || ! -f "$OUTPUT_PATH" ]]; then
+# Already shown. A weekly brief injected every session until it ages out would
+# reach the user seven times.
+if counsel_brief_was_injected "$PROJECT_KEY" "$OUTPUT_PATH"; then
 	_emit ""
 	exit 0
 fi
@@ -107,6 +132,8 @@ CONTEXT="Counsel — weekly improvement brief (auto-generated from your onlooker
 ${BRIEF_CONTENT}
 
 (Counsel injected this brief for project key ${PROJECT_KEY}.)"
+
+counsel_brief_mark_injected "$PROJECT_KEY" "$OUTPUT_PATH" || true
 
 _emit "$CONTEXT"
 exit 0
