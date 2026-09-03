@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.4](https://github.com/onlooker-community/ecosystem/compare/echo-v0.4.3...echo-v0.4.4) (2026-09-03)
+
+
+### Bug Fixes
+
+* **defaults:** ship path defaults that match repos other than this one :broom: ([#241](https://github.com/onlooker-community/ecosystem/issues/241)) ([aa44b98](https://github.com/onlooker-community/ecosystem/commit/aa44b98b320ab88208481b094f8f8032921fdd71))
+
+
+### Performance Improvements
+
+* **clock:** stop paying python3 to ask what time it is :zap: ([#239](https://github.com/onlooker-community/ecosystem/issues/239)) ([2be081c](https://github.com/onlooker-community/ecosystem/commit/2be081c36ac7dd907ca55ce49bba51764aeb4396))
+
 ## [0.4.3](https://github.com/onlooker-community/ecosystem/compare/echo-v0.4.2...echo-v0.4.3) (2026-09-03)
 
 

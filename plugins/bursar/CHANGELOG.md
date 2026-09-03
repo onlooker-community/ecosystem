@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.5](https://github.com/onlooker-community/ecosystem/compare/bursar-v0.4.4...bursar-v0.4.5) (2026-09-03)
+
+
+### Performance Improvements
+
+* **clock:** stop paying python3 to ask what time it is :zap: ([#239](https://github.com/onlooker-community/ecosystem/issues/239)) ([2be081c](https://github.com/onlooker-community/ecosystem/commit/2be081c36ac7dd907ca55ce49bba51764aeb4396))
+
 ## [0.4.4](https://github.com/onlooker-community/ecosystem/compare/bursar-v0.4.3...bursar-v0.4.4) (2026-09-03)
 
 
