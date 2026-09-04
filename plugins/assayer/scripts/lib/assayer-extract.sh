@@ -12,6 +12,37 @@
 # would settle them. The factual cross-check is pure bash, so it stays
 # deterministic and testable.
 
+# Cheap pre-filter: does this message plausibly assert that something SUCCEEDED?
+#
+# Gates the extraction LLM call. Across the first 449 audits, 346 (77%) came
+# back with zero claims — the model was paid to read a message that asserted
+# nothing (ecosystem-449.24).
+#
+# Deliberately generous. A false positive costs one Haiku call; a false
+# negative silently defeats the plugin, so anything resembling an assertion of
+# success gets through. Substring matching, not word matching, so "passes",
+# "passed" and "passing" all fall out of "pass". Matching is case-insensitive
+# via nocasematch rather than `${var,,}`, which is bash 4+ and macOS ships 3.2.
+#
+# Returns 0 if the message may contain claims, 1 if it certainly does not.
+#   $1 — final assistant message text
+assayer_may_contain_claims() {
+	local message="${1:-}"
+	[[ -z "$message" ]] && return 1
+
+	local _restore_nocasematch
+	_restore_nocasematch=$(shopt -p nocasematch)
+	shopt -s nocasematch
+
+	local verdict=1
+	if [[ "$message" =~ (pass|green|clean|succe|verif|confirm|correct|fixed|created|restor|recover|complet|compil|built|work|ready|no\ error|zero\ error|exit\ 0|exit\ code\ 0|✓|✅) ]]; then
+		verdict=0
+	fi
+
+	eval "$_restore_nocasematch"
+	return "$verdict"
+}
+
 # Write the extraction prompt for a final assistant message to stdout.
 #   $1 — final assistant message text
 #   $2 — max_claims

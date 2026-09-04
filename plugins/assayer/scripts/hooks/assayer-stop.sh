@@ -11,7 +11,8 @@
 #   - Skips silently if disabled, no git context, no transcript, or no claims.
 #   - Recursion guard: exits immediately if ASSAYER_NESTED=1 to prevent a
 #     claude -p subprocess from re-triggering this hook on its own Stop.
-#   - Errors from `claude -p` are swallowed; worst case is no audit written.
+#   - Never runs the extraction LLM call itself: it snapshots the inputs and
+#     hands them to a detached assayer-audit.sh, which owns `claude -p`.
 
 set -uo pipefail
 
@@ -24,14 +25,6 @@ PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 # shellcheck source=../lib/hook-health.sh
 source "${PLUGIN_ROOT}/scripts/lib/hook-health.sh"
-# PROMPT_FILE is declared here (empty) and its cleanup trap installed before
-# hook_health_register so the health EXIT trap is the one already in place
-# when PROMPT_FILE gets its real mktemp path below — trap installs replace,
-# they don't chain, and hook_health_register's own chaining only protects a
-# trap that predates it. `rm -f ""` is a harmless no-op if we never reach the
-# mktemp line.
-PROMPT_FILE=""
-trap 'rm -f "$PROMPT_FILE"' EXIT
 hook_health_register "assayer-stop"
 
 # Resolve the ecosystem root (sibling to this plugin's parent).
@@ -111,159 +104,60 @@ FINAL_MESSAGE_CHARS=$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" assayer_config_final_mes
 FINAL_MESSAGE=$(assayer_final_assistant_message "$TRANSCRIPT_PATH" "$FINAL_MESSAGE_CHARS")
 [[ -z "$FINAL_MESSAGE" ]] && _done
 
+# Bail before the extraction call on a message that asserts nothing. 346 of the
+# first 449 audits (77%) came back with zero claims, and the only gate until
+# now was "is the message empty" (ecosystem-449.24). Placed ahead of
+# assayer_collect_commands so a skipped turn also avoids that transcript scan.
+#
+# Skipping is silent, like every other bail-out above it: no audit ran, so
+# claiming one did with a synthesized nothing_to_verify event would put
+# fabricated rows in front of counsel's weekly synthesis.
+assayer_may_contain_claims "$FINAL_MESSAGE" || _done
+
 COMMANDS=$(assayer_collect_commands "$TRANSCRIPT_PATH")
 COMMAND_COUNT=$(printf '%s' "$COMMANDS" | jq 'length' 2>/dev/null) || COMMAND_COUNT=0
 
 # ---------------------------------------------------------------------------
-# Extract claims via claude -p
+# Snapshot and hand off
 # ---------------------------------------------------------------------------
-
-MAX_CLAIMS=$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" assayer_config_max_claims)
-MIN_CONFIDENCE=$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" assayer_config_min_confidence)
-EVAL_MODEL=$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" assayer_config_model)
-TIMEOUT_SECS=$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" assayer_config_timeout)
-
-PROMPT_FILE=$(mktemp -t assayer-prompt.XXXXXX 2>/dev/null) || PROMPT_FILE="/tmp/assayer-prompt.$$"
-assayer_build_extraction_prompt "$FINAL_MESSAGE" "$MAX_CLAIMS" >"$PROMPT_FILE"
-
-CLAUDE_ARGS=(-p --max-turns 1)
-[[ -n "$EVAL_MODEL" ]] && CLAUDE_ARGS+=(--model "$EVAL_MODEL")
-
-RESPONSE=""
-if command -v timeout >/dev/null 2>&1; then
-	RESPONSE=$(timeout "$TIMEOUT_SECS" claude "${CLAUDE_ARGS[@]}" <"$PROMPT_FILE" 2>/dev/null) || RESPONSE=""
-elif command -v gtimeout >/dev/null 2>&1; then
-	RESPONSE=$(gtimeout "$TIMEOUT_SECS" claude "${CLAUDE_ARGS[@]}" <"$PROMPT_FILE" 2>/dev/null) || RESPONSE=""
-else
-	RESPONSE=$(claude "${CLAUDE_ARGS[@]}" <"$PROMPT_FILE" 2>/dev/null) || RESPONSE=""
-fi
-[[ -z "$RESPONSE" ]] && _done
-
-CLAIMS=$(assayer_parse_claims "$RESPONSE")
-CLAIM_COUNT=$(printf '%s' "$CLAIMS" | jq 'length' 2>/dev/null) || CLAIM_COUNT=0
-
-# ---------------------------------------------------------------------------
-# Audit
-# ---------------------------------------------------------------------------
-
-AUDIT_ID=$(assayer_ulid)
-AUDIT_START=$(python3 -c 'import time; print(int(time.time()*1000))' 2>/dev/null || echo 0)
-
-started_payload=$(jq -n \
-	--arg audit_id "$AUDIT_ID" \
-	--argjson claim_count "$CLAIM_COUNT" \
-	--arg trigger "stop" \
-	--argjson command_count "${COMMAND_COUNT:-0}" \
-	'{audit_id: $audit_id, claim_count: $claim_count, trigger: $trigger, command_count: $command_count}')
-assayer_emit_event "assayer.audit.started" "$started_payload" || true
-
-ONLOOKER_BASE="${ONLOOKER_DIR:-$HOME/.onlooker}"
-ASSAYER_DIR="${ONLOOKER_BASE}/assayer/${PROJECT_KEY}"
-mkdir -p "$ASSAYER_DIR" 2>/dev/null || true
-
-count_corroborated=0
-count_contradicted=0
-count_unverified=0
-checked_claims="[]"
-
-while IFS= read -r claim; do
-	[[ -z "$claim" ]] && continue
-
-	# Confidence floor — skip low-confidence extractions. Compare with awk via
-	# -v bindings (not string-interpolated into code), so an LLM- or
-	# config-supplied value is treated as a number and a non-numeric value
-	# degrades to 0 instead of executing as code.
-	conf=$(printf '%s' "$claim" | jq -r '.confidence // 0.6' 2>/dev/null) || conf="0.6"
-	if awk -v a="$conf" -v b="$MIN_CONFIDENCE" 'BEGIN { exit !(a >= b) }' 2>/dev/null; then
-		keep=1
-	else
-		keep=0
-	fi
-	[[ "$keep" != "1" ]] && continue
-
-	claim_text=$(printf '%s' "$claim" | jq -r '.text // ""' 2>/dev/null) || claim_text=""
-	claim_type=$(printf '%s' "$claim" | jq -r '.type // "generic"' 2>/dev/null) || claim_type="generic"
-	[[ -z "$claim_text" ]] && continue
-
-	verdict_obj=$(assayer_classify_claim "$claim" "$COMMANDS")
-	verdict=$(printf '%s' "$verdict_obj" | jq -r '.verdict // "unverified"' 2>/dev/null) || verdict="unverified"
-
-	case "$verdict" in
-	contradicted)
-		count_contradicted=$((count_contradicted + 1))
-		evidence_command=$(printf '%s' "$verdict_obj" | jq -r '.evidence_command // ""' 2>/dev/null) || evidence_command=""
-		excerpt=$(printf '%s' "$verdict_obj" | jq -r '.excerpt // ""' 2>/dev/null) || excerpt=""
-		contradicted_payload=$(jq -n \
-			--arg audit_id "$AUDIT_ID" \
-			--arg claim "$claim_text" \
-			--arg claim_type "$claim_type" \
-			--arg evidence_command "$evidence_command" \
-			--arg result_excerpt "$excerpt" \
-			--argjson confidence "$conf" \
-			'{audit_id: $audit_id, claim: $claim, claim_type: $claim_type,
-			  evidence_command: $evidence_command, result_excerpt: $result_excerpt,
-			  confidence: $confidence}')
-		assayer_emit_event "assayer.claim.contradicted" "$contradicted_payload" || true
-		;;
-	corroborated)
-		count_corroborated=$((count_corroborated + 1))
-		;;
-	*)
-		count_unverified=$((count_unverified + 1))
-		reason=$(printf '%s' "$verdict_obj" | jq -r '.reason // "no_evidence"' 2>/dev/null) || reason="no_evidence"
-		unverified_payload=$(jq -n \
-			--arg audit_id "$AUDIT_ID" \
-			--arg claim "$claim_text" \
-			--arg claim_type "$claim_type" \
-			--arg reason "$reason" \
-			'{audit_id: $audit_id, claim: $claim, claim_type: $claim_type, reason: $reason}')
-		assayer_emit_event "assayer.claim.unverified" "$unverified_payload" || true
-		;;
-	esac
-
-	checked_claims=$(printf '%s' "$checked_claims" | jq -c \
-		--arg text "$claim_text" \
-		--arg verdict "$verdict" \
-		'. + [{text: $text, verdict: $verdict}]' 2>/dev/null) || true
-done < <(printf '%s' "$CLAIMS" | jq -c '.[]' 2>/dev/null)
-
-# ---------------------------------------------------------------------------
-# Audit summary
-# ---------------------------------------------------------------------------
-
-AUDIT_END=$(python3 -c 'import time; print(int(time.time()*1000))' 2>/dev/null || echo 0)
-DURATION_MS=$((AUDIT_END - AUDIT_START))
-[[ "$DURATION_MS" -lt 0 ]] && DURATION_MS=0
-
-VERDICT=$(assayer_audit_verdict "$count_contradicted" "$count_corroborated" "$count_unverified")
-
-complete_payload=$(jq -n \
-	--arg audit_id "$AUDIT_ID" \
-	--argjson claim_count "$CLAIM_COUNT" \
-	--argjson corroborated "$count_corroborated" \
-	--argjson contradicted "$count_contradicted" \
-	--argjson unverified "$count_unverified" \
-	--arg verdict "$VERDICT" \
-	--argjson duration_ms "$DURATION_MS" \
-	'{audit_id: $audit_id, claim_count: $claim_count,
-	  corroborated: $corroborated, contradicted: $contradicted,
-	  unverified: $unverified, verdict: $verdict, duration_ms: $duration_ms}')
-assayer_emit_event "assayer.audit.complete" "$complete_payload" || true
-
-# Advisory file for review in the next session.
-SAFE_SESSION_ID=$(printf '%s' "${SESSION_ID:-unknown}" | tr -c 'a-zA-Z0-9-' '_')
+#
+# Everything below this line used to run inline, including a `timeout 60
+# claude -p` (ecosystem-449.24). Nothing waits on the result: the audit file
+# has no reader, and the assayer.* events are consumed by counsel's weekly
+# synthesis, which does not care which turn they arrive on.
+#
+# The child gets a frozen copy rather than transcript_path. The transcript
+# keeps growing after Stop returns, so a child that re-read it would extract a
+# LATER turn's final message and file those claims against this turn. Freezing
+# costs the 135ms already spent above.
+SNAPSHOT=$(mktemp -t assayer-snapshot.XXXXXX 2>/dev/null) || _done
 jq -n \
-	--arg audit_id "$AUDIT_ID" \
+	--arg final_message "$FINAL_MESSAGE" \
+	--argjson commands "${COMMANDS:-[]}" \
+	--arg project_key "$PROJECT_KEY" \
 	--arg session_id "${SESSION_ID:-unknown}" \
-	--argjson claim_count "$CLAIM_COUNT" \
-	--argjson corroborated "$count_corroborated" \
-	--argjson contradicted "$count_contradicted" \
-	--argjson unverified "$count_unverified" \
-	--arg verdict "$VERDICT" \
-	--argjson claims "$checked_claims" \
-	'{audit_id: $audit_id, session_id: $session_id, claim_count: $claim_count,
-	  corroborated: $corroborated, contradicted: $contradicted,
-	  unverified: $unverified, verdict: $verdict, claims: $claims}' \
-	>"${ASSAYER_DIR}/audit-${SAFE_SESSION_ID}.json" 2>/dev/null || true
+	--arg repo_root "$REPO_ROOT" \
+	'{final_message: $final_message, commands: $commands, project_key: $project_key,
+	  session_id: $session_id, repo_root: $repo_root}' \
+	>"$SNAPSHOT" 2>/dev/null || { rm -f "$SNAPSHOT"; _done; }
+
+# Let the child reuse this hook's resolution instead of re-deriving it.
+[[ -n "$_ECOSYSTEM_ROOT" ]] && export ONLOOKER_ECOSYSTEM_ROOT="$_ECOSYSTEM_ROOT"
+
+AUDIT="${PLUGIN_ROOT}/scripts/assayer-audit.sh"
+if [[ -x "$AUDIT" ]]; then
+	# setsid detaches from the controlling terminal so ending the session does
+	# not SIGHUP the audit mid-flight; nohup alone on macOS, where setsid needs
+	# coreutils. Same shape as counsel's ecosystem-449.19 and cartographer's
+	# ADR-001.
+	if command -v setsid >/dev/null 2>&1; then
+		nohup setsid "$AUDIT" "$SNAPSHOT" >/dev/null 2>&1 &
+	else
+		nohup "$AUDIT" "$SNAPSHOT" >/dev/null 2>&1 &
+	fi
+	disown 2>/dev/null || true
+else
+	rm -f "$SNAPSHOT"
+fi
 
 _done
