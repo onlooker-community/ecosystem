@@ -134,11 +134,25 @@ _run_stop_hook() {
 		'{cwd:$cwd, session_id:$sid, transcript_path:$tp}' | "$HOOK" >/dev/null 2>&1
 }
 
+# Extraction runs in a detached child (ecosystem-449.24), so neither of these
+# can read CLAUDE_CALLED the instant the hook returns — the hook returning is
+# no longer evidence the audit did or did not happen. Both poll.
+_wait_for_claude() {
+	local waited=0
+	while [[ ! -s "$CLAUDE_CALLED" && "$waited" -lt "${1:-20}" ]]; do
+		sleep 1
+		waited=$((waited + 1))
+	done
+}
+
 @test "hook does not invoke claude when the final message asserts nothing" {
 	_hook_setup
 	local t
 	t=$(_transcript_with "Next I will read the config loader and see how it resolves the plugin root.")
 	_run_stop_hook "$t"
+	# Bounded settle. Without it a broken filter still passes: the spawned child
+	# would not have reached its claude call yet when the assertion runs.
+	_wait_for_claude 4
 	[ ! -s "$CLAUDE_CALLED" ] || { echo "claude was invoked on a message with no claims"; return 1; }
 }
 
@@ -147,5 +161,6 @@ _run_stop_hook() {
 	local t
 	t=$(_transcript_with "All tests pass.")
 	_run_stop_hook "$t"
+	_wait_for_claude
 	[ -s "$CLAUDE_CALLED" ] || { echo "claude was not invoked on a real claim"; return 1; }
 }
