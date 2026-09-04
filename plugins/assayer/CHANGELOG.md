@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.5](https://github.com/onlooker-community/ecosystem/compare/assayer-v1.2.4...assayer-v1.2.5) (2026-09-04)
+
+
+### Performance Improvements
+
+* **assayer:** stop blocking every turn on a 60s-ceiling claim extraction :hourglass: ([#248](https://github.com/onlooker-community/ecosystem/issues/248)) ([b441811](https://github.com/onlooker-community/ecosystem/commit/b44181166407fb4af7ea4613ae26ec723bba44a9))
+
 ## [1.2.4](https://github.com/onlooker-community/ecosystem/compare/assayer-v1.2.3...assayer-v1.2.4) (2026-09-03)
 
 
