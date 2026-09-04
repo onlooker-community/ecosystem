@@ -111,6 +111,16 @@ FINAL_MESSAGE_CHARS=$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" assayer_config_final_mes
 FINAL_MESSAGE=$(assayer_final_assistant_message "$TRANSCRIPT_PATH" "$FINAL_MESSAGE_CHARS")
 [[ -z "$FINAL_MESSAGE" ]] && _done
 
+# Bail before the extraction call on a message that asserts nothing. 346 of the
+# first 449 audits (77%) came back with zero claims, and the only gate until
+# now was "is the message empty" (ecosystem-449.24). Placed ahead of
+# assayer_collect_commands so a skipped turn also avoids that transcript scan.
+#
+# Skipping is silent, like every other bail-out above it: no audit ran, so
+# claiming one did with a synthesized nothing_to_verify event would put
+# fabricated rows in front of counsel's weekly synthesis.
+assayer_may_contain_claims "$FINAL_MESSAGE" || _done
+
 COMMANDS=$(assayer_collect_commands "$TRANSCRIPT_PATH")
 COMMAND_COUNT=$(printf '%s' "$COMMANDS" | jq 'length' 2>/dev/null) || COMMAND_COUNT=0
 
