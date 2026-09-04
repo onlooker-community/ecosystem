@@ -72,10 +72,10 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
 
 ```text
 ~/.onlooker/assayer/<project-key>/
-└── audit-<session-id>.json     # advisory summary written at end of each audit
+└── audit-<session-id>-<audit-id>.json   # advisory summary, one per audit
 ```
 
-Each audit file records the claim count, the corroborated / contradicted / unverified tallies, the overall verdict, and the per-claim list for review in the next session.
+Each audit file records the claim count, the corroborated / contradicted / unverified tallies, the overall verdict, and the per-claim list for review in the next session. The name carries the audit id as well as the session id, because the Stop hook fires once per turn — a session-keyed name let each turn overwrite the one before it.
 
 Project key: first 12 hex chars of SHA256 of `git remote get-url origin`, falling back to a hash of the repo root realpath — stable across directory moves, clones, and worktrees of the same repo.
 

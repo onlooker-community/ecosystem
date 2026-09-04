@@ -230,6 +230,11 @@ complete_payload=$(jq -n \
 assayer_emit_event "assayer.audit.complete" "$complete_payload" || true
 
 # Advisory file for review in the next session.
+#
+# Named for the audit, not just the session. Stop fires once per TURN, so a
+# session-keyed name meant each turn overwrote the previous turn's audit —
+# session 8d59b376 ran 77 and kept 1 (ecosystem-449.25). The session id stays
+# in front so a session's audits still glob together.
 SAFE_SESSION_ID=$(printf '%s' "${SESSION_ID:-unknown}" | tr -c 'a-zA-Z0-9-' '_')
 jq -n \
 	--arg audit_id "$AUDIT_ID" \
@@ -243,6 +248,6 @@ jq -n \
 	'{audit_id: $audit_id, session_id: $session_id, claim_count: $claim_count,
 	  corroborated: $corroborated, contradicted: $contradicted,
 	  unverified: $unverified, verdict: $verdict, claims: $claims}' \
-	>"${ASSAYER_DIR}/audit-${SAFE_SESSION_ID}.json" 2>/dev/null || true
+	>"${ASSAYER_DIR}/audit-${SAFE_SESSION_ID}-${AUDIT_ID}.json" 2>/dev/null || true
 
 exit 0
