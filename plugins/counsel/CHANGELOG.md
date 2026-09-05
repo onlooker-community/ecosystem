@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.6](https://github.com/onlooker-community/ecosystem/compare/counsel-v0.6.5...counsel-v0.6.6) (2026-09-05)
+
+
+### Bug Fixes
+
+* **hooks:** attribute nested sessions to their own id :straight_ruler: ([#252](https://github.com/onlooker-community/ecosystem/issues/252)) ([74b34ec](https://github.com/onlooker-community/ecosystem/commit/74b34ecdc038d1e90b7a236077601ea1b6ec9ee8))
+
 ## [0.6.5](https://github.com/onlooker-community/ecosystem/compare/counsel-v0.6.4...counsel-v0.6.5) (2026-09-03)
 
 

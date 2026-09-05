@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.49.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.48.0...ecosystem-v0.49.0) (2026-09-05)
+
+
+### Features
+
+* **lint:** catch plugins enabled in settings but never installed :mag: ([#253](https://github.com/onlooker-community/ecosystem/issues/253)) ([165de74](https://github.com/onlooker-community/ecosystem/commit/165de741de6317ade549c01fcd9e428ae627074a))
+* **scripts:** track the hook rollup and stop it reporting bad data :bar_chart: ([#255](https://github.com/onlooker-community/ecosystem/issues/255)) ([3ee85ba](https://github.com/onlooker-community/ecosystem/commit/3ee85ba215b823afad558a3c6c92ed264c710849))
+
+
+### Bug Fixes
+
+* **hooks:** attribute nested sessions to their own id :straight_ruler: ([#252](https://github.com/onlooker-community/ecosystem/issues/252)) ([74b34ec](https://github.com/onlooker-community/ecosystem/commit/74b34ecdc038d1e90b7a236077601ea1b6ec9ee8))
+
 ## [0.48.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.47.10...ecosystem-v0.48.0) (2026-09-05)
 
 

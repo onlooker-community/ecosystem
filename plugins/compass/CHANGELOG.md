@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.3](https://github.com/onlooker-community/ecosystem/compare/compass-v0.5.2...compass-v0.5.3) (2026-09-05)
+
+
+### Bug Fixes
+
+* **hooks:** attribute nested sessions to their own id :straight_ruler: ([#252](https://github.com/onlooker-community/ecosystem/issues/252)) ([74b34ec](https://github.com/onlooker-community/ecosystem/commit/74b34ecdc038d1e90b7a236077601ea1b6ec9ee8))
+
 ## [0.5.2](https://github.com/onlooker-community/ecosystem/compare/compass-v0.5.1...compass-v0.5.2) (2026-09-03)
 
 

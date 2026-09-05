@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.4](https://github.com/onlooker-community/ecosystem/compare/scribe-v0.6.3...scribe-v0.6.4) (2026-09-05)
+
+
+### Bug Fixes
+
+* **hooks:** attribute nested sessions to their own id :straight_ruler: ([#252](https://github.com/onlooker-community/ecosystem/issues/252)) ([74b34ec](https://github.com/onlooker-community/ecosystem/commit/74b34ecdc038d1e90b7a236077601ea1b6ec9ee8))
+
 ## [0.6.3](https://github.com/onlooker-community/ecosystem/compare/scribe-v0.6.2...scribe-v0.6.3) (2026-09-03)
 
 
