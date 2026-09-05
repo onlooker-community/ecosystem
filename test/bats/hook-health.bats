@@ -63,6 +63,50 @@ setup() {
 	' >/dev/null
 }
 
+# A nested `claude` inherits the parent's exported _HOOK_SESSION_ID, so the
+# payload must win or every hook that child fires is filed under the parent.
+# That mis-attribution is what made 93 separate sessions look like one session
+# re-firing SessionStart 93 times (ecosystem-449.27).
+@test "the payload session_id beats an inherited _HOOK_SESSION_ID" {
+	export _HOOK_SESSION_ID="parent-session"
+	hook_health_register "nested-hook"
+	hook_health_context '{"session_id":"child-session","hook_event_name":"SessionStart"}'
+	hook_health_success
+	tail -n 1 "$HEALTH_LOG" | jq -e '.session_id == "child-session"' >/dev/null
+}
+
+# The inverse must not regress: several plugins parse their own payload and set
+# _HOOK_SESSION_ID before sourcing, then hand hook_health_context a payload that
+# may carry no session_id at all. Overriding unconditionally would blank those.
+@test "a caller-set session id survives a payload that carries none" {
+	_HOOK_SESSION_ID="caller-set"
+	hook_health_register "caller-hook"
+	hook_health_context '{"hook_event_name":"Stop"}'
+	hook_health_success
+	tail -n 1 "$HEALTH_LOG" | jq -e '.session_id == "caller-set"' >/dev/null
+}
+
+@test "an explicitly empty payload session_id does not blank a caller-set id" {
+	_HOOK_SESSION_ID="caller-set"
+	hook_health_register "empty-sid-hook"
+	hook_health_context '{"session_id":"","hook_event_name":"Stop"}'
+	hook_health_success
+	tail -n 1 "$HEALTH_LOG" | jq -e '.session_id == "caller-set"' >/dev/null
+}
+
+# tool_name and hook_event are never exported by any plugin, so they keep the
+# original caller-wins semantics. Pinned so the fix stays scoped to session_id.
+@test "caller-set tool_name and hook_event still win over the payload" {
+	_HOOK_TOOL_NAME="CallerTool"
+	_HOOK_EVENT="CallerEvent"
+	hook_health_register "scope-hook"
+	hook_health_context '{"session_id":"s","tool_name":"PayloadTool","hook_event_name":"PayloadEvent"}'
+	hook_health_success
+	tail -n 1 "$HEALTH_LOG" | jq -e '
+		.tool_name == "CallerTool" and .hook_event == "CallerEvent"
+	' >/dev/null
+}
+
 @test "registering without writing produces no record" {
 	hook_health_register "never-finished"
 	[ ! -f "$HEALTH_LOG" ]
