@@ -19,11 +19,8 @@
     "assayer@onlooker-community": true,
     "echo@onlooker-community": true,
     "tribunal@onlooker-community": true,
-    "bursar@onlooker-community": true,
     "archivist@onlooker-community": true,
-    "cartographer@onlooker-community": true,
-    "scribe@onlooker-community": true,
-    "counsel@onlooker-community": true
+    "librarian@onlooker-community": true
   },
   "extraKnownMarketplaces": {
     "onlooker-community": {
