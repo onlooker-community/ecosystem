@@ -24,6 +24,7 @@
     "test:shellcheck": "git ls-files -z '*.sh' | xargs -0 shellcheck -S error -x",
     "lint:references": "node scripts/lint/check-references.mjs",
     "lint:manifests": "node scripts/lint/check-manifests.mjs",
+    "lint:plugin-installs": "node scripts/lint/check-plugin-installs.mjs",
     "lint:lesson-schema": "node scripts/lint/check-lesson-schema-drift.mjs",
     "lint:managed-blocks": "node scripts/lint/check-managed-blocks.mjs",
     "coverage:node": "node scripts/coverage/run-coverage.mjs",
