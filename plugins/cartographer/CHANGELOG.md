@@ -2,6 +2,13 @@
 
 All notable changes to the Cartographer plugin are documented here.
 
+## [0.7.6](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.7.5...cartographer-v0.7.6) (2026-09-05)
+
+
+### Bug Fixes
+
+* **hooks:** attribute nested sessions to their own id :straight_ruler: ([#252](https://github.com/onlooker-community/ecosystem/issues/252)) ([74b34ec](https://github.com/onlooker-community/ecosystem/commit/74b34ecdc038d1e90b7a236077601ea1b6ec9ee8))
+
 ## [0.7.5](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.7.4...cartographer-v0.7.5) (2026-09-03)
 
 
