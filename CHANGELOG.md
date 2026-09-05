@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.49.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.49.0...ecosystem-v0.49.1) (2026-09-05)
+
+
+### Bug Fixes
+
+* **dogfood:** enable only the plugins this repo actually installs :broom: ([#256](https://github.com/onlooker-community/ecosystem/issues/256)) ([1bfd10d](https://github.com/onlooker-community/ecosystem/commit/1bfd10d6eba0e649b62aca732852f894c329ca0e))
+
 ## [0.49.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.48.0...ecosystem-v0.49.0) (2026-09-05)
 
 
