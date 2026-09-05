@@ -105,7 +105,7 @@ claude plugin install <plugin>@onlooker-community --scope project
 claude plugin list
 
 # Restart, then confirm the hooks actually registered for the new session.
-python3 ~/.onlooker/logs/hook-rollup.py <session-id>
+node scripts/hook-rollup.mjs <session-id>
 ```
 
 `claude plugin update` has the same trap in a sharper form: it defaults to `--scope user` and
