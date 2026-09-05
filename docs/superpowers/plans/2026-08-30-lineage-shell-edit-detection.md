@@ -1456,7 +1456,7 @@ weaker claim than a `delta` one.
 This is the number `ecosystem-449.11` depends on, and the check `ecosystem-449.14` shows inspector failed. Restart the session so the new hook registers, then:
 
 ```bash
-python3 ~/.onlooker/logs/hook-rollup.py <new-session-id>
+node scripts/hook-rollup.mjs <new-session-id>
 ```
 
 Compare `PostToolUse / lineage-post-tool-use` on `Bash` against the ~35ms `tool-sequence-tracker` baseline. Record the p50 and p95 in `ecosystem-449.13`.
