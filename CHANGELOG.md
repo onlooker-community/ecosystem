@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.48.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.47.10...ecosystem-v0.48.0) (2026-09-05)
+
+
+### Features
+
+* **lint:** catch plugins enabled in settings but never installed :mag: ([#250](https://github.com/onlooker-community/ecosystem/issues/250)) ([ec6db40](https://github.com/onlooker-community/ecosystem/commit/ec6db409ad12e8c54e8771d2f423d1214a93e5de))
+
 ## [0.47.10](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.47.9...ecosystem-v0.47.10) (2026-09-04)
 
 
