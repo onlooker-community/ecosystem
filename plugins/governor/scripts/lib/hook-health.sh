@@ -29,6 +29,9 @@
 
 # Do not clobber values a caller already set — several plugins set
 # _HOOK_SESSION_ID before sourcing, and their *-events.sh libs read it.
+# Note this seeds from the ENVIRONMENT, so an exported _HOOK_SESSION_ID crosses
+# into child processes; hook_health_context lets a payload session_id override
+# it for exactly that reason.
 _HOOK_NAME="${_HOOK_NAME:-}"
 _HOOK_START_MS="${_HOOK_START_MS:-}"
 _HOOK_SESSION_ID="${_HOOK_SESSION_ID:-}"
@@ -115,14 +118,35 @@ _hook_health_on_exit() {
 }
 
 # Fill session/event/tool from the hook's JSON payload. Optional — call it
-# after reading stdin. Values already set by the caller win, so a hook that
-# assigned _HOOK_SESSION_ID itself keeps its value.
+# after reading stdin.
+#
+# session_id is the exception to caller-wins: the payload is authoritative when
+# it carries one. _HOOK_SESSION_ID is the only one of these that plugins
+# `export`, so it is the only one a child process inherits — and a hook that
+# shells out to `claude` (assayer, and any other claude-invoking hook) leaks its
+# own id into every hook that nested session fires. Preferring the inherited
+# value files all of that under the parent, which is what made 93 separate
+# sessions read as one session re-firing SessionStart 93 times. See
+# ecosystem-449.27.
+#
+# Every in-process setter derives the value from the same payload it then hands
+# us, so preferring the payload is a no-op for them and only corrects the
+# inherited case. An absent or empty payload session_id still leaves a
+# caller-set value alone — several plugins set it before sourcing and pass a
+# payload that carries none.
+#
+# tool_name and hook_event keep caller-wins: neither is ever exported, so
+# neither can be inherited across a process boundary.
 hook_health_context() {
 	local input="${1:-}"
 	[[ -n "$input" ]] || return 0
 	command -v jq >/dev/null 2>&1 || return 0
 
-	[[ -z "$_HOOK_SESSION_ID" ]] && _HOOK_SESSION_ID=$(printf '%s' "$input" | jq -r '.session_id // ""' 2>/dev/null)
+	local payload_session_id
+	payload_session_id=$(printf '%s' "$input" | jq -r '.session_id // ""' 2>/dev/null)
+	if [[ -n "$payload_session_id" ]]; then
+		_HOOK_SESSION_ID="$payload_session_id"
+	fi
 	[[ -z "$_HOOK_TOOL_NAME" ]] && _HOOK_TOOL_NAME=$(printf '%s' "$input" | jq -r '.tool_name // ""' 2>/dev/null)
 	[[ -z "$_HOOK_EVENT" ]] && _HOOK_EVENT=$(printf '%s' "$input" | jq -r '.hook_event_name // ""' 2>/dev/null)
 	return 0
