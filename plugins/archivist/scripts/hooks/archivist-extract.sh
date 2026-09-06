@@ -96,6 +96,14 @@ CUSTOM_INSTRUCTIONS=$(printf '%s' "$INPUT" | jq -r '.custom_instructions // ""' 
 REPO_ROOT=$(archivist_project_repo_root "$CWD")
 PROJECT_KEY=$(archivist_project_key "$CWD")
 
+# Where this session's files actually live, which for a worktree is not
+# REPO_ROOT (ecosystem-449.37). Used for the root named in the prompt and for
+# path validation — both are questions about the filesystem, not identity.
+# REPO_ROOT still keys storage and the manifest, so a worktree and its parent
+# keep one archive between them.
+WORKTREE_ROOT=$(archivist_worktree_root "$CWD")
+[[ -z "$WORKTREE_ROOT" ]] && WORKTREE_ROOT="$REPO_ROOT"
+
 # Config requires repo_root to scan settings.json overlay; load anyway with
 # best-effort empty fallback.
 archivist_config_load "$REPO_ROOT"
@@ -163,7 +171,9 @@ trap 'rm -f "$PROMPT_FILE"; _approve "Archivist extraction errored out, compacti
 		printf 'Additional user-provided focus: %s\n' "$CUSTOM_INSTRUCTIONS"
 	fi
 	printf '\n'
-	printf 'Repository root: %s\n' "$REPO_ROOT"
+	# The base the model is asked to relativize against, so it has to be the
+	# tree the transcript's paths are from (ecosystem-449.37).
+	printf 'Repository root: %s\n' "$WORKTREE_ROOT"
 	printf '\n'
 	printf '%s\n' '---BEGIN TRANSCRIPT TAIL---'
 	printf '%s\n' "$TRANSCRIPT_TAIL"
@@ -229,7 +239,7 @@ for KIND_PAIR in "decisions:decision" "dead_ends:dead_end" "open_questions:open_
 
 		DETAIL=$(printf '%s' "$ENTRY" | jq -r '.detail // ""')
 		PATHS_JSON=$(printf '%s' "$ENTRY" | jq '.files // []')
-		CLEAN_PATHS=$(archivist_validate_paths_array "$REPO_ROOT" "$PATHS_JSON")
+		CLEAN_PATHS=$(archivist_validate_paths_array "$WORKTREE_ROOT" "$PATHS_JSON")
 
 		ID=$(archivist_ulid)
 		ARTIFACT=$(jq -n \

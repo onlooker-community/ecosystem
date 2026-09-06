@@ -66,6 +66,24 @@ archivist_project_repo_root() {
 	printf '%s' "$toplevel"
 }
 
+# Resolve the toplevel of the working tree the session is actually in.
+#
+# Distinct from archivist_project_repo_root, which deliberately resolves a
+# linked worktree to its parent checkout so both share a project key. That is
+# right for identity and wrong for locating files: a worktree's files sit beside
+# the parent, not beneath it (ecosystem-449.37, mirroring lineage's
+# ecosystem-449.33).
+archivist_worktree_root() {
+	local cwd="${1:-}"
+	[[ -z "$cwd" || ! -d "$cwd" ]] && return 0
+
+	local toplevel
+	toplevel=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || return 0
+	[[ -z "$toplevel" ]] && return 0
+
+	(cd "$toplevel" 2>/dev/null && pwd -P) || printf '%s' "$toplevel"
+}
+
 # Compute the project key for the given cwd. Prints the key or empty string.
 # Usage: key=$(archivist_project_key "$CWD")
 archivist_project_key() {

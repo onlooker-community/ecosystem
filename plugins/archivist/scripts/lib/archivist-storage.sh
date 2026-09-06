@@ -84,8 +84,17 @@ archivist_storage_write_manifest() {
 # possibly with ../), echo the path relativized to the repo root iff it resolves
 # inside the repo AND the file exists. Otherwise echo nothing.
 #
-# Worktrees: an absolute path that lives in a checked-out worktree of the same
-# repo is considered "in repo" — we resolve against the worktree's toplevel.
+# Worktrees: this function has no opinion about them. It validates against the
+# repo_root it is handed and nothing else, so the CALLER decides which tree
+# counts as "in repo". Pass the worktree's own toplevel (archivist_worktree_root)
+# rather than archivist_project_repo_root, which resolves a linked worktree to
+# its parent checkout for project-key purposes — a worktree's files are not
+# under that root, so the containment test rejects every one of them, and a
+# relative path silently resolves against the parent's copy instead
+# (ecosystem-449.37).
+#
+# This comment previously claimed the function resolved against the worktree's
+# toplevel itself. It never did.
 archivist_validate_repo_path() {
 	local repo_root="$1"
 	local candidate="$2"
