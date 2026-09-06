@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.49.6](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.49.5...ecosystem-v0.49.6) (2026-09-06)
+
+
+### Bug Fixes
+
+* **echo:** watch the tree the session worked in, and grade the right copy :eyes: ([#268](https://github.com/onlooker-community/ecosystem/issues/268)) ([e6650bb](https://github.com/onlooker-community/ecosystem/commit/e6650bb98301a865477dbc88288f3ecb008dc4f6))
+
+## [0.49.5](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.49.4...ecosystem-v0.49.5) (2026-09-06)
+
+
+### Bug Fixes
+
+* **tribunal:** make the Stop gate safe to turn back on :unlock: ([#266](https://github.com/onlooker-community/ecosystem/issues/266)) ([ca6882d](https://github.com/onlooker-community/ecosystem/commit/ca6882d6149fb52a1aee26400edae558172f76b0))
+
 ## [0.49.4](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.49.3...ecosystem-v0.49.4) (2026-09-06)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.7](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.3.6...tribunal-v1.3.7) (2026-09-06)
+
+
+### Bug Fixes
+
+* **tribunal:** make the Stop gate safe to turn back on :unlock: ([#266](https://github.com/onlooker-community/ecosystem/issues/266)) ([ca6882d](https://github.com/onlooker-community/ecosystem/commit/ca6882d6149fb52a1aee26400edae558172f76b0))
+
 ## [1.3.6](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.3.5...tribunal-v1.3.6) (2026-09-05)
 
 
