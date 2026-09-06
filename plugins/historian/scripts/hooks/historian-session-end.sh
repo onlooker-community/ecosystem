@@ -22,23 +22,15 @@ PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 source "${PLUGIN_ROOT}/scripts/lib/hook-health.sh"
 hook_health_register "historian-session-end"
 
-_ECOSYSTEM_ROOT="${ONLOOKER_ECOSYSTEM_ROOT:-}"
-if [[ -z "$_ECOSYSTEM_ROOT" ]]; then
-	_candidate="$(cd "${PLUGIN_ROOT}/../.." 2>/dev/null && pwd)"
-	if [[ -f "${_candidate}/scripts/lib/validate-path.sh" ]]; then
-		_ECOSYSTEM_ROOT="$_candidate"
-	fi
-fi
-# Glob-discover the ecosystem plugin under the shared plugin cache parent;
-# works regardless of which ecosystem version is installed.
-if [[ -z "$_ECOSYSTEM_ROOT" ]]; then
-	for _candidate in "${PLUGIN_ROOT}/../../ecosystem/"*/scripts/lib/validate-path.sh; do
-		if [[ -f "$_candidate" ]]; then
-			_ECOSYSTEM_ROOT="$(cd "$(dirname "$(dirname "$_candidate")")" && pwd)"
-			break
-		fi
-	done
-fi
+# Ecosystem substrate (validate-path.sh) lives in the sibling ecosystem plugin.
+# Resolution is shared rather than repeated: fourteen hooks each carried a
+# byte-identical copy of this lookup, and it was wrong the same two ways in all
+# fourteen (ecosystem-449.36, ecosystem-449.35). Fixing it fourteen times is how
+# it stayed broken. See scripts/lib/substrate-resolve.sh.
+# shellcheck source=../lib/substrate-resolve.sh
+source "${PLUGIN_ROOT}/scripts/lib/substrate-resolve.sh"
+_ECOSYSTEM_ROOT=$(onlooker_resolve_substrate "$PLUGIN_ROOT")
+
 if [[ -n "$_ECOSYSTEM_ROOT" && -f "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.sh" ]]; then
 	# shellcheck disable=SC1091
 	export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"

@@ -19,23 +19,39 @@ _plugin_dirs() {
 	[ "$count" -gt 0 ]
 }
 
-@test "every plugin has a vendored hook-health.sh" {
-	local missing=""
-	local d
-	while IFS= read -r d; do
-		[ -f "${d}/scripts/lib/hook-health.sh" ] || missing+="$(basename "$d") "
-	done < <(_plugin_dirs)
-	[ -z "$missing" ] || { echo "missing in: $missing"; return 1; }
+# Read the list from the sync script rather than repeating it here, so adding a
+# lib to SHARED_LIBS cannot leave it silently unguarded — which is the failure
+# mode that let substrate-resolve.sh's predecessor rot in fourteen copies.
+_shared_libs() {
+	sed -n 's/^SHARED_LIBS=(\(.*\))$/\1/p' "${REPO_ROOT}/scripts/sync-shared-libs.sh" | tr ' ' '\n'
 }
 
-@test "every vendored hook-health.sh is byte-identical to the canonical copy" {
-	local canonical="${REPO_ROOT}/scripts/lib/hook-health.sh"
-	local drifted=""
-	local d
-	while IFS= read -r d; do
-		cmp -s "$canonical" "${d}/scripts/lib/hook-health.sh" \
-			|| drifted+="$(basename "$d") "
-	done < <(_plugin_dirs)
+@test "the shared-lib list is readable and non-empty" {
+	local count
+	count=$(_shared_libs | grep -c .)
+	[ "$count" -gt 0 ]
+}
+
+@test "every plugin has a vendored copy of every shared lib" {
+	local missing="" lib d
+	while IFS= read -r lib; do
+		[ -n "$lib" ] || continue
+		while IFS= read -r d; do
+			[ -f "${d}/scripts/lib/${lib}" ] || missing+="$(basename "$d")/${lib} "
+		done < <(_plugin_dirs)
+	done < <(_shared_libs)
+	[ -z "$missing" ] || { echo "missing: $missing"; return 1; }
+}
+
+@test "every vendored shared lib is byte-identical to its canonical copy" {
+	local drifted="" lib d
+	while IFS= read -r lib; do
+		[ -n "$lib" ] || continue
+		while IFS= read -r d; do
+			cmp -s "${REPO_ROOT}/scripts/lib/${lib}" "${d}/scripts/lib/${lib}" \
+				|| drifted+="$(basename "$d")/${lib} "
+		done < <(_plugin_dirs)
+	done < <(_shared_libs)
 	[ -z "$drifted" ] || { echo "drifted: $drifted"; return 1; }
 }
 

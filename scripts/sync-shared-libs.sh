@@ -24,7 +24,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SHARED_LIBS=(config-loader.sh hook-health.sh)
+SHARED_LIBS=(config-loader.sh hook-health.sh substrate-resolve.sh)
 ON_DEMAND_LIBS=(portable-lock.sh)
 
 check_only=0

@@ -92,9 +92,16 @@ See `plugins/compass/docs/adr/001-evaluate-prompts-in-context.md` for the full d
    in this checkout and nowhere else: an installed plugin publishes rooted at `plugins/<name>` and has
    no ecosystem tree above it. Edit the canonical `scripts/lib/config-loader.sh`, then run
    `scripts/sync-shared-libs.sh` to propagate it. `test/bats/config-lib-self-locating.bats` enforces
-   all of this across every plugin, including from a copied-out standalone tree. `hook-health.sh` is
-   vendored the same way and for the same reason, propagated by the same script and guarded by
-   `test/bats/shared-lib-vendoring.bats`.
+   all of this across every plugin, including from a copied-out standalone tree. `hook-health.sh` and
+   `substrate-resolve.sh` are vendored the same way and for the same reason, propagated by the same
+   script and guarded by `test/bats/shared-lib-vendoring.bats` — which reads the list straight out of
+   `sync-shared-libs.sh`, so a lib added to `SHARED_LIBS` is guarded automatically.
+   To find the substrate, call `onlooker_resolve_substrate "$PLUGIN_ROOT"` rather than writing a glob.
+   Fourteen hooks each hand-rolled that lookup and all fourteen were wrong the same two ways —
+   resolving to `<v>/scripts` instead of `<v>` so nothing was ever sourced, and taking the
+   lexically-first cached ecosystem (`0.33.1`) instead of the newest ([ADR-005](docs/adr/005-runtime-emitter-fails-open.md)-era
+   `0.49.x`). Both failures are silent: a hook that sources no substrate exports no
+   `ONLOOKER_EVENTS_LOG` and reports nothing about it. See ecosystem-449.36 and ecosystem-449.35.
 9. In the hook script itself, source the vendored `hook-health.sh` and call
    `hook_health_register "<hook-filename-without-.sh>"` near the top of the script, before any real
    work happens. Once stdin has been read, call `hook_health_context "$INPUT"` so the record picks up
