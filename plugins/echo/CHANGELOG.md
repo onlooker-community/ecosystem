@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.6](https://github.com/onlooker-community/ecosystem/compare/echo-v0.4.5...echo-v0.4.6) (2026-09-06)
+
+
+### Bug Fixes
+
+* **echo:** watch the tree the session worked in, and grade the right copy :eyes: ([#268](https://github.com/onlooker-community/ecosystem/issues/268)) ([e6650bb](https://github.com/onlooker-community/ecosystem/commit/e6650bb98301a865477dbc88288f3ecb008dc4f6))
+
 ## [0.4.5](https://github.com/onlooker-community/ecosystem/compare/echo-v0.4.4...echo-v0.4.5) (2026-09-05)
 
 
