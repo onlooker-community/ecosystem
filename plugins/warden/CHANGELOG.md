@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.5](https://github.com/onlooker-community/ecosystem/compare/warden-v0.4.4...warden-v0.4.5) (2026-09-06)
+
+
+### Bug Fixes
+
+* **events:** emit through the newest ecosystem, not the first one listed :satellite: ([#276](https://github.com/onlooker-community/ecosystem/issues/276)) ([1b3541c](https://github.com/onlooker-community/ecosystem/commit/1b3541c8bbeaf9c00a992ee339e2a726fa9e087c))
+
 ## [0.4.4](https://github.com/onlooker-community/ecosystem/compare/warden-v0.4.3...warden-v0.4.4) (2026-09-05)
 
 

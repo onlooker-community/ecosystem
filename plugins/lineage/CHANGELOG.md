@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.8](https://github.com/onlooker-community/ecosystem/compare/lineage-v0.4.7...lineage-v0.4.8) (2026-09-06)
+
+
+### Bug Fixes
+
+* **events:** emit through the newest ecosystem, not the first one listed :satellite: ([#276](https://github.com/onlooker-community/ecosystem/issues/276)) ([1b3541c](https://github.com/onlooker-community/ecosystem/commit/1b3541c8bbeaf9c00a992ee339e2a726fa9e087c))
+
 ## [0.4.7](https://github.com/onlooker-community/ecosystem/compare/lineage-v0.4.6...lineage-v0.4.7) (2026-09-06)
 
 
