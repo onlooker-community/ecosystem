@@ -68,6 +68,33 @@ lineage_project_repo_root() {
 	printf '%s' "$toplevel"
 }
 
+# Resolve the toplevel of the working tree the session is actually in.
+#
+# This is NOT lineage_project_repo_root, and the difference is the whole point.
+# That one answers "which ledger does this belong to" and deliberately resolves
+# a linked worktree to its parent checkout, so both share a project key. This
+# one answers "which tree do I read and write files in", and for a worktree
+# that is the worktree itself.
+#
+# Collapsing the two is ecosystem-449.33: the parent's root was used as a
+# containment boundary and as a git diff target, so every change made in a
+# worktree was either dropped as out-of-repo or attributed to the wrong tree.
+# Any path operation — containment, diff, file read, output path — wants this
+# root. Only identity wants the other one.
+lineage_worktree_root() {
+	local cwd="${1:-}"
+	[[ -z "$cwd" || ! -d "$cwd" ]] && return 0
+
+	local toplevel
+	toplevel=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || return 0
+	[[ -z "$toplevel" ]] && return 0
+
+	# Resolve physically, matching lineage_project_repo_root and the paths the
+	# hook records, so a symlinked path (macOS /var -> /private/var) does not
+	# fail a prefix comparison against an otherwise identical root.
+	(cd "$toplevel" 2>/dev/null && pwd -P) || printf '%s' "$toplevel"
+}
+
 # Compute the project key for the given cwd. Prints the key or empty string.
 lineage_project_key() {
 	local cwd="${1:-}"
