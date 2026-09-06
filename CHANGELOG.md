@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.49.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.49.1...ecosystem-v0.49.2) (2026-09-06)
+
+
+### Bug Fixes
+
+* **dogfood:** stop paying for a gate we cannot turn off :mute: ([#259](https://github.com/onlooker-community/ecosystem/issues/259)) ([34b690a](https://github.com/onlooker-community/ecosystem/commit/34b690a0ba933c7ba9d92f311c3b3b55e0265cd9))
+
 ## [0.49.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.49.0...ecosystem-v0.49.1) (2026-09-05)
 
 
