@@ -107,6 +107,14 @@ _done() {
 REPO_ROOT=$(tribunal_project_repo_root "$CWD")
 tribunal_config_load "$REPO_ROOT"
 
+# The tree this session is in, which for a worktree is not REPO_ROOT
+# (ecosystem-449.37). Every git read below uses it; REPO_ROOT stays identity.
+# Config still loads from REPO_ROOT above — that is the parent's config, and
+# whether it should be is the same question for every plugin, tracked on 449.37
+# rather than decided here.
+WORKTREE_ROOT=$(tribunal_worktree_root "$CWD")
+[[ -z "$WORKTREE_ROOT" ]] && WORKTREE_ROOT="$REPO_ROOT"
+
 # The off switch, consulted before anything else this hook could spend
 # (ecosystem-449.32). tribunal_config_stop_hook_enabled has existed in
 # tribunal-config.sh the whole time; this hook simply never called it, so
@@ -130,7 +138,7 @@ fi
 # Skip if no files were modified since the last commit AND skip_if_no_file_changes is true.
 SKIP_IF_CLEAN=$(tribunal_config_get '.tribunal.stop_hook.skip_if_no_file_changes')
 if [[ "$SKIP_IF_CLEAN" == "true" ]]; then
-	if git -C "$REPO_ROOT" diff --quiet 2>/dev/null && git -C "$REPO_ROOT" diff --cached --quiet 2>/dev/null; then
+	if git -C "$WORKTREE_ROOT" diff --quiet 2>/dev/null && git -C "$WORKTREE_ROOT" diff --cached --quiet 2>/dev/null; then
 		_done
 	fi
 fi
@@ -152,7 +160,7 @@ SCORE_THRESHOLD=$(tribunal_config_get '.tribunal.session.score_threshold')
 TRANSCRIPT_TAIL=$(tail -c 30000 "$TRANSCRIPT_PATH" 2>/dev/null) || TRANSCRIPT_TAIL=""
 [[ -z "$TRANSCRIPT_TAIL" ]] && _done
 
-DIFF_SUMMARY=$(git -C "$REPO_ROOT" diff --stat 2>/dev/null | tail -c 4000) || DIFF_SUMMARY=""
+DIFF_SUMMARY=$(git -C "$WORKTREE_ROOT" diff --stat 2>/dev/null | tail -c 4000) || DIFF_SUMMARY=""
 
 PROMPT_FILE=$(mktemp -t tribunal-stop-prompt.XXXXXX 2>/dev/null) || PROMPT_FILE="/tmp/tribunal-stop-prompt.$$"
 
