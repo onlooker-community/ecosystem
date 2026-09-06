@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.8](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.3.7...tribunal-v1.3.8) (2026-09-06)
+
+
+### Bug Fixes
+
+* **events:** emit through the newest ecosystem, not the first one listed :satellite: ([#276](https://github.com/onlooker-community/ecosystem/issues/276)) ([1b3541c](https://github.com/onlooker-community/ecosystem/commit/1b3541c8bbeaf9c00a992ee339e2a726fa9e087c))
+
 ## [1.3.7](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.3.6...tribunal-v1.3.7) (2026-09-06)
 
 

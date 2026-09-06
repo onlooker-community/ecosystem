@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.7](https://github.com/onlooker-community/ecosystem/compare/counsel-v0.6.6...counsel-v0.6.7) (2026-09-06)
+
+
+### Bug Fixes
+
+* **events:** emit through the newest ecosystem, not the first one listed :satellite: ([#276](https://github.com/onlooker-community/ecosystem/issues/276)) ([1b3541c](https://github.com/onlooker-community/ecosystem/commit/1b3541c8bbeaf9c00a992ee339e2a726fa9e087c))
+
 ## [0.6.6](https://github.com/onlooker-community/ecosystem/compare/counsel-v0.6.5...counsel-v0.6.6) (2026-09-05)
 
 
