@@ -5,30 +5,49 @@
 # Fail-soft: returns 0 on success or when the substrate is unavailable.
 
 _curator_resolve_event_js() {
-	local script_dir plugin_root ecosystem_root candidate
+	local script_dir plugin_root sibling version_dir version mjs best_version best_path
 	script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 	plugin_root="$(cd "${script_dir}/../.." && pwd)"
 
-	ecosystem_root="${ONLOOKER_ECOSYSTEM_ROOT:-}"
-	if [[ -z "$ecosystem_root" ]]; then
-		candidate="$(cd "${plugin_root}/../.." 2>/dev/null && pwd)"
-		if [[ -f "${candidate}/scripts/lib/onlooker-event.mjs" ]]; then
-			ecosystem_root="$candidate"
-		fi
-	fi
-	# Glob-discover the ecosystem plugin under the shared plugin cache parent;
-	# works regardless of which ecosystem version is installed.
-	if [[ -z "$ecosystem_root" ]]; then
-		for candidate in "${plugin_root}/../../ecosystem/"*/scripts/lib/onlooker-event.mjs; do
-			if [[ -f "$candidate" ]]; then
-				ecosystem_root="$(cd "$(dirname "$(dirname "$candidate")")" && pwd)"
-				break
-			fi
-		done
+	if [[ -n "${ONLOOKER_ECOSYSTEM_ROOT:-}" ]]; then
+		printf '%s/scripts/lib/onlooker-event.mjs' "$ONLOOKER_ECOSYSTEM_ROOT"
+		return 0
 	fi
 
-	if [[ -n "$ecosystem_root" ]]; then
-		printf '%s/scripts/lib/onlooker-event.mjs' "$ecosystem_root"
+	sibling="$(cd "${plugin_root}/../.." 2>/dev/null && pwd)"
+	if [[ -f "${sibling}/scripts/lib/onlooker-event.mjs" ]]; then
+		printf '%s/scripts/lib/onlooker-event.mjs' "$sibling"
+		return 0
+	fi
+
+	# Glob-discover the ecosystem plugin under the shared plugin cache parent;
+	# works regardless of which ecosystem version is installed.
+	#
+	# Return the matched path itself. Re-deriving an ecosystem root from it
+	# needs three dirnames, not two, and the two-dirname form doubled the
+	# path to <v>/scripts/scripts/lib and silenced this plugin for 34 days
+	# (ecosystem-449.34). Nothing here reconstructs what the glob already knows.
+	#
+	# Glob order is lexical and lexical order is not version order: 0.33.1
+	# sorts ahead of 0.49.2, 0.9.0 sorts after both, and 0.47.9 sorts after
+	# 0.47.10. Compare the version directories field by field as numbers so
+	# the newest install wins regardless of how many are cached.
+	best_version=""
+	best_path=""
+	for version_dir in "${plugin_root}/../../ecosystem/"*/; do
+		version_dir="${version_dir%/}"
+		mjs="${version_dir}/scripts/lib/onlooker-event.mjs"
+		[[ -f "$mjs" ]] || continue
+		version="${version_dir##*/}"
+		if [[ -z "$best_version" ]] || [[ "$(printf '%s\n%s\n' "$best_version" "$version" |
+			sort -t. -k1,1n -k2,2n -k3,3n | tail -1)" == "$version" ]]; then
+			best_version="$version"
+			best_path="$mjs"
+		fi
+	done
+
+	if [[ -n "$best_path" ]]; then
+		printf '%s' "$best_path"
 	fi
 }
 
