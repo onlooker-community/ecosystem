@@ -43,13 +43,28 @@ if [[ -z "$_ECOSYSTEM_ROOT" ]]; then
 fi
 # Glob-discover the ecosystem plugin under the shared plugin cache parent;
 # works regardless of which ecosystem version is installed.
+#
+# THREE dirnames, not two (ecosystem-449.36). The match is
+# .../ecosystem/<v>/scripts/lib/validate-path.sh; stripping only lib/ and the
+# filename lands on .../<v>/scripts, so the guard below looked for
+# .../<v>/scripts/scripts/lib/validate-path.sh and found nothing. Sourcing this
+# is what exports ONLOOKER_EVENTS_LOG, so the miss was silent at both ends.
+#
+# NEWEST, not first (ecosystem-449.35). Glob expansion is lexicographic, so
+# 0.33.1 sorted ahead of 0.49.2 and break-on-first-hit bound a month-stale
+# ecosystem. sort -V orders by version on BSD/macOS and GNU alike. Correcting
+# only the doubling would have started sourcing that stale copy for real, so
+# the two move together.
 if [[ -z "$_ECOSYSTEM_ROOT" ]]; then
-	for _candidate in "${PLUGIN_ROOT}/../../ecosystem/"*/scripts/lib/validate-path.sh; do
-		if [[ -f "$_candidate" ]]; then
-			_ECOSYSTEM_ROOT="$(cd "$(dirname "$(dirname "$_candidate")")" && pwd)"
-			break
-		fi
-	done
+	_newest_candidate=""
+	while IFS= read -r _candidate; do
+		[[ -f "$_candidate" ]] && _newest_candidate="$_candidate"
+	done < <(printf '%s\n' "${PLUGIN_ROOT}/../../ecosystem/"*/scripts/lib/validate-path.sh | sort -V)
+	# An unmatched glob expands to the literal pattern; the -f test above is
+	# what keeps that from counting as a hit.
+	if [[ -n "$_newest_candidate" ]]; then
+		_ECOSYSTEM_ROOT="$(cd "$(dirname "$(dirname "$(dirname "$_newest_candidate")")")" && pwd)"
+	fi
 fi
 
 if [[ -n "$_ECOSYSTEM_ROOT" && -f "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.sh" ]]; then
@@ -82,6 +97,13 @@ _done() { exit 0; }
 REPO_ROOT=$(echo_project_repo_root "$CWD")
 [[ -z "$REPO_ROOT" ]] && _done
 
+# The tree this session is in, which for a worktree is not REPO_ROOT
+# (ecosystem-449.37). Both the changed-file scan and the abs_path rebuild below
+# use it. Config still loads from REPO_ROOT — the parent's config — which is the
+# same open question for every plugin here and stays on 449.37.
+WORKTREE_ROOT=$(echo_worktree_root "$CWD")
+[[ -z "$WORKTREE_ROOT" ]] && WORKTREE_ROOT="$REPO_ROOT"
+
 CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" echo_config_load "$REPO_ROOT"
 
 PROJECT_KEY=$(echo_project_key "$CWD")
@@ -94,10 +116,12 @@ command -v jq >/dev/null 2>&1 || _done
 # Identify changed agent files
 # ---------------------------------------------------------------------------
 
-# Collect all changed paths: unstaged, staged, and untracked.
-CHANGED_FILES=$(git -C "$REPO_ROOT" diff --name-only HEAD 2>/dev/null) || CHANGED_FILES=""
-STAGED_FILES=$(git -C "$REPO_ROOT" diff --name-only --cached 2>/dev/null) || STAGED_FILES=""
-UNTRACKED_FILES=$(git -C "$REPO_ROOT" ls-files --others --exclude-standard 2>/dev/null) || UNTRACKED_FILES=""
+# Collect all changed paths: unstaged, staged, and untracked. Read from the
+# worktree the session is in — rooted at REPO_ROOT these came back empty for
+# any worktree, so echo was a silent no-op there (ecosystem-449.37).
+CHANGED_FILES=$(git -C "$WORKTREE_ROOT" diff --name-only HEAD 2>/dev/null) || CHANGED_FILES=""
+STAGED_FILES=$(git -C "$WORKTREE_ROOT" diff --name-only --cached 2>/dev/null) || STAGED_FILES=""
+UNTRACKED_FILES=$(git -C "$WORKTREE_ROOT" ls-files --others --exclude-standard 2>/dev/null) || UNTRACKED_FILES=""
 ALL_CHANGED=$(printf '%s\n%s\n%s' "$CHANGED_FILES" "$STAGED_FILES" "$UNTRACKED_FILES" | sort -u | grep -v '^$') || ALL_CHANGED=""
 [[ -z "$ALL_CHANGED" ]] && _done
 
@@ -181,7 +205,10 @@ sum_after=0
 file_count=0
 
 for rel_path in "${WATCHED_CHANGED[@]}"; do
-	abs_path="${REPO_ROOT}/${rel_path}"
+	# Rebuilt against the tree the path was found in. Rooted at REPO_ROOT this
+	# opened the PARENT checkout's copy, so echo could score one version of a
+	# prompt and store it as the baseline for another (ecosystem-449.37).
+	abs_path="${WORKTREE_ROOT}/${rel_path}"
 	[[ ! -f "$abs_path" ]] && continue
 
 	FILE_CONTENT=$(cat "$abs_path" 2>/dev/null) || continue
