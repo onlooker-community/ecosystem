@@ -92,3 +92,40 @@ _plugins_sourcing_portable_lock() {
 	done < <(_plugin_dirs)
 	[ -z "$drifted" ] || { echo "drifted: $drifted"; return 1; }
 }
+
+# ecosystem-root.sh is vendored on demand for the same reason: only the eight
+# plugins with a hook that sources the substrate need it. It replaced fifteen
+# open-coded copies of one glob loop, each of which carried the same two
+# defects (ecosystem-449.36, ecosystem-449.35) — so a copy that drifts here is
+# the shape that outage came back through. What each copy actually resolves to
+# is covered by hook-substrate-resolution.bats; these two only pin that the
+# right plugins carry it and that no copy has drifted.
+
+_plugins_sourcing_ecosystem_root() {
+	local d
+	while IFS= read -r d; do
+		grep -rlE '^[[:space:]]*(\.|source)[[:space:]].*ecosystem-root\.sh' \
+			"${d}/scripts" >/dev/null 2>&1 && basename "$d"
+	done < <(_plugin_dirs)
+}
+
+@test "every plugin that sources ecosystem-root.sh vendors a copy of it" {
+	local missing="" name
+	while IFS= read -r name; do
+		[ -z "$name" ] && continue
+		[ -f "${REPO_ROOT}/plugins/${name}/scripts/lib/ecosystem-root.sh" ] \
+			|| missing+="$name "
+	done < <(_plugins_sourcing_ecosystem_root)
+	[ -z "$missing" ] || { echo "sources it but does not vendor it: $missing"; return 1; }
+}
+
+@test "every vendored ecosystem-root.sh is byte-identical to the canonical copy" {
+	local canonical="${REPO_ROOT}/scripts/lib/ecosystem-root.sh"
+	local drifted="" d
+	while IFS= read -r d; do
+		[ -f "${d}/scripts/lib/ecosystem-root.sh" ] || continue
+		cmp -s "$canonical" "${d}/scripts/lib/ecosystem-root.sh" \
+			|| drifted+="$(basename "$d") "
+	done < <(_plugin_dirs)
+	[ -z "$drifted" ] || { echo "drifted: $drifted"; return 1; }
+}

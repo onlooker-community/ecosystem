@@ -155,6 +155,18 @@ See `plugins/compass/docs/adr/001-evaluate-prompts-in-context.md` for the full d
    measurement — it silently reports nothing to `hook-health.jsonl`, with no error and no test failure
    to flag it. `test/bats/hook-health.bats` enforces that every hook under `plugins/*/scripts/hooks/*.sh`
    calls `hook_health_register`.
+10. If the hook needs `$ONLOOKER_DIR` or `$ONLOOKER_EVENTS_LOG`, source the vendored
+    `ecosystem-root.sh` and call `onlooker_ecosystem_root`, then keep your own `-f` guard before
+    sourcing `validate-path.sh`. Never open-code the glob that finds the ecosystem. Fifteen hooks did,
+    and every copy carried the same two defects: two dirnames where three are needed, so the guard
+    tested `.../<v>/scripts/scripts/lib/validate-path.sh` and the substrate was never sourced
+    (`ecosystem-449.36`), and a lexical `break`-on-first-hit that bound `0.33.1` over `0.49.2`
+    (`ecosystem-449.35`). Sourcing the substrate is what exports `ONLOOKER_EVENTS_LOG`, so the failure
+    is invisible in any plugin whose emit lib defaults its own sink and total in one that does not —
+    curator, historian and librarian each stopped emitting within 60ms of each other and stayed silent
+    for 34 days. It is vendored on demand, so a plugin adopting it copies it in once, then
+    `scripts/sync-shared-libs.sh` keeps it fresh; `test/bats/hook-substrate-resolution.bats` fails on
+    any hook that re-derives a root by nested `dirname`.
 
 ## Development
 

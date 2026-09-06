@@ -30,23 +30,9 @@ hook_health_register "librarian-session-end"
 
 # Source the ecosystem substrate so $ONLOOKER_DIR / $ONLOOKER_EVENTS_LOG
 # resolve correctly under the test harness's isolated temp home.
-_ECOSYSTEM_ROOT="${ONLOOKER_ECOSYSTEM_ROOT:-}"
-if [[ -z "$_ECOSYSTEM_ROOT" ]]; then
-	_candidate="$(cd "${PLUGIN_ROOT}/../.." 2>/dev/null && pwd)"
-	if [[ -f "${_candidate}/scripts/lib/validate-path.sh" ]]; then
-		_ECOSYSTEM_ROOT="$_candidate"
-	fi
-fi
-# Glob-discover the ecosystem plugin under the shared plugin cache parent;
-# works regardless of which ecosystem version is installed.
-if [[ -z "$_ECOSYSTEM_ROOT" ]]; then
-	for _candidate in "${PLUGIN_ROOT}/../../ecosystem/"*/scripts/lib/validate-path.sh; do
-		if [[ -f "$_candidate" ]]; then
-			_ECOSYSTEM_ROOT="$(cd "$(dirname "$(dirname "$_candidate")")" && pwd)"
-			break
-		fi
-	done
-fi
+# shellcheck source=../lib/ecosystem-root.sh
+source "${PLUGIN_ROOT}/scripts/lib/ecosystem-root.sh"
+_ECOSYSTEM_ROOT="$(onlooker_ecosystem_root)"
 
 if [[ -n "$_ECOSYSTEM_ROOT" && -f "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.sh" ]]; then
 	# shellcheck disable=SC1091

@@ -41,40 +41,9 @@ hook_health_register "archivist-extract"
 # Ecosystem substrate (validate-path.sh) lives in the sibling ecosystem plugin.
 # Prefer the env var the harness sets; fall back to walking up to the repo
 # root in dev checkouts.
-_ECOSYSTEM_ROOT="${ONLOOKER_ECOSYSTEM_ROOT:-}"
-if [[ -z "$_ECOSYSTEM_ROOT" ]]; then
-	# In the marketplace repo, plugins/archivist/scripts/hooks is 4 dirs
-	# below the ecosystem root.
-	_candidate="$(cd "${PLUGIN_ROOT}/../.." 2>/dev/null && pwd)"
-	if [[ -f "${_candidate}/scripts/lib/validate-path.sh" ]]; then
-		_ECOSYSTEM_ROOT="$_candidate"
-	fi
-fi
-# Glob-discover the ecosystem plugin under the shared plugin cache parent;
-# works regardless of which ecosystem version is installed.
-#
-# THREE dirnames, not two (ecosystem-449.36). The match is
-# .../ecosystem/<v>/scripts/lib/validate-path.sh; stripping only lib/ and the
-# filename lands on .../<v>/scripts, so the guard below looked for
-# .../<v>/scripts/scripts/lib/validate-path.sh and found nothing. Sourcing this
-# is what exports ONLOOKER_EVENTS_LOG, so the miss was silent at both ends.
-#
-# NEWEST, not first (ecosystem-449.35). Glob expansion is lexicographic, so
-# 0.33.1 sorted ahead of 0.49.2 and break-on-first-hit bound a month-stale
-# ecosystem. sort -V orders by version on BSD/macOS and GNU alike. Correcting
-# only the doubling would have started sourcing that stale copy for real, so
-# the two move together.
-if [[ -z "$_ECOSYSTEM_ROOT" ]]; then
-	_newest_candidate=""
-	while IFS= read -r _candidate; do
-		[[ -f "$_candidate" ]] && _newest_candidate="$_candidate"
-	done < <(printf '%s\n' "${PLUGIN_ROOT}/../../ecosystem/"*/scripts/lib/validate-path.sh | sort -V)
-	# An unmatched glob expands to the literal pattern; the -f test above is
-	# what keeps that from counting as a hit.
-	if [[ -n "$_newest_candidate" ]]; then
-		_ECOSYSTEM_ROOT="$(cd "$(dirname "$(dirname "$(dirname "$_newest_candidate")")")" && pwd)"
-	fi
-fi
+# shellcheck source=../lib/ecosystem-root.sh
+source "${PLUGIN_ROOT}/scripts/lib/ecosystem-root.sh"
+_ECOSYSTEM_ROOT="$(onlooker_ecosystem_root)"
 
 if [[ -n "$_ECOSYSTEM_ROOT" && -f "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.sh" ]]; then
 	# shellcheck disable=SC1091

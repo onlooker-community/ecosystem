@@ -25,7 +25,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SHARED_LIBS=(config-loader.sh hook-health.sh)
-ON_DEMAND_LIBS=(portable-lock.sh)
+ON_DEMAND_LIBS=(ecosystem-root.sh portable-lock.sh)
 
 check_only=0
 [[ "${1:-}" == "--check" ]] && check_only=1
