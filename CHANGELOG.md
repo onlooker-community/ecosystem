@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.49.11](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.49.10...ecosystem-v0.49.11) (2026-09-06)
+
+
+### Performance Improvements
+
+* **inspector:** read the payload once instead of four times :leaves: ([#282](https://github.com/onlooker-community/ecosystem/issues/282)) ([a54a92b](https://github.com/onlooker-community/ecosystem/commit/a54a92be601604083e197a73192b392d1bab9b18))
+
 ## [0.49.10](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.49.9...ecosystem-v0.49.10) (2026-09-06)
 
 
