@@ -39,23 +39,17 @@ export ASSAYER_NESTED=1
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-# Same ecosystem-root resolution as the hook: env first, then the sibling
-# checkout, then a glob over the plugin cache so any installed version works.
-_ECOSYSTEM_ROOT="${ONLOOKER_ECOSYSTEM_ROOT:-}"
-if [[ -z "$_ECOSYSTEM_ROOT" ]]; then
-	_candidate="$(cd "${PLUGIN_ROOT}/../.." 2>/dev/null && pwd)"
-	if [[ -f "${_candidate}/scripts/lib/validate-path.sh" ]]; then
-		_ECOSYSTEM_ROOT="$_candidate"
-	fi
-fi
-if [[ -z "$_ECOSYSTEM_ROOT" ]]; then
-	for _candidate in "${PLUGIN_ROOT}/../../ecosystem/"*/scripts/lib/validate-path.sh; do
-		if [[ -f "$_candidate" ]]; then
-			_ECOSYSTEM_ROOT="$(cd "$(dirname "$(dirname "$_candidate")")" && pwd)"
-			break
-		fi
-	done
-fi
+# Same ecosystem-root resolution as the hook, and now through the same shared
+# lib. The inline copy this replaces re-derived the root with two dirnames where
+# three are needed, so the guard below tested <v>/scripts/scripts/lib and never
+# passed; it also took the first lexical glob match, which is not the newest
+# version (ecosystem-449.35, ecosystem-449.36). The fourteen-hook sweep that
+# corrected the rest did not reach here, because this is a command script rather
+# than a hook. See scripts/lib/substrate-resolve.sh.
+# shellcheck source=lib/substrate-resolve.sh
+source "${PLUGIN_ROOT}/scripts/lib/substrate-resolve.sh"
+_ECOSYSTEM_ROOT=$(onlooker_resolve_substrate "$PLUGIN_ROOT")
+
 if [[ -n "$_ECOSYSTEM_ROOT" && -f "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.sh" ]]; then
 	# shellcheck disable=SC1091
 	CLAUDE_PLUGIN_ROOT="$_ECOSYSTEM_ROOT" source "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.sh"

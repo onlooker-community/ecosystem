@@ -124,10 +124,15 @@ _hooks_using_resolver() {
 	[ "$count" -ge 14 ]
 }
 
-@test "no hook still carries its own inline substrate lookup" {
+@test "no plugin script still carries its own inline substrate lookup" {
+	# Scoped to every plugin script, not just scripts/hooks/*.sh. The narrower
+	# scope is how assayer-audit.sh kept the two-dirname re-derive through the
+	# fourteen-hook sweep: it is a command script, so nothing looked at it.
+	# substrate-resolve.sh is excluded because it IS the lookup.
 	local leftovers
 	leftovers=$(grep -rln 'ecosystem/"\*/scripts/lib/validate-path.sh' \
-		"${REPO_ROOT}"/plugins/*/scripts/hooks/*.sh 2>/dev/null || true)
+		"${REPO_ROOT}"/plugins/*/scripts/ 2>/dev/null |
+		grep -v '/substrate-resolve\.sh$' || true)
 	[ -z "$leftovers" ] || { echo "still inline: $leftovers"; return 1; }
 }
 
