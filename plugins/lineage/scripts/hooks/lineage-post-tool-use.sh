@@ -134,7 +134,31 @@ _lineage_ignored() {
 }
 
 [[ -z "$CWD" ]] && CWD="$(pwd)"
+
+# Two roots, two jobs — keeping them apart is ecosystem-449.33.
+#
+# REPO_ROOT is identity: it resolves a linked worktree to its parent checkout so
+# both write to one ledger. It is a valid answer to "whose provenance is this"
+# and a wrong answer to "where are the files", because a worktree's files do not
+# live under it.
+#
+# WORKTREE_ROOT is the tree this session is actually in. Every path operation
+# below uses it: the containment test, the Bash branch's baseline and diff, and
+# the record paths. Using REPO_ROOT for those meant a worktree's edits tested as
+# outside the repo and its shell edits diffed the parent's tree instead.
+#
+# The two lineage_config_load calls below are the deliberate exception: they
+# still take REPO_ROOT, so a worktree reads its parent checkout's config. That
+# is config resolution rather than a path operation, it is the same question
+# every plugin here answers the same way, and ecosystem-449.37 settles it across
+# all of them. Left alone here so this change stays one decision wide.
 REPO_ROOT=$(lineage_project_repo_root "$CWD")
+WORKTREE_ROOT=$(lineage_worktree_root "$CWD")
+
+# Outside a git repo both are empty; in a normal checkout they are equal. Fall
+# back so a resolution failure degrades to the old single-root behavior rather
+# than disabling the hook.
+[[ -z "$WORKTREE_ROOT" ]] && WORKTREE_ROOT="$REPO_ROOT"
 
 # ---------------------------------------------------------------------------
 # Bash: git is the source of truth. A shell-shaped edit has no tool_input to
@@ -165,9 +189,9 @@ REPO_ROOT=$(lineage_project_repo_root "$CWD")
 # for the change and finds nothing left to do.
 # ---------------------------------------------------------------------------
 if [[ "$TOOL" == "Bash" ]]; then
-	[[ -z "$REPO_ROOT" ]] && _done
+	[[ -z "$WORKTREE_ROOT" ]] && _done
 
-	BASELINE_FILE=$(lineage_baseline_path "$(lineage_baseline_scope_id "$REPO_ROOT")" "$SESSION_ID")
+	BASELINE_FILE=$(lineage_baseline_path "$(lineage_baseline_scope_id "$WORKTREE_ROOT")" "$SESSION_ID")
 	mkdir -p "$(dirname "$BASELINE_FILE")" 2>/dev/null || _done
 
 	BASELINE_LOCK="${BASELINE_FILE}.lock"
@@ -196,18 +220,18 @@ if [[ "$TOOL" == "Bash" ]]; then
 	# No prior baseline means this is the session's first Bash call. Seed and
 	# stop: with nothing to compare against, every dirty file would look new.
 	if ! printf '%s' "$BASELINE" | jq -e 'has("files")' >/dev/null 2>&1; then
-		_seed=$(lineage_baseline_build "$REPO_ROOT")
+		_seed=$(lineage_baseline_build "$WORKTREE_ROOT")
 		[[ -n "$_seed" ]] && lineage_baseline_write "$BASELINE_FILE" "$_seed"
 		_done
 	fi
 
-	CHANGED=$(lineage_changed_files "$REPO_ROOT" "$BASELINE")
+	CHANGED=$(lineage_changed_files "$WORKTREE_ROOT" "$BASELINE")
 
 	# Pre-gate: nothing moved, so there is nothing to record. Advance the
 	# baseline (a no-op here, but keeps the file's mtime/shape consistent)
 	# and stop before paying for config load or the project key.
 	if [[ -z "$CHANGED" ]]; then
-		_noop=$(lineage_baseline_build "$REPO_ROOT")
+		_noop=$(lineage_baseline_build "$WORKTREE_ROOT")
 		[[ -n "$_noop" ]] && lineage_baseline_write "$BASELINE_FILE" "$_noop"
 		_done
 	fi
@@ -233,8 +257,8 @@ if [[ "$TOOL" == "Bash" ]]; then
 		_lineage_ignored "$REL" && continue
 
 		SCOPE=$(lineage_content_scope "$BASELINE" "$REL")
-		ADDED=$(lineage_added_content "$REPO_ROOT" "$REL")
-		REMOVED=$(lineage_removed_content "$REPO_ROOT" "$REL")
+		ADDED=$(lineage_added_content "$WORKTREE_ROOT" "$REL")
+		REMOVED=$(lineage_removed_content "$WORKTREE_ROOT" "$REL")
 		# Skip only when git reports neither side. A pure deletion has no
 		# added content, and skipping on that alone lost the change for
 		# good, since the baseline advances either way.
@@ -242,7 +266,7 @@ if [[ "$TOOL" == "Bash" ]]; then
 
 		REC=$(lineage_build_record "$(lineage_ulid)" "$(lineage_now_iso)" \
 			"$(lineage_now_epoch)" "$SESSION_ID" "$TURN" "Bash" \
-			"${REPO_ROOT}/${REL}" '{}' "$MAX_CHARS" "$DO_REDACT" \
+			"${WORKTREE_ROOT}/${REL}" '{}' "$MAX_CHARS" "$DO_REDACT" \
 			"$TRANSCRIPT_PATH" "$ADDED" "$PROV_KIND" "$SCOPE" "$REMOVED")
 		[[ -z "$REC" ]] && continue
 
@@ -264,7 +288,7 @@ if [[ "$TOOL" == "Bash" ]]; then
 
 	# Advance the baseline whether or not anything was recorded, so the next
 	# call diffs against current state rather than re-reporting the same edit.
-	_final=$(lineage_baseline_build "$REPO_ROOT")
+	_final=$(lineage_baseline_build "$WORKTREE_ROOT")
 	[[ -n "$_final" ]] && lineage_baseline_write "$BASELINE_FILE" "$_final"
 	_done
 fi
@@ -302,9 +326,14 @@ _lineage_ignored "$FILE_PATH" && _done
 
 # Skip files outside the repo (best-effort). Both sides are realpath-resolved
 # now, so this is a plain prefix test.
-if [[ -n "$REPO_ROOT" && "$FILE_PATH" == /* ]]; then
+#
+# Tested against WORKTREE_ROOT, not REPO_ROOT (ecosystem-449.33). A linked
+# worktree's files live beside the parent checkout, not beneath it, so this
+# prefix test against the parent's root failed for every worktree edit and
+# dropped it as out-of-repo — silently, since the hook exits 0 either way.
+if [[ -n "$WORKTREE_ROOT" && "$FILE_PATH" == /* ]]; then
 	_file_dir=$(dirname "$FILE_PATH")
-	if [[ "$_file_dir" != "$REPO_ROOT" && "$_file_dir"/ != "$REPO_ROOT"/* ]]; then
+	if [[ "$_file_dir" != "$WORKTREE_ROOT" && "$_file_dir"/ != "$WORKTREE_ROOT"/* ]]; then
 		_done
 	fi
 fi
@@ -350,16 +379,18 @@ if lineage_append "$PROJECT_KEY" "$RECORD"; then
 	# none exists yet, the Bash branch's own seed-and-stop step builds one
 	# from current disk state on its first call, which already reflects this
 	# change — nothing to advance ahead of.
-	if [[ -n "$REPO_ROOT" ]]; then
-		_baseline_scope_id=$(lineage_baseline_scope_id "$REPO_ROOT")
+	if [[ -n "$WORKTREE_ROOT" ]]; then
+		_baseline_scope_id=$(lineage_baseline_scope_id "$WORKTREE_ROOT")
 		_baseline_file=$(lineage_baseline_path "$_baseline_scope_id" "$SESSION_ID")
 		# A cheap pre-check, not the deciding one: it keeps an Edit that
 		# precedes any Bash call in the session off the lock entirely. The
 		# test that governs the write is the one inside the lock below.
 		if [[ -f "$_baseline_file" ]]; then
-			# FILE_PATH and REPO_ROOT are both resolved by now, so the strip
-			# needs no further path work (ecosystem-htl).
-			_rel_path="${FILE_PATH#"$REPO_ROOT"/}"
+			# FILE_PATH and WORKTREE_ROOT are both resolved by now, so the
+			# strip needs no further path work (ecosystem-htl). The baseline
+			# it feeds is built from WORKTREE_ROOT, so the key has to be
+			# relative to that same root (ecosystem-449.33).
+			_rel_path="${FILE_PATH#"$WORKTREE_ROOT"/}"
 
 			# Same lock the Bash branch's read → decide → rebuild cycle
 			# takes on this file (ecosystem-449.13 I3): without it, this
