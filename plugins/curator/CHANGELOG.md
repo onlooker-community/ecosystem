@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.6](https://github.com/onlooker-community/ecosystem/compare/curator-v0.3.5...curator-v0.3.6) (2026-09-06)
+
+
+### Bug Fixes
+
+* **emit:** stop doubling the path that silenced three plugins :relieved: ([#261](https://github.com/onlooker-community/ecosystem/issues/261)) ([ae9c6a8](https://github.com/onlooker-community/ecosystem/commit/ae9c6a8aca309737e03028d1182cf2d4dcf39acb))
+
 ## [0.3.5](https://github.com/onlooker-community/ecosystem/compare/curator-v0.3.4...curator-v0.3.5) (2026-09-05)
 
 
