@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.7](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.4.6...archivist-v0.4.7) (2026-09-06)
+
+
+### Bug Fixes
+
+* **archivist:** validate paths against the tree they came from, and emit through the current substrate :card_index_dividers: ([#271](https://github.com/onlooker-community/ecosystem/issues/271)) ([d3f2d39](https://github.com/onlooker-community/ecosystem/commit/d3f2d39bf98538071a2800c6f63425f5f71d4a6d))
+
 ## [0.4.6](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.4.5...archivist-v0.4.6) (2026-09-05)
 
 

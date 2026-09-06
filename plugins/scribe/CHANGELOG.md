@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.5](https://github.com/onlooker-community/ecosystem/compare/scribe-v0.6.4...scribe-v0.6.5) (2026-09-06)
+
+
+### Bug Fixes
+
+* **scribe:** file the document in the tree that earned it :file_folder: ([#270](https://github.com/onlooker-community/ecosystem/issues/270)) ([4b7f2d5](https://github.com/onlooker-community/ecosystem/commit/4b7f2d530294003ca300e22f6547b0daae93e841))
+
 ## [0.6.4](https://github.com/onlooker-community/ecosystem/compare/scribe-v0.6.3...scribe-v0.6.4) (2026-09-05)
 
 
