@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.8](https://github.com/onlooker-community/ecosystem/compare/assayer-v1.2.7...assayer-v1.2.8) (2026-09-06)
+
+
+### Bug Fixes
+
+* **emit:** default the sink instead of falling silent :loud_sound: ([#278](https://github.com/onlooker-community/ecosystem/issues/278)) ([1f4c0f9](https://github.com/onlooker-community/ecosystem/commit/1f4c0f9849a03ea610ebba5718ab986cb122246e))
+
 ## [1.2.7](https://github.com/onlooker-community/ecosystem/compare/assayer-v1.2.6...assayer-v1.2.7) (2026-09-06)
 
 
