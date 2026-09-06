@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.8](https://github.com/onlooker-community/ecosystem/compare/curator-v0.3.7...curator-v0.3.8) (2026-09-06)
+
+
+### Bug Fixes
+
+* **emit:** default the sink instead of falling silent :loud_sound: ([#278](https://github.com/onlooker-community/ecosystem/issues/278)) ([1f4c0f9](https://github.com/onlooker-community/ecosystem/commit/1f4c0f9849a03ea610ebba5718ab986cb122246e))
+
 ## [0.3.7](https://github.com/onlooker-community/ecosystem/compare/curator-v0.3.6...curator-v0.3.7) (2026-09-06)
 
 
