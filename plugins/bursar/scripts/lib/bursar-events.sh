@@ -11,6 +11,14 @@
 
 _BURSAR_PLUGIN_NAME="bursar"
 
+# Vendored substrate resolver, located from this file's own path and tolerated
+# absent — see substrate-resolve.sh, "FAIL-SOFT CALLERS", for why both.
+_BURSAR_EVENTS_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${_BURSAR_EVENTS_LIB_DIR}/substrate-resolve.sh" ]]; then
+	# shellcheck source=plugins/bursar/scripts/lib/substrate-resolve.sh
+	source "${_BURSAR_EVENTS_LIB_DIR}/substrate-resolve.sh"
+fi
+
 _bursar_event_js_path() {
 	if [[ -n "${_ONLOOKER_EVENT_JS:-}" && -f "$_ONLOOKER_EVENT_JS" ]]; then
 		printf '%s' "$_ONLOOKER_EVENT_JS"
@@ -25,12 +33,19 @@ _bursar_event_js_path() {
 	for c in "${candidates[@]}"; do
 		[[ -f "$c" ]] && { printf '%s' "$c"; return 0; }
 	done
-	# Glob-discover the ecosystem plugin under the shared plugin cache parent;
-	# works regardless of which ecosystem version is installed.
-	local mjs
-	for mjs in "${plugin_root}/../../ecosystem/"*/scripts/lib/onlooker-event.mjs; do
-		[[ -f "$mjs" ]] && { printf '%s' "$mjs"; return 0; }
-	done
+	# Version-ordered, not glob-ordered (ecosystem-449.35). Lexical expansion
+	# puts 0.33.1 ahead of 0.49.2, so returning the first match bound a
+	# months-stale substrate on every install measured — silently, because the
+	# path exists and emission keeps working. substrate-resolve.sh does the
+	# ordering; this lib only appends the filename it wants.
+	local root=""
+	if declare -F onlooker_resolve_substrate >/dev/null 2>&1; then
+		root="$(onlooker_resolve_substrate "$plugin_root")"
+	fi
+	if [[ -n "$root" && -f "${root}/scripts/lib/onlooker-event.mjs" ]]; then
+		printf '%s' "${root}/scripts/lib/onlooker-event.mjs"
+		return 0
+	fi
 	return 1
 }
 

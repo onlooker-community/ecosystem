@@ -21,6 +21,26 @@
 # Usage, replacing the old inline block:
 #   source "${PLUGIN_ROOT}/scripts/lib/substrate-resolve.sh"
 #   _ECOSYSTEM_ROOT=$(onlooker_resolve_substrate "$PLUGIN_ROOT")
+#
+# FAIL-SOFT CALLERS. The per-plugin `<name>-events.sh` libs also use this, to
+# pick which ecosystem's onlooker-event.mjs they emit through
+# (ecosystem-449.35). They source it from their OWN path rather than a
+# caller's $PLUGIN_ROOT, and they tolerate its absence instead of exiting the
+# way the config libs do:
+#
+#   _X_EVENTS_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+#   if [[ -f "${_X_EVENTS_LIB_DIR}/substrate-resolve.sh" ]]; then
+#           source "${_X_EVENTS_LIB_DIR}/substrate-resolve.sh"
+#   fi
+#
+# Both halves are deliberate. Self-location, because $CLAUDE_PLUGIN_ROOT is
+# read from whatever scope did the sourcing and a sub-shell can inherit one
+# without the other (ecosystem-88v, ecosystem-7bj). Tolerating absence,
+# because emission is best-effort by contract — a hook must not die because an
+# event could not be written — so a missing copy degrades to "no substrate
+# found", which is the same answer those libs already give where no ecosystem
+# is installed. It cannot ship missing: shared-lib-vendoring.bats fails the
+# build for a plugin that sources a shared lib without vendoring it.
 
 # Print the ecosystem root, or nothing. Never fails the caller.
 #
