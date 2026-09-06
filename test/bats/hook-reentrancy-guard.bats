@@ -43,16 +43,73 @@ _invokes_claude() {
 		| grep -qE '(^|[|;&(]|[[:space:]])claude[[:space:]]'
 }
 
-# A hook reaches claude either directly, or through a lib in its own plugin
-# that it sources.
-_reaches_claude() {
-	local hook="$1" plugin_dir="$2" lib
-	_invokes_claude "$hook" && return 0
-	for lib in "${plugin_dir}"/scripts/lib/*.sh; do
-		[[ -f "$lib" ]] || continue
-		_invokes_claude "$lib" || continue
-		grep -qE "source[^\n]*$(basename "$lib")" "$hook" 2>/dev/null && return 0
+# Does FILE name SCRIPT_BASENAME outside a comment? Covers both ways one
+# script hands off to another -- `source lib.sh` and `exec .../run-audit.sh`
+# -- because for re-entrancy they are the same thing: whatever environment the
+# hook sets up, the child inherits.
+_references() {
+	sed 's/#.*$//' "$1" 2>/dev/null | grep -qF "$2"
+}
+
+# Every script in this plugin that leads to claude, directly or through another
+# script it sources or executes.
+#
+# Computed to a fixpoint rather than one level deep, because the path can be
+# indirect: cartographer's hooks exec run-audit.sh, which sources
+# cartographer-analyze.sh, and only that last file actually runs `claude -p`.
+# A one-level walk sees run-audit.sh invoke nothing and reports the hook clean
+# -- which is how cartographer-session-start.sh was dismissed as needing no
+# guard, on the strength of its own "NEVER calls claude -p" header comment.
+# That invariant is true of the script and irrelevant to the recursion.
+#
+# Walks scripts/*.sh as well as scripts/lib/*.sh: run-audit.sh is a sibling of
+# lib/, not inside it.
+#
+# Bounded to the plugin's own scripts/ tree. That holds only because no script
+# under the ecosystem substrate's scripts/ invokes claude — checked, not
+# assumed. If one ever does, a hook could reach claude through it and this walk
+# would not see it.
+_claude_reaching_scripts() {
+	local plugin_dir="$1"
+	local all=() reaching=() s dep changed=1 known
+
+	for s in "${plugin_dir}"/scripts/*.sh "${plugin_dir}"/scripts/lib/*.sh \
+		"${plugin_dir}"/scripts/hooks/*.sh; do
+		[[ -f "$s" ]] && all+=("$s")
 	done
+	[[ ${#all[@]} -eq 0 ]] && return 0
+
+	for s in "${all[@]}"; do
+		_invokes_claude "$s" && reaching+=("$s")
+	done
+
+	while ((changed)); do
+		changed=0
+		for s in "${all[@]}"; do
+			known=0
+			for dep in "${reaching[@]+"${reaching[@]}"}"; do
+				[[ "$s" == "$dep" ]] && { known=1; break; }
+			done
+			((known)) && continue
+			for dep in "${reaching[@]+"${reaching[@]}"}"; do
+				if _references "$s" "$(basename "$dep")"; then
+					reaching+=("$s")
+					changed=1
+					break
+				fi
+			done
+		done
+	done
+
+	printf '%s\n' "${reaching[@]+"${reaching[@]}"}"
+}
+
+# A hook reaches claude if it is anywhere in that set.
+_reaches_claude() {
+	local hook="$1" plugin_dir="$2" s
+	while IFS= read -r s; do
+		[[ "$s" == "$hook" ]] && return 0
+	done < <(_claude_reaching_scripts "$plugin_dir")
 	return 1
 }
 
@@ -63,7 +120,7 @@ _reaches_claude() {
 		plugin_dir=$(cd "$(dirname "$hook")/../.." && pwd)
 		plugin=$(basename "$plugin_dir")
 		_reaches_claude "$hook" "$plugin_dir" || continue
-		grep -qE '\[\[ "\$\{[A-Z_]+_NESTED:-\}" == "1" \]\] && exit 0' "$hook" \
+		grep -qE '\[\[ "\$\{[A-Z_]+_NESTED:-0?\}" == "1" \]\] && exit 0' "$hook" \
 			|| unguarded+=("${plugin}/$(basename "$hook")")
 	done
 

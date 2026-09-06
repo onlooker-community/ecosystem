@@ -4,10 +4,23 @@
 # Fast path: reads one JSON field, acquires a lock, and launches the audit
 # pipeline as a detached background process. Returns in under 2 seconds.
 #
-# Invariant: this script NEVER calls claude -p or traverses the filesystem.
-# All heavy work runs in run-audit.sh as an orphaned child.
+# This script itself calls no claude -p and traverses no filesystem: all heavy
+# work runs in run-audit.sh as an orphaned child. That says nothing about
+# re-entrancy, though — run-audit.sh does reach `claude -p`, and the guard
+# below is what stops it coming back around (ecosystem-449.23).
 
 set -uo pipefail
+
+# Recursion guard — prevents a claude -p subprocess spawned by run-audit.sh
+# from re-triggering this hook.
+#
+# The lock below is not a substitute. It stamps the holder pid of THIS process,
+# which exits as soon as the audit is backgrounded, so by the time the audit
+# spawns claude the holder is dead and portable-lock reclaims the lock as
+# abandoned — a nested session acquires it on the first try and launches a
+# second audit. Verified against portable-lock.sh directly.
+[[ "${CARTOGRAPHER_NESTED:-0}" == "1" ]] && exit 0
+export CARTOGRAPHER_NESTED=1
 
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/../.." && pwd)}"
 export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
