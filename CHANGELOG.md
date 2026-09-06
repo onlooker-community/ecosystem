@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.49.10](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.49.9...ecosystem-v0.49.10) (2026-09-06)
+
+
+### Bug Fixes
+
+* **hooks:** follow what a hook execs, not just what it sources :mag: ([#280](https://github.com/onlooker-community/ecosystem/issues/280)) ([dd3145c](https://github.com/onlooker-community/ecosystem/commit/dd3145cf5c06b1b26454d3bf8c164d12d07fa6f0))
+
 ## [0.49.9](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.49.8...ecosystem-v0.49.9) (2026-09-06)
 
 
