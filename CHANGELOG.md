@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.49.5](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.49.4...ecosystem-v0.49.5) (2026-09-06)
+
+
+### Bug Fixes
+
+* **tribunal:** make the Stop gate safe to turn back on :unlock: ([#266](https://github.com/onlooker-community/ecosystem/issues/266)) ([ca6882d](https://github.com/onlooker-community/ecosystem/commit/ca6882d6149fb52a1aee26400edae558172f76b0))
+
 ## [0.49.4](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.49.3...ecosystem-v0.49.4) (2026-09-06)
 
 
