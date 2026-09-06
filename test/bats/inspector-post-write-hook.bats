@@ -52,6 +52,43 @@ _run_hook() {
 	printf '%s' "$input" | ONLOOKER_DIR="$ONLOOKER_DIR" CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$HOOK"
 }
 
+# The prologue reads cwd, session_id, tool_name and the target path from a
+# single jq pass, NUL-separated (ecosystem-449.14). It replaced four command
+# substitutions, which preserved a path containing ANY whitespace.
+#
+# The newline is the case that discriminates: spaces survive nearly any
+# implementation, but a line-separated read truncates this path at the newline
+# and inspects the wrong file — silently, because the hook still exits 0. If
+# NUL separation is what the comment in the hook claims to buy, this is the
+# property that has to hold.
+@test "a target path containing a newline survives the single-pass payload read" {
+	echo '{"inspector":{"checks":{".ts":[{"name":"t","kind":"lint","argv":["true"]}]}}}' | _settings
+	local odd="${REPO}/src/od"$'\n'"d.ts"
+	printf 'sample\n' >"$odd"
+
+	run _run_hook "$(_input "$REPO" "Edit" "$odd")"
+	[ "$status" -eq 0 ] || return 1
+
+	jq -e --arg rel "src/od"$'\n'"d.ts" \
+		'select(.event_type == "inspector.run.completed")
+		 | .payload.file_path_relative == $rel' \
+		"$ONLOOKER_EVENTS_LOG" >/dev/null
+}
+
+@test "a target path containing spaces survives the single-pass payload read" {
+	echo '{"inspector":{"checks":{".ts":[{"name":"t","kind":"lint","argv":["true"]}]}}}' | _settings
+	mkdir -p "${REPO}/src/a dir"
+	printf 'sample\n' >"${REPO}/src/a dir/od d.ts"
+
+	run _run_hook "$(_input "$REPO" "Edit" "${REPO}/src/a dir/od d.ts")"
+	[ "$status" -eq 0 ] || return 1
+
+	jq -e --arg rel "src/a dir/od d.ts" \
+		'select(.event_type == "inspector.run.completed")
+		 | .payload.file_path_relative == $rel' \
+		"$ONLOOKER_EVENTS_LOG" >/dev/null
+}
+
 @test "exits 0 when tool_name is not Write/Edit/MultiEdit" {
 	echo '{"inspector":{"checks":{".ts":[{"name":"t","kind":"lint","argv":["true"]}]}}}' | _settings
 	run _run_hook "$(_input "$REPO" "Bash")"

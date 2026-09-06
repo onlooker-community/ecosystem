@@ -26,9 +26,24 @@ source "$PLUGIN_ROOT/scripts/lib/inspector-run.sh"
 
 HOOK_INPUT=$(cat)
 hook_health_context "$HOOK_INPUT"
-CWD=$(printf '%s' "$HOOK_INPUT" | jq -r '.cwd // empty' 2>/dev/null)
-_HOOK_SESSION_ID=$(printf '%s' "$HOOK_INPUT" | jq -r '.session_id // empty' 2>/dev/null)
-TOOL_NAME=$(printf '%s' "$HOOK_INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
+
+# One jq pass for every field we need off the payload, rather than four forks
+# over the same stdin. Each fork costs ~2.6ms against a hook whose whole skip
+# path is ~100ms, and this prologue runs on the check path too (ecosystem-449.14).
+#
+# NUL-separated rather than line-separated: a file path may contain spaces, and
+# pathologically a newline, which a line-based read would truncate. The four
+# command substitutions this replaces preserved such a path, so anything less
+# would be a regression. jq emits the NUL via its own \u0000 escape — bash
+# strings are NUL-terminated, so it cannot be passed in with --arg.
+CWD="" _HOOK_SESSION_ID="" TOOL_NAME="" TOOL_TARGET=""
+_INSPECTOR_JQ_FIELDS='(.cwd // "") + "\u0000" + (.session_id // "") + "\u0000" + (.tool_name // "") + "\u0000" + ((.tool_input.file_path? // .tool_input.path?) // "") + "\u0000"'
+{
+	IFS= read -r -d '' CWD
+	IFS= read -r -d '' _HOOK_SESSION_ID
+	IFS= read -r -d '' TOOL_NAME
+	IFS= read -r -d '' TOOL_TARGET
+} < <(printf '%s' "$HOOK_INPUT" | jq -j "$_INSPECTOR_JQ_FIELDS" 2>/dev/null)
 export _HOOK_SESSION_ID
 
 # Bail on missing input — never block the tool call.
@@ -39,9 +54,7 @@ case "$TOOL_NAME" in
 esac
 export INSPECTOR_TOOL_NAME="$TOOL_NAME"
 
-# Resolve touched file from tool input.
-TOOL_TARGET=$(printf '%s' "$HOOK_INPUT" \
-	| jq -r '.tool_input.file_path // .tool_input.path // empty' 2>/dev/null)
+# Touched file came off the same jq pass above.
 [[ -z "$TOOL_TARGET" ]] && exit 0
 
 # Canonicalize through the same helper the repo root uses. The containment
@@ -82,7 +95,7 @@ fi
 # Look up checks for this file's extension. Use the *longest* matching suffix
 # so `.test.ts` matches before `.ts`. For now this is a simple two-step:
 # first the multi-dot suffix, then the simple extension.
-FILE_BASE=$(basename "$CANONICAL")
+FILE_BASE="${CANONICAL##*/}"
 EXT_LONG=""
 EXT_SHORT=""
 if [[ "$FILE_BASE" == *.*.* ]]; then
