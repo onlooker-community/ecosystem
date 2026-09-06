@@ -52,13 +52,28 @@ if [[ -z "$_ECOSYSTEM_ROOT" ]]; then
 fi
 # Glob-discover the ecosystem plugin under the shared plugin cache parent;
 # works regardless of which ecosystem version is installed.
+#
+# THREE dirnames, not two (ecosystem-449.36). The match is
+# .../ecosystem/<v>/scripts/lib/validate-path.sh; stripping only lib/ and the
+# filename lands on .../<v>/scripts, so the guard below looked for
+# .../<v>/scripts/scripts/lib/validate-path.sh and found nothing. Sourcing this
+# is what exports ONLOOKER_EVENTS_LOG, so the miss was silent at both ends.
+#
+# NEWEST, not first (ecosystem-449.35). Glob expansion is lexicographic, so
+# 0.33.1 sorted ahead of 0.49.2 and break-on-first-hit bound a month-stale
+# ecosystem. sort -V orders by version on BSD/macOS and GNU alike. Correcting
+# only the doubling would have started sourcing that stale copy for real, so
+# the two move together.
 if [[ -z "$_ECOSYSTEM_ROOT" ]]; then
-	for _candidate in "${PLUGIN_ROOT}/../../ecosystem/"*/scripts/lib/validate-path.sh; do
-		if [[ -f "$_candidate" ]]; then
-			_ECOSYSTEM_ROOT="$(cd "$(dirname "$(dirname "$_candidate")")" && pwd)"
-			break
-		fi
-	done
+	_newest_candidate=""
+	while IFS= read -r _candidate; do
+		[[ -f "$_candidate" ]] && _newest_candidate="$_candidate"
+	done < <(printf '%s\n' "${PLUGIN_ROOT}/../../ecosystem/"*/scripts/lib/validate-path.sh | sort -V)
+	# An unmatched glob expands to the literal pattern; the -f test above is
+	# what keeps that from counting as a hit.
+	if [[ -n "$_newest_candidate" ]]; then
+		_ECOSYSTEM_ROOT="$(cd "$(dirname "$(dirname "$(dirname "$_newest_candidate")")")" && pwd)"
+	fi
 fi
 
 if [[ -n "$_ECOSYSTEM_ROOT" && -f "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.sh" ]]; then
@@ -95,6 +110,14 @@ CUSTOM_INSTRUCTIONS=$(printf '%s' "$INPUT" | jq -r '.custom_instructions // ""' 
 
 REPO_ROOT=$(archivist_project_repo_root "$CWD")
 PROJECT_KEY=$(archivist_project_key "$CWD")
+
+# Where this session's files actually live, which for a worktree is not
+# REPO_ROOT (ecosystem-449.37). Used for the root named in the prompt and for
+# path validation — both are questions about the filesystem, not identity.
+# REPO_ROOT still keys storage and the manifest, so a worktree and its parent
+# keep one archive between them.
+WORKTREE_ROOT=$(archivist_worktree_root "$CWD")
+[[ -z "$WORKTREE_ROOT" ]] && WORKTREE_ROOT="$REPO_ROOT"
 
 # Config requires repo_root to scan settings.json overlay; load anyway with
 # best-effort empty fallback.
@@ -163,7 +186,9 @@ trap 'rm -f "$PROMPT_FILE"; _approve "Archivist extraction errored out, compacti
 		printf 'Additional user-provided focus: %s\n' "$CUSTOM_INSTRUCTIONS"
 	fi
 	printf '\n'
-	printf 'Repository root: %s\n' "$REPO_ROOT"
+	# The base the model is asked to relativize against, so it has to be the
+	# tree the transcript's paths are from (ecosystem-449.37).
+	printf 'Repository root: %s\n' "$WORKTREE_ROOT"
 	printf '\n'
 	printf '%s\n' '---BEGIN TRANSCRIPT TAIL---'
 	printf '%s\n' "$TRANSCRIPT_TAIL"
@@ -229,7 +254,7 @@ for KIND_PAIR in "decisions:decision" "dead_ends:dead_end" "open_questions:open_
 
 		DETAIL=$(printf '%s' "$ENTRY" | jq -r '.detail // ""')
 		PATHS_JSON=$(printf '%s' "$ENTRY" | jq '.files // []')
-		CLEAN_PATHS=$(archivist_validate_paths_array "$REPO_ROOT" "$PATHS_JSON")
+		CLEAN_PATHS=$(archivist_validate_paths_array "$WORKTREE_ROOT" "$PATHS_JSON")
 
 		ID=$(archivist_ulid)
 		ARTIFACT=$(jq -n \

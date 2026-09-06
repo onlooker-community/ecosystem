@@ -27,10 +27,18 @@ _archivist_event_js_path() {
 	done
 	# Glob-discover the ecosystem plugin under the shared plugin cache parent;
 	# works regardless of which ecosystem version is installed.
-	local mjs
-	for mjs in "${plugin_root}/../../ecosystem/"*/scripts/lib/onlooker-event.mjs; do
-		[[ -f "$mjs" ]] && { printf '%s' "$mjs"; return 0; }
-	done
+	#
+	# NEWEST, not first (ecosystem-449.35). Glob expansion is lexicographic
+	# rather than semver, so 0.33.1 sorts ahead of 0.49.2 and returning the
+	# first match bound a month-stale emitter. Unlike the validate-path loop in
+	# the hooks there is no doubled dirname here, so the path resolved, emission
+	# worked, and nothing reported that the emitter was old. sort -V orders by
+	# version on BSD/macOS and GNU alike.
+	local mjs newest=""
+	while IFS= read -r mjs; do
+		[[ -f "$mjs" ]] && newest="$mjs"
+	done < <(printf '%s\n' "${plugin_root}/../../ecosystem/"*/scripts/lib/onlooker-event.mjs | sort -V)
+	[[ -n "$newest" ]] && { printf '%s' "$newest"; return 0; }
 	return 1
 }
 
