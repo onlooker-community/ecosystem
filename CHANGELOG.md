@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.49.7](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.49.6...ecosystem-v0.49.7) (2026-09-06)
+
+
+### Bug Fixes
+
+* **archivist:** validate paths against the tree they came from, and emit through the current substrate :card_index_dividers: ([#271](https://github.com/onlooker-community/ecosystem/issues/271)) ([d3f2d39](https://github.com/onlooker-community/ecosystem/commit/d3f2d39bf98538071a2800c6f63425f5f71d4a6d))
+* **scribe:** file the document in the tree that earned it :file_folder: ([#270](https://github.com/onlooker-community/ecosystem/issues/270)) ([4b7f2d5](https://github.com/onlooker-community/ecosystem/commit/4b7f2d530294003ca300e22f6547b0daae93e841))
+
 ## [0.49.6](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.49.5...ecosystem-v0.49.6) (2026-09-06)
 
 
