@@ -47,13 +47,30 @@ if [[ -z "$_ECOSYSTEM_ROOT" ]]; then
 fi
 # Glob-discover the ecosystem plugin under the shared plugin cache parent;
 # works regardless of which ecosystem version is installed.
+#
+# THREE dirnames, not two (ecosystem-449.36). The match is
+# .../ecosystem/<v>/scripts/lib/validate-path.sh; stripping only lib/ and the
+# filename lands on .../<v>/scripts, and the guard below then looks for
+# .../<v>/scripts/scripts/lib/validate-path.sh and finds nothing. The substrate
+# was never sourced, and because sourcing it is what exports
+# ONLOOKER_EVENTS_LOG, that failed silently in both directions.
+#
+# NEWEST, not first (ecosystem-449.35). Glob expansion is lexicographic, so
+# 0.33.1 sorted ahead of 0.49.2 and the old `break`-on-first-hit bound whatever
+# ecosystem happened to sort first — a month stale, on every installed plugin
+# measured. sort -V orders by version on both BSD/macOS and GNU. Fixing only
+# the doubling above would have started sourcing that stale copy for real,
+# which is why these two land together.
 if [[ -z "$_ECOSYSTEM_ROOT" ]]; then
-	for _candidate in "${PLUGIN_ROOT}/../../ecosystem/"*/scripts/lib/validate-path.sh; do
-		if [[ -f "$_candidate" ]]; then
-			_ECOSYSTEM_ROOT="$(cd "$(dirname "$(dirname "$_candidate")")" && pwd)"
-			break
-		fi
-	done
+	_newest_candidate=""
+	while IFS= read -r _candidate; do
+		[[ -f "$_candidate" ]] && _newest_candidate="$_candidate"
+	done < <(printf '%s\n' "${PLUGIN_ROOT}/../../ecosystem/"*/scripts/lib/validate-path.sh | sort -V)
+	# An unmatched glob expands to the literal pattern; the -f test above is
+	# what keeps that from being mistaken for a hit.
+	if [[ -n "$_newest_candidate" ]]; then
+		_ECOSYSTEM_ROOT="$(cd "$(dirname "$(dirname "$(dirname "$_newest_candidate")")")" && pwd)"
+	fi
 fi
 
 if [[ -n "$_ECOSYSTEM_ROOT" && -f "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.sh" ]]; then
@@ -90,6 +107,25 @@ _done() {
 REPO_ROOT=$(tribunal_project_repo_root "$CWD")
 tribunal_config_load "$REPO_ROOT"
 
+# The tree this session is in, which for a worktree is not REPO_ROOT
+# (ecosystem-449.37). Every git read below uses it; REPO_ROOT stays identity.
+# Config still loads from REPO_ROOT above — that is the parent's config, and
+# whether it should be is the same question for every plugin, tracked on 449.37
+# rather than decided here.
+WORKTREE_ROOT=$(tribunal_worktree_root "$CWD")
+[[ -z "$WORKTREE_ROOT" ]] && WORKTREE_ROOT="$REPO_ROOT"
+
+# The off switch, consulted before anything else this hook could spend
+# (ecosystem-449.32). tribunal_config_stop_hook_enabled has existed in
+# tribunal-config.sh the whole time; this hook simply never called it, so
+# `stop_hook.enabled: false` was documented, tested, and inert — the gate ran a
+# `claude -p` on every dirty-tree Stop regardless. The only way to stop it was
+# to disable the plugin outright.
+#
+# Default is off: the accessor requires a literal true, so absent config keeps
+# the gate silent rather than opting a repo in by omission.
+tribunal_config_stop_hook_enabled || _done
+
 PROJECT_KEY=$(tribunal_project_key "$CWD")
 if [[ -z "$PROJECT_KEY" || -z "$REPO_ROOT" ]]; then
 	_done
@@ -102,7 +138,7 @@ fi
 # Skip if no files were modified since the last commit AND skip_if_no_file_changes is true.
 SKIP_IF_CLEAN=$(tribunal_config_get '.tribunal.stop_hook.skip_if_no_file_changes')
 if [[ "$SKIP_IF_CLEAN" == "true" ]]; then
-	if git -C "$REPO_ROOT" diff --quiet 2>/dev/null && git -C "$REPO_ROOT" diff --cached --quiet 2>/dev/null; then
+	if git -C "$WORKTREE_ROOT" diff --quiet 2>/dev/null && git -C "$WORKTREE_ROOT" diff --cached --quiet 2>/dev/null; then
 		_done
 	fi
 fi
@@ -124,7 +160,7 @@ SCORE_THRESHOLD=$(tribunal_config_get '.tribunal.session.score_threshold')
 TRANSCRIPT_TAIL=$(tail -c 30000 "$TRANSCRIPT_PATH" 2>/dev/null) || TRANSCRIPT_TAIL=""
 [[ -z "$TRANSCRIPT_TAIL" ]] && _done
 
-DIFF_SUMMARY=$(git -C "$REPO_ROOT" diff --stat 2>/dev/null | tail -c 4000) || DIFF_SUMMARY=""
+DIFF_SUMMARY=$(git -C "$WORKTREE_ROOT" diff --stat 2>/dev/null | tail -c 4000) || DIFF_SUMMARY=""
 
 PROMPT_FILE=$(mktemp -t tribunal-stop-prompt.XXXXXX 2>/dev/null) || PROMPT_FILE="/tmp/tribunal-stop-prompt.$$"
 
@@ -158,12 +194,28 @@ CLAUDE_ARGS=(-p --max-turns 1)
 [[ -n "$JUDGE_MODEL" ]] && CLAUDE_ARGS+=(--model "$JUDGE_MODEL")
 
 RESPONSE=""
+_JUDGE_RC=0
 if command -v timeout >/dev/null 2>&1; then
-	RESPONSE=$(timeout 60 claude "${CLAUDE_ARGS[@]}" < "$PROMPT_FILE" 2>/dev/null) || RESPONSE=""
+	RESPONSE=$(timeout 60 claude "${CLAUDE_ARGS[@]}" < "$PROMPT_FILE" 2>/dev/null) || _JUDGE_RC=$?
 elif command -v gtimeout >/dev/null 2>&1; then
-	RESPONSE=$(gtimeout 60 claude "${CLAUDE_ARGS[@]}" < "$PROMPT_FILE" 2>/dev/null) || RESPONSE=""
+	RESPONSE=$(gtimeout 60 claude "${CLAUDE_ARGS[@]}" < "$PROMPT_FILE" 2>/dev/null) || _JUDGE_RC=$?
 else
-	RESPONSE=$(claude "${CLAUDE_ARGS[@]}" < "$PROMPT_FILE" 2>/dev/null) || RESPONSE=""
+	RESPONSE=$(claude "${CLAUDE_ARGS[@]}" < "$PROMPT_FILE" 2>/dev/null) || _JUDGE_RC=$?
+fi
+
+# Report a judge that never answered instead of swallowing it (ecosystem-449.32).
+# `|| RESPONSE=""` collapsed three outcomes into one: a judge that answered with
+# nothing, one that errored, and one that burned the full 60s and was killed.
+# All three then took the same silent _done, so hook-health recorded success and
+# the spend was invisible — which is how a gate nobody could turn off also
+# looked free. 124 is the timeout(1) convention for "killed at the deadline";
+# gtimeout matches it.
+if [[ "$_JUDGE_RC" -eq 124 ]]; then
+	hook_health_failure "judge_timeout"
+	_done
+elif [[ "$_JUDGE_RC" -ne 0 ]]; then
+	hook_health_failure "judge_error_rc_${_JUDGE_RC}"
+	_done
 fi
 
 [[ -z "$RESPONSE" ]] && _done
