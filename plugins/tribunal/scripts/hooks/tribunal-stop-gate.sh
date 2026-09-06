@@ -47,13 +47,30 @@ if [[ -z "$_ECOSYSTEM_ROOT" ]]; then
 fi
 # Glob-discover the ecosystem plugin under the shared plugin cache parent;
 # works regardless of which ecosystem version is installed.
+#
+# THREE dirnames, not two (ecosystem-449.36). The match is
+# .../ecosystem/<v>/scripts/lib/validate-path.sh; stripping only lib/ and the
+# filename lands on .../<v>/scripts, and the guard below then looks for
+# .../<v>/scripts/scripts/lib/validate-path.sh and finds nothing. The substrate
+# was never sourced, and because sourcing it is what exports
+# ONLOOKER_EVENTS_LOG, that failed silently in both directions.
+#
+# NEWEST, not first (ecosystem-449.35). Glob expansion is lexicographic, so
+# 0.33.1 sorted ahead of 0.49.2 and the old `break`-on-first-hit bound whatever
+# ecosystem happened to sort first — a month stale, on every installed plugin
+# measured. sort -V orders by version on both BSD/macOS and GNU. Fixing only
+# the doubling above would have started sourcing that stale copy for real,
+# which is why these two land together.
 if [[ -z "$_ECOSYSTEM_ROOT" ]]; then
-	for _candidate in "${PLUGIN_ROOT}/../../ecosystem/"*/scripts/lib/validate-path.sh; do
-		if [[ -f "$_candidate" ]]; then
-			_ECOSYSTEM_ROOT="$(cd "$(dirname "$(dirname "$_candidate")")" && pwd)"
-			break
-		fi
-	done
+	_newest_candidate=""
+	while IFS= read -r _candidate; do
+		[[ -f "$_candidate" ]] && _newest_candidate="$_candidate"
+	done < <(printf '%s\n' "${PLUGIN_ROOT}/../../ecosystem/"*/scripts/lib/validate-path.sh | sort -V)
+	# An unmatched glob expands to the literal pattern; the -f test above is
+	# what keeps that from being mistaken for a hit.
+	if [[ -n "$_newest_candidate" ]]; then
+		_ECOSYSTEM_ROOT="$(cd "$(dirname "$(dirname "$(dirname "$_newest_candidate")")")" && pwd)"
+	fi
 fi
 
 if [[ -n "$_ECOSYSTEM_ROOT" && -f "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.sh" ]]; then
