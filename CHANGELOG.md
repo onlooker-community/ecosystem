@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.49.3](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.49.2...ecosystem-v0.49.3) (2026-09-06)
+
+
+### Bug Fixes
+
+* **emit:** stop doubling the path that silenced three plugins :relieved: ([#261](https://github.com/onlooker-community/ecosystem/issues/261)) ([ae9c6a8](https://github.com/onlooker-community/ecosystem/commit/ae9c6a8aca309737e03028d1182cf2d4dcf39acb))
+
 ## [0.49.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.49.1...ecosystem-v0.49.2) (2026-09-06)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.7](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.15.6...librarian-v0.15.7) (2026-09-06)
+
+
+### Bug Fixes
+
+* **emit:** stop doubling the path that silenced three plugins :relieved: ([#261](https://github.com/onlooker-community/ecosystem/issues/261)) ([ae9c6a8](https://github.com/onlooker-community/ecosystem/commit/ae9c6a8aca309737e03028d1182cf2d4dcf39acb))
+
 ## [0.15.6](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.15.5...librarian-v0.15.6) (2026-09-05)
 
 
