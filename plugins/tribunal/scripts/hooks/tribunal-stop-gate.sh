@@ -90,6 +90,17 @@ _done() {
 REPO_ROOT=$(tribunal_project_repo_root "$CWD")
 tribunal_config_load "$REPO_ROOT"
 
+# The off switch, consulted before anything else this hook could spend
+# (ecosystem-449.32). tribunal_config_stop_hook_enabled has existed in
+# tribunal-config.sh the whole time; this hook simply never called it, so
+# `stop_hook.enabled: false` was documented, tested, and inert — the gate ran a
+# `claude -p` on every dirty-tree Stop regardless. The only way to stop it was
+# to disable the plugin outright.
+#
+# Default is off: the accessor requires a literal true, so absent config keeps
+# the gate silent rather than opting a repo in by omission.
+tribunal_config_stop_hook_enabled || _done
+
 PROJECT_KEY=$(tribunal_project_key "$CWD")
 if [[ -z "$PROJECT_KEY" || -z "$REPO_ROOT" ]]; then
 	_done
@@ -158,12 +169,28 @@ CLAUDE_ARGS=(-p --max-turns 1)
 [[ -n "$JUDGE_MODEL" ]] && CLAUDE_ARGS+=(--model "$JUDGE_MODEL")
 
 RESPONSE=""
+_JUDGE_RC=0
 if command -v timeout >/dev/null 2>&1; then
-	RESPONSE=$(timeout 60 claude "${CLAUDE_ARGS[@]}" < "$PROMPT_FILE" 2>/dev/null) || RESPONSE=""
+	RESPONSE=$(timeout 60 claude "${CLAUDE_ARGS[@]}" < "$PROMPT_FILE" 2>/dev/null) || _JUDGE_RC=$?
 elif command -v gtimeout >/dev/null 2>&1; then
-	RESPONSE=$(gtimeout 60 claude "${CLAUDE_ARGS[@]}" < "$PROMPT_FILE" 2>/dev/null) || RESPONSE=""
+	RESPONSE=$(gtimeout 60 claude "${CLAUDE_ARGS[@]}" < "$PROMPT_FILE" 2>/dev/null) || _JUDGE_RC=$?
 else
-	RESPONSE=$(claude "${CLAUDE_ARGS[@]}" < "$PROMPT_FILE" 2>/dev/null) || RESPONSE=""
+	RESPONSE=$(claude "${CLAUDE_ARGS[@]}" < "$PROMPT_FILE" 2>/dev/null) || _JUDGE_RC=$?
+fi
+
+# Report a judge that never answered instead of swallowing it (ecosystem-449.32).
+# `|| RESPONSE=""` collapsed three outcomes into one: a judge that answered with
+# nothing, one that errored, and one that burned the full 60s and was killed.
+# All three then took the same silent _done, so hook-health recorded success and
+# the spend was invisible — which is how a gate nobody could turn off also
+# looked free. 124 is the timeout(1) convention for "killed at the deadline";
+# gtimeout matches it.
+if [[ "$_JUDGE_RC" -eq 124 ]]; then
+	hook_health_failure "judge_timeout"
+	_done
+elif [[ "$_JUDGE_RC" -ne 0 ]]; then
+	hook_health_failure "judge_error_rc_${_JUDGE_RC}"
+	_done
 fi
 
 [[ -z "$RESPONSE" ]] && _done
