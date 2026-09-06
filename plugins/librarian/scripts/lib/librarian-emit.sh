@@ -75,7 +75,6 @@ librarian_emit() {
 	[[ -z "$event_type" || -z "$session_id" ]] && return 0
 	[[ -z "$_LIBRARIAN_EVENT_JS" || ! -f "$_LIBRARIAN_EVENT_JS" ]] && return 0
 	command -v node >/dev/null 2>&1 || return 0
-	[[ -z "${ONLOOKER_EVENTS_LOG:-}" ]] && return 0
 
 	local params event_json
 	params=$(jq -cn \
@@ -97,6 +96,12 @@ librarian_emit() {
 	) || return 0
 	[[ -z "$event_json" ]] && return 0
 
-	mkdir -p "$(dirname "$ONLOOKER_EVENTS_LOG")" 2>/dev/null
-	printf '%s\n' "$event_json" >> "$ONLOOKER_EVENTS_LOG" 2>/dev/null
+	# Default the sink rather than bailing on an unset one, the shape
+	# archivist-events.sh:91 already uses. ONLOOKER_EVENTS_LOG is exported by
+	# validate-path.sh, which a hook sources out of the ecosystem substrate --
+	# so requiring it made substrate resolution load-bearing for emission twice
+	# over, and turned a path defect into 34 days of silence (ecosystem-449.34).
+	local log_path="${ONLOOKER_EVENTS_LOG:-${ONLOOKER_DIR:-$HOME/.onlooker}/logs/onlooker-events.jsonl}"
+	mkdir -p "$(dirname "$log_path")" 2>/dev/null
+	printf '%s\n' "$event_json" >> "$log_path" 2>/dev/null
 }
