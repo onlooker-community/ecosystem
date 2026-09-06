@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.49.4](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.49.3...ecosystem-v0.49.4) (2026-09-06)
+
+
+### Bug Fixes
+
+* **lineage:** record the tree you are working in, not the one you branched from :relieved: ([#263](https://github.com/onlooker-community/ecosystem/issues/263)) ([e5ecb30](https://github.com/onlooker-community/ecosystem/commit/e5ecb304a077fb9e990cce584935c2e68dfc22d5))
+
 ## [0.49.3](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.49.2...ecosystem-v0.49.3) (2026-09-06)
 
 
