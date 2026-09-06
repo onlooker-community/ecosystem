@@ -179,9 +179,14 @@ scribe_distill() {
 	}
 
 	# Resolve project key and output paths.
+	# project_key partitions storage and is identity, so a worktree shares its
+	# parent's. project_root is where this document gets written and what it
+	# names, which for a worktree is the worktree itself — the parent is a tree
+	# this session never touched (ecosystem-449.37).
 	local project_key project_root output_dir
 	project_key=$(scribe_project_key "$cwd")
-	project_root=$(scribe_project_repo_root "$cwd")
+	project_root=$(scribe_worktree_root "$cwd")
+	[[ -z "$project_root" ]] && project_root=$(scribe_project_repo_root "$cwd")
 
 	if [[ -n "$project_key" ]]; then
 		output_dir=$(scribe_project_dir "$project_key")
