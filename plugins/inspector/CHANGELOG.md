@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/onlooker-community/ecosystem/compare/inspector-v0.5.0...inspector-v0.6.0) (2026-09-07)
+
+
+### Features
+
+* **hook-health:** let a record say which vendored copy wrote it :fingerprint: ([#290](https://github.com/onlooker-community/ecosystem/issues/290)) ([37bdbe5](https://github.com/onlooker-community/ecosystem/commit/37bdbe55ec5a01ece82c34dfc8ee95a6c2eda64b))
+
 ## [0.5.0](https://github.com/onlooker-community/ecosystem/compare/inspector-v0.4.6...inspector-v0.5.0) (2026-09-07)
 
 
