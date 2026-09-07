@@ -215,8 +215,11 @@ _write_index() {
     | jq -e 'select(.payload.referenced_file == "/tmp/curator-abs-attempt.md")' >/dev/null
 
   # The clean reference resolves as expected (no broken_index for it).
+  # `|| return 1`: a non-final `!` is exempt from errexit and does not fail the
+  # test (SC2314, ecosystem-o09). Same rule the writing-tests skill states for
+  # `[[ ]]`.
   ! grep '"event_type":"curator.finding.broken_index"' "$ONLOOKER_EVENTS_LOG" \
-    | jq -e 'select(.payload.referenced_file == "real.md")' >/dev/null
+    | jq -e 'select(.payload.referenced_file == "real.md")' >/dev/null || return 1
 
   # The sentinel file wasn't read (mtime unchanged) and content intact.
   local sentinel_mtime_after
@@ -243,7 +246,7 @@ BODY
 
   # Neither the URL host nor the absolute path produce a finding.
   ! grep '"event_type":"curator.finding.path_broken"' "$ONLOOKER_EVENTS_LOG" \
-    | jq -e 'select(.payload.broken_path | contains("example.com"))' >/dev/null
+    | jq -e 'select(.payload.broken_path | contains("example.com"))' >/dev/null || return 1
   ! grep '"event_type":"curator.finding.path_broken"' "$ONLOOKER_EVENTS_LOG" \
     | jq -e 'select(.payload.broken_path | contains("python3.11"))' >/dev/null
 }

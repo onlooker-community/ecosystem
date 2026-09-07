@@ -84,8 +84,10 @@ _seed_memory() {
   [ "$status" -eq 0 ]
 
   # MEMORY.md is not its own memory; should NOT appear as a memory_file.
+  # `|| return 1`: a non-final `!` does not fail the test (SC2314,
+  # ecosystem-o09).
   ! grep '"event_type":"memory.recalled"' "$ONLOOKER_EVENTS_LOG" \
-    | jq -e 'select(.payload.memory_file == "MEMORY.md")' >/dev/null
+    | jq -e 'select(.payload.memory_file == "MEMORY.md")' >/dev/null || return 1
   local count
   count=$(grep -c '"event_type":"memory.recalled"' "$ONLOOKER_EVENTS_LOG")
   [ "$count" -eq 1 ]

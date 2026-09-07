@@ -92,6 +92,46 @@
             "${file}"
           ]
         }
+      ],
+      ".bats": [
+        {
+          "name": "shellcheck",
+          "kind": "lint",
+          "argv": [
+            "${repo_root}/scripts/lint/run-tool.sh",
+            "shellcheck",
+            "-S",
+            "error",
+            "-x",
+            "${file}"
+          ]
+        }
+      ],
+      ".yml": [
+        {
+          "name": "yq",
+          "kind": "lint",
+          "argv": [
+            "${repo_root}/scripts/lint/run-tool.sh",
+            "yq",
+            "e",
+            ".",
+            "${file}"
+          ]
+        }
+      ],
+      ".yaml": [
+        {
+          "name": "yq",
+          "kind": "lint",
+          "argv": [
+            "${repo_root}/scripts/lint/run-tool.sh",
+            "yq",
+            "e",
+            ".",
+            "${file}"
+          ]
+        }
       ]
     }
   }

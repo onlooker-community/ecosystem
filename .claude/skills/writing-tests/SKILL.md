@@ -178,7 +178,7 @@ _seed_artifact() {
 }
 ```
 
-## Gate every assertion: non-final `[[ ]]` needs `|| return 1`
+## Gate every assertion: non-final `[[ ]]` and `!` need `|| return 1`
 
 `bats` resolves `#!/usr/bin/env bash`, which on macOS is the system bash 3.2.
 Under 3.2 a failing **non-final** `[[ ]]` does **not** fail the test body —
@@ -200,6 +200,37 @@ status is its last command. Any `[[ ]]` before that needs explicit gating:
 Do **not** "fix" this by swapping to `[ ]`. Most of these assertions rely on
 `[[ ]]`-only behavior — `==` glob patterns, `=~` regex, internal `&&`/`||` —
 and a blanket swap silently changes what they test.
+
+**`!` has the same hole, for a different reason, on every bash.** A
+`!`-prefixed command is exempt from `errexit`, so a failing non-final one does
+not fail the test body either:
+
+```bash
+@test "non-final ! that should fail" {
+  ! true                        # asserts `true` fails; it does not
+  echo "reached the end anyway"
+}                               # -> ok
+
+@test "final ! that should fail" {
+  echo setup
+  ! true
+}                               # -> not ok
+```
+
+So a negative assertion needs the same gate:
+
+```bash
+! grep -q "$secret" "$file" || return 1   # non-final — must gate
+```
+
+This is not hypothetical. Three files carried ungated `!` assertions, including
+historian's secret-redaction test, where all three credential checks were
+non-final — the test's outcome rested entirely on its last line and would have
+passed with an AWS key, a GitHub token and an Anthropic key written verbatim
+into the stored transcript (ecosystem-o09).
+
+`shellcheck -S error` reports these as SC2314 and `npm run test:shellcheck`
+covers `*.bats`, so CI catches them now. Inspector also runs it per-edit.
 
 When you add an assertion, break it on purpose once and confirm the test fails.
 A test that passes whether or not the code is correct is worse than no test,

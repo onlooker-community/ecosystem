@@ -112,8 +112,14 @@ _chunk_count() {
   # patterns out of the bats source file (the repo's secret-scanner
   # PreToolUse hook would otherwise refuse to write this file).
   local fake_aws fake_gh fake_anthropic
+  # One assignment, not two. The second used to rebuild this as
+  # "AK${fake_aws:1}", which prepends AK to the string minus its first
+  # character and yields AKKIAABC... -- 21 chars containing no AKIA substring
+  # at all, so the sanitizer correctly ignored it and this test never once
+  # exercised AWS key redaction (ecosystem-o09). The interpolation below is
+  # already enough to keep the literal prefix out of this file, which is what
+  # the rebuild was reaching for.
   fake_aws="A${KIA_PREFIX:-KIA}ABCDEFGHIJKLMNOP"
-  fake_aws="AK${fake_aws:1}"
   fake_gh="g""hp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
   fake_anthropic="s""k-ant-veryverylongtokenvalue1234"
   local turn_body
@@ -125,9 +131,13 @@ _chunk_count() {
   [ "$status" -eq 0 ]
 
   local jsonl="${HIST_DIR}/sessions/${SESSION_ID}.jsonl"
-  ! grep -F -q "$fake_aws" "$jsonl"
-  ! grep -F -q "$fake_gh" "$jsonl"
-  ! grep -F -q "$fake_anthropic" "$jsonl"
+  # `|| return 1` on each: a `!`-prefixed command is exempt from errexit, so a
+  # non-final one does not fail the test (SC2314, ecosystem-o09). Without these
+  # three gates this test's outcome rested entirely on the last line, and it
+  # would have passed with all three credentials written verbatim.
+  ! grep -F -q "$fake_aws" "$jsonl" || return 1
+  ! grep -F -q "$fake_gh" "$jsonl" || return 1
+  ! grep -F -q "$fake_anthropic" "$jsonl" || return 1
   grep -q 'REDACTED:secret' "$jsonl"
   jq -e '.redaction_count > 0' "$jsonl" >/dev/null
   grep -q '"event_type":"historian.chunk.sanitized"' "$ONLOOKER_EVENTS_LOG"
@@ -145,8 +155,11 @@ _chunk_count() {
   [ "$status" -eq 0 ]
   [ "$(_chunk_count)" -ge 1 ]
 
-  ! grep -F -q "$marker" "${HIST_DIR}/sessions/${SESSION_ID}.jsonl"
-  ! grep -q 'meant to be sensitive' "${HIST_DIR}/sessions/${SESSION_ID}.jsonl"
+  # `|| return 1`: a non-final `!` does not fail the test (SC2314,
+  # ecosystem-o09). These two assert the skip-marked chunk was dropped, so
+  # ungated they would have let a leaked chunk through.
+  ! grep -F -q "$marker" "${HIST_DIR}/sessions/${SESSION_ID}.jsonl" || return 1
+  ! grep -q 'meant to be sensitive' "${HIST_DIR}/sessions/${SESSION_ID}.jsonl" || return 1
 
   grep '"event_type":"historian.chunk.dropped"' "$ONLOOKER_EVENTS_LOG" \
     | jq -e '.payload.reason == "skip_marker"' >/dev/null
@@ -164,7 +177,7 @@ _chunk_count() {
   run bash -c "printf '%s' '$(_input)' | '$HOOK'"
   [ "$status" -eq 0 ]
 
-  ! grep -q 'restricted/notes.md' "${HIST_DIR}/sessions/${SESSION_ID}.jsonl"
+  ! grep -q 'restricted/notes.md' "${HIST_DIR}/sessions/${SESSION_ID}.jsonl" || return 1
 
   grep '"event_type":"historian.chunk.dropped"' "$ONLOOKER_EVENTS_LOG" \
     | jq -e '.payload.reason == "never_index_path"' >/dev/null
@@ -179,7 +192,7 @@ _chunk_count() {
 
   [ "$(_chunk_count)" -ge 1 ]
   grep -q 'Plain spoken assistant text' "${HIST_DIR}/sessions/${SESSION_ID}.jsonl"
-  ! grep -q 'tool_use' "${HIST_DIR}/sessions/${SESSION_ID}.jsonl"
+  ! grep -q 'tool_use' "${HIST_DIR}/sessions/${SESSION_ID}.jsonl" || return 1
   ! grep -q '/tmp/x' "${HIST_DIR}/sessions/${SESSION_ID}.jsonl"
 }
 
@@ -218,8 +231,8 @@ _chunk_count() {
   [ "$status" -eq 0 ]
 
   local jsonl="${HIST_DIR}/sessions/${SESSION_ID}.jsonl"
-  ! grep -F -q "abcdefghijklmnopqrstuvwxyz1234" "$jsonl"
-  ! grep -F -q "zyxwvutsrqponmlkjihgfedcba98765432" "$jsonl"
+  ! grep -F -q "abcdefghijklmnopqrstuvwxyz1234" "$jsonl" || return 1
+  ! grep -F -q "zyxwvutsrqponmlkjihgfedcba98765432" "$jsonl" || return 1
   grep -q 'REDACTED:secret' "$jsonl"
 }
 
@@ -238,7 +251,7 @@ _chunk_count() {
 
   local jsonl="${HIST_DIR}/sessions/${SESSION_ID}.jsonl"
   grep -F -q "$fake_aws" "$jsonl"
-  ! grep -q 'REDACTED:secret' "$jsonl"
+  ! grep -q 'REDACTED:secret' "$jsonl" || return 1
   jq -e '.redaction_count == 0' "$jsonl" >/dev/null
 }
 
@@ -281,6 +294,6 @@ _chunk_count() {
   run bash -c "printf '%s' '$(_input)' | '$HOOK'"
   [ "$status" -eq 0 ]
 
-  ! grep -q '"event_type":"historian.indexing.started"' "$ONLOOKER_EVENTS_LOG"
+  ! grep -q '"event_type":"historian.indexing.started"' "$ONLOOKER_EVENTS_LOG" || return 1
   grep -q '"event_type":"historian.indexing.complete"' "$ONLOOKER_EVENTS_LOG"
 }
