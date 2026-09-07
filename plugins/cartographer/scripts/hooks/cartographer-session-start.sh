@@ -14,11 +14,10 @@ set -uo pipefail
 # Recursion guard — prevents a claude -p subprocess spawned by run-audit.sh
 # from re-triggering this hook.
 #
-# The lock below is not a substitute. It stamps the holder pid of THIS process,
-# which exits as soon as the audit is backgrounded, so by the time the audit
-# spawns claude the holder is dead and portable-lock reclaims the lock as
-# abandoned — a nested session acquires it on the first try and launches a
-# second audit. Verified against portable-lock.sh directly.
+# The audit lock is not a substitute for this guard, even now that run-audit.sh
+# holds it properly (ecosystem-hap). A nested claude -p inherits this variable
+# and stops here, which is cheaper and more direct than letting it spawn an
+# audit that would then decline the lock.
 [[ "${CARTOGRAPHER_NESTED:-0}" == "1" ]] && exit 0
 export CARTOGRAPHER_NESTED=1
 
@@ -72,9 +71,12 @@ elif [[ -f "$STATE_FILE" ]]; then
 	TRIGGER="$INTERVAL_TRIGGER"
 fi
 
-# Acquire lock non-blocking — skip if another session's audit is running.
-# portable-lock.sh uses atomic mkdir so no fd lifetime concerns.
-cartographer_lock_acquire "$LOCK_FILE" || exit 0
+# Cheap advisory probe, NOT the lock (ecosystem-hap). run-audit.sh acquires
+# and releases the audit lock itself, because it is the process that actually
+# runs the audit; this hook exits seconds after backgrounding it. Racing past
+# this check is harmless -- the audit will decline the lock and exit -- so it
+# is an optimization to avoid spawning a process that would do nothing.
+cartographer_lock_is_held "$LOCK_FILE" && exit 0
 
 # Launch the audit detached — hook must return immediately.
 # setsid detaches from the controlling terminal so SIGHUP on session close
@@ -94,12 +96,10 @@ export ONLOOKER_DIR
 # audit. run-audit.sh loads config once, for itself.
 if command -v setsid &>/dev/null; then
 	nohup setsid bash -c "
-	  trap 'source \"$PLUGIN_ROOT/scripts/lib/cartographer-lock.sh\"; cartographer_lock_release \"$LOCK_FILE\"' EXIT
 	  exec \"$PLUGIN_ROOT/scripts/run-audit.sh\"
 	" >>"$CARTOGRAPHER_DIR/audit.log" 2>&1 &
 else
 	nohup bash -c "
-	  trap 'source \"$PLUGIN_ROOT/scripts/lib/cartographer-lock.sh\"; cartographer_lock_release \"$LOCK_FILE\"' EXIT
 	  exec \"$PLUGIN_ROOT/scripts/run-audit.sh\"
 	" >>"$CARTOGRAPHER_DIR/audit.log" 2>&1 &
 fi

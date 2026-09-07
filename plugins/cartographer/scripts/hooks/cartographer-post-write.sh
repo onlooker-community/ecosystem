@@ -60,9 +60,12 @@ mkdir -p "$CARTOGRAPHER_DIR"
 
 LOCK_FILE="$CARTOGRAPHER_DIR/audit.lock"
 
-# Non-blocking lock — if a full scheduled audit is running, skip.
-# portable-lock.sh uses atomic mkdir so no fd lifetime concerns.
-cartographer_lock_acquire "$LOCK_FILE" || exit 0
+# Cheap advisory probe, NOT the lock (ecosystem-hap). run-audit.sh acquires
+# and releases the audit lock itself, because it is the process that actually
+# runs the audit; this hook exits seconds after backgrounding it. Racing past
+# this check is harmless -- the audit will decline the lock and exit -- so it
+# is an optimization to avoid spawning a process that would do nothing.
+cartographer_lock_is_held "$LOCK_FILE" && exit 0
 
 export CARTOGRAPHER_DIR
 export CARTOGRAPHER_TRIGGER="post_tool_use"
@@ -76,12 +79,10 @@ export ONLOOKER_DIR
 # resolved in the first place because PLUGIN_ROOT is not exported.
 if command -v setsid &>/dev/null; then
 	nohup setsid bash -c "
-	  trap 'source \"$PLUGIN_ROOT/scripts/lib/cartographer-lock.sh\"; cartographer_lock_release \"$LOCK_FILE\"' EXIT
 	  exec \"$PLUGIN_ROOT/scripts/run-audit.sh\"
 	" >>"$CARTOGRAPHER_DIR/audit.log" 2>&1 &
 else
 	nohup bash -c "
-	  trap 'source \"$PLUGIN_ROOT/scripts/lib/cartographer-lock.sh\"; cartographer_lock_release \"$LOCK_FILE\"' EXIT
 	  exec \"$PLUGIN_ROOT/scripts/run-audit.sh\"
 	" >>"$CARTOGRAPHER_DIR/audit.log" 2>&1 &
 fi
