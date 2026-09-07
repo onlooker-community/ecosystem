@@ -128,19 +128,30 @@ librarian_emit "librarian.scan.started" "$SESSION_ID" "$(jq -cn \
 	'{ trigger: $trigger, last_scan_at: (if $last_scan_at == "" then null else $last_scan_at end),
 	   artifact_count_in_window: $artifact_count_in_window } | with_entries(select(.value != null))')"
 
-# Bail with scan.complete{outcome: ok, candidates: 0} when archivist has
-# nothing new for us. We still advance the watermark so subsequent scans
-# don't re-walk the same window.
+# Bail with scan.complete{outcome: skipped} when archivist has nothing new
+# for us. We still advance the watermark so subsequent scans don't re-walk
+# the same window.
+#
+# A SKIP, not an empty result. This scan never reached classification, so it
+# was never a chance to write anything - which is the opposite claim from the
+# full pipeline below running, classifying everything and legitimately
+# proposing nothing. Both reported "empty" until now, so a consumer could not
+# tell "nothing to do" from "did the work, nothing came of it", and that
+# distinction is exactly what a write-health check needs. `skipped` plus a
+# reason is the vocabulary the schema already carried for this; librarian had
+# simply never used it.
 if [[ "$ARTIFACT_COUNT" == "0" ]]; then
 	librarian_storage_write_last_scan "$PROJECT_KEY" || true
 	DURATION_MS=$(( $(librarian_now_ms) - SCAN_START_TS_MS ))
 	librarian_emit "librarian.scan.complete" "$SESSION_ID" "$(jq -cn \
-		--arg outcome "empty" \
+		--arg outcome "skipped" \
+		--arg skip_reason "no_new_artifacts" \
 		--argjson duration_ms "$DURATION_MS" \
 		--argjson candidates_proposed 0 \
 		--argjson candidates_dropped 0 \
 		--argjson artifact_count_in_window 0 \
-		'{ outcome: $outcome, duration_ms: $duration_ms,
+		'{ outcome: $outcome, skip_reason: $skip_reason,
+		   duration_ms: $duration_ms,
 		   candidates_proposed: $candidates_proposed,
 		   candidates_dropped: $candidates_dropped,
 		   artifact_count_in_window: $artifact_count_in_window }')"

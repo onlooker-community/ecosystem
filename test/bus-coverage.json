@@ -113,6 +113,7 @@
     "meridian.playbook.updated": "plugin lives in another repo",
     "meridian.reliance.measured": "plugin lives in another repo",
     "onlooker.session.summary": "emitted by the agent, not this repo",
+    "onlooker.watch.unmatched": "registered by schema 2.18.0; no plugin in this repo emits it yet, so there is no emission for the bus gate to validate. Move it to expected once an emitter lands",
     "oracle.calibration.complete": "plugin lives in another repo",
     "oracle.calibration.requested": "plugin lives in another repo",
     "relay.handoff.captured": "plugin lives in another repo",
