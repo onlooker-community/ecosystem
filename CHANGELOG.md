@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.52.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.51.0...ecosystem-v0.52.0) (2026-09-07)
+
+
+### Features
+
+* **hook-health:** let a record say which vendored copy wrote it :fingerprint: ([#290](https://github.com/onlooker-community/ecosystem/issues/290)) ([37bdbe5](https://github.com/onlooker-community/ecosystem/commit/37bdbe55ec5a01ece82c34dfc8ee95a6c2eda64b))
+
+
+### Bug Fixes
+
+* **cartographer:** let the audit hold its own lock :lock: ([#288](https://github.com/onlooker-community/ecosystem/issues/288)) ([1d3a64d](https://github.com/onlooker-community/ecosystem/commit/1d3a64d03a4f9a4a0f7f95fe192c85cf0f065cd4))
+
 ## [0.51.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.50.0...ecosystem-v0.51.0) (2026-09-07)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.3.8...tribunal-v1.4.0) (2026-09-07)
+
+
+### Features
+
+* **hook-health:** let a record say which vendored copy wrote it :fingerprint: ([#290](https://github.com/onlooker-community/ecosystem/issues/290)) ([37bdbe5](https://github.com/onlooker-community/ecosystem/commit/37bdbe55ec5a01ece82c34dfc8ee95a6c2eda64b))
+
 ## [1.3.8](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.3.7...tribunal-v1.3.8) (2026-09-06)
 
 

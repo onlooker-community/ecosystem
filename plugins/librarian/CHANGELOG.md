@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.0](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.15.9...librarian-v0.16.0) (2026-09-07)
+
+
+### Features
+
+* **hook-health:** let a record say which vendored copy wrote it :fingerprint: ([#290](https://github.com/onlooker-community/ecosystem/issues/290)) ([37bdbe5](https://github.com/onlooker-community/ecosystem/commit/37bdbe55ec5a01ece82c34dfc8ee95a6c2eda64b))
+
 ## [0.15.9](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.15.8...librarian-v0.15.9) (2026-09-06)
 
 
