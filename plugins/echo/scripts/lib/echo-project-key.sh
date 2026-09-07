@@ -87,6 +87,11 @@ echo_project_key() {
 }
 
 # Stable test_id for a file path: first 16 chars of sha256 of the path.
+#
+# Keyed on the path, which is the right identity for "which prompt file is
+# this". It is deliberately NOT content-derived — a file's history has to
+# survive its edits. What the content IS gets recorded separately, by
+# echo_content_sha256 below, so the two questions stay separable.
 echo_test_id_for_path() {
 	local path="$1"
 	if command -v shasum >/dev/null 2>&1; then
@@ -95,5 +100,23 @@ echo_test_id_for_path() {
 		printf '%s' "$path" | sha256sum 2>/dev/null | cut -c1-16
 	else
 		printf '%s' "$path" | od -A n -t x1 | tr -d ' \n' | cut -c1-16
+	fi
+}
+
+# Full sha256 of a file's bytes, or empty if it cannot be read.
+#
+# Hashes the FILE rather than a captured string: $(cat f) strips trailing
+# newlines, so hashing the capture would disagree with `shasum -a 256 f` for
+# every file that ends in one, which is all of them. The recorded hash has to
+# be the one a person can reproduce by hand.
+echo_content_sha256() {
+	local path="$1"
+	[[ -f "$path" ]] || return 0
+	if command -v shasum >/dev/null 2>&1; then
+		shasum -a 256 "$path" 2>/dev/null | cut -d' ' -f1
+	elif command -v sha256sum >/dev/null 2>&1; then
+		sha256sum "$path" 2>/dev/null | cut -d' ' -f1
+	else
+		od -A n -t x1 < "$path" 2>/dev/null | tr -d ' \n'
 	fi
 }

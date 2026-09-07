@@ -151,6 +151,48 @@ BASELINE_DIR="${ECHO_DIR}/baselines"
 mkdir -p "$BASELINE_DIR" 2>/dev/null || _done
 
 # ---------------------------------------------------------------------------
+# Drop files whose content we have already scored
+# ---------------------------------------------------------------------------
+
+# The list above answers "dirty relative to HEAD", which is not the same
+# question as "changed since the last evaluation". One edit to a watched file
+# leaves it dirty until it is committed, so without this filter every later
+# Stop re-ran a 26-48s judge on bytes that had already been scored
+# (ecosystem-449.40).
+#
+# Two things went wrong with that, and this filter is the fix for both. The
+# cost was the visible one: 265s of blocked Stop time in a single day, over
+# two distinct files, the largest line item in the whole hook stack. The
+# correctness failure was worse and quieter -- a single judge's spread on
+# identical content measured 0.13-0.24 against a drift_threshold of 0.05, so
+# each repeat run emitted a regression or an improvement for a file that had
+# not moved, and wrote that noisy score in as the next run's baseline. The
+# baseline for one SKILL.md walked 0.78 -> 0.65 -> 0.72 without a single edit.
+#
+# A missing content_sha256 means a baseline written before this existed, so it
+# must evaluate: treating "no recorded hash" as a match would freeze echo on
+# every file it had already seen.
+PENDING=()
+for rel_path in "${WATCHED_CHANGED[@]}"; do
+	_abs="${WORKTREE_ROOT}/${rel_path}"
+	[[ -f "$_abs" ]] || continue
+
+	_current_sha=$(echo_content_sha256 "$_abs")
+	_baseline_file="${BASELINE_DIR}/$(echo_test_id_for_path "$rel_path").json"
+	_recorded_sha=""
+	if [[ -f "$_baseline_file" ]]; then
+		_recorded_sha=$(jq -r '.content_sha256 // empty' "$_baseline_file" 2>/dev/null) || _recorded_sha=""
+	fi
+
+	[[ -n "$_current_sha" && "$_current_sha" == "$_recorded_sha" ]] && continue
+	PENDING+=("$rel_path")
+done
+
+# Nothing to score is not a suite. Emitting started/complete around zero work
+# is what made the repeat runs read as real activity in the event log.
+[[ "${#PENDING[@]}" -eq 0 ]] && _done
+
+# ---------------------------------------------------------------------------
 # Evaluation loop
 # ---------------------------------------------------------------------------
 
@@ -160,11 +202,11 @@ DRIFT_THRESHOLD=$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" echo_config_drift_threshold)
 
 SUITE_ID=$(echo_ulid)
 SUITE_START=$(_hook_health_now_ms 2>/dev/null || jq -n '(now * 1000 | floor)' 2>/dev/null || echo 0)
-FIRST_CHANGED="${WATCHED_CHANGED[0]}"
+FIRST_CHANGED="${PENDING[0]}"
 
 suite_started_payload=$(jq -n \
 	--arg suite_id "$SUITE_ID" \
-	--argjson test_count "${#WATCHED_CHANGED[@]}" \
+	--argjson test_count "${#PENDING[@]}" \
 	--arg trigger "file_change" \
 	--arg changed_file "$FIRST_CHANGED" \
 	'{suite_id: $suite_id, test_count: $test_count, trigger: $trigger, changed_file: $changed_file}')
@@ -179,7 +221,7 @@ sum_before=0
 sum_after=0
 file_count=0
 
-for rel_path in "${WATCHED_CHANGED[@]}"; do
+for rel_path in "${PENDING[@]}"; do
 	# Rebuilt against the tree the path was found in. Rooted at REPO_ROOT this
 	# opened the PARENT checkout's copy, so echo could score one version of a
 	# prompt and store it as the baseline for another (ecosystem-449.37).
@@ -241,13 +283,18 @@ for rel_path in "${WATCHED_CHANGED[@]}"; do
 		SCORE_BEFORE=$(jq -r '.score // empty' "$BASELINE_FILE" 2>/dev/null) || SCORE_BEFORE=""
 	fi
 
-	# Persist new baseline.
+	# Persist new baseline, stamped with the content it was scored from. That
+	# stamp is what lets the next Stop tell "already judged these bytes" from
+	# "this file changed" — without it the score below is unattributable to any
+	# particular version of the file (ecosystem-449.40).
 	jq -n \
 		--arg path "$rel_path" \
 		--arg test_id "$TEST_ID" \
 		--argjson score "$SCORE_AFTER" \
+		--arg content_sha256 "$(echo_content_sha256 "$abs_path")" \
 		--arg ts "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
-		'{path: $path, test_id: $test_id, score: $score, recorded_at: $ts}' \
+		'{path: $path, test_id: $test_id, score: $score,
+		  content_sha256: $content_sha256, recorded_at: $ts}' \
 		> "$BASELINE_FILE" 2>/dev/null || true
 
 	file_count=$((file_count + 1))
@@ -379,7 +426,7 @@ jq -n \
 	--argjson degraded "$count_degraded" \
 	--argjson neutral "$count_neutral" \
 	--argjson merge_recommended "$MERGE_RECOMMENDED" \
-	--argjson files "$(printf '%s\n' "${WATCHED_CHANGED[@]}" | jq -R . | jq -s .)" \
+	--argjson files "$(printf '%s\n' "${PENDING[@]}" | jq -R . | jq -s .)" \
 	'{suite_id: $suite_id, session_id: $session_id, test_count: $test_count,
 	  improved: $improved, degraded: $degraded, neutral: $neutral,
 	  merge_recommended: $merge_recommended, files: $files}' \
