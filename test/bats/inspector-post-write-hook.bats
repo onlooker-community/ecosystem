@@ -124,6 +124,49 @@ _run_hook() {
 	[ "$(jq -r 'select(.event_type=="inspector.check.skipped").payload.reason' "$ONLOOKER_EVENTS_LOG")" = "no_extension_match" ]
 }
 
+# The skip path is ~20% of invocations and was the only one reporting no
+# duration, which is how ecosystem-449.14 came to quote a whole-hook figure as
+# the skip decision's cost. Asserting a bound rather than a value: the point is
+# that the field is present, non-negative and plausible, not that it hits a
+# number a loaded CI box will not reproduce.
+@test "a whole-file skip reports how long deciding to skip took" {
+	echo '{"inspector":{"checks":{".ts":[{"name":"t","kind":"lint","argv":["true"]}]}}}' | _settings
+	run _run_hook "$(_input "$REPO" "Edit" "${REPO}/src/sample.py")"
+	[ "$status" -eq 0 ] || return 1
+
+	jq -e 'select(.event_type=="inspector.check.skipped")
+	       | .payload.duration_ms | type == "number" and . >= 0 and . < 60000' \
+		"$ONLOOKER_EVENTS_LOG" >/dev/null
+}
+
+# The schema types duration_ms as integer/minimum 0, so there is no null to
+# fall back to -- an unavailable clock has to drop the key entirely.
+#
+# Driven through the emitter directly rather than the hook: hook_health_register
+# assigns _HOOK_START_MS itself, so no amount of environment scrubbing makes the
+# hook take this path. Sourcing the lib without hook-health is what actually
+# reproduces a fail-soft source failure, which is the only way the variable is
+# ever missing in production.
+@test "a skip omits duration_ms rather than nulling it when no clock origin exists" {
+	run bash -c "
+		export CLAUDE_PLUGIN_ROOT='$PLUGIN_ROOT' ONLOOKER_DIR='$ONLOOKER_DIR'
+		export ONLOOKER_EVENTS_LOG='$ONLOOKER_EVENTS_LOG'
+		source '${PLUGIN_ROOT}/scripts/lib/inspector-events.sh'
+		source '${PLUGIN_ROOT}/scripts/lib/inspector-run.sh'
+		unset _HOOK_START_MS
+		INSPECTOR_FILE='${REPO}/src/sample.py' \
+		INSPECTOR_FILE_RELATIVE='src/sample.py' \
+		INSPECTOR_TOOL_NAME='Edit' \
+		INSPECTOR_PROJECT_KEY='deadbeefcafe' \
+			inspector_emit_whole_file_skipped no_extension_match
+	"
+	[ "$status" -eq 0 ] || return 1
+	[ "$(_event_count inspector.check.skipped)" = "1" ] || return 1
+
+	jq -e 'select(.event_type=="inspector.check.skipped")
+	       | has("duration_ms") | not' "$ONLOOKER_EVENTS_LOG" >/dev/null
+}
+
 @test "a passing check emits .passed and silences agent-facing stdout by default" {
 	echo '{"inspector":{"checks":{".ts":[{"name":"clean","kind":"lint","argv":["true"]}]}}}' | _settings
 	run _run_hook "$(_input)"

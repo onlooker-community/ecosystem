@@ -305,8 +305,25 @@ _inspector_emit_skipped() {
 	inspector_emit_event "inspector.check.skipped" "$payload" || true
 }
 
+# Whole-file skips are the paths that do no work at all -- no_extension_match,
+# not_in_repo, excluded_path -- and they are roughly a fifth of invocations.
+# Their cost was the one thing the hook never reported, which is how
+# ecosystem-449.14 came to quote a whole-hook duration as the skip decision's.
+#
+# Measured from _HOOK_START_MS deliberately, rather than from a mark of our own.
+# That is the same origin hook_health_register stamps at hook entry and the same
+# one hook-health.jsonl subtracts from, so the number here and the number there
+# are comparable by construction -- which is exactly the comparison this bead
+# got wrong twice. If hook-health did not load, the field is omitted rather than
+# guessed: the schema types it integer/minimum 0, so there is no null to send.
 inspector_emit_whole_file_skipped() {
 	local reason="$1"
+	local dur=-1 now
+	if [[ "${_HOOK_START_MS:-}" =~ ^[0-9]+$ ]]; then
+		now=$(_inspector_now_ms)
+		[[ "$now" =~ ^[0-9]+$ ]] && dur=$(( now - _HOOK_START_MS ))
+		(( dur < 0 )) && dur=0
+	fi
 	local payload
 	payload=$(jq -n \
 		--arg file "${INSPECTOR_FILE:-}" \
@@ -314,7 +331,9 @@ inspector_emit_whole_file_skipped() {
 		--arg tool "${INSPECTOR_TOOL_NAME:-}" \
 		--arg reason "$reason" \
 		--arg pk "${INSPECTOR_PROJECT_KEY:-}" \
-		'{file_path:$file,file_path_relative:$rel,tool_name:$tool,reason:$reason,project_key:$pk}')
+		--argjson dur "$dur" \
+		'{file_path:$file,file_path_relative:$rel,tool_name:$tool,reason:$reason,project_key:$pk}
+		 + (if $dur >= 0 then {duration_ms:$dur} else {} end)')
 	inspector_emit_event "inspector.check.skipped" "$payload" || true
 }
 
