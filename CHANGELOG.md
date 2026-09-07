@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.53.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.53.1...ecosystem-v0.53.2) (2026-09-07)
+
+
+### Bug Fixes
+
+* **lineage:** describe the checkout, not the session, when watching for edits :busts_in_silhouette: ([#300](https://github.com/onlooker-community/ecosystem/issues/300)) ([5de1385](https://github.com/onlooker-community/ecosystem/commit/5de138565da0f2632d2a636ea21a4413595c5794))
+
 ## [0.53.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.53.0...ecosystem-v0.53.1) (2026-09-07)
 
 
