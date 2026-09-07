@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/onlooker-community/ecosystem/compare/echo-v0.5.0...echo-v0.5.1) (2026-09-07)
+
+
+### Bug Fixes
+
+* **echo:** score a prompt file once, not on every Stop until it is committed :mute: ([#298](https://github.com/onlooker-community/ecosystem/issues/298)) ([67dc26c](https://github.com/onlooker-community/ecosystem/commit/67dc26ceee741bd751f300c1bd14a524deee7f72))
+
 ## [0.5.0](https://github.com/onlooker-community/ecosystem/compare/echo-v0.4.7...echo-v0.5.0) (2026-09-07)
 
 
