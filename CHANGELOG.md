@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.51.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.50.0...ecosystem-v0.51.0) (2026-09-07)
+
+
+### Features
+
+* **lint:** tell a plugin that never ran from one that ran and said nothing :satellite: ([#286](https://github.com/onlooker-community/ecosystem/issues/286)) ([32c1f0c](https://github.com/onlooker-community/ecosystem/commit/32c1f0c2dc1c4632316fb96918045d47f4a3817c))
+
 ## [0.50.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.49.11...ecosystem-v0.50.0) (2026-09-07)
 
 
