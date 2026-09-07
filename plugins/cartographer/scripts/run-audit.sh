@@ -24,6 +24,7 @@ set -uo pipefail
 
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 
+source "$PLUGIN_ROOT/scripts/lib/cartographer-lock.sh"
 source "$PLUGIN_ROOT/scripts/lib/cartographer-config.sh"
 source "$PLUGIN_ROOT/scripts/lib/cartographer-ulid.sh"
 source "$PLUGIN_ROOT/scripts/lib/cartographer-project-key.sh"
@@ -40,6 +41,33 @@ TARGET_FILE="${CARTOGRAPHER_TARGET_FILE:-}"
 REPO_ROOT="${CARTOGRAPHER_REPO_ROOT:-$(pwd)}"
 TYPE_FILTER="${CARTOGRAPHER_TYPE_FILTER:-}"
 SCOPE_PATH="${CARTOGRAPHER_SCOPE_PATH:-}"
+# The audit holds its own lock (ecosystem-hap).
+#
+# It used to be taken by the launching hook, which then backgrounded this script
+# and exited within ~2s. portable-lock stamps the holder pid at acquire time, so
+# the recorded holder was a process that was already gone, and _lock_stale's
+# `kill -0` reclaimed the lock on the next caller's first try -- the lock
+# excluded nothing. The release was equally broken: the launcher set an EXIT trap
+# and then `exec`ed this script, which replaces the process image and discards
+# the trap, so nothing ever released it. One lock directory sat abandoned for
+# 78 days.
+#
+# Those two defects cancelled: the lock was never released, and never needed to
+# be, because staleness broke it every time. Fixing either alone makes things
+# worse -- a lock that excludes properly but is never released is a permanent
+# deadlock. So the holder has to be this process, and the trap has to be set
+# here, below the exec rather than above it.
+#
+# The /cartographer skill runs this script in the foreground, so a manual audit
+# now also declines to run alongside a scheduled one. That is the intended
+# behavior for a lock whose whole job is one-audit-at-a-time.
+LOCK_FILE="${CARTOGRAPHER_DIR}/audit.lock"
+if ! cartographer_lock_acquire "$LOCK_FILE"; then
+	printf '[cartographer] another audit holds %s; skipping\n' "$LOCK_FILE" >&2
+	exit 0
+fi
+trap 'cartographer_lock_release "$LOCK_FILE"' EXIT
+
 AUDIT_ID=$(cartographer_ulid)
 START_TS=$(date +%s)
 
