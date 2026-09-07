@@ -26,6 +26,7 @@
     "lint:manifests": "node scripts/lint/check-manifests.mjs",
     "lint:plugin-installs": "node scripts/lint/check-plugin-installs.mjs",
     "lint:plugin-liveness": "node scripts/lint/check-plugin-liveness.mjs",
+    "lint:lib-skew": "node scripts/lint/check-shared-lib-skew.mjs",
     "lint:lesson-schema": "node scripts/lint/check-lesson-schema-drift.mjs",
     "lint:managed-blocks": "node scripts/lint/check-managed-blocks.mjs",
     "coverage:node": "node scripts/coverage/run-coverage.mjs",

@@ -24,6 +24,8 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=./lib-fingerprint.sh
+source "${REPO_ROOT}/scripts/lib-fingerprint.sh"
 SHARED_LIBS=(config-loader.sh hook-health.sh substrate-resolve.sh)
 ON_DEMAND_LIBS=(portable-lock.sh)
 
@@ -38,6 +40,22 @@ for lib in "${SHARED_LIBS[@]}" "${ON_DEMAND_LIBS[@]}"; do
 		printf 'missing canonical lib: %s\n' "$canonical" >&2
 		exit 1
 	}
+
+	# Stamp the canonical copy with its own content fingerprint before
+	# propagating, so every vendored copy carries a value that matches its
+	# bytes (ecosystem-449.31). Done here rather than by hand because a
+	# fingerprint someone has to remember to update is just another label that
+	# can lie about the file it labels.
+	if grep -q "^${LIB_FINGERPRINT_MARKER}" "$canonical"; then
+		if [[ "$check_only" -eq 1 ]]; then
+			if [[ "$(lib_fingerprint "$canonical")" != "$(lib_fingerprint_stamped "$canonical")" ]]; then
+				printf 'stale fingerprint: %s\n' "${canonical#"${REPO_ROOT}/"}" >&2
+				drift=$((drift + 1))
+			fi
+		elif lib_fingerprint_stamp "$canonical"; then
+			printf 'stamped %s (%s)\n' "${canonical#"${REPO_ROOT}/"}" "$(lib_fingerprint_stamped "$canonical")"
+		fi
+	fi
 
 	on_demand=0
 	for od in "${ON_DEMAND_LIBS[@]}"; do

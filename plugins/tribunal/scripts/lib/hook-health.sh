@@ -27,6 +27,20 @@
 # shebang that resolves to 3.2 on macOS. Treat small values as a floor, not a
 # measurement. duration_ms is null when it could not be computed at all.
 
+# Content fingerprint of this file, stamped by scripts/sync-shared-libs.sh and
+# verified by test/bats/shared-lib-fingerprint.bats.
+#
+# ecosystem-449.31. This lib is vendored into every plugin and plugins install
+# independently, so one session can run the substrate on one copy and its
+# plugins on another. Records from that window mixed two attribution schemes
+# with nothing in the record to separate them. Carrying the fingerprint lets a
+# rollup partition rows by which copy wrote them instead of assuming uniformity.
+#
+# Derived from the bytes rather than declared: a version directory's name, its
+# package.json and its mtime have each been caught disagreeing with the contents
+# they label. A hand-maintained constant would be a fourth such label.
+_ONLOOKER_LIB_FINGERPRINT="48b212e0d8d2"
+
 # Do not clobber values a caller already set — several plugins set
 # _HOOK_SESSION_ID before sourcing, and their *-events.sh libs read it.
 # Note this seeds from the ENVIRONMENT, so an exported _HOOK_SESSION_ID crosses
@@ -193,6 +207,7 @@ _hook_health_write() {
 		--arg session_id "$_HOOK_SESSION_ID" \
 		--arg hook_event "$_HOOK_EVENT" \
 		--arg tool_name "$_HOOK_TOOL_NAME" \
+		--arg lib "$_ONLOOKER_LIB_FINGERPRINT" \
 		--argjson start "$start" \
 		--argjson end "$end" \
 		'{
@@ -206,7 +221,10 @@ _hook_health_write() {
 			error: (if $error == "" then null else $error end),
 			session_id: (if $session_id == "" then null else $session_id end),
 			hook_event: (if $hook_event == "" then null else $hook_event end),
-			tool_name: (if $tool_name == "" then null else $tool_name end)
+			tool_name: (if $tool_name == "" then null else $tool_name end),
+			# Which vendored copy of hook-health.sh wrote this row. Rows with
+			# differing values in one session are a skew window, not noise.
+			lib_schema: (if $lib == "" then null else $lib end)
 		   }' >> "$path" 2>/dev/null || true
 
 	# Reset so a second write in the same shell cannot double-count.
