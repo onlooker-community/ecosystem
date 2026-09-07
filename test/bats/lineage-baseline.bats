@@ -26,10 +26,22 @@ setup() {
 }
 
 @test "baseline path lands under lineage-baselines, never under lineage" {
-  run lineage_baseline_path "abc123" "sess-1"
+  run lineage_baseline_path "abc123"
   [ "$status" -eq 0 ] || return 1
-  [[ "$output" == *"/lineage-baselines/abc123/sess-1.json" ]] || return 1
+  [[ "$output" == *"/lineage-baselines/abc123/baseline.json" ]] || return 1
   [[ "$output" != *"/lineage/abc123"* ]]
+}
+
+# One file per checkout, not per session. A session id in this path is what
+# let two sessions in one tree each keep a private view of shared state, so
+# each discovered the other's work and recorded it as its own
+# (ecosystem-449.41). The path must not vary with anything session-shaped.
+@test "baseline path does not vary by session" {
+  local a b
+  a=$(lineage_baseline_path "abc123")
+  b=$(lineage_baseline_path "abc123")
+  [ "$a" = "$b" ] || return 1
+  [[ "$a" != *"sess"* ]]
 }
 
 @test "candidate_paths reports a modified tracked file" {
