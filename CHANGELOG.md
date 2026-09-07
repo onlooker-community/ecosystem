@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.53.3](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.53.2...ecosystem-v0.53.3) (2026-09-07)
+
+
+### Bug Fixes
+
+* **echo:** one edit, one verdict across sessions :busts_in_silhouette: ([#303](https://github.com/onlooker-community/ecosystem/issues/303)) ([7119221](https://github.com/onlooker-community/ecosystem/commit/71192217f61276bebc1c2d9496077c5fae170f0f))
+
 ## [0.53.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.53.1...ecosystem-v0.53.2) (2026-09-07)
 
 

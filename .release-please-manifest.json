@@ -1,8 +1,8 @@
 {
-  ".": "0.53.2",
+  ".": "0.53.3",
   "plugins/archivist": "0.5.0",
   "plugins/tribunal": "1.4.0",
-  "plugins/echo": "0.5.1",
+  "plugins/echo": "0.5.2",
   "plugins/cartographer": "0.8.0",
   "plugins/governor": "0.5.0",
   "plugins/compass": "0.6.0",
