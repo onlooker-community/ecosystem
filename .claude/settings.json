@@ -38,6 +38,7 @@
           "name": "shellcheck",
           "kind": "lint",
           "argv": [
+            "${repo_root}/scripts/lint/run-tool.sh",
             "shellcheck",
             "-S",
             "error",
@@ -51,6 +52,7 @@
           "name": "biome",
           "kind": "lint",
           "argv": [
+            "${repo_root}/scripts/lint/run-tool.sh",
             "biome",
             "check",
             "${file}"
@@ -62,6 +64,7 @@
           "name": "biome",
           "kind": "lint",
           "argv": [
+            "${repo_root}/scripts/lint/run-tool.sh",
             "biome",
             "check",
             "${file}"
@@ -73,6 +76,7 @@
           "name": "biome",
           "kind": "lint",
           "argv": [
+            "${repo_root}/scripts/lint/run-tool.sh",
             "biome",
             "check",
             "${file}"
