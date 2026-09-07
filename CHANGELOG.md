@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.52.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.52.1...ecosystem-v0.52.2) (2026-09-07)
+
+
+### Bug Fixes
+
+* **tests:** make negative assertions actually able to fail :lock_with_ink_pen: ([#293](https://github.com/onlooker-community/ecosystem/issues/293)) ([f7741f0](https://github.com/onlooker-community/ecosystem/commit/f7741f03887fd341c6a141362018eda8e5c2206d))
+
 ## [0.52.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.52.0...ecosystem-v0.52.1) (2026-09-07)
 
 
