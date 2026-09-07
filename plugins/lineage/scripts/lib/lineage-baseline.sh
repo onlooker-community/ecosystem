@@ -25,18 +25,35 @@ lineage_baseline_dir() {
 	printf '%s/lineage-baselines/%s' "${ONLOOKER_DIR:-${HOME}/.onlooker}" "$safe"
 }
 
+# One baseline per checkout, NOT per session.
+#
+# The baseline answers "what did this tree look like last time anyone looked",
+# and the Bash branch uses it to decide whether a shell command changed
+# anything. Keyed per session, those stopped being the same question the moment
+# a second session touched the tree: the other session's baseline went stale,
+# and its next Bash call — any command, a pure read included — saw work it had
+# not done and recorded it under its own session_id (ecosystem-449.41). In the
+# field that put five ghost records in the ledger in 80 seconds and made
+# /lineage name the wrong author and resolve the wrong session's prompt.
+#
+# The session id is deliberately NOT a parameter. There is exactly one correct
+# scope for this file, and taking a session argument is what made the wrong one
+# expressible. Sharing the path also shares the lock the Bash branch takes
+# across it, so sessions in one checkout now exclude each other instead of each
+# racing its own private copy.
 lineage_baseline_path() {
-	local scope_id="$1" sid="${2:-unknown}" safe_sid
-	safe_sid=$(printf '%s' "$sid" | tr -c 'a-zA-Z0-9-' '_')
-	printf '%s/%s.json' "$(lineage_baseline_dir "$scope_id")" "$safe_sid"
+	local scope_id="$1"
+	printf '%s/baseline.json' "$(lineage_baseline_dir "$scope_id")"
 }
 
-# Cheap identity for the per-session baseline.
+# Cheap identity for the baseline, derived from the worktree root.
 #
 # Deliberately NOT lineage_project_key: resolving that shells out for the remote
 # URL and costs roughly 20ms, which is part of the setup the Bash pre-gate exists
 # to skip. The baseline is scratch and is never joined to the ledger, so it does
-# not need the ledger's identity — only stability within a session.
+# not need the ledger's identity — only stability for a given checkout. It keys
+# on the worktree root rather than the common dir so a worktree and its parent,
+# which are genuinely different trees, do not share one (ecosystem-449.33).
 lineage_baseline_scope_id() {
 	local root="${1:-unknown}"
 	lineage_sha256 "$root" | cut -c1-12

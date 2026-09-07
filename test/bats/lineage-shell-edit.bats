@@ -111,8 +111,8 @@ _run_hook() { printf '%s' "$(_bash_input "$1")" | bash "$HOOK"; }
 
 @test "the baseline lives under lineage-baselines, not lineage" {
   _run_hook "echo seed"
-  [ -f "${ONLOOKER_DIR}/lineage-baselines/${SCOPE_ID}/sess-shell.json" ] || return 1
-  [ ! -d "${ONLOOKER_DIR}/lineage/${SCOPE_ID}/sess-shell.json" ]
+  [ -f "${ONLOOKER_DIR}/lineage-baselines/${SCOPE_ID}/baseline.json" ] || return 1
+  [ ! -d "${ONLOOKER_DIR}/lineage/${SCOPE_ID}/baseline.json" ]
 }
 
 @test "lockfiles are ignored" {
@@ -247,7 +247,7 @@ _run_hook() { printf '%s' "$(_bash_input "$1")" | bash "$HOOK"; }
 # to eliminate, reached through the mechanism added to fix it.
 
 _baseline_lock_dir() {
-  printf '%s.lock.d' "$(lineage_baseline_path "$SCOPE_ID" "sess-shell")"
+  printf '%s.lock.d' "$(lineage_baseline_path "$SCOPE_ID")"
 }
 
 _seed_baseline_lock() {

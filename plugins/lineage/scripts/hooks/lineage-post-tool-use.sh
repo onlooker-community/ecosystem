@@ -191,7 +191,7 @@ WORKTREE_ROOT=$(lineage_worktree_root "$CWD")
 if [[ "$TOOL" == "Bash" ]]; then
 	[[ -z "$WORKTREE_ROOT" ]] && _done
 
-	BASELINE_FILE=$(lineage_baseline_path "$(lineage_baseline_scope_id "$WORKTREE_ROOT")" "$SESSION_ID")
+	BASELINE_FILE=$(lineage_baseline_path "$(lineage_baseline_scope_id "$WORKTREE_ROOT")")
 	mkdir -p "$(dirname "$BASELINE_FILE")" 2>/dev/null || _done
 
 	BASELINE_LOCK="${BASELINE_FILE}.lock"
@@ -217,8 +217,11 @@ if [[ "$TOOL" == "Bash" ]]; then
 	[[ -f "$BASELINE_FILE" ]] && BASELINE=$(cat "$BASELINE_FILE" 2>/dev/null) || true
 	[[ -z "$BASELINE" ]] && BASELINE='{}'
 
-	# No prior baseline means this is the session's first Bash call. Seed and
-	# stop: with nothing to compare against, every dirty file would look new.
+	# No prior baseline means this is the first Bash call in this checkout by
+	# any session. Seed and stop: with nothing to compare against, every dirty
+	# file would look new. A session joining a checkout that already has a
+	# baseline inherits it rather than seeding its own, which is what keeps it
+	# from claiming the pending diff as its own work (ecosystem-449.41).
 	if ! printf '%s' "$BASELINE" | jq -e 'has("files")' >/dev/null 2>&1; then
 		_seed=$(lineage_baseline_build "$WORKTREE_ROOT")
 		[[ -n "$_seed" ]] && lineage_baseline_write "$BASELINE_FILE" "$_seed"
@@ -375,13 +378,18 @@ if lineage_append "$PROJECT_KEY" "$RECORD"; then
 	# newest-wins lookup returns it instead of the true Edit/Write/MultiEdit
 	# record it displaced (ecosystem-449.13 C2).
 	#
-	# Only when a baseline file already exists for this scope/session: if
-	# none exists yet, the Bash branch's own seed-and-stop step builds one
-	# from current disk state on its first call, which already reflects this
-	# change — nothing to advance ahead of.
+	# The baseline is shared across the checkout (ecosystem-449.41), so this
+	# advance now speaks for every session in it: another session's next Bash
+	# call sees a baseline that already accounts for this edit, instead of
+	# discovering it and claiming it.
+	#
+	# Only when a baseline file already exists for this scope: if none exists
+	# yet, the Bash branch's own seed-and-stop step builds one from current
+	# disk state on its first call, which already reflects this change —
+	# nothing to advance ahead of.
 	if [[ -n "$WORKTREE_ROOT" ]]; then
 		_baseline_scope_id=$(lineage_baseline_scope_id "$WORKTREE_ROOT")
-		_baseline_file=$(lineage_baseline_path "$_baseline_scope_id" "$SESSION_ID")
+		_baseline_file=$(lineage_baseline_path "$_baseline_scope_id")
 		# A cheap pre-check, not the deciding one: it keeps an Edit that
 		# precedes any Bash call in the session off the lock entirely. The
 		# test that governs the write is the one inside the lock below.
