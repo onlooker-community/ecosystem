@@ -231,6 +231,12 @@ for rel_path in "${PENDING[@]}"; do
 	FILE_CONTENT=$(cat "$abs_path" 2>/dev/null) || continue
 	[[ -z "$FILE_CONTENT" ]] && continue
 
+	# The bytes this iteration is about to spend a judge on. Captured HERE,
+	# beside the read that builds the prompt, rather than recomputed after the
+	# call returns: the judge takes 26-60s, and a file edited during that window
+	# would otherwise be stamped with content nobody actually scored.
+	JUDGED_SHA=$(echo_content_sha256 "$abs_path")
+
 	TEST_ID=$(echo_test_id_for_path "$rel_path")
 	BASELINE_FILE="${BASELINE_DIR}/${TEST_ID}.json"
 
@@ -278,6 +284,30 @@ for rel_path in "${PENDING[@]}"; do
 	CONFIDENCE=$(printf '%s' "$CLEAN" | jq -r '.confidence // "0.6"' 2>/dev/null) || CONFIDENCE="0.6"
 	[[ -z "$SCORE_AFTER" ]] && continue
 
+	# Another session may have judged these exact bytes while this one sat in
+	# its own judge call. Both cleared the pre-judge filter above legitimately,
+	# because neither had recorded the new hash yet, so the only way to tell
+	# "someone already scored this edit" from "this is a fresh edit" is to
+	# re-read the baseline now and compare CONTENT rather than time.
+	#
+	# A lock would not close this. Serializing the read-modify-write still
+	# leaves whichever suite finishes second reading a baseline recorded from
+	# the very bytes it just scored, and diffing sample-vs-sample. In the field
+	# that emitted an improvement AND a regression for a single edit, and left
+	# the losing sample as the baseline every later run compares against
+	# (ecosystem-449.46).
+	#
+	# An absent stamp is not a match: baselines written before ecosystem-449.40
+	# carry no content_sha256, and reading that as "already scored" would freeze
+	# echo on every file it had ever seen.
+	RECORDED_SHA=""
+	if [[ -f "$BASELINE_FILE" ]]; then
+		RECORDED_SHA=$(jq -r '.content_sha256 // empty' "$BASELINE_FILE" 2>/dev/null) || RECORDED_SHA=""
+	fi
+	if [[ -n "$JUDGED_SHA" && "$RECORDED_SHA" == "$JUDGED_SHA" ]]; then
+		continue
+	fi
+
 	SCORE_BEFORE=""
 	if [[ -f "$BASELINE_FILE" ]]; then
 		SCORE_BEFORE=$(jq -r '.score // empty' "$BASELINE_FILE" 2>/dev/null) || SCORE_BEFORE=""
@@ -291,7 +321,7 @@ for rel_path in "${PENDING[@]}"; do
 		--arg path "$rel_path" \
 		--arg test_id "$TEST_ID" \
 		--argjson score "$SCORE_AFTER" \
-		--arg content_sha256 "$(echo_content_sha256 "$abs_path")" \
+		--arg content_sha256 "$JUDGED_SHA" \
 		--arg ts "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
 		'{path: $path, test_id: $test_id, score: $score,
 		  content_sha256: $content_sha256, recorded_at: $ts}' \
