@@ -113,6 +113,7 @@
     "meridian.playbook.updated": "plugin lives in another repo",
     "meridian.reliance.measured": "plugin lives in another repo",
     "onlooker.session.summary": "emitted by the agent, not this repo",
+    "onlooker.watch.unmatched": "registered in @onlooker-community/schema 2.18.0 for ecosystem-449.21, but no plugin emits it yet: the detection in echo (watch_paths) and cartographer (undocumented_entity.globs) lands separately. Move to expected with that change, not before",
     "oracle.calibration.complete": "plugin lives in another repo",
     "oracle.calibration.requested": "plugin lives in another repo",
     "relay.handoff.captured": "plugin lives in another repo",
