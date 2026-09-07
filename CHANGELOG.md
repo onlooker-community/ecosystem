@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.52.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.52.0...ecosystem-v0.52.1) (2026-09-07)
+
+
+### Bug Fixes
+
+* **inspector:** find the linter even when the session did not activate mise :mag_right: ([#291](https://github.com/onlooker-community/ecosystem/issues/291)) ([18b70ec](https://github.com/onlooker-community/ecosystem/commit/18b70ecc38f891682d47b197c3120c10d400a6f2))
+
 ## [0.52.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.51.0...ecosystem-v0.52.0) (2026-09-07)
 
 
