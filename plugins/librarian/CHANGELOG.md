@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.0](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.16.0...librarian-v0.17.0) (2026-09-07)
+
+
+### Features
+
+* **librarian:** report the nothing-new bail as a skip :label: ([#295](https://github.com/onlooker-community/ecosystem/issues/295)) ([e16d567](https://github.com/onlooker-community/ecosystem/commit/e16d567af9050b02c69f5e1f9d28332fa1bb2239))
+
 ## [0.16.0](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.15.9...librarian-v0.16.0) (2026-09-07)
 
 

@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.53.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.52.2...ecosystem-v0.53.0) (2026-09-07)
+
+
+### Features
+
+* **librarian:** report the nothing-new bail as a skip :label: ([#295](https://github.com/onlooker-community/ecosystem/issues/295)) ([e16d567](https://github.com/onlooker-community/ecosystem/commit/e16d567af9050b02c69f5e1f9d28332fa1bb2239))
+
+
+### Bug Fixes
+
+* **schema:** account for the type the 2.18.0 release added :triangular_flag_on_post: ([#297](https://github.com/onlooker-community/ecosystem/issues/297)) ([f9a37cc](https://github.com/onlooker-community/ecosystem/commit/f9a37cc370cd0f34b71821b0c19a6f89b7e3be78))
+
 ## [0.52.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.52.1...ecosystem-v0.52.2) (2026-09-07)
 
 
