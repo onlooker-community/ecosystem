@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/onlooker-community/ecosystem/compare/inspector-v0.4.6...inspector-v0.5.0) (2026-09-07)
+
+
+### Features
+
+* **inspector:** report how long deciding to skip took :stopwatch: ([#284](https://github.com/onlooker-community/ecosystem/issues/284)) ([2ee9f76](https://github.com/onlooker-community/ecosystem/commit/2ee9f76147dc32d94249c2af2b4bc5db238e3d73))
+
 ## [0.4.6](https://github.com/onlooker-community/ecosystem/compare/inspector-v0.4.5...inspector-v0.4.6) (2026-09-06)
 
 

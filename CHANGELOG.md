@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.50.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.49.11...ecosystem-v0.50.0) (2026-09-07)
+
+
+### Features
+
+* **inspector:** report how long deciding to skip took :stopwatch: ([#284](https://github.com/onlooker-community/ecosystem/issues/284)) ([2ee9f76](https://github.com/onlooker-community/ecosystem/commit/2ee9f76147dc32d94249c2af2b4bc5db238e3d73))
+
 ## [0.49.11](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.49.10...ecosystem-v0.49.11) (2026-09-06)
 
 
