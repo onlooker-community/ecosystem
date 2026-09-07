@@ -3,8 +3,8 @@
 # Exercises the librarian SessionEnd scan pipeline end-to-end with a stub
 # `claude` CLI. Verifies:
 #   - Disabled config: no proposals, no events.
-#   - Empty archivist dir: scan.started + scan.complete{outcome: empty}
-#     emitted, watermark advances.
+#   - Empty archivist dir: scan.started + scan.complete{outcome: skipped,
+#     skip_reason: no_new_artifacts} emitted, watermark advances.
 #   - Synthetic artifacts that pass durability filter and classifier:
 #     proposals land on disk with the expected provenance and scan events
 #     report the correct counts.
@@ -98,7 +98,7 @@ _hook_input() {
 }
 
 
-@test "session-end emits empty scan when archivist has nothing" {
+@test "session-end emits a skipped scan when archivist has nothing" {
   run bash -c "printf '%s' '$(_hook_input)' | '$HOOK'"
   [ "$status" -eq 0 ]
 
@@ -107,10 +107,13 @@ _hook_input() {
   grep '"event_type":"librarian.scan.started"' "$ONLOOKER_EVENTS_LOG" \
     | jq -e '.payload.artifact_count_in_window == 0' >/dev/null
 
-  # scan.complete fired with outcome=empty and zero counts.
+  # scan.complete reports a SKIP naming its reason, not an empty result.
+  # This scan never reached classification, so it was never a chance to
+  # write - which is a different claim from the full pipeline running and
+  # proposing nothing, and that path keeps "empty" to itself.
   grep -q '"event_type":"librarian.scan.complete"' "$ONLOOKER_EVENTS_LOG"
   grep '"event_type":"librarian.scan.complete"' "$ONLOOKER_EVENTS_LOG" \
-    | jq -e '.payload.outcome == "empty" and .payload.candidates_proposed == 0 and .payload.candidates_dropped == 0' >/dev/null
+    | jq -e '.payload.outcome == "skipped" and .payload.skip_reason == "no_new_artifacts" and .payload.candidates_proposed == 0 and .payload.candidates_dropped == 0' >/dev/null
 
   # Watermark advanced for next scan.
   [ -f "${LIBRARIAN_DIR}/last_scan.json" ]
