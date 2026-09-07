@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.2](https://github.com/onlooker-community/ecosystem/compare/echo-v0.5.1...echo-v0.5.2) (2026-09-07)
+
+
+### Bug Fixes
+
+* **echo:** one edit, one verdict across sessions :busts_in_silhouette: ([#303](https://github.com/onlooker-community/ecosystem/issues/303)) ([7119221](https://github.com/onlooker-community/ecosystem/commit/71192217f61276bebc1c2d9496077c5fae170f0f))
+
 ## [0.5.1](https://github.com/onlooker-community/ecosystem/compare/echo-v0.5.0...echo-v0.5.1) (2026-09-07)
 
 
