@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/onlooker-community/ecosystem/compare/scribe-v0.7.0...scribe-v0.8.0) (2026-09-08)
+
+
+### Features
+
+* **ecosystem:** stamp the plugin version each session actually runs :mag: ([#305](https://github.com/onlooker-community/ecosystem/issues/305)) ([d58361d](https://github.com/onlooker-community/ecosystem/commit/d58361dbd22909d683087e1a0dde1d644cff6e42))
+
 ## [0.7.0](https://github.com/onlooker-community/ecosystem/compare/scribe-v0.6.6...scribe-v0.7.0) (2026-09-07)
 
 

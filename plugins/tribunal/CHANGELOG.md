@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.4.0...tribunal-v1.5.0) (2026-09-08)
+
+
+### Features
+
+* **ecosystem:** stamp the plugin version each session actually runs :mag: ([#305](https://github.com/onlooker-community/ecosystem/issues/305)) ([d58361d](https://github.com/onlooker-community/ecosystem/commit/d58361dbd22909d683087e1a0dde1d644cff6e42))
+
 ## [1.4.0](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.3.8...tribunal-v1.4.0) (2026-09-07)
 
 
