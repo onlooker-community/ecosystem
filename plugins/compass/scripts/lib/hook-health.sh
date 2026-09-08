@@ -39,7 +39,7 @@
 # Derived from the bytes rather than declared: a version directory's name, its
 # package.json and its mtime have each been caught disagreeing with the contents
 # they label. A hand-maintained constant would be a fourth such label.
-_ONLOOKER_LIB_FINGERPRINT="48b212e0d8d2"
+_ONLOOKER_LIB_FINGERPRINT="45153d1566a3"
 
 # Do not clobber values a caller already set — several plugins set
 # _HOOK_SESSION_ID before sourcing, and their *-events.sh libs read it.
@@ -52,6 +52,65 @@ _HOOK_SESSION_ID="${_HOOK_SESSION_ID:-}"
 _HOOK_EVENT="${_HOOK_EVENT:-}"
 _HOOK_TOOL_NAME="${_HOOK_TOOL_NAME:-}"
 _HOOK_PRIOR_EXIT_CMD="${_HOOK_PRIOR_EXIT_CMD:-}"
+
+# Which plugin copy is this, and which host process is running it.
+#
+# ecosystem-9eg. /clear mints a new session_id inside the SAME process, and
+# plugin code is pinned at PROCESS start rather than session start. A cleared
+# session therefore looks post-release by every timestamp available while still
+# running the pre-release plugin, so comparing a session's first event to the
+# install time gives a false pass. Recording the version directly retires that
+# whole inference.
+#
+# Derived from this file's own path, which is version-pinned in the installed
+# layout (.../cache/<marketplace>/<plugin>/<version>/scripts/lib/hook-health.sh).
+# Self-locating via BASH_SOURCE for the same reason config-loader.sh is:
+# $PLUGIN_ROOT is read from whatever scope did the sourcing and is simply gone
+# in a sub-shell that inherited only CLAUDE_PLUGIN_ROOT.
+_ONLOOKER_PLUGIN_NAME=""
+_ONLOOKER_PLUGIN_VERSION=""
+
+# $PPID is the process that invoked the hook — the claude process itself,
+# confirmed by capturing live hook processes during an edit. A builtin, so it
+# costs nothing. Two session_ids sharing one host_pid IS a /clear; one
+# plugin_name carrying two plugin_versions is a mixed-version window.
+_HOOK_HOST_PID="$PPID"
+
+_hook_health_derive_origin() {
+	local src="${BASH_SOURCE[0]}"
+
+	# Walk up from <root>/scripts/lib/hook-health.sh to <root>, checking each
+	# component by name. Pure parameter expansion: no dirname, no subprocess.
+	# Verifying the names rather than blindly stripping three levels means a
+	# path of an unexpected shape falls through to the null case instead of
+	# quietly labeling rows with whatever happened to sit three levels up.
+	local libdir="${src%/*}"
+	[[ "${libdir##*/}" == "lib" ]] || return 0
+	local scriptsdir="${libdir%/*}"
+	[[ "${scriptsdir##*/}" == "scripts" ]] || return 0
+	local root="${scriptsdir%/*}"
+	# A relative path can run out of components before we run out of strips,
+	# leaving root equal to what we tried to strip.
+	[[ -n "$root" && "$root" != "$scriptsdir" ]] || return 0
+
+	local base="${root##*/}"
+	# Assigned to a variable first: bash 3.2 treats a quoted regex literal as a
+	# string to match, not a pattern.
+	local semver='^[0-9]+\.[0-9]+\.[0-9]+'
+	if [[ "$base" =~ $semver ]]; then
+		_ONLOOKER_PLUGIN_VERSION="$base"
+		local parent="${root%/*}"
+		[[ -n "$parent" && "$parent" != "$root" ]] && _ONLOOKER_PLUGIN_NAME="${parent##*/}"
+	else
+		# A working-tree checkout: <repo>/plugins/<name> or <repo> for the
+		# substrate. Name it, but leave the version null — this copy is not a
+		# release and must not be counted as one.
+		_ONLOOKER_PLUGIN_NAME="$base"
+	fi
+	return 0
+}
+
+_hook_health_derive_origin
 
 hook_health_log_path() {
 	printf '%s' "${ONLOOKER_HOOK_HEALTH_LOG:-${ONLOOKER_DIR:-$HOME/.onlooker}/logs/hook-health.jsonl}"
@@ -208,6 +267,9 @@ _hook_health_write() {
 		--arg hook_event "$_HOOK_EVENT" \
 		--arg tool_name "$_HOOK_TOOL_NAME" \
 		--arg lib "$_ONLOOKER_LIB_FINGERPRINT" \
+		--arg plugin_name "$_ONLOOKER_PLUGIN_NAME" \
+		--arg plugin_version "$_ONLOOKER_PLUGIN_VERSION" \
+		--argjson host_pid "${_HOOK_HOST_PID:-0}" \
 		--argjson start "$start" \
 		--argjson end "$end" \
 		'{
@@ -224,7 +286,15 @@ _hook_health_write() {
 			tool_name: (if $tool_name == "" then null else $tool_name end),
 			# Which vendored copy of hook-health.sh wrote this row. Rows with
 			# differing values in one session are a skew window, not noise.
-			lib_schema: (if $lib == "" then null else $lib end)
+			lib_schema: (if $lib == "" then null else $lib end),
+			# Which plugin code wrote this row (ecosystem-9eg). plugin_version
+			# is null for a working-tree copy, which is not a release and must
+			# not be counted as one.
+			plugin_name: (if $plugin_name == "" then null else $plugin_name end),
+			plugin_version: (if $plugin_version == "" then null else $plugin_version end),
+			# The host claude process. Two session_ids sharing one host_pid is
+			# a /clear, which no timestamp can distinguish from a fresh start.
+			host_pid: (if $host_pid > 0 then $host_pid else null end)
 		   }' >> "$path" 2>/dev/null || true
 
 	# Reset so a second write in the same shell cannot double-count.
