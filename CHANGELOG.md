@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.54.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.54.0...ecosystem-v0.54.1) (2026-09-09)
+
+
+### Bug Fixes
+
+* **compass:** stop the gate stranding the session it guards :relieved: ([#307](https://github.com/onlooker-community/ecosystem/issues/307)) ([ee5b80d](https://github.com/onlooker-community/ecosystem/commit/ee5b80df93ed9c9e50274c19d8dcdbe228c46fc6))
+
 ## [0.54.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.53.3...ecosystem-v0.54.0) (2026-09-08)
 
 

@@ -1,11 +1,11 @@
 {
-  ".": "0.54.0",
+  ".": "0.54.1",
   "plugins/archivist": "0.6.0",
   "plugins/tribunal": "1.5.0",
   "plugins/echo": "0.6.0",
   "plugins/cartographer": "0.9.0",
   "plugins/governor": "0.6.0",
-  "plugins/compass": "0.7.0",
+  "plugins/compass": "0.7.1",
   "plugins/scribe": "0.8.0",
   "plugins/counsel": "0.8.0",
   "plugins/warden": "0.6.0",
