@@ -47,8 +47,20 @@ _compass_transcript_role() {
 # Walk a JSONL transcript file backwards to find the most recent assistant
 # turn with non-empty text. Avoids loading the entire file into memory by
 # streaming with `tac` when available; falls back to `tail -r` on BSD.
-_compass_transcript_read_from_file() {
+# Walk a JSONL transcript backwards for the most recent line of $role that
+# carries non-empty text, echoing either that text or the raw line.
+#   $1 — transcript path
+#   $2 — role to match ("assistant" | "user"); default assistant
+#   $3 — what to echo: "text" (default) or "line"
+#
+# The non-empty-text requirement is what makes the user role mean "the last
+# thing the human said". Tool results are user-role lines too, but they carry
+# tool_result blocks rather than text, so _compass_transcript_extract_text
+# yields nothing for them and they are passed over.
+_compass_transcript_find_last() {
 	local path="$1"
+	local want_role="${2:-assistant}"
+	local emit="${3:-text}"
 	[[ -f "$path" ]] || return 1
 
 	local reverser=""
@@ -63,24 +75,53 @@ _compass_transcript_read_from_file() {
 		while IFS= read -r line; do
 			[[ -z "$line" ]] && continue
 			role=$(_compass_transcript_role "$line") || continue
-			[[ "$role" == "assistant" ]] || continue
+			[[ "$role" == "$want_role" ]] || continue
 			content=$(_compass_transcript_extract_text "$line") || continue
-			[[ -n "$content" ]] && { printf '%s' "$content"; return 0; }
+			[[ -n "$content" ]] || continue
+			if [[ "$emit" == "line" ]]; then
+				printf '%s' "$line"
+			else
+				printf '%s' "$content"
+			fi
+			return 0
 		done < <(eval "$reverser" "\"$path\"" 2>/dev/null)
 	else
 		# Final fallback: forward scan, keep the last match.
-		local found=""
+		local found="" found_line=""
 		while IFS= read -r line; do
 			[[ -z "$line" ]] && continue
 			role=$(_compass_transcript_role "$line") || continue
-			[[ "$role" == "assistant" ]] || continue
+			[[ "$role" == "$want_role" ]] || continue
 			content=$(_compass_transcript_extract_text "$line") || continue
-			[[ -n "$content" ]] && found="$content"
+			[[ -n "$content" ]] && { found="$content"; found_line="$line"; }
 		done < "$path"
-		[[ -n "$found" ]] && { printf '%s' "$found"; return 0; }
+		if [[ -n "$found" ]]; then
+			if [[ "$emit" == "line" ]]; then
+				printf '%s' "$found_line"
+			else
+				printf '%s' "$found"
+			fi
+			return 0
+		fi
 	fi
 
 	return 1
+}
+
+# Preserved signature: the prior assistant turn's text (ADR-001's evaluator
+# input). Delegates so there is one backwards scan to maintain, not two.
+_compass_transcript_read_from_file() {
+	_compass_transcript_find_last "$1" "assistant" "text"
+}
+
+# Echo the raw JSONL line of the most recent human user message, or nothing.
+# The caller wants two things from it — the text, for the override phrase, and
+# the uuid, as a turn identifier — so this returns the line rather than making
+# the caller scan twice.
+compass_read_user_turn_line() {
+	local transcript_path="${1:-}"
+	[[ -z "$transcript_path" ]] && return 0
+	_compass_transcript_find_last "$transcript_path" "user" "line" || return 0
 }
 
 # Read the prior assistant turn.

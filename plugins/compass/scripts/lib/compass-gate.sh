@@ -47,12 +47,39 @@ _compass_state_get() {
 	jq -r "${jq_path} // empty" "$state_file" 2>/dev/null
 }
 
+# The default state document for the create-on-demand path below. It mirrors the
+# one compass-session-start.sh writes; the two are separate because SessionStart
+# does not source this lib. test/bats/compass-state-on-demand.bats pins them to
+# the same shape so the copies cannot drift.
+_compass_state_default() {
+	local session_id="$1"
+	jq -n --arg sid "$session_id" \
+		'{
+			session_id: $sid,
+			turn_check_count: 0,
+			cooldown: [],
+			circuit_breaker: {state: "closed", consecutive_failures: 0, opened_at: null}
+		}' 2>/dev/null
+}
+
 _compass_state_update() {
 	local session_id="$1"
 	local jq_expr="$2"
 	local state_file
 	state_file=$(_compass_state_file "$session_id")
-	[[ -f "$state_file" ]] || return 1
+	# Create on demand rather than refusing. compass-session-start seeds this
+	# file, but a session already running when compass is enabled never ran it —
+	# and this rollout enables plugins mid-session as a matter of course. Every
+	# caller swallowed the old `return 1`, so failures could not accumulate and
+	# the turn count could not rise: the circuit breaker and the turn budget
+	# were both disabled at once, which is what turned one evaluator outage into
+	# a session locked out of every write-class tool (ecosystem-449.45 defect 1).
+	# scribe-capture.sh:66-73 is the same pattern for the same reason.
+	if [[ ! -f "$state_file" ]]; then
+		mkdir -p "${state_file%/*}" 2>/dev/null || return 1
+		_compass_state_default "$session_id" > "$state_file" 2>/dev/null || return 1
+		[[ -s "$state_file" ]] || return 1
+	fi
 	local updated
 	updated=$(jq "$jq_expr" "$state_file" 2>/dev/null) || return 1
 	[[ -n "$updated" ]] && printf '%s' "$updated" > "$state_file"
@@ -291,7 +318,59 @@ compass_run_gate() {
 		return $_allow_exit
 	fi
 
+	# ---- Rule 3.5: user override -------------------------------------
+	# `compass: proceed` is advertised in the deny message, so something has to
+	# read it. It is taken from the last HUMAN user message: a gate that can
+	# deny every write-class tool needs an escape hatch inside the session, and
+	# before this the only recovery was disabling the plugin
+	# (ecosystem-449.45 defect 2). The line is also the turn identifier used by
+	# Rule 4, so it is read once here and reused.
+	local user_turn_line="" user_turn_text="" turn_id=""
+	if [[ -n "$transcript_path" ]]; then
+		user_turn_line=$(compass_read_user_turn_line "$transcript_path") \
+			|| user_turn_line=""
+	fi
+	if [[ -n "$user_turn_line" ]]; then
+		user_turn_text=$(_compass_transcript_extract_text "$user_turn_line") \
+			|| user_turn_text=""
+		turn_id=$(printf '%s' "$user_turn_line" | jq -r '.uuid // empty' 2>/dev/null) \
+			|| turn_id=""
+	fi
+	if [[ -n "$user_turn_text" ]] \
+		&& printf '%s' "$user_turn_text" | grep -qiF 'compass: proceed' 2>/dev/null; then
+		compass_emit_event "compass.check.overridden" \
+			"$(jq -n --arg f "$file_path" \
+			'{file_path:$f,user_acknowledgment:true}' 2>/dev/null || echo '{}')" \
+			2>/dev/null || true
+		return $_allow_exit
+	fi
+
 	# ---- Rule 4: turn budget ------------------------------------------
+	# A turn boundary resets the budget first. Without this the counter only
+	# ever increased, so max_checks_per_turn was really max-checks-per-SESSION:
+	# compass evaluated three writes and then waved everything else through for
+	# the rest of the session. 249 of its 306 lifetime events were
+	# turn_budget_exhausted skips (ecosystem-449.51).
+	#
+	# The identifier is the last human user message's uuid, which is stable for
+	# the whole turn. The prior assistant turn is NOT — the assistant speaks
+	# again between writes, so fingerprinting that would reset the budget on
+	# nearly every write and disable the brake a second way.
+	#
+	# Interpolated into the jq expression rather than passed as --argjson
+	# because _compass_state_update takes only an expression; the shape guard
+	# is what makes that safe, and a turn_id of any other shape is skipped
+	# rather than trusted.
+	if [[ -n "$turn_id" ]] && [[ "$turn_id" =~ ^[A-Za-z0-9_-]+$ ]]; then
+		local recorded_turn
+		recorded_turn=$(_compass_state_get "$session_id" '.turn_id') || recorded_turn=""
+		if [[ "$turn_id" != "$recorded_turn" ]]; then
+			_compass_state_update "$session_id" \
+				".turn_id = \"${turn_id}\" | .turn_check_count = 0" \
+				2>/dev/null || true
+		fi
+	fi
+
 	local max_checks
 	max_checks=$(compass_config_get '.compass.max_checks_per_turn')
 	max_checks="${max_checks:-3}"
@@ -415,8 +494,10 @@ compass_run_gate() {
 		cb_failures="${cb_failures:-0}"
 		cb_threshold=$(compass_config_get '.compass.circuit_breaker.consecutive_failures_to_open')
 		cb_threshold="${cb_threshold:-3}"
+		local cb_opened="false"
 		if [[ "$cb_enabled" == "true" ]] && (( cb_failures >= cb_threshold )); then
 			_compass_open_circuit "$session_id" 2>/dev/null || true
+			cb_opened="true"
 		fi
 
 		compass_emit_event "compass.check.skipped" \
@@ -424,6 +505,20 @@ compass_run_gate() {
 			'{reason:$r,file_path:$f}' 2>/dev/null || echo '{}')" 2>/dev/null || true
 
 		[[ "$error_policy" == "open" ]] && return $_allow_exit
+
+		# Opening the breaker has to take effect on THIS call. Recording the
+		# open state and then falling through to the fail-closed block denied
+		# the very call that tripped the breaker, so the escape hatch only
+		# existed for a later call that fail-closed had already prevented —
+		# which is how one session lost every write-class tool for its whole
+		# life (ecosystem-449.45). Honor open_behavior here, where it is armed.
+		local cb_open_behavior
+		cb_open_behavior=$(compass_config_get '.compass.circuit_breaker.open_behavior')
+		cb_open_behavior="${cb_open_behavior:-fail_open}"
+		if [[ "$cb_opened" == "true" ]] && [[ "$cb_open_behavior" == "fail_open" ]]; then
+			return $_allow_exit
+		fi
+
 		# fail-closed: block
 		_compass_intervention \
 			"$tool_name" "$file_path" "" "" "none" \
