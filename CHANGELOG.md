@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.54.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.53.3...ecosystem-v0.54.0) (2026-09-08)
+
+
+### Features
+
+* **ecosystem:** stamp the plugin version each session actually runs :mag: ([#305](https://github.com/onlooker-community/ecosystem/issues/305)) ([d58361d](https://github.com/onlooker-community/ecosystem/commit/d58361dbd22909d683087e1a0dde1d644cff6e42))
+
 ## [0.53.3](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.53.2...ecosystem-v0.53.3) (2026-09-07)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.18.0](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.17.0...librarian-v0.18.0) (2026-09-08)
+
+
+### Features
+
+* **ecosystem:** stamp the plugin version each session actually runs :mag: ([#305](https://github.com/onlooker-community/ecosystem/issues/305)) ([d58361d](https://github.com/onlooker-community/ecosystem/commit/d58361dbd22909d683087e1a0dde1d644cff6e42))
+
 ## [0.17.0](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.16.0...librarian-v0.17.0) (2026-09-07)
 
 
