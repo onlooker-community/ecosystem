@@ -9,9 +9,7 @@
   "homepage": "https://onlooker.dev",
   "repository": "https://github.com/onlooker-community/ecosystem",
   "license": "MIT",
-  "skills": [
-    "./skills/tribunal"
-  ],
+  "skills": ["./skills/tribunal"],
   "agents": [
     "./agents/tribunal-actor.md",
     "./agents/tribunal-judge-standard.md",
