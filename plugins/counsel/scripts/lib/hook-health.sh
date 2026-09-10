@@ -39,7 +39,7 @@
 # Derived from the bytes rather than declared: a version directory's name, its
 # package.json and its mtime have each been caught disagreeing with the contents
 # they label. A hand-maintained constant would be a fourth such label.
-_ONLOOKER_LIB_FINGERPRINT="45153d1566a3"
+_ONLOOKER_LIB_FINGERPRINT="4c9a52fe9a3d"
 
 # Do not clobber values a caller already set — several plugins set
 # _HOOK_SESSION_ID before sourcing, and their *-events.sh libs read it.
@@ -67,8 +67,14 @@ _HOOK_PRIOR_EXIT_CMD="${_HOOK_PRIOR_EXIT_CMD:-}"
 # Self-locating via BASH_SOURCE for the same reason config-loader.sh is:
 # $PLUGIN_ROOT is read from whatever scope did the sourcing and is simply gone
 # in a sub-shell that inherited only CLAUDE_PLUGIN_ROOT.
-_ONLOOKER_PLUGIN_NAME=""
-_ONLOOKER_PLUGIN_VERSION=""
+# Assigned only when unset, never blanked (ecosystem-449.50). The substrate's
+# validate-path.sh re-sources this file from its own directory, so a plugin
+# hook that registered with its vendored copy runs these lines a second time
+# with BASH_SOURCE pointing into the ecosystem tree. A plain reset here would
+# discard the plugin's identity before the guard below could protect it.
+# ${var=} preserves an existing empty value; ${var:=} would not.
+: "${_ONLOOKER_PLUGIN_NAME=}"
+: "${_ONLOOKER_PLUGIN_VERSION=}"
 
 # $PPID is the process that invoked the hook — the claude process itself,
 # confirmed by capturing live hook processes during an edit. A builtin, so it
@@ -110,7 +116,20 @@ _hook_health_derive_origin() {
 	return 0
 }
 
-_hook_health_derive_origin
+# First source wins. Every one of the fourteen affected hooks sources its own
+# vendored copy and registers before it reaches the substrate's
+# validate-path.sh, so the first derivation is the one that names the code
+# actually running the hook; the substrate's re-source is incidental.
+#
+# The sentinel is set before deriving rather than after, and tested with
+# ${var+set} rather than for emptiness, so a first copy at an unrecognizable
+# path stays null instead of being backfilled by the substrate. Null says "a
+# copy we cannot name wrote this"; adopting the substrate's identity would be
+# the same wrong answer this guard exists to prevent.
+if [[ -z "${_ONLOOKER_PLUGIN_ORIGIN_DERIVED+set}" ]]; then
+	_ONLOOKER_PLUGIN_ORIGIN_DERIVED=1
+	_hook_health_derive_origin
+fi
 
 hook_health_log_path() {
 	printf '%s' "${ONLOOKER_HOOK_HEALTH_LOG:-${ONLOOKER_DIR:-$HOME/.onlooker}/logs/hook-health.jsonl}"

@@ -121,3 +121,107 @@ _row_from_layout() {
 		.plugin_name == "inspector" and .plugin_version == "9.9.9"
 	' >/dev/null
 }
+
+# ---------------------------------------------------------------------------
+# ecosystem-449.50 — first source wins.
+#
+# Fourteen plugin hooks source their own vendored hook-health.sh, register,
+# and then source the substrate's validate-path.sh, which re-sources
+# hook-health.sh from its OWN directory (validate-path.sh:71). The re-source
+# re-runs both the initializers and the derivation with BASH_SOURCE now
+# pointing into the ecosystem tree, so last-source-wins relabeled every one of
+# those hooks as the substrate. Measured 2026-09-09: librarian-session-start,
+# curator-session-start, archivist-inject, tribunal-stop-gate, assayer-stop
+# and echo-stop-gate all stamped ecosystem 0.54.0.
+#
+# The ordering the fix relies on holds across all fourteen: every one sources
+# its vendored copy strictly before the substrate's validate-path.sh.
+# ---------------------------------------------------------------------------
+
+# Stage a substrate release tree complete enough to source validate-path.sh.
+_stage_substrate() {
+	local root="$1" f
+	mkdir -p "${root}/scripts/lib"
+	for f in validate-path.sh hook-health.sh portable-lock.sh; do
+		cp "${REPO_ROOT}/scripts/lib/${f}" "${root}/scripts/lib/${f}"
+	done
+}
+
+@test "re-sourcing a second copy does not relabel the row" {
+	local plugin="${BATS_TEST_TMPDIR}/cache/onlooker-community/curator/0.5.0/scripts/lib"
+	local substrate="${BATS_TEST_TMPDIR}/cache/onlooker-community/ecosystem/0.54.1/scripts/lib"
+	mkdir -p "$plugin" "$substrate"
+	cp "${REPO_ROOT}/scripts/lib/hook-health.sh" "${plugin}/hook-health.sh"
+	cp "${REPO_ROOT}/scripts/lib/hook-health.sh" "${substrate}/hook-health.sh"
+
+	env HOME="$HOME" ONLOOKER_DIR="$ONLOOKER_DIR" bash -c '
+		source "$1"
+		hook_health_register "double-source-probe"
+		source "$2"
+		hook_health_success
+	' _ "${plugin}/hook-health.sh" "${substrate}/hook-health.sh" >/dev/null 2>&1
+
+	tail -n 1 "$HEALTH_LOG" | jq -e '
+		.plugin_name == "curator" and .plugin_version == "0.5.0"
+	' >/dev/null
+}
+
+# The real path: the substrate is reached through validate-path.sh, exactly as
+# the fourteen affected hooks reach it.
+@test "sourcing the substrate's validate-path.sh preserves the plugin identity" {
+	local plugin="${BATS_TEST_TMPDIR}/cache/onlooker-community/librarian/0.18.0/scripts/lib"
+	local substrate="${BATS_TEST_TMPDIR}/cache/onlooker-community/ecosystem/0.54.1"
+	mkdir -p "$plugin"
+	cp "${REPO_ROOT}/scripts/lib/hook-health.sh" "${plugin}/hook-health.sh"
+	_stage_substrate "$substrate"
+
+	env HOME="$HOME" ONLOOKER_DIR="$ONLOOKER_DIR" bash -c '
+		source "$1"
+		hook_health_register "validate-path-probe"
+		CLAUDE_PLUGIN_ROOT="$3" source "$2"
+		hook_health_success
+	' _ "${plugin}/hook-health.sh" "${substrate}/scripts/lib/validate-path.sh" "$substrate" >/dev/null 2>&1
+
+	tail -n 1 "$HEALTH_LOG" | jq -e '
+		.plugin_name == "librarian" and .plugin_version == "0.18.0"
+	' >/dev/null
+}
+
+# Guard against over-fixing. An ecosystem hook sources only validate-path.sh,
+# so the substrate's own copy is the first one and must still name itself.
+@test "the substrate still labels its own hooks when it is the first source" {
+	local substrate="${BATS_TEST_TMPDIR}/cache/onlooker-community/ecosystem/0.54.1"
+	_stage_substrate "$substrate"
+
+	env HOME="$HOME" ONLOOKER_DIR="$ONLOOKER_DIR" bash -c '
+		CLAUDE_PLUGIN_ROOT="$2" source "$1"
+		hook_health_register "substrate-only-probe"
+		hook_health_success
+	' _ "${substrate}/scripts/lib/validate-path.sh" "$substrate" >/dev/null 2>&1
+
+	tail -n 1 "$HEALTH_LOG" | jq -e '
+		.plugin_name == "ecosystem" and .plugin_version == "0.54.1"
+	' >/dev/null
+}
+
+# An unrecognizable first copy stays null rather than inheriting the
+# substrate's identity. Null says "written by a copy we cannot name"; adopting
+# the substrate's name would be the same wrong answer 449.50 is about.
+@test "an unidentifiable first source is not backfilled by a later one" {
+	local odd="${BATS_TEST_TMPDIR}/somewhere/odd"
+	local substrate="${BATS_TEST_TMPDIR}/cache/onlooker-community/ecosystem/0.54.1/scripts/lib"
+	mkdir -p "$odd" "$substrate"
+	cp "${REPO_ROOT}/scripts/lib/hook-health.sh" "${odd}/hook-health.sh"
+	cp "${REPO_ROOT}/scripts/lib/hook-health.sh" "${substrate}/hook-health.sh"
+
+	env HOME="$HOME" ONLOOKER_DIR="$ONLOOKER_DIR" bash -c '
+		source "$1"
+		hook_health_register "odd-first-probe"
+		source "$2"
+		hook_health_success
+	' _ "${odd}/hook-health.sh" "${substrate}/hook-health.sh" >/dev/null 2>&1
+
+	tail -n 1 "$HEALTH_LOG" | jq -e '
+		.plugin_name == null and .plugin_version == null
+	' >/dev/null
+}
