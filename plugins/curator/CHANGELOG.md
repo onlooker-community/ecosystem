@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/onlooker-community/ecosystem/compare/curator-v0.5.0...curator-v0.5.1) (2026-09-10)
+
+
+### Bug Fixes
+
+* **ecosystem:** let each hook keep its own name in the health log :mag: ([#309](https://github.com/onlooker-community/ecosystem/issues/309)) ([de701bf](https://github.com/onlooker-community/ecosystem/commit/de701bf958134709d0884aef018619c685b227de))
+
 ## [0.5.0](https://github.com/onlooker-community/ecosystem/compare/curator-v0.4.0...curator-v0.5.0) (2026-09-08)
 
 
