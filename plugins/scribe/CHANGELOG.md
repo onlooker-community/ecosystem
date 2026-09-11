@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.2](https://github.com/onlooker-community/ecosystem/compare/scribe-v0.8.1...scribe-v0.8.2) (2026-09-11)
+
+
+### Bug Fixes
+
+* **scribe:** let the intent extractor actually reach the model :relieved: ([#311](https://github.com/onlooker-community/ecosystem/issues/311)) ([cc206b0](https://github.com/onlooker-community/ecosystem/commit/cc206b0eae3e64bb1a7d8a2cc5e5a257c745b0b6))
+
 ## [0.8.1](https://github.com/onlooker-community/ecosystem/compare/scribe-v0.8.0...scribe-v0.8.1) (2026-09-10)
 
 

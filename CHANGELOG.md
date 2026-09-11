@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.54.3](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.54.2...ecosystem-v0.54.3) (2026-09-11)
+
+
+### Bug Fixes
+
+* **librarian:** stop an empty allowlist from posing as a verdict :mag: ([#313](https://github.com/onlooker-community/ecosystem/issues/313)) ([56057f9](https://github.com/onlooker-community/ecosystem/commit/56057f9c8f39d191711e2c57d11dfa9b105b26bd))
+* **scribe:** let the intent extractor actually reach the model :relieved: ([#311](https://github.com/onlooker-community/ecosystem/issues/311)) ([cc206b0](https://github.com/onlooker-community/ecosystem/commit/cc206b0eae3e64bb1a7d8a2cc5e5a257c745b0b6))
+
 ## [0.54.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.54.1...ecosystem-v0.54.2) (2026-09-10)
 
 
