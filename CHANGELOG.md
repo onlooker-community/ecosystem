@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.54.4](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.54.3...ecosystem-v0.54.4) (2026-09-11)
+
+
+### Bug Fixes
+
+* **librarian:** let the suite see the drop reasons it could not assert on :key: ([#314](https://github.com/onlooker-community/ecosystem/issues/314)) ([5307327](https://github.com/onlooker-community/ecosystem/commit/5307327109c912692b0e5b0e750c29c63b1cd36f))
+
 ## [0.54.3](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.54.2...ecosystem-v0.54.3) (2026-09-11)
 
 
