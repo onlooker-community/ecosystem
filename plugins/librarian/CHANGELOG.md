@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.18.2](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.18.1...librarian-v0.18.2) (2026-09-11)
+
+
+### Bug Fixes
+
+* **librarian:** stop an empty allowlist from posing as a verdict :mag: ([#313](https://github.com/onlooker-community/ecosystem/issues/313)) ([56057f9](https://github.com/onlooker-community/ecosystem/commit/56057f9c8f39d191711e2c57d11dfa9b105b26bd))
+
 ## [0.18.1](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.18.0...librarian-v0.18.1) (2026-09-10)
 
 
