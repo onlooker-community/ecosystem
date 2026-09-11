@@ -55,18 +55,23 @@ scribe_count_turns() {
 	local transcript_path="${1:-}"
 	[[ -f "$transcript_path" ]] || { printf '0'; return 0; }
 
-	local count=0
-	local line
-	while IFS= read -r line; do
-		[[ -z "$line" ]] && continue
-		local entry_type
-		entry_type=$(printf '%s' "$line" | jq -r '.type // empty' 2>/dev/null) || continue
-		[[ "$entry_type" == "user" ]] || continue
-		# Only count real user prompts (string content), not tool results (array content)
-		local content_type
-		content_type=$(printf '%s' "$line" | jq -r '.message.content | type' 2>/dev/null) || continue
-		[[ "$content_type" == "string" ]] && count=$((count + 1))
-	done < "$transcript_path"
+	# One streaming jq pass, not one process per line. The loop this replaced
+	# spawned a jq per line (two on user lines) and cost ~3.2ms/line, which is
+	# where scribe-stop's 751ms-6.3s came from — ecosystem-449.43 read that as
+	# the LLM path, and it never was. Measured 2.17s on a 674-line transcript.
+	#
+	# -R with `fromjson? // empty` keeps every tolerance the loop had: blank
+	# lines and unparseable lines drop out silently rather than aborting the
+	# count. Only user entries whose content is a string count, so tool results
+	# (array content) stay excluded.
+	local count
+	count=$(jq -R -r '
+		fromjson? // empty
+		| select(.type == "user")
+		| select((.message.content | type) == "string")
+		| 1
+	' "$transcript_path" 2>/dev/null | wc -l | tr -d '[:space:]') || count=0
+	[[ -z "$count" ]] && count=0
 
 	printf '%s' "$count"
 }
@@ -121,18 +126,36 @@ scribe_extract_intent() {
 		return 1
 	fi
 
-	local claude_args=(-p --max-turns 1 --model "$model" --max-tokens "$max_tokens")
+	# No --max-tokens: the claude CLI has no such option and rejects it outright
+	# ("error: unknown option '--max-tokens'", exit 1). Passing it meant every
+	# extraction scribe ever attempted failed in ~0.14s, and because the CLI's
+	# stderr went to /dev/null the reason was never recorded anywhere — scribe
+	# wrote 13,201 capture files and produced not one distilled artifact. See
+	# ecosystem-449.54. The CLI exposes no output-token cap, so $max_tokens is
+	# accepted for signature stability and deliberately not forwarded.
+	local claude_args=(-p --max-turns 1 --model "$model")
+
+	# Keep the CLI's stderr. Discarding it is what made the flag bug survive:
+	# a hard failure and a quiet no-op looked identical from the outside.
+	local cli_err
+	cli_err=$(mktemp -t scribe-extract-err.XXXXXX 2>/dev/null) || cli_err="/tmp/scribe-extract-err.$$"
 
 	local response=""
 	if command -v timeout >/dev/null 2>&1; then
-		response=$(timeout "$timeout_s" claude "${claude_args[@]}" < "$prompt_file" 2>/dev/null) || response=""
+		response=$(timeout "$timeout_s" claude "${claude_args[@]}" < "$prompt_file" 2>"$cli_err") || response=""
 	elif command -v gtimeout >/dev/null 2>&1; then
-		response=$(gtimeout "$timeout_s" claude "${claude_args[@]}" < "$prompt_file" 2>/dev/null) || response=""
+		response=$(gtimeout "$timeout_s" claude "${claude_args[@]}" < "$prompt_file" 2>"$cli_err") || response=""
 	else
-		response=$(claude "${claude_args[@]}" < "$prompt_file" 2>/dev/null) || response=""
+		response=$(claude "${claude_args[@]}" < "$prompt_file" 2>"$cli_err") || response=""
 	fi
 
-	[[ -z "$response" ]] && return 1
+	if [[ -z "$response" ]]; then
+		printf 'scribe_extract_intent: claude CLI produced no output\n' >&2
+		[[ -s "$cli_err" ]] && cat "$cli_err" >&2
+		rm -f "$cli_err"
+		return 1
+	fi
+	rm -f "$cli_err"
 
 	# Strip markdown fences if present.
 	local clean
