@@ -18,6 +18,44 @@ setup() {
 	DURABLE='[{"id":"a1","summary":"We chose the queue","detail":"We chose the queue because the old path dropped events on every restart."}]'
 }
 
+@test "every drop reason the filter can produce survives the emitter" {
+	# Reconciles the reason literals in the source against the payload contract,
+	# rather than pinning one example. filter_drop_pattern spent the whole life
+	# of the drop list outside the enum (ecosystem-449.56): the emitter is
+	# fail-soft, so under ONLOOKER_VALIDATE it refused the event and discarded
+	# it, and no test could assert on a drop-pattern drop because the event never
+	# landed while the suite was running. A reason added here but not to the
+	# schema is invisible in exactly the place the suites look, so this fails at
+	# the next divergence instead of going quiet.
+	local reasons
+	reasons=$(grep -oE 'kept: false, reason: "[a-z_]+"' \
+		"${PLUGIN_ROOT}/scripts/lib/librarian-durability.sh" \
+		| sed 's/.*"\(.*\)"/\1/' | sort -u)
+	[ -n "$reasons" ]
+
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-emit.sh"
+	# setup_test_env deliberately unsets this so a developer's real log cannot be
+	# written to; validate-path.sh would derive it, but naming it here keeps the
+	# test from depending on that whole chain.
+	export ONLOOKER_EVENTS_LOG="${ONLOOKER_DIR}/logs/onlooker-events.jsonl"
+	export _LIBRARIAN_EVENT_JS="${REPO_ROOT}/scripts/lib/onlooker-event.mjs"
+	mkdir -p "$(dirname "$ONLOOKER_EVENTS_LOG")"
+
+	local reason
+	for reason in $reasons; do
+		: >"$ONLOOKER_EVENTS_LOG"
+		ONLOOKER_VALIDATE=1 librarian_emit "librarian.candidate.dropped" \
+			"sess-reason-check" "{\"reason\":\"${reason}\"}"
+		# An empty log means validation refused it — the silent path this guards.
+		if ! grep -q "\"reason\":\"${reason}\"" "$ONLOOKER_EVENTS_LOG"; then
+			echo "reason '${reason}' is emitted by librarian_durability_filter" >&2
+			echo "but refused by the librarian.candidate.dropped payload contract" >&2
+			echo "in @onlooker-community/schema — add it to the enum there" >&2
+			return 1
+		fi
+	done
+}
+
 @test "an empty marker list is reported as a fault, not as a missing marker" {
 	# The allowlist inverts when it is empty: matches_any([]) is false for every
 	# artifact, so each one falls to the else branch. Reporting that as
