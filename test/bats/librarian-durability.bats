@@ -18,7 +18,7 @@ setup() {
 	DURABLE='[{"id":"a1","summary":"We chose the queue","detail":"We chose the queue because the old path dropped events on every restart."}]'
 }
 
-@test "every drop reason the filter can produce survives the emitter" {
+@test "every drop reason either source can emit survives the emitter" {
 	# Reconciles the reason literals in the source against the payload contract,
 	# rather than pinning one example. filter_drop_pattern spent the whole life
 	# of the drop list outside the enum (ecosystem-449.56): the emitter is
@@ -28,9 +28,12 @@ setup() {
 	# schema is invisible in exactly the place the suites look, so this fails at
 	# the next divergence instead of going quiet.
 	local reasons
-	reasons=$(grep -oE 'kept: false, reason: "[a-z_]+"' \
-		"${PLUGIN_ROOT}/scripts/lib/librarian-durability.sh" \
-		| sed 's/.*"\(.*\)"/\1/' | sort -u)
+	reasons=$( {
+		grep -oE 'kept: false, reason: "[a-z_]+"' \
+			"${PLUGIN_ROOT}/scripts/lib/librarian-durability.sh"
+		grep -oE -- '--arg reason "[a-z_]+"' \
+			"${PLUGIN_ROOT}/scripts/hooks/librarian-session-end.sh"
+	} | sed 's/.*"\(.*\)"/\1/' | sort -u )
 	[ -n "$reasons" ]
 
 	source "${PLUGIN_ROOT}/scripts/lib/librarian-emit.sh"
