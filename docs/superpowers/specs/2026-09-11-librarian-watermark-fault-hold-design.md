@@ -99,10 +99,16 @@ holds about three weeks at that rate while keeping the repeated `load_since` wal
 so there is no way to express this without a schema change; it ships first, then the ecosystem
 lockfile bumps.
 
-The ordering is self-enforcing rather than something to remember. The reconciliation test added
-in `#314` greps the reason literals out of `librarian-durability.sh` and asserts each survives
-`librarian_emit` under `ONLOOKER_VALIDATE=1`, so adding the literal before the schema lands
-fails the suite by construction.
+The ordering should be self-enforcing rather than something to remember, and it is not yet. The
+reconciliation test added in `#314` greps reason literals out of `librarian-durability.sh`
+only — but `retry_cap_exceeded` is assigned in the hook, so that test would not see it. The
+same blind spot already covers three live reasons the hook emits today (`classified_null`,
+`duplicate`, `low_confidence`); all three happen to be in the enum, so nothing is currently
+broken, but the guard is narrower than it appears.
+
+Widening the test to scan `librarian-session-end.sh` as well as the filter is therefore part of
+this work, and lands **before** the new literal. With that in place, adding a reason ahead of
+its schema value fails the suite by construction.
 
 ## What this does and does not recover
 
