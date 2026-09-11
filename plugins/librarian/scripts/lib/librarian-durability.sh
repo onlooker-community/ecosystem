@@ -30,12 +30,20 @@ _LIBRARIAN_DURABILITY_DROP_PATTERNS=(
 # Args:
 #   candidates_json    Array of archivist artifacts (from
 #                      librarian_archivist_load_since).
-#   markers_json       JSON array of marker phrases (from config).
+#   markers_json       JSON array of marker phrases (from config). An empty
+#                      array is a configuration fault rather than a strict
+#                      filter — see filter_markers_unavailable below.
 #   min_detail_chars   Minimum detail length to keep an artifact.
 #
 # Output: JSON object with two keys:
 #   { "kept":    [<artifact>, ...],
 #     "dropped": [{ "artifact_id": "...", "reason": "..." }, ...] }
+#
+# Drop reasons:
+#   detail_too_short            below min_detail_chars
+#   filter_drop_pattern         matched the meta-conversation drop list
+#   filter_marker_missing       carried none of the configured markers
+#   filter_markers_unavailable  there were no markers to carry
 librarian_durability_filter() {
 	local candidates="${1:-[]}"
 	local markers_json="${2:-[]}"
@@ -64,6 +72,12 @@ librarian_durability_filter() {
 				{ kept: false, reason: "filter_drop_pattern" }
 			elif ($text | matches_any($markers)) then
 				{ kept: true, reason: "marker_phrase_match" }
+			elif ($markers | length) == 0 then
+				# No markers to match against, so this is a statement about the
+				# configuration and not about the artifact. Kept separate from
+				# filter_marker_missing because the two are indistinguishable
+				# downstream otherwise, and that conflation hid a total outage.
+				{ kept: false, reason: "filter_markers_unavailable" }
 			else
 				{ kept: false, reason: "filter_marker_missing" }
 			end;
