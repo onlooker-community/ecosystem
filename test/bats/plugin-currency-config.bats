@@ -20,6 +20,7 @@ setup() {
 	[ "$(plugin_currency_config_get '.plugin_currency.enabled')" = "true" ]
 	[ "$(plugin_currency_config_get '.plugin_currency.probe_ttl_hours')" = "6" ]
 	[ "$(plugin_currency_config_get '.plugin_currency.wall_clock_budget_ms')" = "1500" ]
+	[ "$(plugin_currency_config_get '.plugin_currency.probe_timeout_seconds')" = "30" ]
 	[ "$(plugin_currency_config_get '.plugin_currency.surface_when_current')" = "false" ]
 	[ "$(plugin_currency_config_get_json '.plugin_currency.marketplaces')" = '["onlooker-community"]' ]
 }

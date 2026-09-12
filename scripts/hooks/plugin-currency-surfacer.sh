@@ -132,54 +132,49 @@ if plugin_currency_cache_is_fresh "$CACHE" "$TTL"; then
 	_finish ""
 fi
 
-# Not fresh. Probe, bounded. On any failure the cache is left exactly as it was:
-# restamping checked_at on an answer we did not re-verify is the failure mode
-# this whole hook exists to prevent.
-MARKET_ARGS=()
+# Not fresh. The live probe costs roughly 4.6s against the network, so it runs
+# DETACHED and lands for the NEXT session rather than blocking this one.
+# Blocking SessionStart on it would be the same defect ecosystem-449.43 files
+# against scribe-stop. The age rule is what makes this safe: until that answer
+# arrives we say "unchecked", never "current".
+MARKETS=()
 while IFS= read -r m; do
-	[[ -n "$m" ]] && MARKET_ARGS+=(--marketplace "$m")
+	[[ -n "$m" ]] && MARKETS+=("$m")
 done < <(plugin_currency_config_get_json '.plugin_currency.marketplaces' 2>/dev/null | jq -r '.[]? // empty' 2>/dev/null)
 
-BUDGET_S=$(awk -v ms="$BUDGET_MS" 'BEGIN{printf "%.3f", ms/1000}')
-START=$(date -u +%s)
-PROBE=""
-if command -v node >/dev/null 2>&1; then
-	if command -v timeout >/dev/null 2>&1; then
-		PROBE=$(timeout "$BUDGET_S" node "${SCRIPT_DIR}/../lint/check-plugin-installs.mjs" \
-			--json --project "$CWD" "${MARKET_ARGS[@]}" 2>/dev/null) || PROBE=""
-	else
-		PROBE=$(node "${SCRIPT_DIR}/../lint/check-plugin-installs.mjs" \
-			--json --project "$CWD" "${MARKET_ARGS[@]}" 2>/dev/null) || PROBE=""
-	fi
-fi
-DURATION=$(( ($(date -u +%s) - START) * 1000 ))
+PROBE_TIMEOUT=$(plugin_currency_config_get '.plugin_currency.probe_timeout_seconds')
+[[ -z "$PROBE_TIMEOUT" ]] && PROBE_TIMEOUT=30
 
-NEW_FINDINGS=""
-[[ -n "$PROBE" ]] && NEW_FINDINGS=$(printf '%s' "$PROBE" | jq -c '.findings // []' 2>/dev/null)
+# mkdir is the atomic test-and-set here: if another session already has a
+# refresh in flight, this one does not pile a second onto it.
+_spawn_refresh() {
+	local lock="${CACHE}.refresh.lock"
+	mkdir -p "$(dirname "$CACHE")" 2>/dev/null
+	mkdir "$lock" 2>/dev/null || return 1
+	(
+		trap 'rmdir "$lock" 2>/dev/null || true' EXIT
+		PLUGIN_CURRENCY_SESSION_ID="$SESSION_ID" \
+			ONLOOKER_DIR="$ONLOOKER_DIR" \
+			CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-}" \
+			bash "${SCRIPT_DIR}/../lib/plugin-currency-probe.sh" \
+			"$CWD" "$CACHE" "$PROBE_TIMEOUT" "${MARKETS[@]}"
+	) >/dev/null 2>&1 &
+	disown 2>/dev/null || true
+	return 0
+}
 
-if [[ -z "$NEW_FINDINGS" ]]; then
-	_emit "onlooker.currency.checked" \
-		"$(jq -cn --arg d "$DURATION" '{probe_outcome:"failed", duration_ms:($d|tonumber)}')"
-	PREV_AGE=$(plugin_currency_cache_age_seconds "$CACHE")
-	if [[ -n "$PREV_AGE" ]]; then
-		_finish "onlooker: plugin currency unchecked for $((PREV_AGE / 3600))h — probe failed"
-	fi
-	_finish "onlooker: plugin currency unchecked — probe failed"
-fi
+_spawn_refresh || true
 
-plugin_currency_cache_write "$CACHE" "$NEW_FINDINGS"
-COUNT=$(printf '%s' "$NEW_FINDINGS" | jq -r 'length' 2>/dev/null) || COUNT=0
-_emit "onlooker.currency.checked" \
-	"$(jq -cn --arg d "$DURATION" --arg n "$COUNT" --arg m "${#MARKET_ARGS[@]}" \
-		'{probe_outcome:"ok", duration_ms:($d|tonumber), findings_count:($n|tonumber), marketplaces_checked:(($m|tonumber)/2|floor)}')"
-
-if [[ "$COUNT" -gt 0 ]]; then
-	_emit "onlooker.currency.stale" \
-		"$(jq -cn --argjson f "$NEW_FINDINGS" '{findings_count:($f|length), answer_age_seconds:0, findings:$f}')"
-	_finish "$(_render "$NEW_FINDINGS" 0)"
+PREV_AGE=$(plugin_currency_cache_age_seconds "$CACHE")
+if [[ -n "$PREV_AGE" ]]; then
+	# Deliberately no skipped event here. The probe has not failed -- it has not
+	# finished. skip_reason has no value for "deferred", and stamping
+	# probe_failed would conflate two different conditions, which is the exact
+	# mistake ecosystem-449.39 records against librarian.scan.complete and which
+	# this event type's own schema description warns about. The detached probe
+	# emits onlooker.currency.checked when it lands; that is the record.
+	_finish "onlooker: plugin currency unchecked for $((PREV_AGE / 3600))h, refreshing in the background"
 fi
 
-if [[ "$SURFACE_CURRENT" == "true" ]]; then
-	_finish "onlooker: plugin pins current (just checked)"
-fi
+# No cache at all yet, and the probe is still running. Nothing truthful to say.
 _finish ""

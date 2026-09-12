@@ -115,13 +115,46 @@ _break_node() {
 	_context | grep -qi 'unchecked'
 }
 
-@test "an expired cache that re-probes clean is silent rather than reassuring" {
-	# surface_when_current defaults false, so a genuinely current result says
-	# nothing at all. Silence here is a positive result, not a failure to speak.
+@test "an expired cache defers to a background refresh and says so" {
+	# The probe is detached, so this session gets no fresh answer. It must say
+	# it does not know rather than fall back to the expired one.
 	_seed_aged 1 '[]'
 	_run_hook
-	[ -z "$(_context)" ] || return 1
-	grep -q '"event_type":"onlooker.currency.checked"' "$ONLOOKER_EVENTS_LOG"
+	_context | grep -qi 'unchecked' || return 1
+	! _context | grep -qi 'current' || return 1
+	# And deliberately NO skipped event. The probe has not failed, it has not
+	# finished, and skip_reason carries no value for "deferred". Stamping
+	# probe_failed would conflate two different conditions -- the mistake
+	# ecosystem-449.39 records against librarian.scan.complete. The detached
+	# probe's onlooker.currency.checked is the record instead.
+	if [[ -f "$ONLOOKER_EVENTS_LOG" ]]; then
+		! grep -q '"skip_reason":"probe_failed"' "$ONLOOKER_EVENTS_LOG" || return 1
+	fi
+	[ "$status" -eq 0 ]
+}
+
+@test "an expired cache spawns exactly one background refresh" {
+	_seed_aged 1 '[]'
+	_run_hook
+	# The lock directory is the spawn's own mutual exclusion; its existence or
+	# prompt removal both indicate the child ran.
+	[ "$status" -eq 0 ] || return 1
+	sleep 1
+	local n; n=$(pgrep -fc 'plugin-currency-probe.sh' 2>/dev/null || echo 0)
+	[ "$n" -le 1 ]
+}
+
+@test "the hook returns fast even when a probe is needed" {
+	# The whole reason the probe is detached: a live probe costs ~4.6s and
+	# blocking SessionStart on it is the defect ecosystem-449.43 tracks against
+	# scribe-stop. Generous bound so this is not flaky on a loaded machine.
+	_seed_aged 1 '[]'
+	local start end
+	start=$(date -u +%s)
+	_run_hook
+	end=$(date -u +%s)
+	[ "$status" -eq 0 ] || return 1
+	[ "$((end - start))" -lt 3 ]
 }
 
 @test "an expired cache reports unchecked rather than replaying old findings as fresh" {

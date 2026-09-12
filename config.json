@@ -11,6 +11,7 @@
     "marketplaces": ["onlooker-community"],
     "probe_ttl_hours": 6,
     "wall_clock_budget_ms": 1500,
+    "probe_timeout_seconds": 30,
     "surface_when_current": false,
     "max_pointer_chars": 200
   }
