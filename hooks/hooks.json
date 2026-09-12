@@ -91,6 +91,10 @@
           {
             "type": "command",
             "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hooks/memory-recall-tracker.sh"
+          },
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hooks/plugin-currency-surfacer.sh"
           }
         ]
       }
