@@ -8,9 +8,7 @@
   },
   "plugin_currency": {
     "enabled": true,
-    "marketplaces": [
-      "onlooker-community"
-    ],
+    "marketplaces": ["onlooker-community"],
     "probe_ttl_hours": 6,
     "wall_clock_budget_ms": 1500,
     "surface_when_current": false,
