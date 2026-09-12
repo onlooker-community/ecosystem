@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.56.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.55.0...ecosystem-v0.56.0) (2026-09-12)
+
+
+### Features
+
+* **ecosystem:** plumbing for a stale plugin pin warning :bell: ([#318](https://github.com/onlooker-community/ecosystem/issues/318)) ([9bd5a3f](https://github.com/onlooker-community/ecosystem/commit/9bd5a3f949d2e95c7e22a67c8752396f60660f33))
+
 ## [0.55.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.54.4...ecosystem-v0.55.0) (2026-09-12)
 
 
