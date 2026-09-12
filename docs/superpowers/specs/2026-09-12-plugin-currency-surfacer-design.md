@@ -170,16 +170,44 @@ Concretely:
 - A failed probe — offline, timeout, budget exceeded — leaves the previous
   `checked_at` untouched rather than stamping a fresh time on an old answer.
 
-### Cost
+### Cost, and why the probe is detached
 
-The probe runs at most once per `probe_ttl_hours` (default 6). Every other
-session start reads one small JSON file. A probe that exceeds
-`wall_clock_budget_ms` is abandoned and the cache is left alone, following
-curator's `cheap_checks.wall_clock_budget_ms` precedent.
+**Amended after implementation.** This section originally specified a bounded
+*synchronous* probe. Measurement killed that: the live probe costs **4646ms**
+against this repo, versus 157ms for `--offline`. Blocking SessionStart on ~5s is
+the defect `ecosystem-449.43` already tracks against scribe-stop, so raising the
+budget would have traded a silent failure for a latency regression this repo
+treats as a bug.
+
+The probe therefore runs **detached**. The hook reads the cache synchronously
+and returns — measured 417ms end to end — and spawns a background probe whose
+answer lands for the *next* session. `mkdir` on a lock directory is the atomic
+test-and-set that stops two sessions piling up probes.
+
+The age rule is exactly what makes this safe. A session whose answer has expired
+does not get a fresh one, and says so: "unchecked", never "current". Being one
+session behind is acceptable precisely because the hook never overstates what it
+knows.
+
+Cache writes are write-then-rename, because a detached probe can be writing
+while another session reads.
 
 Offline is a normal case, not an error: `ls-remote` fails, the probe fails, the
 cache is untouched, and the age rule causes the hook to say "unchecked" rather
 than to guess.
+
+### The finding shape is not the schema shape
+
+Also learned at implementation time, and load-bearing. `check-plugin-installs`
+emits findings as `{plugin, marketplace, head, remoteHead, lastFetchAttempt}`;
+the schema requires `{reason, subject, effective, available}` with
+`additionalProperties: false`. Passing the raw shape through produced `stale`
+events that failed validation and said so to nobody, because the runtime emitter
+fails open unless `ONLOOKER_VALIDATE=1` ([ADR-005](../../adr/005-runtime-emitter-fails-open.md)).
+
+The probe maps between them. Tests use samples copied from a real run rather
+than fixtures authored against the schema — the latter only prove the hook
+agrees with its author's beliefs about the program it calls.
 
 ### Surfacing, and repeat surfacing
 
@@ -237,6 +265,13 @@ otherwise — the mistake `ecosystem-449.39` records against
 
 All three need triage into `test/bus-coverage.json`, `expected` where a test
 drives the branch.
+
+**A gap the detached design opened:** `skip_reason` has no value for "the answer
+expired and a refresh is in flight". That is not `probe_failed` — the probe has
+not failed, it has not finished — and stamping it would conflate two conditions,
+which is the mistake this enum exists to avoid. The defer path emits nothing
+rather than something false, which is honest but lossy: the feature's most
+common transition leaves no event. Tracked as `ecosystem-449.60`.
 
 ### Cross-repo sequencing
 
