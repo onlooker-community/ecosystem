@@ -48,7 +48,7 @@ The lib is pure so that the two things most worth testing exhaustively — the s
 - Consumes: `_archivist_ulid_encode` from `archivist-ulid.sh`.
 - Produces:
   - `archivist_mine_split <body>` — prints one normalized message per record, NUL-separated.
-  - `archivist_mine_normalize <message>` — strips a leading `* `, trims trailing whitespace.
+  - `archivist_mine_normalize <message>` — strips a leading `*`, trims trailing whitespace.
   - `archivist_mine_id <normalized_message> <commit_epoch_ms>` — prints a 26-char ULID.
 
 - [ ] **Step 1: Write the failing tests**
