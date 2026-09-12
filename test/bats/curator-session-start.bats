@@ -294,8 +294,15 @@ BODY
 }
 
 @test "surfacer truncates context past max_pointer_chars" {
+  # Carries setup()'s generous wall_clock_budget_ms forward. Overwriting
+  # settings.json drops every key setup() pinned, and losing the budget puts
+  # this test back on the shipped 500ms default -- exactly what setup()'s
+  # comment warns about. It failed on a parallel CI runner for that reason
+  # while passing in isolation: the later phases never ran, the context was
+  # too short to need truncating, and the ellipsis assertion failed.
+  # This test is about truncation, not about how fast the host is.
   printf '%s\n' \
-    '{"curator":{"memory_store_path":"'"$MEM_DIR"'","surfacer":{"max_pointer_chars":40}}}' \
+    '{"curator":{"memory_store_path":"'"$MEM_DIR"'","cheap_checks":{"wall_clock_budget_ms":600000},"surfacer":{"max_pointer_chars":40}}}' \
     > "${PROJECT_REPO}/.claude/settings.json"
 
   _seed_memory "project_a.md" "project" "Date 2025-01-01"
