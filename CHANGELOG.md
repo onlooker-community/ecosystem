@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.55.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.54.4...ecosystem-v0.55.0) (2026-09-12)
+
+
+### Features
+
+* **lint:** teach the install check to ask whether a plugin is current :mag: ([#316](https://github.com/onlooker-community/ecosystem/issues/316)) ([4d78100](https://github.com/onlooker-community/ecosystem/commit/4d781007a6c800dfa217ac0623f88f8404ac3537))
+
 ## [0.54.4](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.54.3...ecosystem-v0.54.4) (2026-09-11)
 
 
