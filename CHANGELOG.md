@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.57.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.57.0...ecosystem-v0.57.1) (2026-09-12)
+
+
+### Performance Improvements
+
+* **tests:** run bats across files in parallel :zap: ([#322](https://github.com/onlooker-community/ecosystem/issues/322)) ([dfecd98](https://github.com/onlooker-community/ecosystem/commit/dfecd98cd0d281a930ab235dd8b46a0a62c2cd8b))
+
 ## [0.57.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.56.0...ecosystem-v0.57.0) (2026-09-12)
 
 
