@@ -32,6 +32,15 @@ jobs:
       - name: Install tools
         run: mise install
 
+      # bats --jobs needs GNU parallel. mise does not carry it -- its registry
+      # has only shenwei356/rush, which bats accepts but which ignores the job
+      # count entirely: -j 2 and -j 4 behave identically, and the load-sensitive
+      # tests (hook-health's duration_ms < 50, librarian's budget tests) fail
+      # under it. Measured, not assumed. So this one tool comes from the distro
+      # rather than mise, deliberately. See ecosystem-449.61.
+      - name: Install GNU parallel
+        run: sudo apt-get update && sudo apt-get install -y parallel
+
       - name: Install Node dependencies
         run: npm ci
 
