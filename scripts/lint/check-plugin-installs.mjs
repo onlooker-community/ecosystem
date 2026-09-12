@@ -65,18 +65,20 @@ function parseArgs(argv) {
     json: false,
     offline: false,
     report: false,
+    marketplaces: [],
   };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--strict') args.strict = true;
     else if (a === '--json') args.json = true;
     else if (a === '--offline') args.offline = true;
+    else if (a === '--marketplace') args.marketplaces.push(argv[++i]);
     else if (a === '--report') args.report = true;
     else if (a === '--project') args.project = argv[++i];
     else if (a === '--config-dir') args.configDir = argv[++i];
     else if (a === '--help' || a === '-h') {
       process.stdout.write(
-        'usage: check-plugin-installs [--project <path>] [--config-dir <path>] [--strict] [--offline] [--report] [--json]\n',
+        'usage: check-plugin-installs [--project <path>] [--config-dir <path>] [--strict] [--offline] [--report] [--json] [--marketplace <name>]\n',
       );
       process.exit(0);
     } else {
@@ -423,6 +425,19 @@ function main() {
     if (available) {
       report.findings.push({ plugin: key, reason: 'stale_install', effective, available, source });
     }
+  }
+
+  // Scope filter (ecosystem-449.59). A finding names either a marketplace
+  // directly (clone_behind) or a plugin keyed `name@marketplace`. Filtering
+  // here rather than at print time keeps the exit code and the printed errors
+  // agreeing with each other -- a check that exits 1 while printing nothing
+  // actionable is worse than one that does not run.
+  if (args.marketplaces.length > 0) {
+    const wanted = new Set(args.marketplaces);
+    report.findings = report.findings.filter((f) => {
+      const name = f.marketplace ?? String(f.plugin ?? '').split('@')[1];
+      return wanted.has(name);
+    });
   }
 
   report.status = report.findings.length > 0 ? 'failed' : 'ok';

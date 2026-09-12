@@ -543,3 +543,55 @@ describe('check-plugin-installs foreign marketplace shapes', () => {
     assert.equal(r.code, 0, r.stderr);
   });
 });
+
+describe('check-plugin-installs --marketplace scope filter (ecosystem-449.59)', () => {
+  const OTHER = '@meaganewaller-marketplace';
+
+  // Two enabled plugins from two marketplaces, neither installed, so each
+  // produces exactly one not_installed finding. The filter's only job is to
+  // decide which of the two survives.
+  function twoMarketplacesBothMissing() {
+    const s = scaffold();
+    writeSettings(s.project, { [`lineage${MARKET}`]: true, [`mise${OTHER}`]: true });
+    writeManifest(s.configDir, {});
+    return s;
+  }
+
+  it('reports only the named marketplace', () => {
+    const s = twoMarketplacesBothMissing();
+    const r = run(s, '--offline', '--marketplace', 'onlooker-community');
+    assert.equal(r.code, 1);
+    assert.match(r.stderr, /lineage@onlooker-community/);
+    assert.doesNotMatch(r.stderr, /mise@meaganewaller-marketplace/);
+  });
+
+  it('excludes other marketplaces from the exit code', () => {
+    const s = scaffold();
+    writeSettings(s.project, { [`mise${OTHER}`]: true });
+    writeManifest(s.configDir, {});
+    const r = run(s, '--offline', '--marketplace', 'onlooker-community');
+    assert.equal(r.code, 0, r.stderr);
+  });
+
+  it('unions the set when repeated', () => {
+    const s = twoMarketplacesBothMissing();
+    const r = run(s, '--offline', '--marketplace', 'onlooker-community', '--marketplace', 'meaganewaller-marketplace');
+    assert.equal(r.code, 1);
+    assert.match(r.stderr, /lineage@onlooker-community/);
+    assert.match(r.stderr, /mise@meaganewaller-marketplace/);
+  });
+
+  it('yields no findings for an unknown marketplace rather than erroring', () => {
+    const s = twoMarketplacesBothMissing();
+    const r = run(s, '--offline', '--marketplace', 'does-not-exist');
+    assert.equal(r.code, 0, r.stderr);
+  });
+
+  it('preserves existing behavior exactly when omitted', () => {
+    const s = twoMarketplacesBothMissing();
+    const r = run(s, '--offline');
+    assert.equal(r.code, 1);
+    assert.match(r.stderr, /lineage@onlooker-community/);
+    assert.match(r.stderr, /mise@meaganewaller-marketplace/);
+  });
+});
