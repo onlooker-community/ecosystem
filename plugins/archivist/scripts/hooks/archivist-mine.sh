@@ -27,6 +27,7 @@ set -uo pipefail
 # nested case cannot arise the way it could for the extractor - kept so the
 # family reads the same way rather than because a loop is reachable here.
 [[ "${ARCHIVIST_NESTED:-}" == "1" ]] && exit 0
+export ARCHIVIST_NESTED=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
@@ -34,10 +35,6 @@ PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 # shellcheck source=../lib/hook-health.sh
 source "${PLUGIN_ROOT}/scripts/lib/hook-health.sh"
 hook_health_register "archivist-mine"
-
-# shellcheck source=../lib/substrate-resolve.sh
-source "${PLUGIN_ROOT}/scripts/lib/substrate-resolve.sh"
-_ECOSYSTEM_ROOT=$(onlooker_resolve_substrate "$PLUGIN_ROOT")
 
 # shellcheck source=../lib/archivist-project-key.sh
 source "${PLUGIN_ROOT}/scripts/lib/archivist-project-key.sh"
