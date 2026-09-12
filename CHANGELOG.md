@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.57.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.56.0...ecosystem-v0.57.0) (2026-09-12)
+
+
+### Features
+
+* **ecosystem:** warn at session start when plugin pins go stale :bell: ([#320](https://github.com/onlooker-community/ecosystem/issues/320)) ([118a78b](https://github.com/onlooker-community/ecosystem/commit/118a78b4b42852be894e8929eaac81d4915e4667))
+
 ## [0.56.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.55.0...ecosystem-v0.56.0) (2026-09-12)
 
 
