@@ -20,6 +20,8 @@ setup() {
 	source "${REPO_ROOT}/scripts/lib/onlooker-project-key.sh"
 	source "${REPO_ROOT}/scripts/lib/plugin-currency-cache.sh"
 	CACHE=$(plugin_currency_cache_path "$(onlooker_project_key "$PROJECT_REPO")")
+	SENTINEL="${BATS_TEST_TMPDIR}/probe-ran"
+	SENTINEL_BIN="${BATS_TEST_TMPDIR}/sbin"
 }
 
 _input() {
@@ -133,15 +135,52 @@ _break_node() {
 	[ "$status" -eq 0 ]
 }
 
-@test "an expired cache spawns exactly one background refresh" {
+# Detecting a spawn needs a durable trace, not a process count and not the lock
+# directory: the child recreates the lock, so inspecting it cannot distinguish
+# "did not spawn" from "spawned and re-took the lock". A stub node that touches
+# a sentinel does distinguish them, and does it without racing.
+_stub_node_sentinel() {
+	mkdir -p "$SENTINEL_BIN"
+	cat >"${SENTINEL_BIN}/node" <<STUBEOF
+#!/usr/bin/env bash
+touch "${SENTINEL}"
+printf '%s' '{"status":"ok","findings":[]}'
+STUBEOF
+	chmod +x "${SENTINEL_BIN}/node"
+}
+
+@test "an expired cache does spawn a refresh" {
+	# The positive half. Without it the negative test below could pass because
+	# the hook never spawns anything at all.
 	_seed_aged 1 '[]'
-	_run_hook
-	# The lock directory is the spawn's own mutual exclusion; its existence or
-	# prompt removal both indicate the child ran.
+	_stub_node_sentinel
+	run bash -c "printf '%s' '$(_input)' | PATH='${SENTINEL_BIN}:$PATH' '$HOOK'"
 	[ "$status" -eq 0 ] || return 1
-	sleep 1
-	local n; n=$(pgrep -fc 'plugin-currency-probe.sh' 2>/dev/null || echo 0)
-	[ "$n" -le 1 ]
+	local i
+	for i in 1 2 3 4 5 6 7 8 9 10; do
+		[ -f "$SENTINEL" ] && break
+		sleep 1
+	done
+	[ -f "$SENTINEL" ]
+}
+
+@test "an in-flight refresh blocks a second spawn" {
+	# mkdir on the lock directory is the atomic test-and-set. Holding it here
+	# stands in for another session's probe already running: this one must not
+	# start a second.
+	_seed_aged 1 '[]'
+	mkdir -p "$(dirname "$CACHE")"
+	mkdir "${CACHE}.refresh.lock"
+
+	_stub_node_sentinel
+	run bash -c "printf '%s' '$(_input)' | PATH='${SENTINEL_BIN}:$PATH' '$HOOK'"
+	[ "$status" -eq 0 ] || return 1
+	sleep 2
+	# No probe ran, and the foreign lock was left alone.
+	! [ -f "$SENTINEL" ] || return 1
+	[ -d "${CACHE}.refresh.lock" ] || return 1
+	# It still speaks, because the answer is expired either way.
+	_context | grep -qi 'unchecked'
 }
 
 @test "the hook returns fast even when a probe is needed" {
