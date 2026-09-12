@@ -517,10 +517,10 @@ setup() {
 @test "ships the documented defaults" {
   source "${REPO_ROOT}/scripts/lib/plugin-currency-config.sh"
   plugin_currency_config_load "$PROJECT_REPO"
-  [ "$(plugin_currency_config_get '.enabled')" = "true" ]
-  [ "$(plugin_currency_config_get '.probe_ttl_hours')" = "6" ]
-  [ "$(plugin_currency_config_get '.surface_when_current')" = "false" ]
-  [ "$(plugin_currency_config_get_json '.marketplaces')" = '["onlooker-community"]' ]
+  [ "$(plugin_currency_config_get '.plugin_currency.enabled')" = "true" ]
+  [ "$(plugin_currency_config_get '.plugin_currency.probe_ttl_hours')" = "6" ]
+  [ "$(plugin_currency_config_get '.plugin_currency.surface_when_current')" = "false" ]
+  [ "$(plugin_currency_config_get_json '.plugin_currency.marketplaces')" = '["onlooker-community"]' ]
 }
 
 @test "a project setting overrides the shipped default" {
@@ -529,7 +529,7 @@ setup() {
     > "${PROJECT_REPO}/.claude/settings.json"
   source "${REPO_ROOT}/scripts/lib/plugin-currency-config.sh"
   plugin_currency_config_load "$PROJECT_REPO"
-  [ "$(plugin_currency_config_get '.probe_ttl_hours')" = "1" ]
+  [ "$(plugin_currency_config_get '.plugin_currency.probe_ttl_hours')" = "1" ]
 }
 ```
 
@@ -583,17 +583,23 @@ plugin_currency_config_load() {
 }
 
 plugin_currency_config_get() {
-	config_get "$_PLUGIN_CURRENCY_CONFIG" "${1:-}"
+	local path="$1"
+	config_get "_PLUGIN_CURRENCY_CONFIG" "${path}"
 }
 
 plugin_currency_config_get_json() {
-	config_get_json "$_PLUGIN_CURRENCY_CONFIG" "${1:-}"
+	local path="$1"
+	config_get_json "_PLUGIN_CURRENCY_CONFIG" "${path}"
 }
 ```
 
-Confirm the argument order of `config_get` / `config_get_json` against
-`scripts/lib/config-loader.sh:151` and `:176` before finalizing, and match the
-neighboring plugin accessors rather than this sketch if they differ.
+Two details this sketch originally got wrong, both corrected above after
+reading `scripts/lib/config-loader.sh` rather than assuming its shape:
+
+- `config_get` takes the **variable name**, not the variable's value. Passing
+  the value returns empty for every key, silently — no error, just defaults.
+- jq paths carry the namespace key: `.plugin_currency.probe_ttl_hours`, the same
+  way `curator_config_get '.curator.cheap_checks.enabled'` does.
 
 - [ ] **Step 5: Run to verify it passes**
 
