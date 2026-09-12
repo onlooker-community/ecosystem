@@ -5,5 +5,13 @@
     "enabled": true,
     "per_turn_max_chars": 1200,
     "max_rules": 50
+  },
+  "plugin_currency": {
+    "enabled": true,
+    "marketplaces": ["onlooker-community"],
+    "probe_ttl_hours": 6,
+    "wall_clock_budget_ms": 1500,
+    "surface_when_current": false,
+    "max_pointer_chars": 200
   }
 }
