@@ -64,6 +64,15 @@ plugin_currency_cache_write() {
 	local path="${1:-}" findings="${2:-[]}"
 	[[ -n "$path" ]] || return 1
 	mkdir -p "$(dirname "$path")" || return 1
-	jq -n --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson f "$findings" \
-		'{checked_at: $t, findings: $f}' >"$path"
+	# Write-then-rename. The probe runs detached, so a session can be reading
+	# this file while another writes it; a partial write would read back as an
+	# unparseable cache, which is survivable, but a torn one that still parses
+	# would not be.
+	local tmp="${path}.tmp.$$"
+	if ! jq -n --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson f "$findings" \
+		'{checked_at: $t, findings: $f}' >"$tmp" 2>/dev/null; then
+		rm -f "$tmp"
+		return 1
+	fi
+	mv -f "$tmp" "$path" || { rm -f "$tmp"; return 1; }
 }
