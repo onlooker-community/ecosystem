@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.6.1...archivist-v0.7.0) (2026-09-12)
+
+
+### Features
+
+* **archivist:** mine commits, so the lesson pipeline has an input :pick: ([#324](https://github.com/onlooker-community/ecosystem/issues/324)) ([616f437](https://github.com/onlooker-community/ecosystem/commit/616f4379fcff444d0685d05d4de8b0acfb81b9f0))
+
 ## [0.6.1](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.6.0...archivist-v0.6.1) (2026-09-10)
 
 
