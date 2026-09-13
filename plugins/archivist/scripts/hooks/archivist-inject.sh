@@ -64,10 +64,9 @@ hook_health_context "$INPUT"
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 SOURCE=$(printf '%s' "$INPUT" | jq -r '.source // "startup"' 2>/dev/null) || SOURCE="startup"
 
-REPO_ROOT=$(archivist_project_repo_root "$CWD")
 PROJECT_KEY=$(archivist_project_key "$CWD")
 
-archivist_config_load "$REPO_ROOT"
+archivist_config_load "$CWD"
 
 if [[ -z "$PROJECT_KEY" ]]; then
 	_emit ""

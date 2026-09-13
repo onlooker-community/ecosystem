@@ -48,22 +48,112 @@
 #
 # Precedence (latest wins):
 #   1. plugin config.json (shipped defaults)
-#   2. ~/.claude/settings.json
-#   3. ~/.claude/settings.local.json (local overrides user)
-#   4. <repo>/.claude/settings.json
-#   5. <repo>/.claude/settings.local.json (local overrides project)
+#   2. <claude_dir>/settings.json
+#   3. <claude_dir>/settings.local.json (local overrides user)
+#   4. <worktree>/.claude/settings.json        committed, branch-scoped
+#   5. <parent>/.claude/settings.local.json    gitignored, machine-scoped
+#
+# Layers 4 and 5 resolve against DIFFERENT roots. settings.json is committed, so
+# a worktree on a feature branch must see its own copy — the dogfooding rollout
+# stages plugin enablement through exactly that file. settings.local.json is
+# gitignored, so `git worktree add` never copies it and it exists only in the
+# main checkout; resolving it against the worktree would silently drop every
+# local override in a worktree session. See ecosystem-449.37 and ADR-004.
+
+# Resolve the two repo-scoped roots from a session cwd.
+#
+# Sets, in the caller's scope:
+#   _CONFIG_WORKTREE_ROOT  --show-toplevel      the tree this session is in
+#   _CONFIG_PARENT_ROOT    --git-common-dir/..  the main checkout
+#
+# The two are the same in a normal checkout and differ in a linked worktree,
+# where the parent is where a gitignored settings.local.json actually lives.
+#
+# Resolution lives here rather than at the call sites on purpose. Thirty-three
+# callers each picking a root is how ecosystem-ber, ecosystem-68z and
+# ecosystem-449.37 all happened: a wrong root is accepted silently and reads as
+# "no config" rather than as an error. No caller picks one now, so none can pick
+# a wrong one.
+#
+# Memoized on cwd. Hooks are one process per fire, so the cache cannot outlive a
+# single invocation.
+_config_resolve_roots() {
+	local cwd="${1:-}"
+
+	_CONFIG_WORKTREE_ROOT=""
+	_CONFIG_PARENT_ROOT=""
+
+	if [[ -z "$cwd" || ! -d "$cwd" ]]; then
+		return 0
+	fi
+
+	if [[ "${_CONFIG_ROOTS_CWD:-}" == "$cwd" ]]; then
+		_CONFIG_WORKTREE_ROOT="${_CONFIG_ROOTS_WORKTREE:-}"
+		_CONFIG_PARENT_ROOT="${_CONFIG_ROOTS_PARENT:-}"
+		return 0
+	fi
+
+	# One fork for both answers; git emits them in argument order. Two separate
+	# rev-parse calls measured ~9.7ms against ~4.8ms for this, and hook cost is
+	# already a live concern (ecosystem-449.29, 449.43, ff7, 6ce).
+	local out=""
+	out=$(git -C "$cwd" rev-parse --show-toplevel --git-common-dir 2>/dev/null) || out=""
+
+	local toplevel="" common_dir=""
+	if [[ -n "$out" ]]; then
+		toplevel=$(printf '%s\n' "$out" | sed -n '1p')
+		common_dir=$(printf '%s\n' "$out" | sed -n '2p')
+	fi
+
+	if [[ -n "$toplevel" ]]; then
+		_CONFIG_WORKTREE_ROOT=$(cd "$toplevel" 2>/dev/null && pwd -P) \
+			|| _CONFIG_WORKTREE_ROOT=""
+	fi
+
+	# --git-common-dir is relative in a normal checkout (".git" from the root,
+	# "../.git" from a subdirectory) and absolute in a linked worktree. It is
+	# relative to CWD, not to the toplevel — resolving it from the toplevel
+	# climbs one level too far for any session started in a subdirectory.
+	if [[ -n "$common_dir" ]]; then
+		if [[ "$common_dir" != /* ]]; then
+			common_dir=$(cd "$cwd" && cd "$common_dir" 2>/dev/null && pwd -P) \
+				|| common_dir=""
+		fi
+		if [[ -n "$common_dir" && -d "$common_dir" ]]; then
+			_CONFIG_PARENT_ROOT=$(cd "${common_dir}/.." 2>/dev/null && pwd -P) \
+				|| _CONFIG_PARENT_ROOT=""
+		fi
+	fi
+
+	# Outside a repo git answers nothing, but .claude/settings.json is a Claude
+	# Code concept rather than a git one and a plain directory can carry one.
+	# Fall back to cwd so a non-git project keeps its config. There is no upward
+	# walk here: outside git there is no defined project boundary to walk to.
+	if [[ -z "$_CONFIG_WORKTREE_ROOT" ]]; then
+		_CONFIG_WORKTREE_ROOT="$cwd"
+	fi
+	if [[ -z "$_CONFIG_PARENT_ROOT" ]]; then
+		_CONFIG_PARENT_ROOT="$_CONFIG_WORKTREE_ROOT"
+	fi
+
+	_CONFIG_ROOTS_CWD="$cwd"
+	_CONFIG_ROOTS_WORKTREE="$_CONFIG_WORKTREE_ROOT"
+	_CONFIG_ROOTS_PARENT="$_CONFIG_PARENT_ROOT"
+	return 0
+}
 
 # Load config for a plugin, merging all five layers into a variable.
 #
 # Arguments:
 #   $1 = plugin name (e.g., "bursar", "compass")
-#   $2 = repo root (or empty for no-repo defaults)
+#   $2 = session cwd (or empty for no-repo defaults). NOT a repo root — the
+#        loader resolves the worktree and parent roots from it itself.
 #   $3 = output variable name (e.g., "_BURSAR_CONFIG")
 #
 # Sets the output variable to the merged JSON config.
 config_load_plugin() {
 	local plugin_name="${1:-}"
-	local repo_root="${2:-}"
+	local cwd="${2:-}"
 	local output_var="${3:-}"
 
 	[[ -z "$plugin_name" || -z "$output_var" ]] && return 1
@@ -91,8 +181,16 @@ config_load_plugin() {
 	local repo_file=""
 	local repo_local_file=""
 
-	[[ -n "$repo_root" ]] && repo_file="${repo_root}/.claude/settings.json"
-	[[ -n "$repo_root" ]] && repo_local_file="${repo_root}/.claude/settings.local.json"
+	# Layer 4 is committed and therefore branch-scoped: a worktree must see its
+	# own branch's copy. Layer 5 is gitignored and therefore machine-scoped:
+	# `git worktree add` never copies it, so it lives only in the parent.
+	_config_resolve_roots "$cwd"
+	if [[ -n "$_CONFIG_WORKTREE_ROOT" ]]; then
+		repo_file="${_CONFIG_WORKTREE_ROOT}/.claude/settings.json"
+	fi
+	if [[ -n "$_CONFIG_PARENT_ROOT" ]]; then
+		repo_local_file="${_CONFIG_PARENT_ROOT}/.claude/settings.local.json"
+	fi
 
 	# Read each layer defensively—missing or malformed files degrade to empty.
 	[[ -f "$default_file" ]] && default_txt="$(<"$default_file")"

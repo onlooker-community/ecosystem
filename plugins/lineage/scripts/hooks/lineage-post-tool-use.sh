@@ -147,11 +147,12 @@ _lineage_ignored() {
 # the record paths. Using REPO_ROOT for those meant a worktree's edits tested as
 # outside the repo and its shell edits diffed the parent's tree instead.
 #
-# The two lineage_config_load calls below are the deliberate exception: they
-# still take REPO_ROOT, so a worktree reads its parent checkout's config. That
-# is config resolution rather than a path operation, it is the same question
-# every plugin here answers the same way, and ecosystem-449.37 settles it across
-# all of them. Left alone here so this change stays one decision wide.
+# The two lineage_config_load calls below take CWD, not REPO_ROOT. The loader
+# resolves both repo-scoped roots itself and splits the layers across them:
+# settings.json from the worktree because it is committed and therefore
+# branch-scoped, settings.local.json from the parent because it is gitignored
+# and therefore machine-scoped. Settled for all sixteen plugins at once in
+# ecosystem-449.37 acceptance 5.
 REPO_ROOT=$(lineage_project_repo_root "$CWD")
 WORKTREE_ROOT=$(lineage_worktree_root "$CWD")
 
@@ -239,7 +240,7 @@ if [[ "$TOOL" == "Bash" ]]; then
 		_done
 	fi
 
-	lineage_config_load "$REPO_ROOT"
+	lineage_config_load "$CWD"
 	PROJECT_KEY=$(lineage_project_key "$CWD")
 	[[ -n "${LINEAGE_TRACE_SETUP:-}" ]] && printf 'SETUP_DONE\n' >&2
 	[[ -z "$PROJECT_KEY" ]] && _done
@@ -296,7 +297,7 @@ if [[ "$TOOL" == "Bash" ]]; then
 	_done
 fi
 
-lineage_config_load "$REPO_ROOT"
+lineage_config_load "$CWD"
 
 PROJECT_KEY=$(lineage_project_key "$CWD")
 [[ -z "$PROJECT_KEY" ]] && _done

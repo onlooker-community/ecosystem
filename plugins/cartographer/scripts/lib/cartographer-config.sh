@@ -5,11 +5,16 @@
 #   1. plugins/cartographer/config.json  (plugin defaults)
 #   2. ~/.claude/settings.json           (.cartographer subtree)
 #   3. ~/.claude/settings.local.json     (.cartographer subtree, local overrides user)
-#   4. <repo>/.claude/settings.json      (.cartographer subtree)
-#   5. <repo>/.claude/settings.local.json (.cartographer subtree, local overrides project)
+#   4. <worktree>/.claude/settings.json      (.cartographer subtree)
+#   5. <parent>/.claude/settings.local.json (.cartographer subtree, local overrides project)
+#
+# Layers 4 and 5 resolve against DIFFERENT roots. settings.json is committed and
+# therefore branch-scoped; settings.local.json is gitignored, so git worktree add
+# never copies it and it lives only in the main checkout. config_load_plugin
+# takes a session cwd and derives both roots itself (ecosystem-449.37).
 #
 # Usage:
-#   cartographer_config_load <repo_root>
+#   cartographer_config_load <cwd>
 #   cartographer_config_get_json ".cartographer.exclude_paths"
 
 # Resolve the vendored loader from this file's own location. $PLUGIN_ROOT is
@@ -30,8 +35,8 @@ source "$_CARTOGRAPHER_CONFIG_LOADER"
 _CARTOGRAPHER_CONFIG=""
 
 cartographer_config_load() {
-	local repo_root="${1:-}"
-	config_load_plugin "cartographer" "$repo_root" "_CARTOGRAPHER_CONFIG"
+	local cwd="${1:-}"
+	config_load_plugin "cartographer" "$cwd" "_CARTOGRAPHER_CONFIG"
 	return 0
 }
 

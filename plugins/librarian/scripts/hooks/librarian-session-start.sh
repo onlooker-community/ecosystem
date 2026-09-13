@@ -68,8 +68,7 @@ hook_health_context "$INPUT"
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 [[ -z "$CWD" ]] && CWD="$(pwd)"
 
-REPO_ROOT=$(librarian_project_repo_root "$CWD")
-librarian_config_load "$REPO_ROOT"
+librarian_config_load "$CWD"
 
 PROJECT_KEY=$(librarian_project_key "$CWD")
 if [[ -z "$PROJECT_KEY" ]]; then

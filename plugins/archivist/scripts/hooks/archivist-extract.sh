@@ -92,7 +92,7 @@ WORKTREE_ROOT=$(archivist_worktree_root "$CWD")
 
 # Config requires repo_root to scan settings.json overlay; load anyway with
 # best-effort empty fallback.
-archivist_config_load "$REPO_ROOT"
+archivist_config_load "$CWD"
 
 if [[ -z "$PROJECT_KEY" || -z "$REPO_ROOT" ]]; then
 	_approve "Archivist: no git context, nothing to extract"

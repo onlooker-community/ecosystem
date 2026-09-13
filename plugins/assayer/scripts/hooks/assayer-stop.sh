@@ -76,7 +76,7 @@ _done() { exit 0; }
 REPO_ROOT=$(assayer_project_repo_root "$CWD")
 [[ -z "$REPO_ROOT" ]] && _done
 
-CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" assayer_config_load "$REPO_ROOT"
+CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" assayer_config_load "$CWD"
 
 PROJECT_KEY=$(assayer_project_key "$CWD")
 [[ -z "$PROJECT_KEY" ]] && _done

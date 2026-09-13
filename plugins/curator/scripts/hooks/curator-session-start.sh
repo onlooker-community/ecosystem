@@ -69,7 +69,7 @@ SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SE
 [[ -z "$SESSION_ID" ]] && SESSION_ID="unknown"
 
 REPO_ROOT=$(curator_project_repo_root "$CWD")
-curator_config_load "$REPO_ROOT"
+curator_config_load "$CWD"
 
 PROJECT_KEY=$(curator_project_key "$CWD")
 if [[ -z "$PROJECT_KEY" ]]; then

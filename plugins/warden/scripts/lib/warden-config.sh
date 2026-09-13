@@ -6,11 +6,16 @@
 #   1. plugins/warden/config.json (defaults shipped with the plugin)
 #   2. ~/.claude/settings.json
 #   3. ~/.claude/settings.local.json (local overrides user)
-#   4. <repo>/.claude/settings.json
-#   5. <repo>/.claude/settings.local.json (local overrides project)
+#   4. <worktree>/.claude/settings.json
+#   5. <parent>/.claude/settings.local.json (local overrides project)
+#
+# Layers 4 and 5 resolve against DIFFERENT roots. settings.json is committed and
+# therefore branch-scoped; settings.local.json is gitignored, so git worktree add
+# never copies it and it lives only in the main checkout. config_load_plugin
+# takes a session cwd and derives both roots itself (ecosystem-449.37).
 #
 # Exposes:
-#   warden_config_load <repo_root>    # populates _warden_CONFIG (JSON)
+#   warden_config_load <cwd>    # populates _warden_CONFIG (JSON)
 #   warden_config_get <jq-path>       # echoes string value (empty if unset)
 #   warden_config_get_json <jq-path>  # echoes JSON value (null if unset)
 
@@ -32,8 +37,8 @@ source "$_WARDEN_CONFIG_LOADER"
 _warden_CONFIG="{}"
 
 warden_config_load() {
-	local repo_root="${1:-}"
-	config_load_plugin "warden" "$repo_root" "_warden_CONFIG"
+	local cwd="${1:-}"
+	config_load_plugin "warden" "$cwd" "_warden_CONFIG"
 	return 0
 }
 

@@ -85,7 +85,7 @@ SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SE
 [[ -z "$CWD" ]] && CWD="$(pwd)"
 [[ -z "$SESSION_ID" ]] && SESSION_ID="unknown"
 
-librarian_config_load "$(librarian_project_repo_root "$CWD")"
+librarian_config_load "$CWD"
 
 PROJECT_KEY=$(librarian_project_key "$CWD")
 [[ -z "$PROJECT_KEY" ]] && exit 0

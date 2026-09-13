@@ -86,8 +86,7 @@ PROMPT=$(printf '%s' "$INPUT" | jq -r '.prompt // .user_message // .message // "
 [[ -z "$CWD" ]] && CWD="$(pwd)"
 [[ -z "$SESSION_ID" ]] && SESSION_ID="unknown"
 
-REPO_ROOT=$(historian_project_repo_root "$CWD")
-historian_config_load "$REPO_ROOT"
+historian_config_load "$CWD"
 
 RETRIEVAL_ENABLED=$(historian_config_get '.historian.retrieval.enabled')
 if [[ "$RETRIEVAL_ENABLED" == "false" ]]; then
