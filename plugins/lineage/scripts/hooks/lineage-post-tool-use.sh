@@ -239,7 +239,7 @@ if [[ "$TOOL" == "Bash" ]]; then
 		_done
 	fi
 
-	lineage_config_load "$REPO_ROOT"
+	lineage_config_load "$CWD"
 	PROJECT_KEY=$(lineage_project_key "$CWD")
 	[[ -n "${LINEAGE_TRACE_SETUP:-}" ]] && printf 'SETUP_DONE\n' >&2
 	[[ -z "$PROJECT_KEY" ]] && _done
@@ -296,7 +296,7 @@ if [[ "$TOOL" == "Bash" ]]; then
 	_done
 fi
 
-lineage_config_load "$REPO_ROOT"
+lineage_config_load "$CWD"
 
 PROJECT_KEY=$(lineage_project_key "$CWD")
 [[ -z "$PROJECT_KEY" ]] && _done

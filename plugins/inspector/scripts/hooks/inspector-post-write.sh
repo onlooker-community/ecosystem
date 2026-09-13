@@ -73,13 +73,13 @@ export INSPECTOR_PROJECT_KEY="$PROJECT_KEY"
 # File must live under repo root.
 if [[ "$CANONICAL" != "$REPO_ROOT"/* && "$CANONICAL" != "$REPO_ROOT" ]]; then
 	export INSPECTOR_FILE_RELATIVE="$CANONICAL"
-	inspector_config_load "$REPO_ROOT"
+	inspector_config_load "$CWD"
 	inspector_emit_whole_file_skipped "not_in_repo"
 	exit 0
 fi
 export INSPECTOR_FILE_RELATIVE="${CANONICAL#"$REPO_ROOT"/}"
 
-inspector_config_load "$REPO_ROOT"
+inspector_config_load "$CWD"
 
 # Excluded path containment check.
 EXCLUDES=$(inspector_config_exclude_paths)

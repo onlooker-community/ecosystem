@@ -79,7 +79,7 @@ REPO_ROOT=$(echo_project_repo_root "$CWD")
 WORKTREE_ROOT=$(echo_worktree_root "$CWD")
 [[ -z "$WORKTREE_ROOT" ]] && WORKTREE_ROOT="$REPO_ROOT"
 
-CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" echo_config_load "$REPO_ROOT"
+CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" echo_config_load "$CWD"
 
 PROJECT_KEY=$(echo_project_key "$CWD")
 [[ -z "$PROJECT_KEY" ]] && _done

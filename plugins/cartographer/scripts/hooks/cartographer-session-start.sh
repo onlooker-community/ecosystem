@@ -41,7 +41,7 @@ export _HOOK_SESSION_ID
 [[ -z "$CWD" ]] && exit 0
 
 REPO_ROOT=$(cartographer_project_repo_root "$CWD")
-cartographer_config_load "$REPO_ROOT"
+cartographer_config_load "$CWD"
 
 PROJECT_KEY=$(cartographer_project_key "$CWD")
 [[ -z "$PROJECT_KEY" ]] && exit 0

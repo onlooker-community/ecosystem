@@ -67,8 +67,7 @@ CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 
 export _HOOK_SESSION_ID="$SESSION_ID"
 
-REPO_ROOT=$(counsel_project_repo_root "$CWD")
-counsel_config_load "$REPO_ROOT"
+counsel_config_load "$CWD"
 
 PROJECT_KEY=$(counsel_project_key "$CWD")
 if [[ -z "$PROJECT_KEY" ]]; then

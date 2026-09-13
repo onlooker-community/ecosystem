@@ -65,7 +65,7 @@ TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | jq -r '.transcript_path // ""' 2>/dev/n
 [[ -z "$SESSION_ID" ]] && SESSION_ID="unknown"
 
 REPO_ROOT=$(historian_project_repo_root "$CWD")
-historian_config_load "$REPO_ROOT"
+historian_config_load "$CWD"
 
 PROJECT_KEY=$(historian_project_key "$CWD")
 [[ -z "$PROJECT_KEY" ]] && exit 0

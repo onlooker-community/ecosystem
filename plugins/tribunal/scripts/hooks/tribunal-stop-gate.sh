@@ -77,7 +77,7 @@ _done() {
 }
 
 REPO_ROOT=$(tribunal_project_repo_root "$CWD")
-tribunal_config_load "$REPO_ROOT"
+tribunal_config_load "$CWD"
 
 # The tree this session is in, which for a worktree is not REPO_ROOT
 # (ecosystem-449.37). Every git read below uses it; REPO_ROOT stays identity.
