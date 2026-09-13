@@ -171,9 +171,15 @@ Details that are load-bearing:
   an absolute one in a worktree. It is absolutized with the `cd … && pwd -P`
   idiom the `*-project-key.sh` libs already use, not `realpath`, which is not
   portable across the macOS and Linux legs of CI.
-- **Empty, non-git, or nonexistent cwd** → both roots empty → layers 4 and 5
-  skipped. Defaults and user layers still apply. This preserves the loader's
-  existing no-repo contract, where `""` meant "no repo".
+- **Non-git cwd** → both roots fall back to `cwd` itself. `.claude/settings.json`
+  is a Claude Code concept, not a git one: a plain directory can carry project
+  settings, and 19 of the 36 bats files that write a settings fixture never
+  `git init` at all. Skipping the layers outside a repo would regress both.
+  Outside git there is no defined project boundary, so there is no upward walk —
+  same as today's behavior, and noted as a limit below.
+- **Empty or nonexistent cwd** → both roots empty → layers 4 and 5 skipped.
+  Defaults and user layers still apply. This preserves the loader's existing
+  no-repo contract, where `""` meant "no repo".
 - **Resolved roots are memoized per cwd** for the process, so a hook calling the
   loader twice (`inspector-post-write.sh:76,82`) pays one fork.
 
@@ -230,9 +236,15 @@ relative-vs-absolute `--git-common-dir` behavior only appears in a real one:
 2. **worktree cwd reads the worktree's layer 4**, not the parent's, with the two
    trees holding different values so the assertion cannot pass by accident.
 3. **worktree cwd reads the parent's layer 5.**
-4. **non-git cwd** → shipped defaults, exit 0.
-5. **empty cwd** → shipped defaults, exit 0.
-6. **repo root passed as cwd still resolves** — the back-compat guarantee.
+4. **worktree subdirectory** resolves the worktree, not the parent — the two
+   defects composed, which is the case neither category describes alone.
+5. **layer 5 still outranks layer 4** even though they now come from different
+   roots. Precedence order is unchanged; only the roots moved.
+6. **non-git cwd** reads its own `.claude/settings.json` — the back-compat
+   guarantee for the 19 no-git fixtures.
+7. **cwd with no `.claude` at all** → shipped defaults, exit 0.
+8. **empty cwd** → shipped defaults, exit 0.
+9. **repo root passed as cwd still resolves** — the vendored-copy guarantee.
 
 Test 2 follows the shape `echo-stop-gate-worktree.bats` established: dirty both
 sides so the only variable is which tree was read. A test that distinguishes the
@@ -255,6 +267,16 @@ exact mistake that reads as correct.
 - A new child of `ecosystem-449.37` for category B, recording the five plugins,
   the sixteen call sites, and the eight observed subdirectory sessions.
 - Acceptance 5 answered on `ecosystem-449.37` with the rule above.
+
+## Known limit
+
+**Category B is fixed inside a git repo and not outside one.** The upward walk
+is `--show-toplevel`, so a subdirectory of a *non-git* project directory still
+reads `${cwd}/.claude/settings.json` and misses the one above it. Resolving that
+would mean walking parents looking for a `.claude/`, which needs a rule for
+which ancestor wins and is a larger decision than this change. Every session
+recorded in the category B evidence above is inside a git repo, so the observed
+failure is covered.
 
 ## Risks
 
