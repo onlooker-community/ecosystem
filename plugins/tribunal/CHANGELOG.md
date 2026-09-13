@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.2](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.5.1...tribunal-v1.5.2) (2026-09-13)
+
+
+### Bug Fixes
+
+* **config:** resolve settings roots in the loader, not at call sites :compass: ([#327](https://github.com/onlooker-community/ecosystem/issues/327)) ([50c5687](https://github.com/onlooker-community/ecosystem/commit/50c56873299401296a6ba6436adba3d56477f331))
+
 ## [1.5.1](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.5.0...tribunal-v1.5.1) (2026-09-10)
 
 

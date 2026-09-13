@@ -2,6 +2,13 @@
 
 All notable changes to the Cartographer plugin are documented here.
 
+## [0.9.2](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.9.1...cartographer-v0.9.2) (2026-09-13)
+
+
+### Bug Fixes
+
+* **config:** resolve settings roots in the loader, not at call sites :compass: ([#327](https://github.com/onlooker-community/ecosystem/issues/327)) ([50c5687](https://github.com/onlooker-community/ecosystem/commit/50c56873299401296a6ba6436adba3d56477f331))
+
 ## [0.9.1](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.9.0...cartographer-v0.9.1) (2026-09-10)
 
 

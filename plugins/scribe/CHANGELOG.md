@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.3](https://github.com/onlooker-community/ecosystem/compare/scribe-v0.8.2...scribe-v0.8.3) (2026-09-13)
+
+
+### Bug Fixes
+
+* **config:** resolve settings roots in the loader, not at call sites :compass: ([#327](https://github.com/onlooker-community/ecosystem/issues/327)) ([50c5687](https://github.com/onlooker-community/ecosystem/commit/50c56873299401296a6ba6436adba3d56477f331))
+
 ## [0.8.2](https://github.com/onlooker-community/ecosystem/compare/scribe-v0.8.1...scribe-v0.8.2) (2026-09-11)
 
 
