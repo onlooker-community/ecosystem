@@ -500,12 +500,12 @@ compass_run_gate() {
 			cb_opened="true"
 		fi
 
-		compass_emit_event "compass.check.skipped" \
-			"$(jq -n --arg r "sampler_error" --arg f "$file_path" \
-			'{reason:$r,file_path:$f}' 2>/dev/null || echo '{}')" 2>/dev/null || true
-
-		[[ "$error_policy" == "open" ]] && return $_allow_exit
-
+		# The event has to FOLLOW the decision, not precede it. This used to
+		# emit compass.check.skipped here and then decide, so every fail-closed
+		# denial was reported to the bus as "compass declined to act" when it
+		# had in fact denied the tool call (ecosystem-449.45 defect 3). Work out
+		# what happens first, then say what happened.
+		#
 		# Opening the breaker has to take effect on THIS call. Recording the
 		# open state and then falling through to the fail-closed block denied
 		# the very call that tripped the breaker, so the escape hatch only
@@ -515,9 +515,32 @@ compass_run_gate() {
 		local cb_open_behavior
 		cb_open_behavior=$(compass_config_get '.compass.circuit_breaker.open_behavior')
 		cb_open_behavior="${cb_open_behavior:-fail_open}"
-		if [[ "$cb_opened" == "true" ]] && [[ "$cb_open_behavior" == "fail_open" ]]; then
+
+		local error_allows="false"
+		if [[ "$error_policy" == "open" ]]; then
+			error_allows="true"
+		elif [[ "$cb_opened" == "true" && "$cb_open_behavior" == "fail_open" ]]; then
+			error_allows="true"
+		fi
+
+		if [[ "$error_allows" == "true" ]]; then
+			# Allowed. Compass genuinely declined to act, so this really is a
+			# skip and keeps saying so.
+			compass_emit_event "compass.check.skipped" \
+				"$(jq -n --arg r "sampler_error" --arg f "$file_path" \
+				'{reason:$r,file_path:$f}' 2>/dev/null || echo '{}')" 2>/dev/null || true
 			return $_allow_exit
 		fi
+
+		# Denied. confidence and stddev are null rather than 0 because the
+		# evaluator measured nothing — a zero would assert a measured zero
+		# confidence, which is a different and stronger claim than "not
+		# measured". Requires @onlooker-community/schema >= 2.21.0, which made
+		# both nullable and added reason (ecosystem-449.52 gap 2).
+		compass_emit_event "compass.check.failed" \
+			"$(jq -n --arg f "$file_path" --arg t "$tool_name" \
+			'{confidence:null,stddev:null,reason:"sampler_error",file_path:$f,tool_name:$t}' \
+			2>/dev/null || echo '{}')" 2>/dev/null || true
 
 		# fail-closed: block
 		_compass_intervention \

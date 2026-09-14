@@ -98,7 +98,26 @@ CHANGED_FILES=$(git -C "$WORKTREE_ROOT" diff --name-only HEAD 2>/dev/null) || CH
 STAGED_FILES=$(git -C "$WORKTREE_ROOT" diff --name-only --cached 2>/dev/null) || STAGED_FILES=""
 UNTRACKED_FILES=$(git -C "$WORKTREE_ROOT" ls-files --others --exclude-standard 2>/dev/null) || UNTRACKED_FILES=""
 ALL_CHANGED=$(printf '%s\n%s\n%s' "$CHANGED_FILES" "$STAGED_FILES" "$UNTRACKED_FILES" | sort -u | grep -v '^$') || ALL_CHANGED=""
-[[ -z "$ALL_CHANGED" ]] && _done
+
+# Every silent exit below now says why it was silent (ecosystem-449.52 gap 1).
+# The only prior signal was the ABSENCE of echo.suite.started, and absence
+# cannot distinguish these three from each other or from the hook never firing.
+# All three emit, not just content_unchanged: covering one would leave the
+# ambiguity half-open.
+_skip_suite() {
+	local reason="$1" considered="${2:-0}" first="${3:-}"
+	local payload
+	payload=$(jq -cn --arg r "$reason" --argjson c "$considered" --arg f "$first" \
+		'{reason: $r, considered_count: $c}
+		 + (if $f == "" then {} else {changed_file: $f} end)' 2>/dev/null) || return 0
+	echo_emit_event "echo.suite.skipped" "$payload" || true
+	return 0
+}
+
+if [[ -z "$ALL_CHANGED" ]]; then
+	_skip_suite "no_changes" 0
+	_done
+fi
 
 # Load watch and exclude patterns (bash 3 compatible — no mapfile).
 WATCH_PATTERNS=()
@@ -139,7 +158,13 @@ while IFS= read -r f; do
 	WATCHED_CHANGED+=("$f")
 done <<< "$ALL_CHANGED"
 
-[[ "${#WATCHED_CHANGED[@]}" -eq 0 ]] && _done
+if [[ "${#WATCHED_CHANGED[@]}" -eq 0 ]]; then
+	# Dirty files existed; none of them matched watch_paths. Distinct from
+	# no_changes, and distinct from a misconfigured watcher watching nothing
+	# (ecosystem-449.21), which this cannot yet tell apart.
+	_skip_suite "no_watched_changes" 0
+	_done
+fi
 
 # ---------------------------------------------------------------------------
 # Storage paths
@@ -189,8 +214,14 @@ for rel_path in "${WATCHED_CHANGED[@]}"; do
 done
 
 # Nothing to score is not a suite. Emitting started/complete around zero work
-# is what made the repeat runs read as real activity in the event log.
-[[ "${#PENDING[@]}" -eq 0 ]] && _done
+# is what made the repeat runs read as real activity in the event log. The skip
+# below is the opposite problem: this exit is the one the content-hash filter
+# created, and until it emitted, the filter's success was indistinguishable from
+# the hook not running at all (ecosystem-449.40 acceptance 7).
+if [[ "${#PENDING[@]}" -eq 0 ]]; then
+	_skip_suite "content_unchanged" "${#WATCHED_CHANGED[@]}" "${WATCHED_CHANGED[0]}"
+	_done
+fi
 
 # ---------------------------------------------------------------------------
 # Evaluation loop
