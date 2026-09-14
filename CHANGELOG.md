@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.58.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.58.0...ecosystem-v0.58.1) (2026-09-13)
+
+
+### Bug Fixes
+
+* **config:** resolve settings roots in the loader, not at call sites :compass: ([#327](https://github.com/onlooker-community/ecosystem/issues/327)) ([50c5687](https://github.com/onlooker-community/ecosystem/commit/50c56873299401296a6ba6436adba3d56477f331))
+
 ## [0.58.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.57.1...ecosystem-v0.58.0) (2026-09-12)
 
 
