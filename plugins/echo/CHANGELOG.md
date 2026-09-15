@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/onlooker-community/ecosystem/compare/echo-v0.6.2...echo-v0.7.0) (2026-09-15)
+
+
+### Features
+
+* **plugins:** emit the decisions the schema can now express :satellite: ([#329](https://github.com/onlooker-community/ecosystem/issues/329)) ([675ebde](https://github.com/onlooker-community/ecosystem/commit/675ebde1707150d892a52e3612cd993d80681f56))
+
 ## [0.6.2](https://github.com/onlooker-community/ecosystem/compare/echo-v0.6.1...echo-v0.6.2) (2026-09-13)
 
 
