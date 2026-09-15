@@ -165,16 +165,28 @@ _spawn_refresh() {
 
 _spawn_refresh || true
 
+# The deferral is a decision, and it says so (ecosystem-449.60). This used to
+# emit nothing at all: skip_reason had no value for "the answer expired and a
+# detached probe is already running", and stamping probe_failed would have
+# conflated "we tried and could not" with "we are waiting" -- the mistake
+# ecosystem-449.39 records against librarian.scan.complete. Emitting nothing was
+# honest but lossy, because this is the surfacer's MOST COMMON path: the bus
+# could not answer how often a session starts with a stale answer, which is the
+# question the epic exists to ask. The detached probe still emits
+# onlooker.currency.checked when it lands; that remains the record of the probe.
 PREV_AGE=$(plugin_currency_cache_age_seconds "$CACHE")
 if [[ -n "$PREV_AGE" ]]; then
-	# Deliberately no skipped event here. The probe has not failed -- it has not
-	# finished. skip_reason has no value for "deferred", and stamping
-	# probe_failed would conflate two different conditions, which is the exact
-	# mistake ecosystem-449.39 records against librarian.scan.complete and which
-	# this event type's own schema description warns about. The detached probe
-	# emits onlooker.currency.checked when it lands; that is the record.
+	_emit "onlooker.currency.skipped" \
+		"$(jq -cn --arg a "$PREV_AGE" \
+			'{skip_reason:"refresh_deferred", answer_age_seconds:($a|tonumber)}')"
 	_finish "onlooker: plugin currency unchecked for $((PREV_AGE / 3600))h, refreshing in the background"
 fi
 
-# No cache at all yet, and the probe is still running. Nothing truthful to say.
+# No cache at all yet, and the probe is still running. Still a deferral, but
+# with no prior answer to be stale -- so no answer_age_seconds. Omitting it is
+# the point: an age of 0 would claim a measurement that was just taken, which is
+# the opposite of what happened.
+_emit "onlooker.currency.skipped" '{"skip_reason":"refresh_deferred"}'
+
+# Nothing truthful to say to the user yet.
 _finish ""

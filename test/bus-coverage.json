@@ -24,6 +24,7 @@
     "echo.improvement.detected",
     "echo.regression.detected",
     "echo.suite.complete",
+    "echo.suite.skipped",
     "echo.suite.started",
     "governor.budget.exceeded",
     "governor.budget.warning",

@@ -124,14 +124,43 @@ _break_node() {
 	_run_hook
 	_context | grep -qi 'unchecked' || return 1
 	! _context | grep -qi 'current' || return 1
-	# And deliberately NO skipped event. The probe has not failed, it has not
-	# finished, and skip_reason carries no value for "deferred". Stamping
-	# probe_failed would conflate two different conditions -- the mistake
-	# ecosystem-449.39 records against librarian.scan.complete. The detached
-	# probe's onlooker.currency.checked is the record instead.
-	if [[ -f "$ONLOOKER_EVENTS_LOG" ]]; then
-		! grep -q '"skip_reason":"probe_failed"' "$ONLOOKER_EVENTS_LOG" || return 1
-	fi
+	# The deferral now has its own skip_reason (ecosystem-449.60). It used to
+	# emit NOTHING here rather than emit something false, which was honest but
+	# lossy: this is the surfacer's most common path, so the bus could not
+	# answer "how often does a session start with a stale answer?" -- the
+	# question the whole epic is about.
+	grep -q '"skip_reason":"refresh_deferred"' "$ONLOOKER_EVENTS_LOG" || return 1
+	# Still NOT probe_failed. The probe has not failed, it has not finished,
+	# and conflating those is the mistake ecosystem-449.39 records against
+	# librarian.scan.complete.
+	! grep -q '"skip_reason":"probe_failed"' "$ONLOOKER_EVENTS_LOG" || return 1
+	[ "$status" -eq 0 ]
+}
+
+@test "a deferred refresh carries the age of the answer it could not replace" {
+	# Without the age, a deferral is indistinguishable from one that deferred
+	# on a nearly-fresh cache. The age is what makes the skip readable.
+	_seed_aged 2 '[]'
+	_run_hook
+	local age
+	age=$(grep '"skip_reason":"refresh_deferred"' "$ONLOOKER_EVENTS_LOG" \
+		| tail -n 1 | jq -r '.payload.answer_age_seconds // empty')
+	[[ -n "$age" ]] || return 1
+	# Two days, with slack for clock and runtime.
+	[[ "$age" -gt 100000 ]] || return 1
+	[ "$status" -eq 0 ]
+}
+
+@test "a deferral with no cache at all reports no age rather than a zero" {
+	# No cache means no prior answer, not an answer of age zero. The age is
+	# optional precisely so this case can stay silent about it instead of
+	# asserting a measurement it does not have.
+	_run_hook
+	grep -q '"skip_reason":"refresh_deferred"' "$ONLOOKER_EVENTS_LOG" || return 1
+	local line
+	line=$(grep '"skip_reason":"refresh_deferred"' "$ONLOOKER_EVENTS_LOG" | tail -n 1)
+	[[ "$(printf '%s' "$line" | jq -r '.payload.answer_age_seconds // "absent"')" == "absent" ]] \
+		|| return 1
 	[ "$status" -eq 0 ]
 }
 
@@ -141,10 +170,26 @@ _break_node() {
 # a sentinel does distinguish them, and does it without racing.
 _stub_node_sentinel() {
 	mkdir -p "$SENTINEL_BIN"
+	local real_node
+	real_node=$(command -v node)
+	# The sentinel must mark a PROBE, not any node call. The surfacer also
+	# shells out to node to emit its events (the refresh_deferred skip added in
+	# ecosystem-449.60), so a stub that touches the sentinel unconditionally
+	# reports a spawn that never happened -- and worse, makes the positive test
+	# below pass off the emit rather than off a probe. Discriminate on argv:
+	# the probe runs check-plugin-installs, emission runs onlooker-event. Real
+	# node handles everything else so the event log stays truthful.
 	cat >"${SENTINEL_BIN}/node" <<STUBEOF
 #!/usr/bin/env bash
-touch "${SENTINEL}"
-printf '%s' '{"status":"ok","findings":[]}'
+case "\$*" in
+	*check-plugin-installs*)
+		touch "${SENTINEL}"
+		printf '%s' '{"status":"ok","findings":[]}'
+		;;
+	*)
+		exec "${real_node}" "\$@"
+		;;
+esac
 STUBEOF
 	chmod +x "${SENTINEL_BIN}/node"
 }
