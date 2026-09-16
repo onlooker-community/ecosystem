@@ -45,9 +45,21 @@ The bead was filed 2026-09-03 and marked BLOCKED on a schema release, because
 `@onlooker-community/schema` is an external dependency and a new event type
 cannot be registered from this repo.
 
-That blocker is gone. `onlooker.watch.unmatched` ships in schema **2.21.0**
-(`dist/event-types.js`, `schemas/payload/plugins-ops.json`), and `package.json`
-already declares `^2.21.0`. The bead's own open design question — a per-plugin
+That blocker is gone, and it has been gone longer than the bead knows. The
+timeline is worth stating precisely, because "the type exists" and "the type is
+usable" were two different dates:
+
+- **2.18.0** — `onlooker.watch.unmatched` is *defined*. The `test/bus-coverage.json`
+  exclusion entry records this, along with the instruction to move it to
+  `expected` when a plugin starts emitting it.
+- **2.20.0** — `ONLOOKER_WATCH_UNMATCHED` is *re-exported from `index.ts`*. Until
+  then it was defined but unreachable by consumers, which is why the bead stayed
+  blocked through two releases that nominally contained it.
+- **2.21.0** — the installed and declared version (`package.json` has `^2.21.0`).
+  Verified reachable: one export in `dist/index.js`, and the payload in
+  `schemas/payload/plugins-ops.json`.
+
+No schema PR is needed. The bead's own open design question — a per-plugin
 `echo.watch.unmatched` versus a substrate-level signal covering the class — was
 answered by what shipped: the registered type is `onlooker.watch.unmatched`, the
 generalized form, carrying the plugin as a payload field.
@@ -196,6 +208,12 @@ where nothing changed this turn, and line 117 returns before the patterns are ev
 loaded. This requires hoisting the pattern load from line 123 above that gate, and
 retires the TODO comment at line 162.
 
+It also sits above the `command -v claude` guard at line 87. That guard returns
+before line 117, so a check placed only below it would never run in a repository
+without `claude` on `PATH` — including the whole bats suite. The check needs git
+and jq, not `claude`, and someone whose tooling is incomplete still deserves to
+learn their config is dead.
+
 Root is `WORKTREE_ROOT`, not `REPO_ROOT` — the tree the session is actually in,
 per `ecosystem-449.37`. Echo already draws this distinction at line 79 for its
 changed-file scan.
@@ -204,6 +222,13 @@ changed-file scan.
 reports even when the audit is throttled, lock-contended, or timing out. Those are
 the conditions under which a dead config is most likely to go unnoticed: the audit
 has completed zero times since 2026-09-07.
+
+Root is `REPO_ROOT` from `cartographer_project_repo_root`, which is what the hook
+already computes and what `run-audit.sh` passes down to the matcher. Note this is
+*not* the same choice echo makes, and the difference is not an inconsistency to
+tidy up: the governing rule is that each check mirrors its own plugin's matcher,
+and cartographer has no worktree-root helper because its matcher never used one.
+Changing cartographer's root belongs to `ecosystem-449.37`, not here.
 
 ## Testing
 
@@ -227,9 +252,11 @@ Two specific hazards:
 - **The suite runs parallel (`-j 4`).** Tests must not assume the marker directory
   starts empty beyond their own temp home.
 
-Triage `onlooker.watch.unmatched` into `test/bus-coverage.json` as `expected`
-(CLAUDE.md item 6); `npm run test:bus` fails on any registered type appearing in
-neither list.
+`onlooker.watch.unmatched` is already triaged in `test/bus-coverage.json`, under
+`excluded`, with the reason "no plugin emits it yet … move to expected with that
+change, not before." This work is that change, so the entry **moves** from
+`excluded` to `expected` rather than being added (CLAUDE.md item 6). `npm run
+test:bus` passes on the branch today at 622 emissions and must still pass after.
 
 ## Risks
 
