@@ -107,7 +107,8 @@ mode it would be a constant 0: under `nullglob` an unmatched glob produces zero
 loop iterations, so the counter reads 0 in precisely the case that emits. A field
 that looks like a measurement and never varies is worse than an absent one — the
 same reasoning that made compass's `confidence` null rather than 0 in
-`ecosystem-449.45`. In `files` mode it counts real tracked files and is sent.
+`ecosystem-449.45`. In `files` mode it counts the real candidate set — tracked
+plus untracked-but-not-ignored — and is sent.
 
 ## Shared helper
 
@@ -221,7 +222,8 @@ match, so a repository that is fixed and later re-broken emits again.
   the suite's temp home is respected.
 
 Steady-state cost is one `stat`. The scan runs only when the marker says the
-check is due: 653 tracked files and `git ls-files` at 6ms in this repository, so a
+check is due: ~653 tracked files plus the untracked-but-not-ignored ones, two
+`git ls-files` invocations at ~6ms each in this repository, so a
 due check costs well under 50ms.
 
 Because the scan is gated behind the marker, clearing lags by up to one TTL. A
