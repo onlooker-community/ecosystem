@@ -180,3 +180,95 @@ _onlooker_watch_scan_dirs() {
 	[[ "$had_nullglob" -eq 0 ]] && shopt -u nullglob
 	printf '%s %s' "$matched" "$scanned"
 }
+
+# Public entry point. Returns 0 on every path, including every failure.
+#
+# An empty pattern list emits nothing: a plugin configured to watch nothing is
+# a different condition from a plugin whose patterns cannot match, and this
+# event type only speaks to the second.
+onlooker_watch_unmatched_check() {
+	local plugin="" config_key="" root="" project_key="" mode=""
+	local patterns_json="" emit_fn="" ttl_hours="$_ONLOOKER_WATCH_TTL_HOURS_DEFAULT"
+
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+			--plugin)        plugin="${2:-}";        shift 2 ;;
+			--config-key)    config_key="${2:-}";    shift 2 ;;
+			--root)          root="${2:-}";          shift 2 ;;
+			--project-key)   project_key="${2:-}";   shift 2 ;;
+			--mode)          mode="${2:-}";          shift 2 ;;
+			--patterns-json) patterns_json="${2:-}"; shift 2 ;;
+			--emit-fn)       emit_fn="${2:-}";       shift 2 ;;
+			--ttl-hours)     ttl_hours="${2:-168}";  shift 2 ;;
+			*) shift ;;
+		esac
+	done
+
+	[[ -z "$plugin" || -z "$config_key" || -z "$root" ]] && return 0
+	[[ -z "$project_key" || -z "$mode" || -z "$patterns_json" ]] && return 0
+	[[ -z "$emit_fn" ]] && return 0
+	command -v jq >/dev/null 2>&1 || return 0
+
+	local count
+	count=$(printf '%s' "$patterns_json" | jq -r 'length' 2>/dev/null) || return 0
+	[[ -z "$count" || "$count" == "null" || "$count" -eq 0 ]] && return 0
+
+	[[ "$mode" == "files" || "$mode" == "dirs" ]] || return 0
+
+	# MARKER FIRST, THEN SCAN. This ordering is the cost contract: in steady
+	# state the whole check is one stat, and the scan only runs when the answer
+	# could change something. Scanning first would be simpler and would keep the
+	# marker exact, but it would pay the scan on every Stop forever to tidy a
+	# file no consumer reads.
+	#
+	# The price is that clearing lags by up to one TTL: a repository whose
+	# patterns start matching again keeps its marker until the next due check
+	# observes the match. That is harmless -- the marker only ever suppresses
+	# emission, and a matching repository has nothing to emit.
+	local marker hash
+	marker=$(onlooker_watch_marker_path "$project_key" "$config_key")
+	hash=$(onlooker_watch_patterns_hash "$patterns_json") || return 0
+	onlooker_watch_marker_due "$marker" "$hash" "$ttl_hours" || return 0
+
+	local scan
+	case "$mode" in
+		files) scan=$(_onlooker_watch_scan_files "$root" "$patterns_json") ;;
+		dirs)  scan=$(_onlooker_watch_scan_dirs  "$root" "$patterns_json") ;;
+	esac
+
+	local matched="${scan%% *}" scanned="${scan##* }"
+
+	# A match is the recovery edge: drop the marker so a later re-break speaks.
+	if [[ "$matched" != "0" ]]; then
+		onlooker_watch_marker_clear "$marker"
+		return 0
+	fi
+
+	# candidates_scanned is omitted in dirs mode on purpose. Under nullglob an
+	# unmatched glob produces zero loop iterations, so the counter is always 0
+	# exactly when we emit -- a number that looks like a measurement and is not
+	# one. The schema makes the field optional; absent beats a constant zero,
+	# the same reasoning that made compass's confidence null rather than 0
+	# (ecosystem-449.45). In files mode it counts real tracked files and stays.
+	local payload
+	if [[ "$mode" == "files" ]]; then
+		payload=$(jq -cn \
+			--arg p "$plugin" --arg k "$config_key" --arg pk "$project_key" \
+			--argjson pat "$patterns_json" --argjson n "$scanned" \
+			'{plugin: $p, config_key: $k, patterns: $pat,
+			  candidates_scanned: $n, project_key: $pk}' 2>/dev/null) || return 0
+	else
+		payload=$(jq -cn \
+			--arg p "$plugin" --arg k "$config_key" --arg pk "$project_key" \
+			--argjson pat "$patterns_json" \
+			'{plugin: $p, config_key: $k, patterns: $pat,
+			  project_key: $pk}' 2>/dev/null) || return 0
+	fi
+
+	if command -v "$emit_fn" >/dev/null 2>&1 || declare -F "$emit_fn" >/dev/null 2>&1; then
+		"$emit_fn" "onlooker.watch.unmatched" "$payload" || true
+		onlooker_watch_marker_write "$marker" "$hash" || true
+	fi
+
+	return 0
+}

@@ -143,3 +143,119 @@ _make_repo() {
 	result=$(_onlooker_watch_scan_dirs "$SPACED" '["plugins/*/"]')
 	[[ "${result%% *}" == "1" ]]
 }
+
+_fake_emit() {
+	printf '%s\t%s\n' "$1" "$2" >>"${BATS_TEST_TMPDIR}/emitted"
+}
+
+_emitted_count() {
+	[[ -f "${BATS_TEST_TMPDIR}/emitted" ]] && wc -l <"${BATS_TEST_TMPDIR}/emitted" | tr -d ' ' || printf '0'
+}
+
+_check() {
+	onlooker_watch_unmatched_check \
+		--plugin echo --config-key echo.watch_paths \
+		--root "$FIXTURE" --project-key "proj123" \
+		--mode files --patterns-json "$1" \
+		--emit-fn _fake_emit "${@:2}"
+}
+
+@test "emits when patterns match nothing" {
+	_make_repo
+	_check '["nope/*.md"]'
+	[[ "$(_emitted_count)" == "1" ]]
+	grep -q 'onlooker.watch.unmatched' "${BATS_TEST_TMPDIR}/emitted"
+}
+
+@test "the payload carries exactly the fields the schema allows" {
+	_make_repo
+	_check '["nope/*.md"]'
+	payload=$(cut -f2 <"${BATS_TEST_TMPDIR}/emitted")
+	printf '%s' "$payload" | jq -e '
+		.plugin == "echo"
+		and .config_key == "echo.watch_paths"
+		and .patterns == ["nope/*.md"]
+		and .project_key == "proj123"
+		and (.candidates_scanned | type) == "number"
+		and ([keys[]] | sort) == ["candidates_scanned","config_key","patterns","plugin","project_key"]
+	' >/dev/null
+}
+
+@test "does not emit when patterns match" {
+	_make_repo
+	_check '["plugins/*/agents/*.md"]'
+	[[ "$(_emitted_count)" == "0" ]]
+}
+
+@test "a match clears an existing marker" {
+	_make_repo
+	marker=$(onlooker_watch_marker_path "proj123" "echo.watch_paths")
+	onlooker_watch_marker_write "$marker" "stale-hash-xx"
+	_check '["plugins/*/agents/*.md"]'
+	[[ ! -f "$marker" ]]
+}
+
+# MUTATION TEST. A test asserting "no second event" passes just as well when
+# the emitter is broken outright, so the first emit is asserted in the same
+# test. Break the suppression and this must fail, or it is decoration.
+@test "a second call is suppressed by the marker but the first still emitted" {
+	_make_repo
+	_check '["nope/*.md"]'
+	[[ "$(_emitted_count)" == "1" ]]
+	_check '["nope/*.md"]'
+	[[ "$(_emitted_count)" == "1" ]]
+}
+
+# THE COST CONTRACT. When the marker says the check is not due, the scanner must
+# not run at all -- that is what makes the steady state one stat on a hook that
+# fires on every Stop. Proven by its side effect: a matching repo would clear the
+# marker if it were scanned, so the marker surviving proves no scan happened.
+@test "a marker that is not due suppresses the scan entirely" {
+	_make_repo
+	marker=$(onlooker_watch_marker_path "proj123" "echo.watch_paths")
+	hash=$(onlooker_watch_patterns_hash '["plugins/*/agents/*.md"]')
+	onlooker_watch_marker_write "$marker" "$hash"
+	_check '["plugins/*/agents/*.md"]'
+	[[ -f "$marker" ]]
+	[[ "$(_emitted_count)" == "0" ]]
+}
+
+@test "a changed pattern set re-arms the signal" {
+	_make_repo
+	_check '["nope/*.md"]'
+	_check '["also-nope/*.md"]'
+	[[ "$(_emitted_count)" == "2" ]]
+}
+
+@test "an expired marker re-arms the signal" {
+	_make_repo
+	_check '["nope/*.md"]'
+	marker=$(onlooker_watch_marker_path "proj123" "echo.watch_paths")
+	hash=$(onlooker_watch_patterns_hash '["nope/*.md"]')
+	jq -n --arg h "$hash" --arg t "$(relative_iso_days_ago 8)" \
+		'{patterns_hash: $h, last_emitted: $t}' >"$marker"
+	_check '["nope/*.md"]'
+	[[ "$(_emitted_count)" == "2" ]]
+}
+
+@test "returns 0 and emits nothing when required arguments are missing" {
+	run onlooker_watch_unmatched_check --plugin echo --emit-fn _fake_emit
+	[ "$status" -eq 0 ]
+	[[ "$(_emitted_count)" == "0" ]]
+}
+
+@test "returns 0 when the emit function does not exist" {
+	_make_repo
+	run onlooker_watch_unmatched_check \
+		--plugin echo --config-key echo.watch_paths \
+		--root "$FIXTURE" --project-key "proj123" \
+		--mode files --patterns-json '["nope/*.md"]' \
+		--emit-fn no_such_function
+	[ "$status" -eq 0 ]
+}
+
+@test "an empty pattern list emits nothing" {
+	_make_repo
+	_check '[]'
+	[[ "$(_emitted_count)" == "0" ]]
+}
