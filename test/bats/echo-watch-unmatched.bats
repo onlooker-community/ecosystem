@@ -87,7 +87,7 @@ _path_without_claude() {
 	restricted_path=$(_path_without_claude)
 	run env PATH="$restricted_path" command -v claude
 	[ "$status" -ne 0 ]
-	run bash -c "PATH='$restricted_path' printf '%s' '$(jq -cn --arg cwd "$REPO" \
+	run env PATH="$restricted_path" bash -c "printf '%s' '$(jq -cn --arg cwd "$REPO" \
 		'{cwd: $cwd, session_id: "sess-watch", hook_event_name: "Stop"}')' | '$HOOK'"
 	grep -q '"event_type":"onlooker.watch.unmatched"' "$ONLOOKER_EVENTS_LOG"
 }
