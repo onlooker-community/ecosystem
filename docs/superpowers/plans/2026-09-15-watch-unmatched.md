@@ -160,10 +160,14 @@ Create `scripts/lib/watch-unmatched.sh`:
 # untracked and gitignored paths too. One scanner would disagree with one of
 # them and invent misconfigurations that are not there.
 #
-# This lib is VENDORED into every plugin by scripts/sync-shared-libs.sh: an
-# installed plugin publishes rooted at ./plugins/<name> and has no ecosystem
-# checkout above it, so a repo-root path resolves in this checkout and nowhere
-# else (ecosystem-ber).
+# Task 5 vendors this lib into echo and cartographer -- and only those two --
+# via ON_DEMAND_LIBS in scripts/sync-shared-libs.sh. Not SHARED_LIBS: those land
+# in all 16 plugins because every hook uses them, and a copy nobody sources is
+# noise that still has to be kept in sync.
+#
+# Vendored rather than shared at all because an installed plugin publishes rooted
+# at ./plugins/<name> and has no ecosystem checkout above it, so a repo-root path
+# resolves in this checkout and nowhere else (ecosystem-ber).
 
 # Default re-arm window. A deliberate constant, not config: pure edge-triggering
 # makes a misconfiguration emitted once on day 1 invisible to a query over the
@@ -261,7 +265,7 @@ onlooker_watch_marker_clear() {
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `ONLOOKER_VALIDATE=1 bats test/bats/watch-unmatched.bats`
-Expected: PASS, 7 tests
+Expected: PASS, 9 tests
 
 - [ ] **Step 5: Commit**
 
@@ -373,7 +377,7 @@ _onlooker_watch_scan_files() {
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `ONLOOKER_VALIDATE=1 bats test/bats/watch-unmatched.bats`
-Expected: PASS, 11 tests
+Expected: PASS, 13 tests
 
 - [ ] **Step 5: Commit**
 
@@ -481,7 +485,7 @@ _onlooker_watch_scan_dirs() {
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `ONLOOKER_VALIDATE=1 bats test/bats/watch-unmatched.bats`
-Expected: PASS, 16 tests
+Expected: PASS, 18 tests
 
 - [ ] **Step 5: Commit**
 
@@ -727,7 +731,7 @@ onlooker_watch_unmatched_check() {
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `ONLOOKER_VALIDATE=1 bats test/bats/watch-unmatched.bats`
-Expected: PASS, 27 tests
+Expected: PASS, 29 tests
 
 - [ ] **Step 5: Verify the mutation test actually bites**
 
