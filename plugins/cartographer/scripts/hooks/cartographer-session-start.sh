@@ -30,6 +30,8 @@ hook_health_register "cartographer-session-start"
 source "$PLUGIN_ROOT/scripts/lib/cartographer-config.sh"
 source "$PLUGIN_ROOT/scripts/lib/cartographer-project-key.sh"
 source "$PLUGIN_ROOT/scripts/lib/cartographer-lock.sh"
+source "$PLUGIN_ROOT/scripts/lib/cartographer-events.sh"
+source "$PLUGIN_ROOT/scripts/lib/watch-unmatched.sh"
 
 # Parse hook input
 HOOK_INPUT=$(cat)
@@ -52,6 +54,21 @@ mkdir -p "$CARTOGRAPHER_DIR"
 
 LOCK_FILE="$CARTOGRAPHER_DIR/audit.lock"
 STATE_FILE="$CARTOGRAPHER_DIR/last_audit_at"
+
+# Before the interval gate on purpose. Whether these globs can match anything is
+# a property of repo plus config, and a throttled or lock-contended audit is
+# exactly when a dead config would otherwise stay invisible (ecosystem-449.21).
+#
+# REPO_ROOT, not a worktree root: this must mirror the root run-audit.sh hands
+# to the matcher, or the check disagrees with the thing it describes.
+onlooker_watch_unmatched_check \
+	--plugin cartographer \
+	--config-key cartographer.undocumented_entity.globs \
+	--root "$REPO_ROOT" \
+	--project-key "$PROJECT_KEY" \
+	--mode dirs \
+	--patterns-json "$(cartographer_config_undocumented_globs)" \
+	--emit-fn cartographer_emit_event
 
 # Determine if an audit is due
 INTERVAL_HOURS=$(cartographer_config_audit_interval_hours)

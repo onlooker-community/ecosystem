@@ -57,6 +57,8 @@ source "${PLUGIN_ROOT}/scripts/lib/echo-project-key.sh"
 source "${PLUGIN_ROOT}/scripts/lib/echo-ulid.sh"
 # shellcheck source=../lib/echo-events.sh
 CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" source "${PLUGIN_ROOT}/scripts/lib/echo-events.sh"
+# shellcheck source=../lib/watch-unmatched.sh
+source "${PLUGIN_ROOT}/scripts/lib/watch-unmatched.sh"
 
 INPUT=$(cat)
 hook_health_context "$INPUT"
@@ -83,6 +85,40 @@ CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" echo_config_load "$CWD"
 
 PROJECT_KEY=$(echo_project_key "$CWD")
 [[ -z "$PROJECT_KEY" ]] && _done
+
+# Load watch and exclude patterns (bash 3 compatible — no mapfile). Hoisted up
+# from beside the changed-file filter below: the watch-unmatched check right
+# after this needs the patterns loaded before either of the two early returns
+# that follow (the claude guard just below, and the ALL_CHANGED gate further
+# down) can hide the signal it exists to raise.
+WATCH_PATTERNS=()
+while IFS= read -r _pat; do
+	[[ -n "$_pat" ]] && WATCH_PATTERNS+=("$_pat")
+done < <(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" echo_config_watch_paths)
+
+EXCLUDE_PATTERNS=()
+while IFS= read -r _pat; do
+	[[ -n "$_pat" ]] && EXCLUDE_PATTERNS+=("$_pat")
+done < <(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" echo_config_exclude_paths)
+
+# Whether watch_paths can match anything in this repo AT ALL is a property of
+# repo plus config, not of this turn. Hence its position: above the claude guard
+# immediately below and the changed-files gate further down, both of which
+# return early in exactly the quiet, tool-less repos where a dead watcher is
+# least likely to be noticed (ecosystem-449.21). The check needs only git and
+# jq, and the helper guards on jq itself.
+WATCH_PATTERNS_JSON=$(printf '%s\n' "${WATCH_PATTERNS[@]}" \
+	| jq -Rsc 'split("\n") | map(select(length > 0))' 2>/dev/null) \
+	|| WATCH_PATTERNS_JSON="[]"
+
+onlooker_watch_unmatched_check \
+	--plugin echo \
+	--config-key echo.watch_paths \
+	--root "$WORKTREE_ROOT" \
+	--project-key "$PROJECT_KEY" \
+	--mode files \
+	--patterns-json "$WATCH_PATTERNS_JSON" \
+	--emit-fn echo_emit_event
 
 command -v claude >/dev/null 2>&1 || _done
 command -v jq >/dev/null 2>&1 || _done
@@ -119,17 +155,6 @@ if [[ -z "$ALL_CHANGED" ]]; then
 	_done
 fi
 
-# Load watch and exclude patterns (bash 3 compatible — no mapfile).
-WATCH_PATTERNS=()
-while IFS= read -r _pat; do
-	[[ -n "$_pat" ]] && WATCH_PATTERNS+=("$_pat")
-done < <(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" echo_config_watch_paths)
-
-EXCLUDE_PATTERNS=()
-while IFS= read -r _pat; do
-	[[ -n "$_pat" ]] && EXCLUDE_PATTERNS+=("$_pat")
-done < <(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" echo_config_exclude_paths)
-
 # Filter changed files: must match at least one watch pattern AND no exclude pattern.
 WATCHED_CHANGED=()
 while IFS= read -r f; do
@@ -161,7 +186,8 @@ done <<< "$ALL_CHANGED"
 if [[ "${#WATCHED_CHANGED[@]}" -eq 0 ]]; then
 	# Dirty files existed; none of them matched watch_paths. Distinct from
 	# no_changes, and distinct from a misconfigured watcher watching nothing
-	# (ecosystem-449.21), which this cannot yet tell apart.
+	# (ecosystem-449.21) -- that condition is reported separately, above, as
+	# onlooker.watch.unmatched.
 	_skip_suite "no_watched_changes" 0
 	_done
 fi
