@@ -15,10 +15,11 @@
 # untracked and gitignored paths too. One scanner would disagree with one of
 # them and invent misconfigurations that are not there.
 #
-# This lib is VENDORED into every plugin by scripts/sync-shared-libs.sh: an
-# installed plugin publishes rooted at ./plugins/<name> and has no ecosystem
-# checkout above it, so a repo-root path resolves in this checkout and nowhere
-# else (ecosystem-ber).
+# This lib will be VENDORED via scripts/sync-shared-libs.sh's ON_DEMAND_LIBS
+# (only echo and cartographer source it, not every plugin -- SHARED_LIBS would
+# mint copies nothing reads): an installed plugin publishes rooted at
+# ./plugins/<name> and has no ecosystem checkout above it, so a repo-root path
+# resolves in this checkout and nowhere else (ecosystem-ber).
 
 # Default re-arm window. A deliberate constant, not config: pure edge-triggering
 # makes a misconfiguration emitted once on day 1 invisible to a query over the
