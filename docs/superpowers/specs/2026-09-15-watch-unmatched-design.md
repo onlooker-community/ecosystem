@@ -102,13 +102,31 @@ generalized form, carrying the plugin as a payload field.
 There is no mode field and no timestamp field — the envelope carries the latter.
 Adding a third plugin requires widening the enum, which requires a schema release.
 
+**`candidates_scanned` is omitted in `dirs` mode.** It is optional, and in that
+mode it would be a constant 0: under `nullglob` an unmatched glob produces zero
+loop iterations, so the counter reads 0 in precisely the case that emits. A field
+that looks like a measurement and never varies is worse than an absent one — the
+same reasoning that made compass's `confidence` null rather than 0 in
+`ecosystem-449.45`. In `files` mode it counts real tracked files and is sent.
+
 ## Shared helper
 
-New canonical `scripts/lib/watch-unmatched.sh`, added to `SHARED_LIBS` in
-`scripts/sync-shared-libs.sh`. That propagates it into `plugins/echo/scripts/lib/`
-and `plugins/cartographer/scripts/lib/`, and enrolls it in
-`shared-lib-vendoring.bats` automatically, since that test reads the list straight
-out of the sync script.
+New canonical `scripts/lib/watch-unmatched.sh`, added to **`ON_DEMAND_LIBS`** in
+`scripts/sync-shared-libs.sh` — not `SHARED_LIBS`.
+
+The sync script draws that line itself: `SHARED_LIBS` "land in every plugin,
+because every hook uses them"; `ON_DEMAND_LIBS` "land only where a copy already
+exists, because a copy nobody sources is noise that still has to be kept in
+sync." Only echo and cartographer source this lib, so `SHARED_LIBS` would mint
+fourteen copies nothing reads. `portable-lock.sh` sits in 5 of 16 plugins on
+exactly this basis.
+
+The cost is that adoption is manual: on-demand libs are never created by the
+sync, only refreshed where already vendored, so the first copy into each of the
+two plugins is a deliberate `cp`. Drift afterward is caught by
+`shared-lib-vendoring.bats`'s `the sync script reports no drift` case, which runs
+`sync-shared-libs.sh --check`. That file's per-plugin assertions enumerate
+`SHARED_LIBS` only, and correctly do not apply here.
 
 The lib resolves its own siblings from `${BASH_SOURCE[0]}` — never from a
 caller-supplied `$PLUGIN_ROOT`, never through a path that climbs to the repo root

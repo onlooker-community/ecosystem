@@ -15,10 +15,10 @@
 ## Global Constraints
 
 - **Bash only.** No Python or Node entry points in hooks; shelling out to `node` for event emission or `python3` for date math is fine (CLAUDE.md Conventions).
-- **Never hardcode `~/.onlooker`.** Always `${ONLOOKER_DIR:-}` so the suite's temp home is respected (CLAUDE.md item 3).
+- **Never hardcode `~/.onlooker` as the only source.** Use `${ONLOOKER_DIR:-$HOME/.onlooker}` so the env var always wins where set and the suite's temp home is respected (CLAUDE.md item 3). The fallback is required: echo calls this lib above the line where its own hook establishes `ONLOOKER_BASE`.
 - **Fail soft.** Every public function returns 0 on every path, including failure. A plugin must not block a session it was not invited to (CLAUDE.md item 7).
 - **Self-locating libs.** Resolve siblings from `${BASH_SOURCE[0]}`, never from a caller-supplied `$PLUGIN_ROOT`, never via a path that climbs to the repo root (CLAUDE.md item 8).
-- **Event type:** `onlooker.watch.unmatched`. Payload is exactly `plugin`, `config_key`, `patterns`, `candidates_scanned`, `project_key`. `additionalProperties: false` — any sixth field fails validation under `ONLOOKER_VALIDATE=1`.
+- **Event type:** `onlooker.watch.unmatched`. Payload vocabulary is exactly `plugin`, `config_key`, `patterns`, `candidates_scanned`, `project_key`; `additionalProperties: false`, so any sixth field fails validation under `ONLOOKER_VALIDATE=1`. Required: `plugin`, `config_key`, `patterns`. `candidates_scanned` is optional and is **omitted in dirs mode** — under nullglob it would be a constant 0 there.
 - **`plugin` enum admits only `echo` and `cartographer`.** A third needs a schema release.
 - **American English** in comments, identifiers, and commit messages.
 - **Commits route through `/commit`.** Never hand-craft `git commit -m`.
@@ -30,10 +30,10 @@
 | File | Responsibility |
 |---|---|
 | `scripts/lib/watch-unmatched.sh` (create) | Canonical lib: scanners, marker, emit decision |
-| `plugins/echo/scripts/lib/watch-unmatched.sh` (generated) | Vendored copy, written by `sync-shared-libs.sh` |
-| `plugins/cartographer/scripts/lib/watch-unmatched.sh` (generated) | Vendored copy, written by `sync-shared-libs.sh` |
-| `scripts/sync-shared-libs.sh:29` (modify) | Add the lib to `SHARED_LIBS` |
-| `plugins/echo/scripts/hooks/echo-stop-gate.sh` (modify) | Call site; hoist pattern load above the `ALL_CHANGED` gate |
+| `plugins/echo/scripts/lib/watch-unmatched.sh` (create) | Vendored copy, seeded by hand then refreshed by `sync-shared-libs.sh` |
+| `plugins/cartographer/scripts/lib/watch-unmatched.sh` (create) | Vendored copy, seeded by hand then refreshed by `sync-shared-libs.sh` |
+| `scripts/sync-shared-libs.sh:30` (modify) | Add the lib to `ON_DEMAND_LIBS` |
+| `plugins/echo/scripts/hooks/echo-stop-gate.sh` (modify) | Call site; hoist pattern load above the `claude` guard at line 87 |
 | `plugins/cartographer/scripts/hooks/cartographer-session-start.sh` (modify) | Call site, before the audit-interval gate |
 | `test/bats/watch-unmatched.bats` (create) | Unit coverage for the lib |
 | `test/bats/echo-watch-unmatched.bats` (create) | Echo call-site coverage — no `echo-stop-gate.bats` exists to extend |
@@ -694,12 +694,26 @@ onlooker_watch_unmatched_check() {
 		return 0
 	fi
 
+	# candidates_scanned is omitted in dirs mode on purpose. Under nullglob an
+	# unmatched glob produces zero loop iterations, so the counter is always 0
+	# exactly when we emit -- a number that looks like a measurement and is not
+	# one. The schema makes the field optional; absent beats a constant zero,
+	# the same reasoning that made compass's confidence null rather than 0
+	# (ecosystem-449.45). In files mode it counts real tracked files and stays.
 	local payload
-	payload=$(jq -cn \
-		--arg p "$plugin" --arg k "$config_key" --arg pk "$project_key" \
-		--argjson pat "$patterns_json" --argjson n "$scanned" \
-		'{plugin: $p, config_key: $k, patterns: $pat,
-		  candidates_scanned: $n, project_key: $pk}' 2>/dev/null) || return 0
+	if [[ "$mode" == "files" ]]; then
+		payload=$(jq -cn \
+			--arg p "$plugin" --arg k "$config_key" --arg pk "$project_key" \
+			--argjson pat "$patterns_json" --argjson n "$scanned" \
+			'{plugin: $p, config_key: $k, patterns: $pat,
+			  candidates_scanned: $n, project_key: $pk}' 2>/dev/null) || return 0
+	else
+		payload=$(jq -cn \
+			--arg p "$plugin" --arg k "$config_key" --arg pk "$project_key" \
+			--argjson pat "$patterns_json" \
+			'{plugin: $p, config_key: $k, patterns: $pat,
+			  project_key: $pk}' 2>/dev/null) || return 0
+	fi
 
 	if command -v "$emit_fn" >/dev/null 2>&1 || declare -F "$emit_fn" >/dev/null 2>&1; then
 		"$emit_fn" "onlooker.watch.unmatched" "$payload" || true
@@ -728,43 +742,56 @@ Use `/commit`, staging `scripts/lib/watch-unmatched.sh` and `test/bats/watch-unm
 
 ---
 
-### Task 5: Vendor the lib into both plugins
+### Task 5: Vendor the lib into echo and cartographer
 
 **Files:**
-- Modify: `scripts/sync-shared-libs.sh:29`
-- Generated: `plugins/*/scripts/lib/watch-unmatched.sh`
+- Modify: `scripts/sync-shared-libs.sh:30`
+- Create: `plugins/echo/scripts/lib/watch-unmatched.sh`, `plugins/cartographer/scripts/lib/watch-unmatched.sh`
 
 **Interfaces:**
 - Consumes: the finished lib from Task 4
-- Produces: a vendored copy in every plugin, so hooks can source it from `$PLUGIN_ROOT/scripts/lib/`
+- Produces: a vendored copy in echo and cartographer only, so their hooks can source it from `$PLUGIN_ROOT/scripts/lib/`
 
-- [ ] **Step 1: Add the lib to `SHARED_LIBS`**
+**Policy note:** this lib is an **on-demand** lib, not a shared one. `sync-shared-libs.sh` documents the split: `SHARED_LIBS` "land in every plugin, because every hook uses them"; `ON_DEMAND_LIBS` "land only where a copy already exists, because a copy nobody sources is noise that still has to be kept in sync." Only echo and cartographer source this one, so putting it in `SHARED_LIBS` would create 14 unused copies. `portable-lock.sh` sits in 5 of 16 plugins on exactly this basis.
 
-In `scripts/sync-shared-libs.sh`, change line 29 from:
+- [ ] **Step 1: Add the lib to `ON_DEMAND_LIBS`**
+
+In `scripts/sync-shared-libs.sh`, change line 30 from:
 
 ```bash
-SHARED_LIBS=(config-loader.sh hook-health.sh substrate-resolve.sh)
+ON_DEMAND_LIBS=(portable-lock.sh)
 ```
 
 to:
 
 ```bash
-SHARED_LIBS=(config-loader.sh hook-health.sh substrate-resolve.sh watch-unmatched.sh)
+ON_DEMAND_LIBS=(portable-lock.sh watch-unmatched.sh)
 ```
 
-- [ ] **Step 2: Run the sync**
+Leave line 29 (`SHARED_LIBS`) untouched.
 
-Run: `scripts/sync-shared-libs.sh`
-Expected: writes `watch-unmatched.sh` into every `plugins/*/scripts/lib/`
+- [ ] **Step 2: Seed the two copies, then sync**
+
+On-demand libs are "never created, only refreshed where vendored", so the first copy into each adopting plugin is manual:
+
+```bash
+cp scripts/lib/watch-unmatched.sh plugins/echo/scripts/lib/
+cp scripts/lib/watch-unmatched.sh plugins/cartographer/scripts/lib/
+scripts/sync-shared-libs.sh
+```
+
+Expected: exactly two vendored copies exist. Verify with `ls plugins/*/scripts/lib/watch-unmatched.sh | wc -l` → `2`.
 
 - [ ] **Step 3: Verify no drift and that vendoring coverage picked it up**
 
 Run: `scripts/sync-shared-libs.sh --check && ONLOOKER_VALIDATE=1 bats test/bats/shared-lib-vendoring.bats test/bats/config-lib-self-locating.bats`
-Expected: no drift reported; both bats files PASS. `shared-lib-vendoring.bats` reads `SHARED_LIBS` straight out of the sync script, so the new lib is guarded automatically.
+Expected: no drift reported; both bats files PASS.
+
+Note what does and does not guard this lib. `shared-lib-vendoring.bats` enumerates `SHARED_LIBS` only, so its "every plugin has a vendored copy" assertion correctly does not apply here. Drift between the canonical copy and the two vendored ones is still caught, by that file's `the sync script reports no drift` test, which runs `sync-shared-libs.sh --check` over on-demand libs wherever they exist.
 
 - [ ] **Step 4: Commit**
 
-Use `/commit`, staging `scripts/sync-shared-libs.sh` and every generated `plugins/*/scripts/lib/watch-unmatched.sh`.
+Use `/commit`, staging `scripts/sync-shared-libs.sh` and the two vendored copies.
 
 ---
 
