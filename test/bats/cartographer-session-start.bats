@@ -80,6 +80,18 @@ _run_hook() {
 	! grep -q '"event_type":"onlooker.watch.unmatched"' "$ONLOOKER_EVENTS_LOG"
 }
 
+# A dead config and a feature switched off deliberately look identical to a
+# glob scan -- both match zero paths -- but only one of them is a
+# misconfiguration. run-audit.sh itself declines to run the undocumented_entity
+# phase when it is disabled (run-audit.sh:254); the watch check must decline
+# the same way, or it reports a feature the user turned off as a dead plugin.
+@test "stays quiet when undocumented_entity is disabled, even though its globs match nothing" {
+	_settings '{"cartographer":{"undocumented_entity":{"enabled":false,"globs":["nowhere/*/"]}}}'
+	_run_hook
+	[ "$status" -eq 0 ]
+	! grep -q '"event_type":"onlooker.watch.unmatched"' "$ONLOOKER_EVENTS_LOG"
+}
+
 @test "emits once across two sessions, not once per SessionStart" {
 	_settings '{"cartographer":{"undocumented_entity":{"globs":["nowhere/*/"]}}}'
 	_run_hook
