@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.60.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.59.0...ecosystem-v0.60.0) (2026-09-16)
+
+
+### Features
+
+* **watch-unmatched:** tell an idle plugin from a dead one :mag: ([#331](https://github.com/onlooker-community/ecosystem/issues/331)) ([cfc921b](https://github.com/onlooker-community/ecosystem/commit/cfc921b0dbe0e422310426b7c060615132e568b1))
+
 ## [0.59.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.58.1...ecosystem-v0.59.0) (2026-09-15)
 
 

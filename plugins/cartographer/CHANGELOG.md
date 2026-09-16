@@ -2,6 +2,13 @@
 
 All notable changes to the Cartographer plugin are documented here.
 
+## [0.10.0](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.9.2...cartographer-v0.10.0) (2026-09-16)
+
+
+### Features
+
+* **watch-unmatched:** tell an idle plugin from a dead one :mag: ([#331](https://github.com/onlooker-community/ecosystem/issues/331)) ([cfc921b](https://github.com/onlooker-community/ecosystem/commit/cfc921b0dbe0e422310426b7c060615132e568b1))
+
 ## [0.9.2](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.9.1...cartographer-v0.9.2) (2026-09-13)
 
 
