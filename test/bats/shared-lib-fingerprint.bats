@@ -50,17 +50,30 @@ setup() {
 	[ "$seen" = "1" ]
 }
 
+# Read both lists from the sync script rather than repeating them here, so
+# adding a lib to either array cannot leave this fixture out of date — the
+# same failure mode shared-lib-vendoring.bats's _shared_libs() guards against.
+# sync --check requires a canonical copy of every lib in SHARED_LIBS and
+# ON_DEMAND_LIBS alike before it will run at all, on-demand or not, so the
+# fixture needs the union of both.
+_sync_libs() {
+	sed -n \
+		-e 's/^SHARED_LIBS=(\(.*\))$/\1/p' \
+		-e 's/^ON_DEMAND_LIBS=(\(.*\))$/\1/p' \
+		"${REPO_ROOT}/scripts/sync-shared-libs.sh" | tr ' ' '\n'
+}
+
 @test "editing a lib without restamping is caught by sync --check" {
 	local work="${BATS_TEST_TMPDIR}/repo"
 	mkdir -p "${work}/scripts/lib" "${work}/plugins/demo/scripts/lib"
 	cp "${REPO_ROOT}/scripts/lib-fingerprint.sh" "${work}/scripts/"
 	cp "${REPO_ROOT}/scripts/sync-shared-libs.sh" "${work}/scripts/"
-	# portable-lock.sh is on-demand rather than shared, but sync still requires
-	# the canonical copy to exist before it will run at all.
-	for lib in hook-health.sh config-loader.sh substrate-resolve.sh portable-lock.sh; do
+	local lib
+	while IFS= read -r lib; do
+		[ -n "$lib" ] || continue
 		cp "${REPO_ROOT}/scripts/lib/${lib}" "${work}/scripts/lib/${lib}"
 		cp "${REPO_ROOT}/scripts/lib/${lib}" "${work}/plugins/demo/scripts/lib/${lib}"
-	done
+	done < <(_sync_libs)
 
 	run bash "${work}/scripts/sync-shared-libs.sh" --check
 	[ "$status" -eq 0 ] || return 1
