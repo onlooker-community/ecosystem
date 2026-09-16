@@ -168,21 +168,35 @@ false alarms, which is worse than the silence it replaces.
 
 | mode | mechanism | mirrors | `candidates_scanned` |
 |---|---|---|---|
-| `files` | `git -C "$root" ls-files`, then `[[ "$f" == $pat ]]` | `echo-stop-gate.sh:141` | tracked files listed |
+| `files` | `git -C "$root" ls-files` + `git -C "$root" ls-files --others --exclude-standard`, then `[[ "$f" == $pat ]]` | `echo-stop-gate.sh:135` (`ALL_CHANGED`'s candidate set) | tracked + untracked-but-not-ignored files listed |
 | `dirs` | `for match in "${root}"/$glob` under `nullglob`, then `[[ -e "$match" ]]` | `cartographer-omission.sh:77` | paths examined |
 
 Cartographer expands its globs against the **filesystem**, not against git, so it
-matches untracked and gitignored paths. A `git ls-files`-based check would
-disagree with it. This is the single most important detail in the design: the two
-scanners exist because the two matchers differ, not because the code was not
-factored.
+matches untracked and gitignored paths. Echo's own candidate set (`ALL_CHANGED`,
+`echo-stop-gate.sh:135`) is git-tracked paths plus untracked-but-not-ignored
+paths — it also walks `git ls-files --others --exclude-standard` — so the files
+scanner mirrors that same union, not `git ls-files` alone. This is the single
+most important detail in the design: the two scanners exist because the two
+matchers differ, not because the code was not factored. The two candidate sets
+are coupled: changing `ALL_CHANGED`'s composition in `echo-stop-gate.sh`
+requires changing this scanner to match.
 
 `dirs` mode must save and restore `nullglob`, as `cartographer-omission.sh:67`
 does — the lib is sourced, not run.
 
-Consequence to state plainly: in `files` mode, a pattern matching only untracked
-files reports unmatched. That is correct for this purpose. The repository does not
-durably contain those files, and echo's baselines are keyed to committed content.
+The remaining boundary between the two scanners is gitignored paths: `files`
+mode excludes them (`--exclude-standard` omits anything `.gitignore` covers,
+matching echo's real matcher), while `dirs` mode still sees them, because shell
+glob expansion against the filesystem has no concept of `.gitignore`. That is
+where the files/dirs contrast now lives — not untracked-versus-tracked, which
+the two modes now agree on.
+
+Consequence to state plainly: in `files` mode, a pattern matching only a
+gitignored path reports unmatched. That is correct for this purpose: echo never
+scores that file either, because `ALL_CHANGED` excludes it the same way.
+Echo's baselines are keyed on `echo_content_sha256` of the working-tree file
+(`echo-stop-gate.sh:231`), not on committed content, which is consistent with
+scanning the working tree here rather than a git object.
 
 ## Marker and re-emission
 
