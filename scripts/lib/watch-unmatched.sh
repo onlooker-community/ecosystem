@@ -148,3 +148,35 @@ _onlooker_watch_scan_files() {
 
 	printf '0 %s' "$scanned"
 }
+
+# dirs mode -- mirrors cartographer-omission.sh:77 exactly: shell glob expansion
+# against the FILESYSTEM under nullglob, then an existence test. This sees
+# untracked and gitignored paths, which is why it cannot be folded into the
+# files scanner.
+#
+# nullglob is saved and restored: this lib is sourced, not run.
+_onlooker_watch_scan_dirs() {
+	local root="${1:-}" patterns_json="${2:-[]}"
+	root="${root%/}"
+
+	local had_nullglob=0
+	shopt -q nullglob && had_nullglob=1
+	shopt -s nullglob
+
+	local scanned=0 matched=0 glob match
+	while IFS= read -r glob; do
+		[[ -z "$glob" ]] && continue
+		# shellcheck disable=SC2086 # $glob unquoted on purpose: this is the glob
+		# expansion. "${root}" IS quoted -- a repo path containing a space must
+		# not word-split before the glob expands, or the match silently finds
+		# nothing.
+		for match in "${root}"/$glob; do
+			scanned=$(( scanned + 1 ))
+			[[ -e "$match" ]] || continue
+			matched=1
+		done
+	done < <(printf '%s' "$patterns_json" | jq -r '.[]' 2>/dev/null)
+
+	[[ "$had_nullglob" -eq 0 ]] && shopt -u nullglob
+	printf '%s %s' "$matched" "$scanned"
+}

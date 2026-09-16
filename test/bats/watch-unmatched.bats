@@ -105,3 +105,41 @@ _make_repo() {
 	result=$(_onlooker_watch_scan_files "${BATS_TEST_TMPDIR}/plain" '["*.md"]')
 	[[ "${result%% *}" == "0" ]]
 }
+
+@test "dirs scanner matches a glob that hits a real directory" {
+	_make_repo
+	result=$(_onlooker_watch_scan_dirs "$FIXTURE" '["plugins/*/"]')
+	[[ "${result%% *}" == "1" ]]
+}
+
+@test "dirs scanner reports zero for a glob that hits nothing" {
+	_make_repo
+	result=$(_onlooker_watch_scan_dirs "$FIXTURE" '["nonexistent/*/"]')
+	[[ "${result%% *}" == "0" ]]
+}
+
+# The divergence that forces two scanners rather than one. Cartographer expands
+# against the filesystem, so it sees what git does not. A git ls-files check
+# would call this unmatched and invent a misconfiguration.
+@test "dirs scanner sees untracked directories, unlike the files scanner" {
+	_make_repo
+	mkdir -p "${FIXTURE}/untracked-dir/child"
+	dirs_result=$(_onlooker_watch_scan_dirs "$FIXTURE" '["untracked-dir/*/"]')
+	files_result=$(_onlooker_watch_scan_files "$FIXTURE" '["untracked-dir/*"]')
+	[[ "${dirs_result%% *}" == "1" ]]
+	[[ "${files_result%% *}" == "0" ]]
+}
+
+@test "dirs scanner restores the caller's nullglob setting" {
+	_make_repo
+	shopt -u nullglob
+	_onlooker_watch_scan_dirs "$FIXTURE" '["plugins/*/"]' >/dev/null
+	! shopt -q nullglob
+}
+
+@test "dirs scanner handles a root containing a space" {
+	SPACED="${BATS_TEST_TMPDIR}/has space"
+	mkdir -p "${SPACED}/plugins/demo"
+	result=$(_onlooker_watch_scan_dirs "$SPACED" '["plugins/*/"]')
+	[[ "${result%% *}" == "1" ]]
+}
