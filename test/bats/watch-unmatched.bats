@@ -67,3 +67,41 @@ setup() {
 	[[ ! -f "$MARKER" ]]
 	onlooker_watch_marker_clear "$MARKER"
 }
+
+_make_repo() {
+	FIXTURE="${BATS_TEST_TMPDIR}/fixture"
+	mkdir -p "${FIXTURE}/plugins/demo/agents"
+	git -C "$FIXTURE" init -q
+	git -C "$FIXTURE" config user.email t@example.com
+	git -C "$FIXTURE" config user.name "Test"
+	printf '# agent\n' >"${FIXTURE}/plugins/demo/agents/one.md"
+	printf '# readme\n' >"${FIXTURE}/README.md"
+	git -C "$FIXTURE" add -A
+	git -C "$FIXTURE" commit -qm "fixture"
+}
+
+@test "files scanner matches a pattern that hits a tracked file" {
+	_make_repo
+	result=$(_onlooker_watch_scan_files "$FIXTURE" '["plugins/*/agents/*.md"]')
+	[[ "${result%% *}" == "1" ]]
+}
+
+@test "files scanner reports zero for a pattern that hits nothing" {
+	_make_repo
+	result=$(_onlooker_watch_scan_files "$FIXTURE" '["nope/*/never.md"]')
+	[[ "${result%% *}" == "0" ]]
+	[[ "${result##* }" -ge 2 ]]
+}
+
+@test "files scanner ignores untracked files" {
+	_make_repo
+	printf '# untracked\n' >"${FIXTURE}/plugins/demo/agents/two.txt"
+	result=$(_onlooker_watch_scan_files "$FIXTURE" '["plugins/*/agents/*.txt"]')
+	[[ "${result%% *}" == "0" ]]
+}
+
+@test "files scanner is safe on a non-repo root" {
+	mkdir -p "${BATS_TEST_TMPDIR}/plain"
+	result=$(_onlooker_watch_scan_files "${BATS_TEST_TMPDIR}/plain" '["*.md"]')
+	[[ "${result%% *}" == "0" ]]
+}

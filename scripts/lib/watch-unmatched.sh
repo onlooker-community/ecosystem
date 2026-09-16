@@ -112,3 +112,39 @@ onlooker_watch_marker_clear() {
 	[[ -n "${1:-}" ]] && rm -f "$1" 2>/dev/null
 	return 0
 }
+
+# files mode -- mirrors echo-stop-gate.sh:141 exactly: git-tracked paths tested
+# with bash pattern matching. Tracked only, so a pattern matching only untracked
+# files reports unmatched. That is correct here: the repository does not durably
+# contain those files.
+#
+# Prints "<matched> <scanned>". matched is 0 or 1; the caller only needs the
+# boolean, and returning on the first hit avoids walking the rest of the tree.
+_onlooker_watch_scan_files() {
+	local root="${1:-}" patterns_json="${2:-[]}"
+
+	local patterns=() p
+	while IFS= read -r p; do
+		[[ -n "$p" ]] && patterns+=("$p")
+	done < <(printf '%s' "$patterns_json" | jq -r '.[]' 2>/dev/null)
+
+	if [[ "${#patterns[@]}" -eq 0 ]]; then
+		printf '0 0'
+		return 0
+	fi
+
+	local scanned=0 f pat
+	while IFS= read -r f; do
+		[[ -z "$f" ]] && continue
+		scanned=$(( scanned + 1 ))
+		for pat in "${patterns[@]}"; do
+			# shellcheck disable=SC2053 # unquoted on purpose: this is the glob
+			if [[ "$f" == $pat ]]; then
+				printf '1 %s' "$scanned"
+				return 0
+			fi
+		done
+	done < <(git -C "$root" ls-files 2>/dev/null)
+
+	printf '0 %s' "$scanned"
+}
