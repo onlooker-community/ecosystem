@@ -169,12 +169,12 @@ false alarms, which is worse than the silence it replaces.
 
 | mode | mechanism | mirrors | `candidates_scanned` |
 |---|---|---|---|
-| `files` | `git -C "$root" ls-files` + `git -C "$root" ls-files --others --exclude-standard`, then `[[ "$f" == $pat ]]` | `echo-stop-gate.sh:135` (`ALL_CHANGED`'s candidate set) | tracked + untracked-but-not-ignored files listed |
+| `files` | `git -C "$root" ls-files` + `git -C "$root" ls-files --others --exclude-standard`, then `[[ "$f" == $pat ]]` | `echo-stop-gate.sh:135-136` (`ALL_CHANGED`'s candidate set) | tracked + untracked-but-not-ignored files listed |
 | `dirs` | `for match in "${root}"/$glob` under `nullglob`, then `[[ -e "$match" ]]` | `cartographer-omission.sh:77` | paths examined |
 
 Cartographer expands its globs against the **filesystem**, not against git, so it
 matches untracked and gitignored paths. Echo's own candidate set (`ALL_CHANGED`,
-`echo-stop-gate.sh:135`) is git-tracked paths plus untracked-but-not-ignored
+`echo-stop-gate.sh:135-136`) is git-tracked paths plus untracked-but-not-ignored
 paths — it also walks `git ls-files --others --exclude-standard` — so the files
 scanner mirrors that same union, not `git ls-files` alone. This is the single
 most important detail in the design: the two scanners exist because the two
