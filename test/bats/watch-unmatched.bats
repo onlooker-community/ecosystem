@@ -244,18 +244,84 @@ _check() {
 	[[ "$(_emitted_count)" == "0" ]]
 }
 
+# The property that actually matters here is not the return code -- that is
+# already guaranteed independently by the trailing `return 0`. What must NOT
+# happen is the marker getting written: if the emit-fn guard were bypassed, a
+# typo'd --emit-fn would arm the marker as "handled" for a full TTL with
+# nothing ever emitted, which is exactly the silent-failure mode this feature
+# exists to eliminate.
 @test "returns 0 when the emit function does not exist" {
 	_make_repo
+	marker=$(onlooker_watch_marker_path "proj123" "echo.watch_paths")
 	run onlooker_watch_unmatched_check \
 		--plugin echo --config-key echo.watch_paths \
 		--root "$FIXTURE" --project-key "proj123" \
 		--mode files --patterns-json '["nope/*.md"]' \
 		--emit-fn no_such_function
 	[ "$status" -eq 0 ]
+	[[ ! -f "$marker" ]]
 }
 
 @test "an empty pattern list emits nothing" {
 	_make_repo
 	_check '[]'
 	[[ "$(_emitted_count)" == "0" ]]
+}
+
+# candidates_scanned is a deliberate omission in dirs mode, not an accident --
+# nullglob makes an unmatched glob produce a real, always-zero iteration count,
+# which would look like a measurement while never varying. This must fail if
+# that omission is ever reversed, so it asserts absence of the key (not that
+# it equals 0 or null), and pairs it with files mode still carrying the key so
+# the two modes discriminate.
+@test "dirs mode omits candidates_scanned while files mode still carries it" {
+	_make_repo
+	onlooker_watch_unmatched_check \
+		--plugin cartographer --config-key cartographer.watch_globs \
+		--root "$FIXTURE" --project-key "proj123" \
+		--mode dirs --patterns-json '["nonexistent/*/"]' \
+		--emit-fn _fake_emit
+	dirs_payload=$(tail -n1 "${BATS_TEST_TMPDIR}/emitted" | cut -f2)
+	printf '%s' "$dirs_payload" | jq -e '(has("candidates_scanned") | not)' >/dev/null
+
+	_check '["nope/*.md"]'
+	files_payload=$(tail -n1 "${BATS_TEST_TMPDIR}/emitted" | cut -f2)
+	printf '%s' "$files_payload" | jq -e 'has("candidates_scanned")' >/dev/null
+}
+
+@test "an unknown mode emits nothing" {
+	_make_repo
+	run onlooker_watch_unmatched_check \
+		--plugin echo --config-key echo.watch_paths \
+		--root "$FIXTURE" --project-key "proj123" \
+		--mode bogus --patterns-json '["nope/*.md"]' \
+		--emit-fn _fake_emit
+	[ "$status" -eq 0 ]
+	[[ "$(_emitted_count)" == "0" ]]
+}
+
+@test "malformed patterns JSON emits nothing" {
+	_make_repo
+	run onlooker_watch_unmatched_check \
+		--plugin echo --config-key echo.watch_paths \
+		--root "$FIXTURE" --project-key "proj123" \
+		--mode files --patterns-json 'not-json' \
+		--emit-fn _fake_emit
+	[ "$status" -eq 0 ]
+	[[ "$(_emitted_count)" == "0" ]]
+}
+
+# A marker-write failure must not take the emit down with it: the event
+# already reached the emit-fn before the marker write is attempted, so a
+# read-only marker directory should still leave the caller with a delivered
+# event and a clean return code.
+@test "a marker-write failure still emits and returns 0" {
+	_make_repo
+	marker=$(onlooker_watch_marker_path "proj123" "echo.watch_paths")
+	mkdir -p "$(dirname "$marker")"
+	chmod 500 "$(dirname "$marker")"
+	run _check '["nope/*.md"]'
+	chmod 700 "$(dirname "$marker")"
+	[ "$status" -eq 0 ]
+	[[ "$(_emitted_count)" == "1" ]]
 }
