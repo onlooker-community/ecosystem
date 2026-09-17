@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/onlooker-community/ecosystem/compare/echo-v0.8.0...echo-v0.8.1) (2026-09-17)
+
+
+### Bug Fixes
+
+* **watch-unmatched:** land the review fixes that missed the merge :bug: ([#333](https://github.com/onlooker-community/ecosystem/issues/333)) ([94b1925](https://github.com/onlooker-community/ecosystem/commit/94b1925f5c06aacdd8d487b113183be4d484fd06))
+
 ## [0.8.0](https://github.com/onlooker-community/ecosystem/compare/echo-v0.7.0...echo-v0.8.0) (2026-09-16)
 
 
