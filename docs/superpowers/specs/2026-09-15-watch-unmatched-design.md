@@ -107,7 +107,8 @@ mode it would be a constant 0: under `nullglob` an unmatched glob produces zero
 loop iterations, so the counter reads 0 in precisely the case that emits. A field
 that looks like a measurement and never varies is worse than an absent one — the
 same reasoning that made compass's `confidence` null rather than 0 in
-`ecosystem-449.45`. In `files` mode it counts real tracked files and is sent.
+`ecosystem-449.45`. In `files` mode it counts the real candidate set — tracked
+plus untracked-but-not-ignored — and is sent.
 
 ## Shared helper
 
@@ -168,21 +169,35 @@ false alarms, which is worse than the silence it replaces.
 
 | mode | mechanism | mirrors | `candidates_scanned` |
 |---|---|---|---|
-| `files` | `git -C "$root" ls-files`, then `[[ "$f" == $pat ]]` | `echo-stop-gate.sh:141` | tracked files listed |
+| `files` | `git -C "$root" ls-files` + `git -C "$root" ls-files --others --exclude-standard`, then `[[ "$f" == $pat ]]` | `echo-stop-gate.sh:135-136` (`ALL_CHANGED`'s candidate set) | tracked + untracked-but-not-ignored files listed |
 | `dirs` | `for match in "${root}"/$glob` under `nullglob`, then `[[ -e "$match" ]]` | `cartographer-omission.sh:77` | paths examined |
 
 Cartographer expands its globs against the **filesystem**, not against git, so it
-matches untracked and gitignored paths. A `git ls-files`-based check would
-disagree with it. This is the single most important detail in the design: the two
-scanners exist because the two matchers differ, not because the code was not
-factored.
+matches untracked and gitignored paths. Echo's own candidate set (`ALL_CHANGED`,
+`echo-stop-gate.sh:135-136`) is git-tracked paths plus untracked-but-not-ignored
+paths — it also walks `git ls-files --others --exclude-standard` — so the files
+scanner mirrors that same union, not `git ls-files` alone. This is the single
+most important detail in the design: the two scanners exist because the two
+matchers differ, not because the code was not factored. The two candidate sets
+are coupled: changing `ALL_CHANGED`'s composition in `echo-stop-gate.sh`
+requires changing this scanner to match.
 
 `dirs` mode must save and restore `nullglob`, as `cartographer-omission.sh:67`
 does — the lib is sourced, not run.
 
-Consequence to state plainly: in `files` mode, a pattern matching only untracked
-files reports unmatched. That is correct for this purpose. The repository does not
-durably contain those files, and echo's baselines are keyed to committed content.
+The remaining boundary between the two scanners is gitignored paths: `files`
+mode excludes them (`--exclude-standard` omits anything `.gitignore` covers,
+matching echo's real matcher), while `dirs` mode still sees them, because shell
+glob expansion against the filesystem has no concept of `.gitignore`. That is
+where the files/dirs contrast now lives — not untracked-versus-tracked, which
+the two modes now agree on.
+
+Consequence to state plainly: in `files` mode, a pattern matching only a
+gitignored path reports unmatched. That is correct for this purpose: echo never
+scores that file either, because `ALL_CHANGED` excludes it the same way.
+Echo's baselines are keyed on `echo_content_sha256` of the working-tree file
+(`echo-stop-gate.sh:231`), not on committed content, which is consistent with
+scanning the working tree here rather than a git object.
 
 ## Marker and re-emission
 
@@ -207,7 +222,8 @@ match, so a repository that is fixed and later re-broken emits again.
   the suite's temp home is respected.
 
 Steady-state cost is one `stat`. The scan runs only when the marker says the
-check is due: 653 tracked files and `git ls-files` at 6ms in this repository, so a
+check is due: ~653 tracked files plus the untracked-but-not-ignored ones, two
+`git ls-files` invocations at ~6ms each in this repository, so a
 due check costs well under 50ms.
 
 Because the scan is gated behind the marker, clearing lags by up to one TTL. A

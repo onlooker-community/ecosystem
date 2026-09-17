@@ -61,14 +61,21 @@ STATE_FILE="$CARTOGRAPHER_DIR/last_audit_at"
 #
 # REPO_ROOT, not a worktree root: this must mirror the root run-audit.sh hands
 # to the matcher, or the check disagrees with the thing it describes.
-onlooker_watch_unmatched_check \
-	--plugin cartographer \
-	--config-key cartographer.undocumented_entity.globs \
-	--root "$REPO_ROOT" \
-	--project-key "$PROJECT_KEY" \
-	--mode dirs \
-	--patterns-json "$(cartographer_config_undocumented_globs)" \
-	--emit-fn cartographer_emit_event
+#
+# Gated on undocumented_entity.enabled, mirroring run-audit.sh's own gate
+# (run-audit.sh:254). When the feature is off, these globs are inert by
+# choice, not by misconfiguration -- reporting them as unmatched would read a
+# deliberately disabled feature as a dead plugin.
+if [[ "$(cartographer_config_undocumented_enabled)" == "true" ]]; then
+	onlooker_watch_unmatched_check \
+		--plugin cartographer \
+		--config-key cartographer.undocumented_entity.globs \
+		--root "$REPO_ROOT" \
+		--project-key "$PROJECT_KEY" \
+		--mode dirs \
+		--patterns-json "$(cartographer_config_undocumented_globs)" \
+		--emit-fn cartographer_emit_event
+fi
 
 # Determine if an audit is due
 INTERVAL_HOURS=$(cartographer_config_audit_interval_hours)

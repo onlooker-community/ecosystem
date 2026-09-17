@@ -11,9 +11,10 @@
 # is marker-gated rather than emitted on every fire.
 #
 # The check must agree with the matcher it describes. Echo matches git-tracked
-# paths; cartographer expands globs against the filesystem and so sees
-# untracked and gitignored paths too. One scanner would disagree with one of
-# them and invent misconfigurations that are not there.
+# paths plus untracked-but-not-ignored paths; cartographer expands globs
+# against the filesystem and so sees untracked AND gitignored paths too. One
+# scanner would disagree with one of them and invent misconfigurations that
+# are not there.
 #
 # This lib will be VENDORED via scripts/sync-shared-libs.sh's ON_DEMAND_LIBS
 # (only echo and cartographer source it, not every plugin -- SHARED_LIBS would
@@ -78,17 +79,17 @@ onlooker_watch_marker_due() {
 	local path="${1:-}" hash="${2:-}" ttl_hours="${3:-$_ONLOOKER_WATCH_TTL_HOURS_DEFAULT}"
 	[[ -f "$path" ]] || return 0
 
-	local stored_hash stored_at then now
+	local stored_hash stored_at prev now
 	stored_hash=$(jq -r '.patterns_hash // ""' "$path" 2>/dev/null) || return 0
 	[[ "$stored_hash" != "$hash" ]] && return 0
 
 	stored_at=$(jq -r '.last_emitted // ""' "$path" 2>/dev/null) || return 0
 	[[ -z "$stored_at" ]] && return 0
 
-	then=$(_onlooker_watch_epoch "$stored_at") || return 0
-	[[ -z "$then" ]] && return 0
+	prev=$(_onlooker_watch_epoch "$stored_at") || return 0
+	[[ -z "$prev" ]] && return 0
 	now=$(date +%s)
-	(( now - then > ttl_hours * 3600 )) && return 0
+	(( now - prev > ttl_hours * 3600 )) && return 0
 	return 1
 }
 
@@ -113,10 +114,12 @@ onlooker_watch_marker_clear() {
 	return 0
 }
 
-# files mode -- mirrors echo-stop-gate.sh:141 exactly: git-tracked paths tested
-# with bash pattern matching. Tracked only, so a pattern matching only untracked
-# files reports unmatched. That is correct here: the repository does not durably
-# contain those files.
+# files mode -- mirrors echo-stop-gate.sh's real candidate set: ALL_CHANGED
+# there is git-tracked paths PLUS untracked-but-not-ignored paths
+# (`git ls-files --others --exclude-standard`, echo-stop-gate.sh:135), not
+# tracked paths alone. A pattern matching only a gitignored path still reports
+# unmatched -- `--exclude-standard` excludes it from both this scanner and
+# echo's real matcher, so the two stay in agreement.
 #
 # Prints "<matched> <scanned>". matched is 0 or 1; the caller only needs the
 # boolean, and returning on the first hit avoids walking the rest of the tree.
@@ -144,7 +147,12 @@ _onlooker_watch_scan_files() {
 				return 0
 			fi
 		done
-	done < <(git -C "$root" ls-files 2>/dev/null)
+	done < <(
+		{
+			git -C "$root" ls-files 2>/dev/null
+			git -C "$root" ls-files --others --exclude-standard 2>/dev/null
+		}
+	)
 
 	printf '0 %s' "$scanned"
 }
@@ -192,14 +200,14 @@ onlooker_watch_unmatched_check() {
 
 	while [[ $# -gt 0 ]]; do
 		case "$1" in
-			--plugin)        plugin="${2:-}";        shift 2 ;;
-			--config-key)    config_key="${2:-}";    shift 2 ;;
-			--root)          root="${2:-}";          shift 2 ;;
-			--project-key)   project_key="${2:-}";   shift 2 ;;
-			--mode)          mode="${2:-}";          shift 2 ;;
-			--patterns-json) patterns_json="${2:-}"; shift 2 ;;
-			--emit-fn)       emit_fn="${2:-}";       shift 2 ;;
-			--ttl-hours)     ttl_hours="${2:-168}";  shift 2 ;;
+			--plugin)        plugin="${2:-}";        shift; shift ;;
+			--config-key)    config_key="${2:-}";    shift; shift ;;
+			--root)          root="${2:-}";          shift; shift ;;
+			--project-key)   project_key="${2:-}";   shift; shift ;;
+			--mode)          mode="${2:-}";          shift; shift ;;
+			--patterns-json) patterns_json="${2:-}"; shift; shift ;;
+			--emit-fn)       emit_fn="${2:-}";       shift; shift ;;
+			--ttl-hours)     ttl_hours="${2:-$_ONLOOKER_WATCH_TTL_HOURS_DEFAULT}"; shift; shift ;;
 			*) shift ;;
 		esac
 	done
@@ -249,7 +257,8 @@ onlooker_watch_unmatched_check() {
 	# exactly when we emit -- a number that looks like a measurement and is not
 	# one. The schema makes the field optional; absent beats a constant zero,
 	# the same reasoning that made compass's confidence null rather than 0
-	# (ecosystem-449.45). In files mode it counts real tracked files and stays.
+	# (ecosystem-449.45). In files mode it counts real tracked and untracked
+	# candidate files and stays.
 	local payload
 	if [[ "$mode" == "files" ]]; then
 		payload=$(jq -cn \

@@ -10,6 +10,14 @@ setup() {
 	setup_test_env
 	source "${REPO_ROOT}/scripts/lib/watch-unmatched.sh"
 	MARKER=$(onlooker_watch_marker_path "proj123" "echo.watch_paths")
+
+	if command -v timeout >/dev/null 2>&1; then
+		TIMEOUT_BIN="timeout"
+	elif command -v gtimeout >/dev/null 2>&1; then
+		TIMEOUT_BIN="gtimeout"
+	else
+		TIMEOUT_BIN=""
+	fi
 }
 
 @test "marker path is project-scoped and under ONLOOKER_DIR" {
@@ -93,10 +101,21 @@ _make_repo() {
 	[[ "${result##* }" -ge 2 ]]
 }
 
-@test "files scanner ignores untracked files" {
+@test "files scanner matches untracked-but-not-ignored files" {
 	_make_repo
 	printf '# untracked\n' >"${FIXTURE}/plugins/demo/agents/two.txt"
 	result=$(_onlooker_watch_scan_files "$FIXTURE" '["plugins/*/agents/*.txt"]')
+	[[ "${result%% *}" == "1" ]]
+}
+
+@test "files scanner does not match a gitignored file" {
+	_make_repo
+	printf 'secrets/\n' >"${FIXTURE}/.gitignore"
+	mkdir -p "${FIXTURE}/secrets"
+	printf 'shh\n' >"${FIXTURE}/secrets/token.md"
+	run git -C "$FIXTURE" check-ignore -q "secrets/token.md"
+	[ "$status" -eq 0 ]
+	result=$(_onlooker_watch_scan_files "$FIXTURE" '["secrets/*.md"]')
 	[[ "${result%% *}" == "0" ]]
 }
 
@@ -119,13 +138,22 @@ _make_repo() {
 }
 
 # The divergence that forces two scanners rather than one. Cartographer expands
-# against the filesystem, so it sees what git does not. A git ls-files check
-# would call this unmatched and invent a misconfiguration.
-@test "dirs scanner sees untracked directories, unlike the files scanner" {
+# against the filesystem with no concept of .gitignore, so it sees paths git
+# excludes. The files scanner now mirrors echo's real candidate set (tracked
+# plus untracked-but-not-ignored), so untracked-but-not-ignored paths no
+# longer discriminate the two modes -- both see those. Gitignored paths are
+# the boundary that remains: a files-mode check would call this unmatched and
+# invent a misconfiguration.
+@test "dirs scanner sees gitignored paths, unlike the files scanner" {
 	_make_repo
-	mkdir -p "${FIXTURE}/untracked-dir/child"
-	dirs_result=$(_onlooker_watch_scan_dirs "$FIXTURE" '["untracked-dir/*/"]')
-	files_result=$(_onlooker_watch_scan_files "$FIXTURE" '["untracked-dir/*"]')
+	printf 'ignored-dir/\n' >"${FIXTURE}/.gitignore"
+	mkdir -p "${FIXTURE}/ignored-dir/child"
+	printf '# ignored\n' >"${FIXTURE}/ignored-dir/child/note.md"
+	run git -C "$FIXTURE" check-ignore -q "ignored-dir/child/note.md"
+	[ "$status" -eq 0 ]
+
+	dirs_result=$(_onlooker_watch_scan_dirs "$FIXTURE" '["ignored-dir/*/"]')
+	files_result=$(_onlooker_watch_scan_files "$FIXTURE" '["ignored-dir/*"]')
 	[[ "${dirs_result%% *}" == "1" ]]
 	[[ "${files_result%% *}" == "0" ]]
 }
@@ -242,6 +270,79 @@ _check() {
 	run onlooker_watch_unmatched_check --plugin echo --emit-fn _fake_emit
 	[ "$status" -eq 0 ]
 	[[ "$(_emitted_count)" == "0" ]]
+}
+
+# `shift 2` is a no-op in bash when only one positional parameter remains:
+# positional params are unchanged and the shift call itself fails, so a
+# value-taking flag appearing LAST with no value spun the parser loop forever.
+# Verified empirically before the fix: the equivalent loop given `f --plugin`
+# alone hit a 3s timeout (exit 124). Each case below runs under `timeout` for
+# exactly that reason -- a regression here must fail the test, not hang the
+# whole suite. A sentinel emit function proves the early return happened for
+# the right reason (a required field went missing), not merely that nothing
+# crashed.
+_missing_value_call() {
+	"$TIMEOUT_BIN" 5 bash -c "
+		source '${REPO_ROOT}/scripts/lib/watch-unmatched.sh'
+		_sentinel_emit() { printf 'emitted' >>'${BATS_TEST_TMPDIR}/sentinel'; }
+		onlooker_watch_unmatched_check $1
+	"
+}
+
+@test "a trailing value-less --plugin returns 0 without hanging" {
+	[[ -z "$TIMEOUT_BIN" ]] && skip "no timeout/gtimeout binary available"
+	run _missing_value_call "--emit-fn _sentinel_emit --plugin"
+	[ "$status" -eq 0 ]
+	[ ! -f "${BATS_TEST_TMPDIR}/sentinel" ]
+}
+
+@test "a trailing value-less --config-key returns 0 without hanging" {
+	[[ -z "$TIMEOUT_BIN" ]] && skip "no timeout/gtimeout binary available"
+	run _missing_value_call "--emit-fn _sentinel_emit --config-key"
+	[ "$status" -eq 0 ]
+	[ ! -f "${BATS_TEST_TMPDIR}/sentinel" ]
+}
+
+@test "a trailing value-less --root returns 0 without hanging" {
+	[[ -z "$TIMEOUT_BIN" ]] && skip "no timeout/gtimeout binary available"
+	run _missing_value_call "--emit-fn _sentinel_emit --root"
+	[ "$status" -eq 0 ]
+	[ ! -f "${BATS_TEST_TMPDIR}/sentinel" ]
+}
+
+@test "a trailing value-less --project-key returns 0 without hanging" {
+	[[ -z "$TIMEOUT_BIN" ]] && skip "no timeout/gtimeout binary available"
+	run _missing_value_call "--emit-fn _sentinel_emit --project-key"
+	[ "$status" -eq 0 ]
+	[ ! -f "${BATS_TEST_TMPDIR}/sentinel" ]
+}
+
+@test "a trailing value-less --mode returns 0 without hanging" {
+	[[ -z "$TIMEOUT_BIN" ]] && skip "no timeout/gtimeout binary available"
+	run _missing_value_call "--emit-fn _sentinel_emit --mode"
+	[ "$status" -eq 0 ]
+	[ ! -f "${BATS_TEST_TMPDIR}/sentinel" ]
+}
+
+@test "a trailing value-less --patterns-json returns 0 without hanging" {
+	[[ -z "$TIMEOUT_BIN" ]] && skip "no timeout/gtimeout binary available"
+	run _missing_value_call "--emit-fn _sentinel_emit --patterns-json"
+	[ "$status" -eq 0 ]
+	[ ! -f "${BATS_TEST_TMPDIR}/sentinel" ]
+}
+
+@test "a trailing value-less --emit-fn returns 0 without hanging" {
+	[[ -z "$TIMEOUT_BIN" ]] && skip "no timeout/gtimeout binary available"
+	run _missing_value_call "--emit-fn"
+	[ "$status" -eq 0 ]
+	[ ! -f "${BATS_TEST_TMPDIR}/sentinel" ]
+}
+
+@test "a trailing value-less --ttl-hours returns 0 without hanging" {
+	[[ -z "$TIMEOUT_BIN" ]] && skip "no timeout/gtimeout binary available"
+	run _missing_value_call "--emit-fn _sentinel_emit --ttl-hours"
+	[ "$status" -eq 0 ]
+	[ ! -f "${BATS_TEST_TMPDIR}/sentinel" ]
 }
 
 # The property that actually matters here is not the return code -- that is
