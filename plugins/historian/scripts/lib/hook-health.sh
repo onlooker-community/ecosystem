@@ -20,12 +20,24 @@
 #
 # What duration_ms actually measures, since consumers cannot infer it:
 # from the clock read inside hook_health_register to the clock read at the top
-# of _hook_health_write. Both stamps cost a subprocess whose pre-read startup
-# lands inside that window, so a hook doing no work still reports about 3ms on
-# the development machine. Reaching zero needs a subprocess-free clock, which
-# means bash 5's $EPOCHREALTIME — unavailable under the #!/usr/bin/env bash
-# shebang that resolves to 3.2 on macOS. Treat small values as a floor, not a
-# measurement. duration_ms is null when it could not be computed at all.
+# of _hook_health_write. Treat small values as a floor, not a measurement.
+# duration_ms is null when it could not be computed at all.
+#
+# How much of the instrument lands inside that window depends on the shell, and
+# the difference is not small (ecosystem-449.66):
+#
+#   bash 4.2+   Nothing. EPOCHREALTIME and printf %()T are builtins, so both
+#               stamps are free, and the start is re-read after the breadcrumb
+#               so its append is excluded too. Measured floor: ~1ms, the same
+#               as before this lib wrote two records per fire.
+#   bash 3.2    One jq fork for the end stamp, whose startup lands in the
+#               window, plus the breadcrumb's append — buying that exclusion
+#               would cost another jq fork, more than the append itself. On a
+#               loaded host this reads as tens of milliseconds and is mostly
+#               the instrument, not the hook.
+#
+# `#!/usr/bin/env bash` resolves to 3.2 on macOS and 5.x on Linux, so the
+# development machine gets the expensive path and CI the cheap one.
 
 # Content fingerprint of this file, stamped by scripts/sync-shared-libs.sh and
 # verified by test/bats/shared-lib-fingerprint.bats.
@@ -39,7 +51,7 @@
 # Derived from the bytes rather than declared: a version directory's name, its
 # package.json and its mtime have each been caught disagreeing with the contents
 # they label. A hand-maintained constant would be a fourth such label.
-_ONLOOKER_LIB_FINGERPRINT="8425a88a27d1"
+_ONLOOKER_LIB_FINGERPRINT="8c3be235a600"
 
 # Do not clobber values a caller already set — several plugins set
 # _HOOK_SESSION_ID before sourcing, and their *-events.sh libs read it.
@@ -147,8 +159,26 @@ if [[ -z "${_ONLOOKER_PLUGIN_ORIGIN_DERIVED+set}" ]]; then
 	_hook_health_derive_origin
 fi
 
+# Resolve the log path into $_HH_LOG_PATH. One definition, no subprocess.
+#
+# Both writers sit inside the window duration_ms measures, so `$(hook_health_log_path)`
+# billed a fork to every hook's reported latency — one that predates this change
+# in _hook_health_write, and one the breadcrumb would have added. That is real
+# against a ~3ms floor, and hook-health.bats asserts duration_ms < 50 on a hook
+# that does no work. Setting a global instead of capturing stdout removes both.
+_HH_LOG_PATH=""
+_hook_health_resolve_log_path() {
+	_HH_LOG_PATH="${ONLOOKER_HOOK_HEALTH_LOG:-${ONLOOKER_DIR:-$HOME/.onlooker}/logs/hook-health.jsonl}"
+	return 0
+}
+
+# Public accessor, kept because callers and tests use it. Resolved fresh each
+# call rather than cached: ONLOOKER_HOOK_HEALTH_LOG is redirected between
+# register and write throughout the suite, and a cached value would quietly
+# send those records to the previous path.
 hook_health_log_path() {
-	printf '%s' "${ONLOOKER_HOOK_HEALTH_LOG:-${ONLOOKER_DIR:-$HOME/.onlooker}/logs/hook-health.jsonl}"
+	_hook_health_resolve_log_path
+	printf '%s' "$_HH_LOG_PATH"
 }
 
 # Milliseconds since the epoch, cheapest source first.
@@ -178,6 +208,25 @@ _hook_health_now_ms() {
 	printf '%s000' "$(date +%s 2>/dev/null || printf 0)"
 }
 
+# The same clock, returned through $_HH_NOW_MS instead of stdout. Returns 1 when
+# the shell has no free clock, so callers fall back to the cascade above.
+#
+# Capturing _hook_health_now_ms with `$(...)` forks even on the EPOCHREALTIME
+# path, where the read itself is free — and that fork lands inside the window
+# duration_ms measures, on both ends. Under bash 5 this makes the whole measured
+# window subprocess-free, which is how a no-work hook gets back under the
+# `duration_ms < 50` budget in hook-health.bats after the start breadcrumb
+# added a write to it.
+_HH_NOW_MS=""
+_hook_health_now_ms_var() {
+	[[ -n "${EPOCHREALTIME:-}" ]] || return 1
+	local er="${EPOCHREALTIME/,/.}"   # some locales render the separator as a comma
+	local s="${er%%.*}"
+	local us="${er#*.}000"
+	_HH_NOW_MS="${s}${us:0:3}"
+	return 0
+}
+
 # Set _HOOK_START_MS and _HOOK_START_ISO together, adding no subprocess to what
 # the clock already cost (ecosystem-449.66 needs both: ms to measure duration,
 # ISO because every existing consumer reads .timestamp off each line —
@@ -196,9 +245,13 @@ _hook_health_now_ms() {
 _hook_health_start_stamps() {
 	_HOOK_START_ISO=""
 
+	# Both stamps from builtins, no subprocess at all: EPOCHREALTIME by
+	# parameter expansion for the milliseconds, %()T for the ISO form. This
+	# path is strictly cheaper than before this change, which always spent a
+	# fork on $(_hook_health_now_ms).
 	# shellcheck disable=SC2059
-	if printf -v _HOOK_START_ISO '%(%s)T' -1 2>/dev/null; then
-		_HOOK_START_MS=$(_hook_health_now_ms)
+	if _hook_health_now_ms_var && printf -v _HOOK_START_ISO '%(%s)T' -1 2>/dev/null; then
+		_HOOK_START_MS="$_HH_NOW_MS"
 		TZ=UTC printf -v _HOOK_START_ISO '%(%Y-%m-%dT%H:%M:%SZ)T' -1 2>/dev/null
 		[[ -n "$_HOOK_START_ISO" ]] && return 0
 	fi
@@ -231,6 +284,26 @@ _hook_health_start_stamps() {
 # the obvious way it cost more than the jq record it was meant to be cheaper
 # than, and blew the `duration_ms < 50` budget in hook-health.bats. Parameter
 # expansion only, no subprocess.
+# Make sure the log's directory exists, and do it OUTSIDE the timed window.
+#
+# This used to live in _hook_health_write, which runs after the end stamp, so
+# its cost fell outside every reported duration. The breadcrumb needs the
+# directory too, but it runs *before* the end stamp — so calling it there moved
+# `dirname` + `mkdir` inside the window and billed them to the hook. Measured in
+# a fresh bats fixture, where the directory never exists yet: duration_ms=55
+# against a budget of 50, from a hook that does nothing at all.
+#
+# ${path%/*} instead of $(dirname "$path"): same answer for an absolute path,
+# no fork. Only ever does real work once per machine.
+_hook_health_ensure_log_dir() {
+	_hook_health_resolve_log_path
+	[[ -f "$_HH_LOG_PATH" ]] && return 0
+	local dir="${_HH_LOG_PATH%/*}"
+	[[ -n "$dir" && "$dir" != "$_HH_LOG_PATH" ]] || return 0
+	[[ -d "$dir" ]] || mkdir -p "$dir" 2>/dev/null || return 0
+	return 0
+}
+
 _HH_ESC=""
 _hook_health_json_escape() {
 	_HH_ESC="${1:-}"
@@ -251,8 +324,11 @@ _hook_health_breadcrumb() {
 	[[ -n "$_HOOK_NAME" && -n "$_HOOK_START_ISO" ]] || return 0
 
 	local path
-	path=$(hook_health_log_path)
-	[[ -f "$path" ]] || mkdir -p "$(dirname "$path")" 2>/dev/null || return 0
+	_hook_health_resolve_log_path; path="$_HH_LOG_PATH"
+	# No mkdir here. hook_health_register already called
+	# _hook_health_ensure_log_dir, before the clock started, precisely so this
+	# cost is not billed to the hook. If that failed the append below is a no-op
+	# under `|| true`, which is the fail-soft behavior this lib promises.
 
 	local start="${_HOOK_START_MS:-0}"
 	[[ "$start" =~ ^[0-9]+$ ]] || start=0
@@ -312,10 +388,29 @@ hook_health_register() {
 	# A fresh fire has not completed yet, whatever a previous one in this shell
 	# managed to do.
 	_HOOK_COMPLETED=""
+	# Before the clock starts, deliberately. Creating the directory is setup for
+	# the instrument, not work the hook did, and it is the one thing here that
+	# can cost a real syscall. Doing it after the start stamp put it inside every
+	# reported duration.
+	_hook_health_ensure_log_dir
 	_hook_health_start_stamps
 	_HOOK_RUN_SEQ=$((_HOOK_RUN_SEQ + 1))
 	_HOOK_RUN_ID="${_HOOK_START_MS:-0}-$$-${_HOOK_RUN_SEQ}"
 	_hook_health_breadcrumb
+	# Re-stamp so the breadcrumb's own append is not billed to the hook. Writing
+	# it is instrument overhead, and it is not cheap: measured in the bats
+	# fixture on a loaded host, the append alone moved duration_ms from ~20ms to
+	# ~42ms, because a file open/write/close under I/O contention is expensive
+	# in a way the escaping and formatting around it are not (those are 0.27ms).
+	#
+	# Only when the clock is free. On bash 3.2 a second read means another jq
+	# fork, which would cost several times the append it is trying to exclude —
+	# so there the reported duration still includes it, as it always has. The
+	# breadcrumb keeps its own earlier stamp either way; a start a millisecond
+	# before the duration's origin is immaterial to pairing.
+	if _hook_health_now_ms_var; then
+		_HOOK_START_MS="$_HH_NOW_MS"
+	fi
 
 	local prior
 	prior=$(trap -p EXIT 2>/dev/null)
@@ -448,14 +543,31 @@ _hook_health_write() {
 	# dirname, mkdir, and jq's own startup — used to run between the two clock
 	# reads and land inside every reported duration. Measured cost of that:
 	# dirname 1.4ms, mkdir 1.05ms, plus jq's pre-read startup.
+	#
+	# The capture itself was part of that cost: `$(...)` forks even when the
+	# clock underneath is free, and the fork happens after the start stamp, so
+	# it was billed to the hook. Preferring the variable form makes the whole
+	# measured window subprocess-free under bash 5.
 	local end
-	end=$(_hook_health_now_ms)
+	if _hook_health_now_ms_var; then
+		end="$_HH_NOW_MS"
+	else
+		end=$(_hook_health_now_ms)
+	fi
 
 	local path
-	path=$(hook_health_log_path)
-	# -f is a builtin. The dirname/mkdir pair costs ~2.4ms of subprocess and is
-	# only needed until the log exists, which is once per machine.
-	[[ -f "$path" ]] || mkdir -p "$(dirname "$path")" 2>/dev/null || return 0
+	_hook_health_resolve_log_path; path="$_HH_LOG_PATH"
+	# Still guarded here as well as in register, for the callers that reach a
+	# terminal write without one — hook_health_success straight after a
+	# register that could not create the directory, say. Costs a builtin test
+	# once the log exists, which is after the first write on any machine.
+	#
+	# The trailing `|| return 0` is load-bearing, not decoration: without it a
+	# failed mkdir makes this the function's exit status, and the whole lib
+	# promises every function returns 0 so a hook never breaks because its
+	# instrument did. Dropping it turned an unwritable log into a failing
+	# hook_health_register.
+	_hook_health_ensure_log_dir || return 0
 
 	local start="${_HOOK_START_MS:-0}"
 	[[ "$start" =~ ^[0-9]+$ ]] || start=0
