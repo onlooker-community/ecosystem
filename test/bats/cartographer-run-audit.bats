@@ -48,6 +48,18 @@ setup() {
 	mkdir -p "$STUB_BIN"
 	cat > "${STUB_BIN}/claude" <<'STUB'
 #!/usr/bin/env bash
+# Faithful to the real CLI's argument contract: it rejects an unknown option
+# before it reads stdin, and exits 1. A stub that accepts whatever flag it is
+# handed is exactly what let ecosystem-449.63 (--max-tokens) pass this suite
+# while failing every real run for three months.
+for arg in "$@"; do
+	case "$arg" in
+		--max-tokens)
+			printf "error: unknown option '--max-tokens'\n" >&2
+			exit 1
+			;;
+	esac
+done
 cat >/dev/null
 echo call >> "$CLAUDE_CALL_LOG"
 printf '[]'
