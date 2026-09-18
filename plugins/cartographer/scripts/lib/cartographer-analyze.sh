@@ -34,6 +34,42 @@ _cartographer_read_files_for_prompt() {
 	printf '%s' "$output"
 }
 
+# Run one `claude -p` pass over a prompt and print the raw response.
+#
+# Keeps the CLI's stderr and surfaces it only when the call actually failed.
+# Discarding it is half of why ecosystem-449.63 survived: a hard failure and a
+# genuine "no findings" looked identical from the outside, so audit.log recorded
+# "phase=relate timeout or error" for three months without ever saying why.
+#
+# The analyzers still take a $max_tokens argument and deliberately do not
+# forward it. `claude -p` exposes no output-token cap and rejects --max-tokens
+# outright ("error: unknown option '--max-tokens'", exit 1); passing it meant
+# every analysis cartographer ever attempted failed in milliseconds. counsel
+# (#79) and scribe fixed the same defect; cartographer kept all three call sites.
+_cartographer_run_cli() {
+	local prompt="$1" model="$2" timeout_s="$3"
+
+	local cli_err
+	cli_err=$(mktemp -t cartographer-cli-err.XXXXXX 2>/dev/null) || cli_err="/tmp/cartographer-cli-err.$$"
+
+	local response cli_status=0
+	response=$(printf '%s' "$prompt" \
+		| $_CARTOGRAPHER_TIMEOUT_CMD "$timeout_s" claude -p \
+			--max-turns 1 \
+			--model "$model" \
+			2>"$cli_err") || cli_status=$?
+
+	if [[ "$cli_status" -ne 0 ]]; then
+		printf 'cartographer: claude -p failed (exit %s)\n' "$cli_status" >&2
+		[[ -s "$cli_err" ]] && cat "$cli_err" >&2
+		rm -f "$cli_err"
+		return 1
+	fi
+
+	rm -f "$cli_err"
+	printf '%s' "$response"
+}
+
 cartographer_analyze_contradiction() {
 	local files_json="$1"
 	local model="${2:-claude-haiku-4-5-20251001}"
@@ -74,11 +110,8 @@ PROMPT
 ${corpus}"
 
 	local response
-	response=$(printf '%s' "$full_prompt" \
-		| $_CARTOGRAPHER_TIMEOUT_CMD "$timeout_s" claude -p \
-			--model "$model" \
-			--max-tokens "$max_tokens" \
-			2>/dev/null) || { printf '[]'; return 1; }
+	response=$(_cartographer_run_cli "$full_prompt" "$model" "$timeout_s") \
+		|| { printf '[]'; return 1; }
 
 	printf '%s' "$response" | python3 -c "
 import sys, json
@@ -157,11 +190,8 @@ ${candidates}
 </CANDIDATES>"
 
 	local response
-	response=$(printf '%s' "$full_prompt" \
-		| $_CARTOGRAPHER_TIMEOUT_CMD "$timeout_s" claude -p \
-			--model "$model" \
-			--max-tokens "$max_tokens" \
-			2>/dev/null) || { printf '[]'; return 1; }
+	response=$(_cartographer_run_cli "$full_prompt" "$model" "$timeout_s") \
+		|| { printf '[]'; return 1; }
 
 	printf '%s' "$response" | python3 -c "
 import sys, json
@@ -231,11 +261,8 @@ ${project_files}
 </PROJECT FILES>"
 
 	local response
-	response=$(printf '%s' "$full_prompt" \
-		| $_CARTOGRAPHER_TIMEOUT_CMD "$timeout_s" claude -p \
-			--model "$model" \
-			--max-tokens "$max_tokens" \
-			2>/dev/null) || { printf '[]'; return 1; }
+	response=$(_cartographer_run_cli "$full_prompt" "$model" "$timeout_s") \
+		|| { printf '[]'; return 1; }
 
 	printf '%s' "$response" | python3 -c "
 import sys, json

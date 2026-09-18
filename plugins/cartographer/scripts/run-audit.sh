@@ -211,8 +211,9 @@ run_relate() {
 		 cartographer_analyze_contradiction '$DISCOVERED_FILES' \
 		   '$_model_extraction' '$_max_tokens_extraction' '$_phase_timeout'" \
 		2>>"$CARTOGRAPHER_DIR/audit.log") || {
+		# No PHASES_FAILED append here: main()'s `||` clause owns that for every
+		# phase. Doing both recorded one failure twice (ecosystem-449.63).
 		log "phase=relate timeout or error"
-		PHASES_FAILED+=("relate")
 		return 1
 	}
 	RELATE_FINDINGS=$(cartographer_filter_findings "${findings:-[]}" "$TYPE_FILTER")
@@ -234,7 +235,10 @@ run_synthesize() {
 			"source '$PLUGIN_ROOT/scripts/lib/cartographer-analyze.sh'
 			 cartographer_analyze_stale_ref '$DISCOVERED_FILES' '$REPO_ROOT' \
 			   '$_model_synthesis' '$_max_tokens_synthesis' '$_phase_timeout'" \
-			2>>"$CARTOGRAPHER_DIR/audit.log") || stale_findings="[]"
+			2>>"$CARTOGRAPHER_DIR/audit.log") || {
+			log "phase=synthesize stale_ref analyzer failed"
+			stale_findings="[]"
+		}
 	fi
 
 	if cartographer_filter_wants "scope_collision" "$TYPE_FILTER"; then
@@ -242,7 +246,10 @@ run_synthesize() {
 			"source '$PLUGIN_ROOT/scripts/lib/cartographer-analyze.sh'
 			 cartographer_analyze_scope_collision '$GLOBAL_FILES' '$DISCOVERED_FILES' \
 			   '$_model_synthesis' '$_max_tokens_synthesis' '$_phase_timeout'" \
-			2>>"$CARTOGRAPHER_DIR/audit.log") || scope_findings="[]"
+			2>>"$CARTOGRAPHER_DIR/audit.log") || {
+			log "phase=synthesize scope_collision analyzer failed"
+			scope_findings="[]"
+		}
 	fi
 
 	# Disk → doc. Skipped on targeted post-write audits: DISCOVERED_FILES is a
@@ -257,7 +264,10 @@ run_synthesize() {
 			"source '$PLUGIN_ROOT/scripts/lib/cartographer-omission.sh'
 			 cartographer_analyze_undocumented_entity '$DISCOVERED_FILES' '$REPO_ROOT' \
 			   '$_undocumented_globs' '$_undocumented_exclude' '$_undocumented_max'" \
-			2>>"$CARTOGRAPHER_DIR/audit.log") || omission_findings="[]"
+			2>>"$CARTOGRAPHER_DIR/audit.log") || {
+			log "phase=synthesize undocumented_entity analyzer failed"
+			omission_findings="[]"
+		}
 	fi
 
 	# Merge all raw findings
