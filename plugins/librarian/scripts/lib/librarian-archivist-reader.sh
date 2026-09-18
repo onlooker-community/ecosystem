@@ -38,27 +38,63 @@ librarian_archivist_load_since() {
 	project_dir=$(librarian_archivist_project_dir "$project_key")
 	[[ -z "$project_dir" ]] && { echo '[]'; return 0; }
 
-	local kind file all='[]'
+	local kind file
+	local files=()
 	for kind in decisions dead_ends open_questions; do
 		[[ -d "${project_dir}/${kind}" ]] || continue
 		for file in "${project_dir}/${kind}"/*.json; do
 			[[ -f "$file" ]] || continue
-			local item created_at
-			item=$(jq '.' "$file" 2>/dev/null) || continue
-			[[ -z "$item" || "$item" == "null" ]] && continue
-
-			# Filter by watermark when provided.
-			if [[ -n "$watermark" ]]; then
-				created_at=$(printf '%s' "$item" | jq -r '.created_at // .updated_at // ""' 2>/dev/null)
-				[[ -z "$created_at" ]] && continue
-				# Lexicographic compare works for ISO-8601 UTC strings.
-				if [[ "$created_at" < "$watermark" || "$created_at" == "$watermark" ]]; then
-					continue
-				fi
-			fi
-
-			all=$(printf '%s' "$all" | jq --argjson item "$item" '. + [$item]')
+			files+=("$file")
 		done
+	done
+
+	[[ ${#files[@]} -eq 0 ]] && { echo '[]'; return 0; }
+
+	# One jq for the whole corpus, not two per file.
+	#
+	# This loop used to parse each artifact with `jq '.'` and then read its
+	# created_at with a second `jq -r` — every artifact ever written for the
+	# project, walked in full before the watermark could exclude any of it, and
+	# an O(n^2) `. + [$item]` append on top. Measured on a 703-artifact project:
+	# 3.4 SECONDS to return zero artifacts, against the 1500ms window the CLI
+	# gives the entire SessionEnd hook batch. The hook was killed mid-read on
+	# essentially every session, which is why librarian stopped reporting: a
+	# killed hook emits no scan.started, so the outage was invisible on the bus.
+	#
+	# The cost has to be flat in corpus size, not merely smaller, because the
+	# corpus only ever grows. See ecosystem-449.68.
+	local result
+	if result=$(jq -s --arg watermark "$watermark" '
+		map(select(type == "object"))
+		| map(select(
+			$watermark == ""
+			or (((.created_at // .updated_at // "")) as $c
+				| $c != "" and $c > $watermark)))
+		| sort_by(.created_at // .updated_at // "")
+	' "${files[@]}" 2>/dev/null); then
+		printf '%s' "$result"
+		return 0
+	fi
+
+	# A batch parse aborts on the first malformed byte, which would let one
+	# corrupt artifact blank an entire scan. The per-file read cannot do that,
+	# so it stays as the fallback: slow, but it costs only the broken file.
+	# Also covers the case where the argument list is too long to exec.
+	local all='[]' item created_at
+	for file in "${files[@]}"; do
+		item=$(jq '.' "$file" 2>/dev/null) || continue
+		[[ -z "$item" || "$item" == "null" ]] && continue
+
+		if [[ -n "$watermark" ]]; then
+			created_at=$(printf '%s' "$item" | jq -r '.created_at // .updated_at // ""' 2>/dev/null)
+			[[ -z "$created_at" ]] && continue
+			# Lexicographic compare works for ISO-8601 UTC strings.
+			if [[ "$created_at" < "$watermark" || "$created_at" == "$watermark" ]]; then
+				continue
+			fi
+		fi
+
+		all=$(printf '%s' "$all" | jq --argjson item "$item" '. + [$item]')
 	done
 
 	# Sort chronologically; downstream classifier groups by session_id and
