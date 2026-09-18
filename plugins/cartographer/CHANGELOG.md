@@ -2,6 +2,13 @@
 
 All notable changes to the Cartographer plugin are documented here.
 
+## [0.10.2](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.10.1...cartographer-v0.10.2) (2026-09-18)
+
+
+### Bug Fixes
+
+* **cartographer:** stop a stale lock wedging every future audit :unlock: ([#335](https://github.com/onlooker-community/ecosystem/issues/335)) ([7fa5129](https://github.com/onlooker-community/ecosystem/commit/7fa512920ba08b67fa4326ba07a4985eab4c9923))
+
 ## [0.10.1](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.10.0...cartographer-v0.10.1) (2026-09-17)
 
 
