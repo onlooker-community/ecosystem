@@ -208,6 +208,31 @@ setup() {
     >/dev/null
 }
 
+# ecosystem-449.66. Two fires produce two breadcrumbs as well as two terminal
+# records. Counting breadcrumbs would report total == 4, and — because a
+# breadcrumb has no duration_ms — would also report unmeasurable == 2, turning
+# the field that means "the clock failed" into a count of how often the hook ran.
+@test "hook_health_summary ignores start breadcrumbs" {
+  hook_register "crumb-hook"
+  hook_success
+  hook_register "crumb-hook"
+  hook_success
+
+  # The breadcrumbs really are in the log; this is not vacuous.
+  [ "$(jq -sc '[.[] | select(.status == "started")] | length' "$ONLOOKER_HOOK_HEALTH_LOG")" -eq 2 ] || return 1
+
+  local summary
+  summary=$(hook_health_summary 24)
+  echo "$summary" | jq -e \
+    'map(select(.hook == "crumb-hook"))
+     | .[0]
+     | .total == 2
+     and .success == 2
+     and .unmeasurable == 0' \
+    >/dev/null
+}
+
+
 # ----------------------------------------------------------------------------
 # Hook composition bus: hook_bus_list / hook_bus_cleanup
 # ----------------------------------------------------------------------------

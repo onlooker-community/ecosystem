@@ -195,6 +195,11 @@ const eventsHere = new Map();
 const eventsAnywhere = new Map();
 
 const sawHealth = scanJsonl(join(onlookerDir, 'logs', 'hook-health.jsonl'), cutoff, (r) => {
+  // One fire writes two rows since ecosystem-449.66: a start breadcrumb and a
+  // terminal record. Counting both would report every plugin as having run
+  // twice as often as it did, and this count is what the "hooks ran Nx,
+  // emitted nothing" diagnosis below is built on.
+  if (r.status === 'started') return;
   const plugin = hookOwner.get(typeof r.hook === 'string' ? r.hook : '');
   if (plugin) hookCounts.set(plugin, (hookCounts.get(plugin) || 0) + 1);
 });

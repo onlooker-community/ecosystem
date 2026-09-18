@@ -105,6 +105,11 @@ hook_health_summary() {
 
   jq -s --arg cutoff "$cutoff_time" '
     map(select(.timestamp >= $cutoff))
+    # Start breadcrumbs are not outcomes (ecosystem-449.66). They carry no
+    # duration_ms, so leaving them in inflated `total` AND counted every one of
+    # them as `unmeasurable` — the field that is supposed to mean "the clock
+    # failed" would instead have tracked the number of times a hook ran.
+    | map(select(.status != "started"))
     | group_by(.hook)
     | map({
         hook: .[0].hook,
