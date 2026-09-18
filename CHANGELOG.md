@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.60.3](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.60.2...ecosystem-v0.60.3) (2026-09-18)
+
+
+### Bug Fixes
+
+* **librarian:** stop SessionEnd dying at the 1500ms deadline :zap: ([#338](https://github.com/onlooker-community/ecosystem/issues/338)) ([0d0ab06](https://github.com/onlooker-community/ecosystem/commit/0d0ab06bff3114ace0599a008221efd041328a7d))
+
 ## [0.60.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.60.1...ecosystem-v0.60.2) (2026-09-18)
 
 
