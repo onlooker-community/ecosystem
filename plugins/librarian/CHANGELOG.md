@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.18.4](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.18.3...librarian-v0.18.4) (2026-09-18)
+
+
+### Bug Fixes
+
+* **librarian:** stop SessionEnd dying at the 1500ms deadline :zap: ([#338](https://github.com/onlooker-community/ecosystem/issues/338)) ([0d0ab06](https://github.com/onlooker-community/ecosystem/commit/0d0ab06bff3114ace0599a008221efd041328a7d))
+
 ## [0.18.3](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.18.2...librarian-v0.18.3) (2026-09-13)
 
 
