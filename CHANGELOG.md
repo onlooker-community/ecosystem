@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.60.4](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.60.3...ecosystem-v0.60.4) (2026-09-18)
+
+
+### Bug Fixes
+
+* **cartographer:** stop --max-tokens killing every LLM phase :relieved: ([#337](https://github.com/onlooker-community/ecosystem/issues/337)) ([3c031ac](https://github.com/onlooker-community/ecosystem/commit/3c031ac317cb6379624b1deee67e19c5ddb3bf3c))
+
 ## [0.60.3](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.60.2...ecosystem-v0.60.3) (2026-09-18)
 
 
