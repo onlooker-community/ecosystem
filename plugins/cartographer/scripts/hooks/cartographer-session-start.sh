@@ -100,6 +100,13 @@ fi
 # runs the audit; this hook exits seconds after backgrounding it. Racing past
 # this check is harmless -- the audit will decline the lock and exit -- so it
 # is an optimization to avoid spawning a process that would do nothing.
+#
+# That harmlessness runs one way only, and the inverse is what bit us: this
+# probe must never be STRICTER than the lock. It gates the spawn of the one
+# process whose acquire can reclaim an abandoned lock, so a probe that calls a
+# breakable lock "held" is not skipping a no-op audit -- it is withholding the
+# repair, forever, on every future session (ecosystem-449.62). is_held now asks
+# _lock_stale under the same timeout the acquire uses, so the two cannot drift.
 cartographer_lock_is_held "$LOCK_FILE" && exit 0
 
 # Launch the audit detached — hook must return immediately.
