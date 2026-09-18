@@ -142,7 +142,10 @@ cartographer_analyze_stale_ref() {
 		[[ -z "$fpath" || ! -f "$fpath" ]] && continue
 		local line_no=0
 		while IFS= read -r line; do
-			(( line_no++ ))
+			# `|| true` because (( x++ )) returns the pre-increment value, so the
+			# first iteration exits 1 and errexit aborts on bash 4+. Same guard
+			# run-audit.sh uses on all five of its counters.
+			(( line_no++ )) || true
 			# extract tokens that look like relative/absolute paths
 			local tokens
 			tokens=$(printf '%s' "$line" | grep -oE '[./][a-zA-Z0-9_/.-]{3,}' 2>/dev/null || true)

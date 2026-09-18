@@ -132,3 +132,33 @@ STUB
 	[ -s "$CLAUDE_ARGV_LOG" ] || return 1
 	grep -q -- '--max-turns 1' "$CLAUDE_ARGV_LOG"
 }
+
+# `(( x++ ))` evaluates to the PRE-increment value, so the first iteration with
+# x=0 makes the arithmetic command return exit status 1. Under errexit bash 4+
+# aborts on it; bash 3.2 does not. bats resolves `#!/usr/bin/env bash`, which is
+# 3.2 on macOS and 5.x on CI, so this is invisible locally and fatal in CI.
+#
+# run-audit.sh already guards all five of its increments with `|| true`, and the
+# plugin's own SKILL.md documents that idiom -- cartographer-analyze.sh:145 was
+# the one instance that missed it, unreached until a caller ran under errexit.
+_modern_bash() {
+	local b major
+	for b in /opt/homebrew/bin/bash /usr/local/bin/bash /bin/bash; do
+		[ -x "$b" ] || continue
+		major=$("$b" -c 'printf %s "${BASH_VERSINFO[0]}"' 2>/dev/null) || continue
+		if [ "${major:-0}" -ge 4 ]; then printf '%s' "$b"; return 0; fi
+	done
+	return 1
+}
+
+@test "analyzers survive being called under errexit on bash 4+" {
+	local sh
+	sh=$(_modern_bash) || skip "no bash >= 4 on this host"
+	run "$sh" -c '
+		set -e
+		source "$1"
+		cartographer_analyze_stale_ref "$2" "$3" m 2048 10 >/dev/null
+		cartographer_analyze_contradiction "$2" m 2048 10 >/dev/null
+	' _ "${PLUGIN_ROOT}/scripts/lib/cartographer-analyze.sh" "$PROJECT_FILES" "$FIXTURE_REPO"
+	[ "$status" -eq 0 ]
+}
