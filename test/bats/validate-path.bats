@@ -232,6 +232,28 @@ setup() {
     >/dev/null
 }
 
+# A killed run is neither a success nor a failure, and it must rank with the
+# problems rather than below them: sorting on failures alone buried librarian at
+# the bottom of this list for weeks while it was being killed every session.
+@test "hook_health_summary counts terminated runs and ranks them with failures" {
+  hook_register "killed-hook"
+  # The EXIT trap's own path, reached without any completion mark.
+  _hook_health_write "terminated" "terminated_before_completion,last_exit_code=0"
+
+  hook_register "quiet-hook"
+  hook_success
+
+  local summary
+  summary=$(hook_health_summary 24)
+  echo "$summary" | jq -e \
+    'map(select(.hook == "killed-hook"))
+     | .[0]
+     | .terminated == 1 and .success == 0 and .failure == 0' \
+    >/dev/null || return 1
+
+  # Ranked above the healthy hook despite having zero failures.
+  echo "$summary" | jq -e '.[0].hook == "killed-hook"' >/dev/null
+}
 
 # ----------------------------------------------------------------------------
 # Hook composition bus: hook_bus_list / hook_bus_cleanup

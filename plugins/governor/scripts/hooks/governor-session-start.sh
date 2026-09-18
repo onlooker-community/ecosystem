@@ -52,7 +52,7 @@ hook_health_context "$INPUT"
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SESSION_ID=""
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 
-_done() { exit 0; }
+_done() { hook_health_exit 0; }
 
 governor_config_load "$CWD"
 

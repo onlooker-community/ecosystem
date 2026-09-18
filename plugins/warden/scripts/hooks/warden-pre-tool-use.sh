@@ -44,11 +44,11 @@ export _HOOK_SESSION_ID="$SESSION_ID"
 
 warden_config_load "$CWD"
 
-[[ -z "$SESSION_ID" ]] && exit 0
+[[ -z "$SESSION_ID" ]] && hook_health_exit 0
 
 # Gate open → allow silently.
 if ! warden_gate_is_closed "$SESSION_ID"; then
-	exit 0
+	hook_health_exit 0
 fi
 
 # ---- Gate closed → block this operation. -----------------------------
@@ -96,4 +96,4 @@ jq -n \
 	'{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$message}}' 2>/dev/null \
 	|| printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Warden closed the content gate. Run /warden clear to reopen."}}'
 
-exit 0
+hook_health_exit 0

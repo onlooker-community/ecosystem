@@ -109,6 +109,21 @@ See `plugins/compass/docs/adr/001-evaluate-prompts-in-context.md` for the full d
    measurement — it silently reports nothing to `hook-health.jsonl`, with no error and no test failure
    to flag it. `test/bats/hook-health.bats` enforces that every hook under `plugins/*/scripts/hooks/*.sh`
    calls `hook_health_register`.
+10. Once a hook has registered, every path out of it must go through `hook_health_exit` rather
+    than a bare `exit`. The EXIT trap cannot tell an exit the hook chose from a kill: when a
+    signal terminates the shell bash still runs the trap, but `$?` there is the last *completed*
+    command's status — typically a successful `jq` — so a killed hook recorded `success`. That is
+    how librarian ran up 624 consecutive `status=success` records while being killed at the 1500ms
+    SessionEnd deadline on nearly every session. `BASH_COMMAND` cannot separate them either: a hook
+    that fell off its own end reports the last command, exactly like an interrupted one. So an
+    unmarked exit now records `terminated`, and `hook_health_exit` is what marks it.
+    The one exception is the `*_NESTED` re-entry guard: it runs *before* `hook-health.sh` is
+    sourced, where `hook_health_exit` is undefined and would exit 127 instead of 0. Those stay a
+    plain `exit`, and a guard that returns before registering is not a measured run anyway.
+    SIGKILL runs no trap at all, so it is covered separately by the start breadcrumb
+    `hook_health_register` writes — a breadcrumb whose `run_id` never appears on a terminal record
+    is a run that was killed outright. `test/bats/hook-health.bats` enforces the no-bare-`exit`
+    rule; see ecosystem-449.66.
 
 ## Development
 

@@ -37,7 +37,7 @@ source "${PLUGIN_ROOT}/scripts/lib/bursar-ledger.sh"
 INPUT=$(cat)
 hook_health_context "$INPUT"
 
-_done() { exit 0; }
+_done() { hook_health_exit 0; }
 
 # Emit diagnostic errors to stderr when ledger recording fails.
 _log_error() {

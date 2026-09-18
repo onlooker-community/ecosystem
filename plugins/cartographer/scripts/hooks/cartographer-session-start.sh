@@ -40,13 +40,13 @@ CWD=$(printf '%s' "$HOOK_INPUT" | jq -r '.cwd // empty' 2>/dev/null)
 _HOOK_SESSION_ID=$(printf '%s' "$HOOK_INPUT" | jq -r '.session_id // empty' 2>/dev/null)
 export _HOOK_SESSION_ID
 
-[[ -z "$CWD" ]] && exit 0
+[[ -z "$CWD" ]] && hook_health_exit 0
 
 REPO_ROOT=$(cartographer_project_repo_root "$CWD")
 cartographer_config_load "$CWD"
 
 PROJECT_KEY=$(cartographer_project_key "$CWD")
-[[ -z "$PROJECT_KEY" ]] && exit 0
+[[ -z "$PROJECT_KEY" ]] && hook_health_exit 0
 
 ONLOOKER_DIR="${ONLOOKER_DIR:-$HOME/.onlooker}"
 CARTOGRAPHER_DIR="$ONLOOKER_DIR/cartographer/$PROJECT_KEY"
@@ -90,7 +90,7 @@ elif [[ -f "$STATE_FILE" ]]; then
 	ELAPSED=$(( NOW - LAST ))
 	THRESHOLD=$(( INTERVAL_HOURS * 3600 ))
 	if [[ "$ELAPSED" -lt "$THRESHOLD" ]]; then
-		exit 0
+		hook_health_exit 0
 	fi
 	TRIGGER="$INTERVAL_TRIGGER"
 fi
@@ -107,7 +107,7 @@ fi
 # breakable lock "held" is not skipping a no-op audit -- it is withholding the
 # repair, forever, on every future session (ecosystem-449.62). is_held now asks
 # _lock_stale under the same timeout the acquire uses, so the two cannot drift.
-cartographer_lock_is_held "$LOCK_FILE" && exit 0
+cartographer_lock_is_held "$LOCK_FILE" && hook_health_exit 0
 
 # Launch the audit detached — hook must return immediately.
 # setsid detaches from the controlling terminal so SIGHUP on session close
@@ -135,4 +135,4 @@ else
 	" >>"$CARTOGRAPHER_DIR/audit.log" 2>&1 &
 fi
 
-exit 0
+hook_health_exit 0

@@ -64,12 +64,12 @@ source "${PLUGIN_ROOT}/scripts/lib/governor-estimate.sh"
 # shellcheck source=../lib/governor-ledger.sh
 source "${PLUGIN_ROOT}/scripts/lib/governor-ledger.sh"
 
-_allow() { exit 0; }
+_allow() { hook_health_exit 0; }
 
 _block() {
 	local reason="${1:-budget_exceeded}"
 	printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\n' "$reason"
-	exit 0
+	hook_health_exit 0
 }
 
 INPUT=$(cat)

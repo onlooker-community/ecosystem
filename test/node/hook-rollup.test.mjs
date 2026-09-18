@@ -264,6 +264,24 @@ describe('hook-rollup', () => {
       assert.doesNotMatch(r.stderr, /CONTAMINATED/);
     });
 
+    it('reports a terminated run rather than burying it in the histogram', () => {
+      const s = scaffold();
+      writeLines(s.health, [
+        started('librarian-session-end', 'run-1'),
+        health('librarian-session-end', 'SessionEnd', 1502, {
+          runId: 'run-1',
+          status: 'terminated',
+        }),
+      ]);
+      writeLines(s.events, [event('session.start')]);
+      const r = run(s);
+      assert.equal(r.code, 0);
+      assert.match(r.stdout, /TERMINATED: 1 run\(s\) were killed/);
+      // The duration is the deadline, and the output must say so rather than
+      // letting 1502ms read as a slow-but-healthy run.
+      assert.match(r.stdout, /deadlines, not workloads/);
+    });
+
     it('reports a start with no terminal record as an orphan', () => {
       const s = scaffold();
       writeLines(s.health, [

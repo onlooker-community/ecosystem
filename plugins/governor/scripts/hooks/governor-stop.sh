@@ -46,7 +46,7 @@ source "${PLUGIN_ROOT}/scripts/lib/governor-events.sh"
 # shellcheck source=../lib/governor-ledger.sh
 source "${PLUGIN_ROOT}/scripts/lib/governor-ledger.sh"
 
-_done() { exit 0; }
+_done() { hook_health_exit 0; }
 
 INPUT=$(cat)
 hook_health_context "$INPUT"

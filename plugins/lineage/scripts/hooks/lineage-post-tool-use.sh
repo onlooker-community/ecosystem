@@ -64,7 +64,7 @@ source "${PLUGIN_ROOT}/scripts/lib/lineage-baseline.sh"
 
 INPUT=$(cat)
 hook_health_context "$INPUT"
-_done() { exit 0; }
+_done() { hook_health_exit 0; }
 
 # One jq pass for every field this hook can need, instead of the ten it used
 # to spawn. jq was 25 forks and ~66ms of a ~227ms invocation (ecosystem-6ce);

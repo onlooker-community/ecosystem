@@ -67,7 +67,7 @@ TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | jq -r '.transcript_path // ""' 2>/dev/n
 
 export _HOOK_SESSION_ID="${SESSION_ID:-unknown}"
 
-_done() { exit 0; }
+_done() { hook_health_exit 0; }
 
 # ---------------------------------------------------------------------------
 # Config + prerequisites

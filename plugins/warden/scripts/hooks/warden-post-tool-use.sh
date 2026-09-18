@@ -50,7 +50,7 @@ TOOL_NAME=$(printf '%s' "$INPUT" | jq -r '.tool_name // ""' 2>/dev/null) || TOOL
 
 export _HOOK_SESSION_ID="$SESSION_ID"
 
-_done() { exit 0; }
+_done() { hook_health_exit 0; }
 
 warden_config_load "$CWD"
 

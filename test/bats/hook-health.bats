@@ -130,7 +130,7 @@ setup() {
 		source '${REPO_ROOT}/scripts/lib/hook-health.sh'
 		export ONLOOKER_HOOK_HEALTH_LOG='${HEALTH_LOG}'
 		hook_health_register 'trapped-hook'
-		exit 0
+		hook_health_exit 0
 	"
 	[ "$status" -eq 0 ] || return 1
 	tail -n 1 "$HEALTH_LOG" | jq -e '.hook == "trapped-hook" and .status == "success"' >/dev/null
@@ -141,10 +141,43 @@ setup() {
 		source '${REPO_ROOT}/scripts/lib/hook-health.sh'
 		export ONLOOKER_HOOK_HEALTH_LOG='${HEALTH_LOG}'
 		hook_health_register 'crashing-hook'
-		exit 7
+		hook_health_exit 7
 	"
 	[ "$status" -eq 7 ] || return 1
 	tail -n 1 "$HEALTH_LOG" | jq -e '.status == "failure" and .error == "exit_code=7"' >/dev/null
+}
+
+# The contract inversion from ecosystem-449.66, stated directly: a bare `exit`
+# is no longer evidence of success, because the EXIT trap cannot tell one from a
+# kill. This is what makes hook_health_exit load-bearing rather than cosmetic,
+# and it is why the enforcing test below bans a bare exit in a registering hook.
+@test "an exit that never marks completion is recorded as terminated" {
+	run bash -c "
+		source '${REPO_ROOT}/scripts/lib/hook-health.sh'
+		export ONLOOKER_HOOK_HEALTH_LOG='${HEALTH_LOG}'
+		hook_health_register 'unmarked-hook'
+		exit 0
+	"
+	[ "$status" -eq 0 ] || return 1
+	tail -n 1 "$HEALTH_LOG" | jq -e '
+		.hook == "unmarked-hook" and .status == "terminated"
+	' >/dev/null
+}
+
+# hook_health_success / hook_health_failure are themselves statements that the
+# hook reached a decision, so they must imply completion. If they did not, every
+# hook that writes its own record explicitly would be reported as terminated.
+@test "an explicit success call counts as completion" {
+	run bash -c "
+		source '${REPO_ROOT}/scripts/lib/hook-health.sh'
+		export ONLOOKER_HOOK_HEALTH_LOG='${HEALTH_LOG}'
+		hook_health_register 'explicit-hook'
+		hook_health_success
+		exit 0
+	"
+	[ "$status" -eq 0 ] || return 1
+	[ "$(jq -sc '[.[] | select(.hook == "explicit-hook" and .status != "started")] | length' "$HEALTH_LOG")" -eq 1 ] || return 1
+	tail -n 1 "$HEALTH_LOG" | jq -e '.status == "success"' >/dev/null
 }
 
 # The regression this whole task exists for. Modeled on the real pattern in
@@ -493,3 +526,51 @@ setup() {
 	[ -z "$offenders" ] || { echo "registers after another source: $offenders" >&2; return 1; }
 }
 
+# ecosystem-449.66. The twin of the test above, and what keeps the completion
+# contract from rotting: once a hook has registered, every path out of it must
+# go through hook_health_exit, or the EXIT trap cannot tell that exit from a
+# kill and records it as terminated.
+#
+# Scoped to lines AFTER the lib is sourced. The *_NESTED re-entry guards run
+# before it and must stay a plain `exit`: hook_health_exit is not defined yet
+# there, so calling it would exit 127 instead of 0, and a guard that returns
+# before registering is not a measured run in the first place.
+#
+# Heredoc bodies are skipped — they are data a hook writes out, not code it runs.
+@test "every registering hook routes its exits through hook_health_exit" {
+	local hooks=()
+	while IFS= read -r f; do hooks+=("$f"); done \
+		< <(find "${REPO_ROOT}/plugins" -path '*/scripts/hooks/*.sh' -type f -print \
+		    ; find "${REPO_ROOT}/scripts/hooks" -name '*.sh' -type f -print)
+	[ "${#hooks[@]}" -gt 0 ] || return 1
+
+	local offenders="" f src bare
+	for f in "${hooks[@]}"; do
+		grep -q 'hook_health_register' "$f" || continue
+		src=$(grep -nE '^[[:space:]]*(source|\.)[[:space:]].*hook-health\.sh' "$f" | head -1 | cut -d: -f1)
+		[ -n "$src" ] || continue
+
+		bare=$(awk -v start="$src" '
+			NR <= start { next }
+			{
+				line = $0
+				if (inhere) { if (line ~ ("^[ \t]*" delim "[ \t]*$")) inhere = 0; next }
+				if (match(line, /<<-?[ \t]*.?[A-Za-z_][A-Za-z0-9_]*/)) {
+					d = substr(line, RSTART, RLENGTH)
+					sub(/^<<-?[ \t]*.?/, "", d)
+					delim = d; inhere = 1; next
+				}
+				probe = line; sub(/^[ \t]+/, "", probe)
+				if (probe ~ /^#/) next
+				scan = line
+				gsub(/hook_health_exit/, "SAFE", scan)
+				gsub(/builtin[ \t]+exit/, "SAFE", scan)
+				if (scan ~ /(^|[ \t;&|(])exit([ \t]+[-$0-9]|[ \t]*$|[ \t]*[;)])/) print NR
+			}' "$f")
+
+		if [ -n "$bare" ]; then
+			offenders+="$(basename "$f"):$(echo "$bare" | tr '\n' ',') "
+		fi
+	done
+	[ -z "$offenders" ] || { echo "bare exit after registering: $offenders" >&2; return 1; }
+}

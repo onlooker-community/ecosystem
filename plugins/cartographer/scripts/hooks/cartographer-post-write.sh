@@ -28,12 +28,12 @@ CWD=$(printf '%s' "$HOOK_INPUT" | jq -r '.cwd // empty' 2>/dev/null)
 _HOOK_SESSION_ID=$(printf '%s' "$HOOK_INPUT" | jq -r '.session_id // empty' 2>/dev/null)
 export _HOOK_SESSION_ID
 
-[[ -z "$CWD" ]] && exit 0
+[[ -z "$CWD" ]] && hook_health_exit 0
 
 # Extract the written file path from tool input
 TOOL_TARGET=$(printf '%s' "$HOOK_INPUT" \
 	| jq -r '.tool_input.file_path // .tool_input.path // empty' 2>/dev/null)
-[[ -z "$TOOL_TARGET" ]] && exit 0
+[[ -z "$TOOL_TARGET" ]] && hook_health_exit 0
 
 # Canonicalize the path (resolve symlinks where possible)
 if command -v realpath &>/dev/null; then
@@ -46,13 +46,13 @@ fi
 
 # Exact basename match — swap files (.swp, ~, .#) are excluded by this check
 TARGET_BASENAME=$(basename "$CANONICAL")
-[[ "$TARGET_BASENAME" != "CLAUDE.md" ]] && exit 0
+[[ "$TARGET_BASENAME" != "CLAUDE.md" ]] && hook_health_exit 0
 
 REPO_ROOT=$(cartographer_project_repo_root "$CWD")
 cartographer_config_load "$CWD"
 
 PROJECT_KEY=$(cartographer_project_key "$CWD")
-[[ -z "$PROJECT_KEY" ]] && exit 0
+[[ -z "$PROJECT_KEY" ]] && hook_health_exit 0
 
 ONLOOKER_DIR="${ONLOOKER_DIR:-$HOME/.onlooker}"
 CARTOGRAPHER_DIR="$ONLOOKER_DIR/cartographer/$PROJECT_KEY"
@@ -65,7 +65,7 @@ LOCK_FILE="$CARTOGRAPHER_DIR/audit.lock"
 # runs the audit; this hook exits seconds after backgrounding it. Racing past
 # this check is harmless -- the audit will decline the lock and exit -- so it
 # is an optimization to avoid spawning a process that would do nothing.
-cartographer_lock_is_held "$LOCK_FILE" && exit 0
+cartographer_lock_is_held "$LOCK_FILE" && hook_health_exit 0
 
 export CARTOGRAPHER_DIR
 export CARTOGRAPHER_TRIGGER="post_tool_use"
@@ -87,4 +87,4 @@ else
 	" >>"$CARTOGRAPHER_DIR/audit.log" 2>&1 &
 fi
 
-exit 0
+hook_health_exit 0

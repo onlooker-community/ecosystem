@@ -51,10 +51,10 @@ CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 
 PROJECT_KEY=$(archivist_project_key "$CWD")
 # No git context means no store to write into, and nothing to mine.
-[[ -z "$PROJECT_KEY" ]] && exit 0
+[[ -z "$PROJECT_KEY" ]] && hook_health_exit 0
 
 REPO_ROOT=$(archivist_project_repo_root "$CWD")
-[[ -z "$REPO_ROOT" ]] && exit 0
+[[ -z "$REPO_ROOT" ]] && hook_health_exit 0
 
 # ---------------------------------------------------------------------------
 # Watermark
@@ -84,9 +84,9 @@ RANGE="HEAD"
 # commits whose messages the squash already carries.
 COMMITS=$(git -C "$REPO_ROOT" log --first-parent --format='%H %ct' "$RANGE" 2>/dev/null | tail -r 2>/dev/null || \
 	git -C "$REPO_ROOT" log --first-parent --reverse --format='%H %ct' "$RANGE" 2>/dev/null)
-[[ -z "$COMMITS" ]] && exit 0
+[[ -z "$COMMITS" ]] && hook_health_exit 0
 
-HEAD_SHA=$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null) || exit 0
+HEAD_SHA=$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null) || hook_health_exit 0
 
 wrote_any=0
 while IFS=' ' read -r sha epoch; do
@@ -147,4 +147,4 @@ if [[ $wrote_any -eq 1 ]]; then
 		"$HEAD_SHA" "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "$MINED_PATH" 2>/dev/null || true
 fi
 
-exit 0
+hook_health_exit 0

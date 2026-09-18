@@ -96,17 +96,17 @@ archivist_config_load "$CWD"
 
 if [[ -z "$PROJECT_KEY" || -z "$REPO_ROOT" ]]; then
 	_approve "Archivist: no git context, nothing to extract"
-	exit 0
+	hook_health_exit 0
 fi
 
 if [[ -z "$TRANSCRIPT_PATH" || ! -f "$TRANSCRIPT_PATH" ]]; then
 	_approve "Archivist: no transcript available"
-	exit 0
+	hook_health_exit 0
 fi
 
 if ! command -v claude >/dev/null 2>&1; then
 	_approve "Archivist: claude CLI not on PATH, skipping extraction"
-	exit 0
+	hook_health_exit 0
 fi
 
 # ----------------------------------------------------------------------------
@@ -128,7 +128,7 @@ TRANSCRIPT_TAIL=$(tail -c "$TRANSCRIPT_TAIL_CHARS" "$TRANSCRIPT_PATH" 2>/dev/nul
 
 if [[ -z "$TRANSCRIPT_TAIL" ]]; then
 	_approve "Archivist: empty transcript tail"
-	exit 0
+	hook_health_exit 0
 fi
 
 PROMPT_FILE=$(mktemp -t archivist-prompt.XXXXXX 2>/dev/null) || PROMPT_FILE="/tmp/archivist-prompt.$$"
@@ -190,7 +190,7 @@ fi
 
 if [[ -z "$RESPONSE" ]]; then
 	_approve "Archivist: extraction returned no output"
-	exit 0
+	hook_health_exit 0
 fi
 
 # Strip any accidental markdown fences before parsing.
@@ -198,7 +198,7 @@ CLEAN_RESPONSE=$(printf '%s' "$RESPONSE" | sed -e 's/^```json//' -e 's/^```//' -
 
 if ! printf '%s' "$CLEAN_RESPONSE" | jq -e '.decisions and .dead_ends and .open_questions' >/dev/null 2>&1; then
 	_approve "Archivist: extraction output was not valid JSON"
-	exit 0
+	hook_health_exit 0
 fi
 
 # ----------------------------------------------------------------------------
@@ -290,4 +290,4 @@ if [[ "$WRITE_COUNT" -gt 0 && -n "$SESSION_ID" ]]; then
 fi
 
 _approve "Archivist: wrote ${WRITE_COUNT} artifacts (trigger=${TRIGGER})"
-exit 0
+hook_health_exit 0

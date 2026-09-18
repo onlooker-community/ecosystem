@@ -116,6 +116,9 @@ hook_health_summary() {
         total: length,
         success: map(select(.status == "success")) | length,
         failure: map(select(.status == "failure")) | length,
+        # A run killed before it could mark completion. Distinct from failure:
+        # the hook did not decide to stop, something stopped it.
+        terminated: map(select(.status == "terminated")) | length,
         unmeasurable: (map(select(.duration_ms == null)) | length),
         # Average only over records that were actually measured. jq treats
         # null as identity in `add` but `length` still counts it, so the naive
@@ -130,7 +133,11 @@ hook_health_summary() {
         ),
         last_error: (map(select(.error != null)) | last | .error // null)
       })
-    | sort_by(-.failure)
+    # Terminated runs rank alongside failures, not below them. Sorting on
+    # failures alone would have buried librarian at the bottom of this list
+    # throughout the outage that motivated ecosystem-449.66: it recorded zero
+    # failures while being killed on nearly every session.
+    | sort_by(-(.failure + .terminated))
   ' "$ONLOOKER_HOOK_HEALTH_LOG" 2>/dev/null || echo '[]'
 }
 

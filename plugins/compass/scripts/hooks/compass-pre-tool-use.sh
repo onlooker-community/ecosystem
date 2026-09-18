@@ -91,9 +91,9 @@ case "$TOOL_NAME" in
 		;;
 	*)
 		# Unknown tool — allow through; this hook should only fire for known tools.
-		exit 0
+		hook_health_exit 0
 		;;
 esac
 
 compass_run_gate "$TOOL_NAME" "$FILE_PATH" "$OPERATION" "$CONTEXT" "$SESSION_ID" "$CWD" "$TRANSCRIPT_PATH"
-exit $?
+hook_health_exit $?

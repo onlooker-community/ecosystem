@@ -74,10 +74,10 @@ curator_config_load "$CWD"
 PROJECT_KEY=$(curator_project_key "$CWD")
 if [[ -z "$PROJECT_KEY" ]]; then
 	_emit ""
-	exit 0
+	hook_health_exit 0
 fi
 
-curator_storage_init "$PROJECT_KEY" || { _emit ""; exit 0; }
+curator_storage_init "$PROJECT_KEY" || { _emit ""; hook_health_exit 0; }
 REMOTE_URL=$(curator_project_remote_url "$CWD")
 curator_storage_write_manifest "$PROJECT_KEY" "$REMOTE_URL" "$REPO_ROOT" || true
 
@@ -100,7 +100,7 @@ if [[ -z "$MEM_DIR" || ! -d "$MEM_DIR" ]]; then
 		findings_new: 0, findings_resolved: 0, duration_ms: 0
 	}')"
 	_emit ""
-	exit 0
+	hook_health_exit 0
 fi
 
 # ----------------------------------------------------------------------------
@@ -313,7 +313,7 @@ OPEN_COUNT=$(curator_storage_count_open "$PROJECT_KEY")
 
 if [[ "$OPEN_COUNT" -eq 0 && "$SKIP_WHEN_ZERO" == "true" ]]; then
 	_emit ""
-	exit 0
+	hook_health_exit 0
 fi
 
 # Build a compact "2 path-broken, 1 date-decayed" descriptor for the
@@ -341,4 +341,4 @@ if [[ "${#CONTEXT}" -gt "$MAX_POINTER" ]]; then
 fi
 
 _emit "$CONTEXT"
-exit 0
+hook_health_exit 0

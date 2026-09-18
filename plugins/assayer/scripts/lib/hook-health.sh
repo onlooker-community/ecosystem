@@ -51,7 +51,7 @@
 # Derived from the bytes rather than declared: a version directory's name, its
 # package.json and its mtime have each been caught disagreeing with the contents
 # they label. A hand-maintained constant would be a fourth such label.
-_ONLOOKER_LIB_FINGERPRINT="8c3be235a600"
+_ONLOOKER_LIB_FINGERPRINT="f25060e27474"
 
 # Do not clobber values a caller already set — several plugins set
 # _HOOK_SESSION_ID before sourcing, and their *-events.sh libs read it.
@@ -68,13 +68,12 @@ _HOOK_PRIOR_EXIT_CMD="${_HOOK_PRIOR_EXIT_CMD:-}"
 # terminal record that closes it (ecosystem-449.66).
 _HOOK_START_ISO="${_HOOK_START_ISO:-}"
 _HOOK_RUN_ID="${_HOOK_RUN_ID:-}"
-# Set by hook_health_complete. Unset means the EXIT trap cannot prove the hook
-# reached a termination point it chose — it will mean "terminated" once the
-# follow-up change flips the trap and converts every hook; for now it is
-# recorded and not acted on.
+# Set by hook_health_complete, read by the EXIT trap. Unset means the trap
+# cannot prove the hook reached a termination point it chose, so the record says
+# terminated rather than success.
 #
 # Deliberately NOT exported: a subshell that marks completion must not speak for
-# its parent, and losing the flag is the safe direction (a run will read as
+# its parent, and losing the flag is the safe direction (a run reads as
 # terminated, never as a false success).
 _HOOK_COMPLETED="${_HOOK_COMPLETED:-}"
 # Separates two fires that land in the same millisecond in one process, which
@@ -436,13 +435,14 @@ hook_health_register() {
 # excluding the hook's own cleanup from the recorded duration.
 _hook_health_on_exit() {
 	local exit_code="${1:-0}"
-	# NOTE (ecosystem-449.66, part 1 of 2): $_HOOK_COMPLETED is recorded but not
-	# yet acted on. Reporting an unmarked exit as "terminated" only becomes
-	# correct once every hook routes its exits through hook_health_exit —
-	# flipping it first would label all 33 of them terminated on every fire.
-	# The flip, and the conversion that earns it, land together in the next
-	# change. Until then this branches exactly as it always has.
-	if [[ "$exit_code" -eq 0 ]]; then
+	if [[ -z "$_HOOK_COMPLETED" ]]; then
+		# The trap ran without the hook ever marking completion, so the shell
+		# did not reach a termination point it chose — it was killed. $exit_code
+		# is kept for forensics but is NOT evidence of anything: measured, it is
+		# the status of the last COMPLETED command, which for a killed hook is
+		# typically a successful jq. Reporting it as success is ecosystem-449.66.
+		_hook_health_write "terminated" "terminated_before_completion,last_exit_code=${exit_code}"
+	elif [[ "$exit_code" -eq 0 ]]; then
 		_hook_health_write "success" ""
 	else
 		_hook_health_write "failure" "exit_code=${exit_code}"
@@ -500,10 +500,6 @@ hook_health_context() {
 #
 # Cheap by construction — a variable assignment, no subprocess, no write. The
 # record is still written once, by the EXIT trap.
-#
-# Inert until the follow-up change: the trap records the flag's effect only once
-# every hook sets it. Defining it here lets that conversion be a separate,
-# purely mechanical diff.
 hook_health_complete() {
 	_HOOK_COMPLETED=1
 	return 0
