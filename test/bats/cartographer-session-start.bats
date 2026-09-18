@@ -99,3 +99,78 @@ _run_hook() {
 	count=$(grep -c '"event_type":"onlooker.watch.unmatched"' "$ONLOOKER_EVENTS_LOG")
 	[[ "$count" == "1" ]]
 }
+
+# ecosystem-449.62 — the spawn gate, end to end.
+#
+# Every test above pins last_audit_at to now so the interval gate returns before
+# the lock check. These two do the opposite: the interval HAS elapsed, so the
+# lock probe is the last thing standing between the session and an audit.
+#
+# The bug these replace: the probe was `[[ -d "${lock}.d" ]]`, so any lock
+# directory — including one left by an audit that was killed months ago — made
+# the hook exit. run-audit.sh's acquire would have broken that lock on its first
+# iteration, but the hook exited before spawning it. 20 of 23 project directories
+# on the author's machine were wedged this way, the oldest since June.
+
+_stale_lock_setup() {
+	CARTO_DIR="${ONLOOKER_DIR}/cartographer/${PROJECT_KEY}"
+	LOCK_D="${CARTO_DIR}/audit.lock.d"
+	# Interval elapsed: the hook must reach the lock probe.
+	printf '0\n' >"${CARTO_DIR}/last_audit_at"
+	_settings '{"cartographer":{"undocumented_entity":{"globs":["plugins/*/"]}}}'
+
+	# run-audit.sh shells out to claude; keep it deterministic and instant.
+	STUB_BIN="${BATS_TEST_TMPDIR}/bin"
+	mkdir -p "$STUB_BIN"
+	printf '#!/usr/bin/env bash\ncat >/dev/null\nprintf %s "[]"\n' >"${STUB_BIN}/claude"
+	chmod +x "${STUB_BIN}/claude"
+	export PATH="${STUB_BIN}:${PATH}"
+}
+
+# Asserted through the lock's disappearance rather than through audit.log: the
+# lock can only be cleared by the audit process, so a cleared lock is proof the
+# hook spawned it. The audit is detached, hence the bounded wait.
+_wait_for_lock_release() {
+	local waited=0
+	while [[ -d "$LOCK_D" && "$waited" -lt 20 ]]; do
+		sleep 1
+		waited=$((waited + 1))
+	done
+}
+
+@test "a lock abandoned by a dead audit does not stop the next session auditing" {
+	_stale_lock_setup
+	# No holder file — the shape left by pre-holder-file code, and the shape
+	# every stranded lock on the author's machine actually had.
+	mkdir -p "$LOCK_D"
+
+	_run_hook
+	[ "$status" -eq 0 ] || return 1
+	_wait_for_lock_release
+	[ ! -d "$LOCK_D" ]
+}
+
+# The other half, so the fix cannot pass by simply never gating.
+#
+# Asserted on whether an audit was SPAWNED, not on whether the lock survived.
+# The lock survives either way — run-audit.sh declines a live holder on its own
+# — so a surviving lock proves nothing about this gate. The first draft of this
+# test made that mistake and a `return 1` mutant (never gate at all) passed it.
+# A spawned audit announces its decline in audit.log; a gated one writes nothing.
+@test "a lock held by a live audit still turns the next session away" {
+	_stale_lock_setup
+	sleep 30 &
+	local holder=$!
+	mkdir -p "$LOCK_D"
+	printf '%s\n' "$holder" >"${LOCK_D}/holder"
+
+	_run_hook
+	# Generous next to the ~100ms a spawned audit needs to reach the lock.
+	sleep 2
+	local spawned=0
+	grep -q 'another audit holds' "${CARTO_DIR}/audit.log" 2>/dev/null && spawned=1
+	kill "$holder" 2>/dev/null || true
+
+	[ "$spawned" -eq 0 ] || return 1
+	[ -d "$LOCK_D" ]
+}

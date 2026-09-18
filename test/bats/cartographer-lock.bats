@@ -94,3 +94,61 @@ teardown() {
   [[ "$output" == *"RELEASE_OK"* ]] || return 1
   [[ "$output" == *"locking disabled"* ]]
 }
+
+# ecosystem-449.62. is_held guards the spawn of run-audit.sh, and run-audit.sh's
+# own acquire is what reclaims an abandoned lock. So a probe STRICTER than the
+# lock it stands in for gates the only code that could clear the lock it is
+# reporting — the audit never starts, the lock is never broken, and cartographer
+# goes quiet permanently.
+#
+# These pin the probe to the acquire path's verdict rather than to a rule of its
+# own. cartographer_lock_acquire passes timeout=0, which portable-lock clamps
+# stale_after down to, so the question is exactly _lock_stale "$holder" 0 0:
+# would the first mkdir iteration break this lock?
+
+@test "is_held returns false for a lock abandoned without a holder file" {
+  # Exactly the locks found stranded on the author's machine: written by code
+  # that predates holder files, so there is no holder to interrogate and
+  # _lock_stale falls to its age window, which timeout=0 satisfies immediately.
+  mkdir -p "${LOCK_FILE}.d"
+  run cartographer_lock_is_held "$LOCK_FILE"
+  [ "$status" -ne 0 ]
+}
+
+@test "is_held returns false for a lock whose holder is dead" {
+  sleep 0.1 &
+  local dead=$!
+  wait "$dead" 2>/dev/null || true
+  mkdir -p "${LOCK_FILE}.d"
+  printf '%s\n' "$dead" >"${LOCK_FILE}.d/holder"
+  run cartographer_lock_is_held "$LOCK_FILE"
+  [ "$status" -ne 0 ]
+}
+
+@test "is_held returns false for a lock whose holder line is not a pid" {
+  mkdir -p "${LOCK_FILE}.d"
+  printf 'garbage\n' >"${LOCK_FILE}.d/holder"
+  run cartographer_lock_is_held "$LOCK_FILE"
+  [ "$status" -ne 0 ]
+}
+
+# The exclusion half. Loosening the probe must not make it blind: a live holder
+# is still held, however long it has been holding.
+@test "is_held returns true for a lock whose holder is alive" {
+  sleep 30 &
+  local holder=$!
+  mkdir -p "${LOCK_FILE}.d"
+  printf '%s\n' "$holder" >"${LOCK_FILE}.d/holder"
+  run cartographer_lock_is_held "$LOCK_FILE"
+  kill "$holder" 2>/dev/null || true
+  [ "$status" -eq 0 ]
+}
+
+# THE contract, stated directly: the probe and the lock must not disagree about
+# what "held" means. Whenever is_held says free, acquire must succeed.
+@test "a lock is_held calls free is one acquire can actually take" {
+  mkdir -p "${LOCK_FILE}.d"
+  if cartographer_lock_is_held "$LOCK_FILE"; then return 1; fi
+  run cartographer_lock_acquire "$LOCK_FILE"
+  [ "$status" -eq 0 ]
+}

@@ -42,7 +42,36 @@ cartographer_lock_release() {
 	lock_release "$lock_file"
 }
 
+# Would a caller be turned away by this lock right now?
+#
+# Answers by asking the acquire path's own predicate rather than by restating
+# one. cartographer_lock_acquire passes timeout=0, which portable-lock clamps
+# stale_after down to (portable-lock.sh:140), so "held" here means precisely
+# what it means there: a holder _lock_stale refuses to break on the first
+# iteration. One definition, consulted twice.
+#
+# ecosystem-449.62: this was `[[ -d "${lock_file}.d" ]]` alone — a STRICTER rule
+# than the lock's. Callers use it to decide whether to start an audit at all,
+# and it is the audit's acquire that reclaims abandoned locks, so an existence
+# test gated the only code that could clear the lock it was reporting. A lock
+# left by a killed audit wedged cartographer permanently: 20 of 23 project
+# directories on the author's machine, the oldest stuck since June.
 cartographer_lock_is_held() {
 	local lock_file="${1:?lock_file required}"
-	[[ -d "${lock_file}.d" ]]
+	local lock_dir="${lock_file}.d"
+	[[ -d "$lock_dir" ]] || return 1
+
+	# Degraded no-op locking (portable-lock.sh absent). lock_acquire always
+	# fails there, so no audit can run whatever we answer; report held so the
+	# caller's `is_held && exit 0` skips, matching that contract.
+	declare -F _lock_stale >/dev/null 2>&1 || return 0
+
+	# 0 0 = (stale_after, waited), which models cartographer_lock_acquire's loop
+	# exactly while that acquire stays non-blocking: timeout=0 clamps stale_after
+	# to 0 and the loop runs a single iteration at waited=0. Give the acquire a
+	# real timeout and this stops being equivalent — a lock breakable at
+	# waited=timeout is not breakable on the first pass — so the two must be
+	# changed together.
+	_lock_holder "$lock_dir"
+	! _lock_stale "$_LOCK_HOLDER" 0 0
 }
