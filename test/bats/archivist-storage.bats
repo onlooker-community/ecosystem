@@ -196,3 +196,138 @@ setup() {
   run archivist_storage_write_manifest "" "remote" "$REPO"
   [ "$status" -ne 0 ]
 }
+
+# ecosystem-449.73. Counting wrapper for jq on PATH: each invocation appends one
+# byte to $JQ_COUNT_FILE then delegates to the real binary, so the count is
+# exact and behavior is unchanged. Same harness as
+# test/bats/librarian-archivist-reader.bats, which pinned the identical defect
+# one layer up.
+_count_jq_spawns() {
+  local real_jq
+  real_jq=$(command -v jq)
+  STUB_BIN="${BATS_TEST_TMPDIR}/bin"
+  mkdir -p "$STUB_BIN"
+  export JQ_COUNT_FILE="${BATS_TEST_TMPDIR}/jq-count"
+  : > "$JQ_COUNT_FILE"
+  cat > "${STUB_BIN}/jq" <<STUB
+#!/usr/bin/env bash
+printf 'x' >> "${JQ_COUNT_FILE}"
+exec "${real_jq}" "\$@"
+STUB
+  chmod +x "${STUB_BIN}/jq"
+  export PATH="${STUB_BIN}:${PATH}"
+}
+
+_seed_ranked() {
+  local key="$1" kind="$2" id="$3" at="${4:-2026-05-01T00:00:00Z}"
+  printf '{"id":"%s","summary":"s","created_at":"%s","updated_at":"%s"}\n' "$id" "$at" "$at" \
+    > "${ONLOOKER_DIR}/archivist/${key}/${kind}/${id}.json"
+}
+
+@test "load_ranked cost does not scale with the size of the artifact corpus" {
+  # THE DEFECT. load_ranked spawned two jq processes per artifact -- one to
+  # parse the file, and one more to re-parse and re-serialize the ENTIRE
+  # accumulated array in order to append to it -- so the work was quadratic in
+  # corpus size, not merely linear.
+  #
+  # Measured against the real corpus before the fix: 708 artifacts took
+  # 23,756ms, against 42ms for 7. That is 100x the artifacts and 565x the time.
+  # archivist-inject calls this on SessionStart, so its hook-health p50 went
+  # from 380ms on 2026-09-12 to ~24,000ms on 09-13, the day commit mining
+  # landed and the corpus began to grow. Wave 2's SessionStart exit criterion
+  # is roughly 5s.
+  #
+  # Asserted as a subprocess count rather than a wall-clock budget: the cost IS
+  # the spawns, and a count is exact on any machine under any load.
+  local key="abc123def456"
+  archivist_storage_init "$key"
+  local i id
+  for i in $(seq 1 60); do
+    id="01ART$(printf '%021d' "$i")"
+    _seed_ranked "$key" decisions "$id"
+  done
+
+  _count_jq_spawns
+
+  local ranked
+  ranked=$(archivist_storage_load_ranked "$key")
+  [ "$(printf '%s' "$ranked" | jq 'length')" -eq 60 ] || return 1
+
+  local spawns
+  spawns=$(wc -c < "$JQ_COUNT_FILE" | tr -d ' ')
+  # A handful of fixed calls is fine; anything proportional to 60 is the bug.
+  [ "$spawns" -le 10 ]
+}
+
+@test "artifact content never travels through jq's argv" {
+  # The 60-artifact test above passed while the function was still broken on
+  # real data. The first fix accumulated each kind into a variable and combined
+  # them with `jq -n --argjson decisions "$..."`, which puts the entire corpus
+  # on the command line: on the real 708-artifact project that produced
+  # "Argument list too long" and returned EMPTY. Fast and silently wrong.
+  #
+  # Corpus size alone is an unreliable trigger -- ARG_MAX is ~1MB on macOS and
+  # ~2MB on Linux, so a fixture big enough to fail everywhere is big enough to
+  # be slow everywhere. This pins the invariant instead: bulk data reaches jq on
+  # stdin or as a FILE PATH, never as an argument value.
+  local key="abc123def456"
+  archivist_storage_init "$key"
+  local i id
+  for i in $(seq 1 12); do
+    id="01ART$(printf '%021d' "$i")"
+    _seed_ranked "$key" decisions "$id"
+  done
+
+  local real_jq
+  real_jq=$(command -v jq)
+  STUB_BIN="${BATS_TEST_TMPDIR}/bin"
+  mkdir -p "$STUB_BIN"
+  export BIG_ARG_FILE="${BATS_TEST_TMPDIR}/big-arg"
+  : > "$BIG_ARG_FILE"
+  cat > "${STUB_BIN}/jq" <<STUB
+#!/usr/bin/env bash
+# A JSON blob passed as an argument is the defect. Real arguments here are jq
+# programs, short flags, and file paths; none approach this size.
+for a in "\$@"; do
+  if [ "\${#a}" -gt 2000 ]; then
+    printf '%s\n' "\${#a}" >> "${BIG_ARG_FILE}"
+  fi
+done
+exec "${real_jq}" "\$@"
+STUB
+  chmod +x "${STUB_BIN}/jq"
+  export PATH="${STUB_BIN}:${PATH}"
+
+  local ranked
+  ranked=$(archivist_storage_load_ranked "$key")
+  [ "$(printf '%s' "$ranked" | jq 'length')" -eq 12 ] || return 1
+  [ ! -s "$BIG_ARG_FILE" ]
+}
+
+@test "one malformed artifact does not blank the whole ranked set" {
+  # A batch parse aborts on the first bad byte, so the fast path cannot be the
+  # only path: one corrupt file would otherwise empty an entire injection.
+  local key="abc123def456"
+  archivist_storage_init "$key"
+  _seed_ranked "$key" decisions "01GOOD"
+  printf 'not json at all' > "${ONLOOKER_DIR}/archivist/${key}/decisions/01BAD.json"
+
+  local ranked
+  ranked=$(archivist_storage_load_ranked "$key")
+  [ "$(printf '%s' "$ranked" | jq 'length')" -eq 1 ] || return 1
+  [ "$(printf '%s' "$ranked" | jq -r '.[0].id')" = "01GOOD" ]
+}
+
+@test "load_ranked still tags each artifact with its kind" {
+  # The kind is not in the file, it comes from the directory. A batch read that
+  # loses that association would silently mislabel every artifact.
+  local key="abc123def456"
+  archivist_storage_init "$key"
+  _seed_ranked "$key" decisions "01D" "2026-05-01T00:00:00Z"
+  _seed_ranked "$key" open_questions "01Q" "2026-05-02T00:00:00Z"
+
+  local ranked
+  ranked=$(archivist_storage_load_ranked "$key")
+  [ "$(printf '%s' "$ranked" | jq -r '.[] | select(.id=="01D") | .kind')" = "decisions" ] || return 1
+  [ "$(printf '%s' "$ranked" | jq -r '.[] | select(.id=="01Q") | .kind')" = "open_questions" ]
+}

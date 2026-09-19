@@ -202,19 +202,69 @@ archivist_storage_load_ranked() {
 	local pinned_json='{"ids":[]}'
 	[[ -f "$pinned_file" ]] && pinned_json=$(cat "$pinned_file" 2>/dev/null) || true
 
-	local kind file all='[]'
+	# One jq per kind, not two per artifact.
+	#
+	# This loop used to parse each file with its own jq and then run a SECOND
+	# jq to append it — `. + [$item]` re-parsing and re-serializing the whole
+	# accumulated array every iteration, so the work was quadratic in corpus
+	# size rather than linear. Measured against the real corpus: 708 artifacts
+	# took 23,756ms against 42ms for 7, which is 100x the artifacts and 565x
+	# the time.
+	#
+	# archivist-inject calls this on SessionStart, so that cost was paid by
+	# every session, and by every nested `claude -p` a hook makes. Its
+	# hook-health p50 went from 380ms on 2026-09-12 to ~24,000ms on 09-13, the
+	# day commit mining started growing this corpus; wave 2 budgets SessionStart
+	# at roughly 5s. It is also the same defect ecosystem-449.68 fixed one layer
+	# up in librarian's reader — this is the copy nobody re-grepped.
+	#
+	# Per kind rather than one call for everything: the kind comes from the
+	# directory, not the file, so batching across kinds would lose it.
+	local kind file
+	local decisions_json='[]' dead_ends_json='[]' open_questions_json='[]'
 	for kind in decisions dead_ends open_questions; do
 		[[ -d "$project_dir/$kind" ]] || continue
+
+		local files=()
 		for file in "$project_dir/$kind"/*.json; do
 			[[ -f "$file" ]] || continue
-			local item
-			item=$(jq --arg k "$kind" '. + {kind: $k}' "$file" 2>/dev/null) || continue
-			all=$(printf '%s' "$all" | jq --argjson item "$item" '. + [$item]')
+			files+=("$file")
 		done
+		[[ ${#files[@]} -eq 0 ]] && continue
+
+		local batch=""
+		if ! batch=$(jq -s --arg k "$kind" \
+			'map(select(type == "object") | . + {kind: $k})' \
+			"${files[@]}" 2>/dev/null); then
+			# A batch parse aborts on the first malformed byte, which would let
+			# one corrupt artifact blank an entire injection. The per-file read
+			# cannot do that, so it stays as the fallback: slow, but it costs
+			# only the broken file. Also covers an argument list too long to exec.
+			batch='[]'
+			local item
+			for file in "${files[@]}"; do
+				item=$(jq --arg k "$kind" '. + {kind: $k}' "$file" 2>/dev/null) || continue
+				[[ -z "$item" || "$item" == "null" ]] && continue
+				batch=$(printf '%s' "$batch" | jq --argjson item "$item" '. + [$item]')
+			done
+		fi
+
+		case "$kind" in
+			decisions) decisions_json="$batch" ;;
+			dead_ends) dead_ends_json="$batch" ;;
+			open_questions) open_questions_json="$batch" ;;
+		esac
 	done
 
-	printf '%s' "$all" | jq --argjson pinned "$pinned_json" '
-		($pinned.ids // []) as $pids
+	# Combined through stdin, never argv. --argjson puts the value on the
+	# command line, and the whole corpus does not fit: on the real 708-artifact
+	# project that produced "Argument list too long" and an EMPTY result -- fast
+	# and silently wrong, which is worse than slow. $pinned_json is a short id
+	# list and stays an argument.
+	printf '%s\n' "$decisions_json" "$dead_ends_json" "$open_questions_json" \
+		| jq -s --argjson pinned "$pinned_json" '
+		add
+		| ($pinned.ids // []) as $pids
 		| map(. + { pinned: (.id as $id | $pids | index($id) != null) })
 		| sort_by([
 			(if .pinned then 0 else 1 end),
