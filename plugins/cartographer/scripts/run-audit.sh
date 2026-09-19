@@ -257,6 +257,11 @@ run_synthesize() {
 	# nearly the whole enumeration as undocumented, and the emit phase would
 	# dedup-sentinel those false findings permanently. scope_collision already
 	# no-ops on targeted runs for the same reason.
+	# Wrapped in $_TIMEOUT_CMD like the analyzers above it, but this one is a
+	# grep and never reaches the model -- cartographer-omission.sh makes no
+	# _cartographer_run_cli call. So the audit costs THREE model passes, not
+	# four, which is what the total-vs-phase guard above counts. Read the call
+	# sites alone and you will size the timeout budget for one pass too many.
 	local omission_findings="[]"
 	if [[ -z "$TARGET_FILE" && "$_undocumented_enabled" == "true" ]] \
 		&& cartographer_filter_wants "undocumented_entity" "$TYPE_FILTER"; then

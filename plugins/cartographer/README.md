@@ -55,7 +55,7 @@ All options are optional. Defaults shown:
 {
   "cartographer": {
     "audit_interval_hours": 24,
-    "phase_timeout_seconds": 60,
+    "phase_timeout_seconds": 180,
     "total_timeout_seconds": 600,
     "extraction": {
       "model": "claude-haiku-4-5-20251001",
