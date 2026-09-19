@@ -616,8 +616,24 @@ STUB
 
   input=$(jq -cn --arg cwd "$PROJECT_REPO" \
     '{cwd: $cwd, session_id: "sess-1", hook_event_name: "SessionEnd"}')
-  run bash -c "printf '%s' '$input' | '$HOOK'"
 
-  [ "$status" -eq 0 ]
+  # The lesson stage moved to the detached worker with the classifier
+  # (ecosystem-449.72): both reach claude, and one call costs ~39s against
+  # SessionEnd's 1500ms ceiling. The hook now queues the window, so driving it
+  # alone can no longer land a lesson. Suppress the real spawn and run the
+  # worker synchronously instead — a detached worker would race this
+  # assertion for the queue lock.
+  noop="${BATS_TEST_TMPDIR}/noop-worker.sh"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$noop"
+  chmod +x "$noop"
+  run env LIBRARIAN_CLASSIFY_WORKER="$noop" \
+    bash -c "printf '%s' '$input' | '$HOOK'"
+  [ "$status" -eq 0 ] || return 1
+
+  queued=$(find "${ONLOOKER_DIR}/librarian/${PROJECT_KEY}/classify-queue" \
+    -name '*.json' -type f 2>/dev/null | head -1)
+  [ -n "$queued" ] || return 1
+  bash "${PLUGIN_ROOT}/scripts/lib/librarian-classify-worker.sh" "$queued" || true
+
   [ -n "$(ls -A "${LESSONS_DIR}/proposals" 2>/dev/null)" ]
 }

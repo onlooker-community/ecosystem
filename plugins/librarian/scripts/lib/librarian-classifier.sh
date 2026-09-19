@@ -15,9 +15,36 @@
 #   librarian.classifier.max_output_tokens  Output cap
 #   librarian.classifier.min_classifier_confidence  Drop below this
 
-# Hard wall-clock ceiling for a single classifier call. We never want a
-# hung LLM to delay SessionEnd more than this.
-_LIBRARIAN_CLASSIFIER_TIMEOUT_SECONDS=20
+# Hard wall-clock ceiling for a single classifier call.
+#
+# ecosystem-449.72: this was 20s, and it was BELOW the time a call takes. A
+# hook resolves /opt/homebrew/bin/claude, and against that binary one call put
+# its answer on stdout at +39,065ms and exited at +46,484ms; a trivial prompt
+# cost ~29,000ms, so most of it is nested CLI session startup rather than model
+# work (ecosystem-449.73). Every call was therefore killed before its answer
+# arrived, returned empty, and was recorded as classified_null -- which is why
+# librarian.candidate.proposed is 0 all-time (ecosystem-449.67).
+#
+# The old comment said this existed so "a hung LLM" could not delay SessionEnd.
+# Nothing was hung. The call simply costs more than SessionEnd's entire 1500ms
+# ceiling, which is why classification now runs in a detached worker with no
+# ceiling, and why this bound can be generous. It is a backstop against a call
+# that never returns, not a budget.
+_LIBRARIAN_CLASSIFIER_TIMEOUT_SECONDS=120
+
+# Let config override it, so the bound can be tuned without editing the lib.
+# Read at call time rather than source time: the accessor needs
+# librarian_config_load to have run, and this file is sourced before that.
+_librarian_classifier_timeout() {
+	local configured=""
+	if declare -F librarian_config_get >/dev/null 2>&1; then
+		configured=$(librarian_config_get '.librarian.classifier.timeout_seconds' 2>/dev/null)
+	fi
+	case "$configured" in
+		'' | null | *[!0-9]*) printf '%s' "$_LIBRARIAN_CLASSIFIER_TIMEOUT_SECONDS" ;;
+		*) printf '%s' "$configured" ;;
+	esac
+}
 
 # Build the classifier prompt for a single artifact.
 # Usage: librarian_classifier_build_prompt <artifact_json>
@@ -89,15 +116,22 @@ librarian_classifier_call() {
 	local args=(-p --max-turns 1)
 	[[ -n "$model" ]] && args+=(--model "$model")
 
+	local bound
+	bound=$(_librarian_classifier_timeout)
+
+	# The bare-claude branch is last for a reason beyond preference. In any
+	# shell where an account-picker function named `claude` is defined, calling
+	# it as a command runs the FUNCTION -- which on this machine prints "pick an
+	# account" and returns 1, so the classifier fails silently on every call.
+	# `timeout claude ...` executes a PROGRAM and bypasses the function, which
+	# is the only reason the first two branches work at all.
 	local response=""
 	if command -v timeout >/dev/null 2>&1; then
-		response=$(timeout "$_LIBRARIAN_CLASSIFIER_TIMEOUT_SECONDS" \
-			claude "${args[@]}" < "$prompt_file" 2>/dev/null) || response=""
+		response=$(timeout "$bound" claude "${args[@]}" < "$prompt_file" 2>/dev/null) || response=""
 	elif command -v gtimeout >/dev/null 2>&1; then
-		response=$(gtimeout "$_LIBRARIAN_CLASSIFIER_TIMEOUT_SECONDS" \
-			claude "${args[@]}" < "$prompt_file" 2>/dev/null) || response=""
+		response=$(gtimeout "$bound" claude "${args[@]}" < "$prompt_file" 2>/dev/null) || response=""
 	else
-		response=$(claude "${args[@]}" < "$prompt_file" 2>/dev/null) || response=""
+		response=$(command claude "${args[@]}" < "$prompt_file" 2>/dev/null) || response=""
 	fi
 
 	rm -f "$prompt_file"

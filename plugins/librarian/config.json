@@ -14,12 +14,13 @@
       "model": "claude-haiku-4-5-20251001",
       "temperature": 0.2,
       "max_output_tokens": 256,
-      "min_classifier_confidence": 0.6
+      "min_classifier_confidence": 0.6,
+      "timeout_seconds": 120
     },
     "lesson_transform": {
       "model": "claude-haiku-4-5-20251001",
-      "timeout_seconds": 20,
-      "total_budget_ms": 8000
+      "timeout_seconds": 120,
+      "total_budget_ms": 600000
     },
     "lesson_judging": {
       "min_criterion_coverage": 0.6,
