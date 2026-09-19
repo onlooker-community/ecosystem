@@ -194,7 +194,6 @@ Workflow:
      MD012 (consecutive blank lines), MD024 (duplicate headings) and MD034
      (bare URLs) are the rules the generated text trips. See ecosystem-55g.
      scripts/lint/check-managed-blocks.mjs enforces that every block is fenced. -->
-<!-- markdownlint-disable MD012 MD024 MD034 -->
 ## Issue tracking: Linear is the source of truth
 
 Linear holds **what** the work is, **why** it matters and **where it stands**.
@@ -221,6 +220,7 @@ all task tracking, that now means task-level planning, not the backlog itself.
 - Never set `LINEAR_API_KEY` through `bd config` — that config syncs to the git
   remote. Pass it in the environment for the one command that needs it.
 
+<!-- markdownlint-disable MD012 MD024 MD034 -->
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:970c3bf2 -->
 ## Beads Issue Tracker
 
