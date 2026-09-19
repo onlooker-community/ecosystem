@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.4](https://github.com/onlooker-community/ecosystem/compare/bursar-v0.6.3...bursar-v0.6.4) (2026-09-19)
+
+
+### Performance Improvements
+
+* **bursar:** stop reading the whole event log to find nothing :fast_forward: ([#350](https://github.com/onlooker-community/ecosystem/issues/350)) ([122386b](https://github.com/onlooker-community/ecosystem/commit/122386b7601eebda1e90350a4cff3997ca8f8a56))
+
 ## [0.6.3](https://github.com/onlooker-community/ecosystem/compare/bursar-v0.6.2...bursar-v0.6.3) (2026-09-19)
 
 

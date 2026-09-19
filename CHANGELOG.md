@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.61.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.61.0...ecosystem-v0.61.1) (2026-09-19)
+
+
+### Performance Improvements
+
+* **bursar:** stop reading the whole event log to find nothing :fast_forward: ([#350](https://github.com/onlooker-community/ecosystem/issues/350)) ([122386b](https://github.com/onlooker-community/ecosystem/commit/122386b7601eebda1e90350a4cff3997ca8f8a56))
+
 ## [0.61.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.60.7...ecosystem-v0.61.0) (2026-09-19)
 
 
