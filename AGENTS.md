@@ -194,6 +194,32 @@ Workflow:
      MD012 (consecutive blank lines), MD024 (duplicate headings) and MD034
      (bare URLs) are the rules the generated text trips. See ecosystem-55g.
      scripts/lint/check-managed-blocks.mjs enforces that every block is fenced. -->
+## Issue tracking: Linear is the source of truth
+
+Linear holds **what** the work is, **why** it matters and **where it stands**.
+beads holds the **plan** for doing it. The managed Beads blocks below describe
+how to run `bd`; read them through this section. Where they say to use `bd` for
+all task tracking, that now means task-level planning, not the backlog itself.
+
+- Work items live in Linear, team `ONL` (<https://linear.app/onlooker>), which
+  covers this repo, `onlooker` and `schema` together. A bead is the local plan
+  for one Linear issue, linked by `external_ref`.
+- Start work with `bd linear pull ONL-123`, then `bd create --parent <bead-id>`
+  for the steps. Name the branch after the issue (`meagan/onl-123-short-name`)
+  so the PR links itself.
+- Found something that outlives the current task? **File it in Linear**, not as
+  a new top-level bead. If it's just the next step of this task, it's a child
+  bead.
+- **A bead's description mirrors its Linear issue and a pull overwrites it.**
+  Measurements, `file:line` references and ruled-out theories go in notes:
+  `bd update <id> --append-notes "..."`.
+- **Never run a bare `bd linear sync` or `bd linear push`.** Push would create
+  Linear issues out of local beads, including closed ones. Pull only:
+  `bd linear sync --pull`. `linear.exclude_id_prefix` is set to `ecosystem-` as
+  a guard.
+- Never set `LINEAR_API_KEY` through `bd config` — that config syncs to the git
+  remote. Pass it in the environment for the one command that needs it.
+
 <!-- markdownlint-disable MD012 MD024 MD034 -->
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:970c3bf2 -->
 ## Beads Issue Tracker
