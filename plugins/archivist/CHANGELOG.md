@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.3](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.7.2...archivist-v0.7.3) (2026-09-19)
+
+
+### Bug Fixes
+
+* **archivist:** stop re-serializing the corpus once per artifact :zap: ([#346](https://github.com/onlooker-community/ecosystem/issues/346)) ([9c5f7e9](https://github.com/onlooker-community/ecosystem/commit/9c5f7e9e3c1408eb294bdf8a6485378b86f95ddd))
+
 ## [0.7.2](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.7.1...archivist-v0.7.2) (2026-09-19)
 
 
