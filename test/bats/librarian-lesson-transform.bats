@@ -320,11 +320,23 @@ _transform_setup() {
   cat > "${STUB_BIN}/claude" <<'STUB'
 #!/usr/bin/env bash
 prompt=$(cat)
+# The CLASSIFIER prompt is answered first, before any lesson branch. Since
+# ecosystem-449.72 both stages run in the same worker against the same stub,
+# and the classifier runs first — so a fixture whose detail contains
+# "module-runner" would otherwise be handed lesson-shaped JSON for its
+# classifier call, fail validation, and count as an unanswered call. Zero
+# answered calls is how the worker recognizes an unreachable classifier, and it
+# stops there rather than reaching stage 5 at all.
+#
+# Real claude serves both stages or neither, so answering only one is a shape
+# no production run takes.
+if [[ "$prompt" == *"classifying a session artifact"* ]]; then
+  printf '%s' '{"type":"project","title":"Pin vitest until Vite 6","body":"Vitest 4 cannot import vite/module-runner on Vite 5.\n\n**Why:** vite/module-runner ships in Vite 6.\n**How to apply:** Pin vitest to 3.x until Vite 6 lands.","confidence":0.88}'
 # Stub-selector markers are checked before the generic "module-runner"
 # content match: several fixtures embed real vitest/vite prose (which
 # contains "module-runner") alongside their marker, and the marker names
 # the intended stub behavior.
-if [[ "$prompt" == *"no-resolution-stub"* ]]; then
+elif [[ "$prompt" == *"no-resolution-stub"* ]]; then
   printf '%s' '{"eligible":false,"reason":"no_resolution"}'
 elif [[ "$prompt" == *"no-versions-stub"* ]]; then
   printf '%s' '{"eligible":false,"reason":"no_versions"}'

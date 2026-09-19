@@ -161,6 +161,15 @@ AUTO_PROMOTE_THRESHOLD=$(librarian_config_get '.librarian.auto_promote_threshold
 KEPT_COUNT=$(printf '%s' "$KEPT" | jq 'length' 2>/dev/null) || KEPT_COUNT=0
 PROPOSED_COUNT=0
 POST_CLASSIFIER_DROPPED=0
+# An empty response means the CALL did not happen -- no CLI, a timeout,
+# unparseable output -- not that the model judged the artifact unworthy. A real
+# "not memory-worthy" answer arrives as JSON with type null and is handled
+# below. These are counted rather than acted on inside the loop, because one
+# failure and every failure mean different things and only the totals can tell
+# them apart.
+CALL_FAILURES=0
+CALL_ANSWERED=0
+FAILED_IDS=()
 NOW_TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 for ((i = 0; i < KEPT_COUNT; i++)); do
@@ -170,15 +179,26 @@ for ((i = 0; i < KEPT_COUNT; i++)); do
 	RESPONSE=$(librarian_classifier_call \
 		"$ARTIFACT" "$CLASSIFIER_MODEL" "$CLASSIFIER_TEMP" "$CLASSIFIER_MAX")
 
+	# An EMPTY response means the call did not happen: no CLI on PATH, a
+	# timeout, or unparseable output. That is not the model judging this
+	# artifact unworthy -- a real "not memory-worthy" answer arrives as JSON
+	# with type null and is handled further down.
+	#
+	# This used to record classified_null either way, which is the conflation
+	# ecosystem-449.39 names: it turned an outage into a per-artifact verdict,
+	# and because the loop then ran to the end and deleted the queue, the
+	# artifacts were lost for good behind an already-advanced watermark.
+	#
+	# So the first failed call ends the run. A classifier that cannot answer
+	# once will not answer for the remaining artifacts, and continuing would
+	# spend ~39s each manufacturing verdicts nobody made. Abort with the queue
+	# intact and nothing emitted; the next session retries it for free.
 	if [[ -z "$RESPONSE" ]]; then
-		POST_CLASSIFIER_DROPPED=$((POST_CLASSIFIER_DROPPED + 1))
-		librarian_emit "librarian.candidate.dropped" "$SESSION_ID" "$(jq -cn \
-			--arg reason "classified_null" \
-			--arg src "$(printf '%s' "$ARTIFACT" | jq -r '.id // ""')" \
-			'{ reason: $reason, source_artifact_id: (if $src == "" then null else $src end) }
-			 | with_entries(select(.value != null))')"
+		CALL_FAILURES=$((CALL_FAILURES + 1))
+		FAILED_IDS+=("$(printf '%s' "$ARTIFACT" | jq -r '.id // ""')")
 		continue
 	fi
+	CALL_ANSWERED=$((CALL_ANSWERED + 1))
 
 	# Drop nulls and low-confidence classifications silently — by design,
 	# the proposal queue prefers misses over noise.
@@ -380,6 +400,47 @@ for ((i = 0; i < KEPT_COUNT; i++)); do
 			source_artifact_ids: (if $src == "" then [] else [$src] end)
 		}')"
 done
+
+# Every call failed and none was answered: the classifier is unreachable, so
+# nothing here was decided. Leave the queue and say nothing.
+#
+# Everything below either reports an outcome or deletes the queue, and both
+# would be false — reporting would claim a scan that judged nothing, and
+# deleting would strand the artifacts behind an already-advanced watermark. The
+# unmatched scan.started left behind is the honest record, and since
+# ecosystem-449.66 it reads as "this scan did not finish" rather than vanishing.
+#
+# ALL rather than ANY, deliberately. Aborting on the first failure would let one
+# artifact whose output happens to be unparseable block its whole window
+# forever, retried every session and never getting past it. If some calls were
+# answered the classifier is plainly reachable, so the rest are per-artifact
+# problems: they are recorded below and the window is allowed to close.
+#
+# CI on Linux surfaced the original bug here. The test made claude unavailable
+# with PATH=/usr/bin:/bin, which on macOS also hides jq (it lives in
+# /opt/homebrew/bin), so the worker bailed at an early guard and passed for the
+# wrong reason. On Linux jq is in /usr/bin, so the worker ran on, recorded every
+# candidate as classified_null and deleted the queue.
+if [[ "$CALL_FAILURES" -gt 0 && "$CALL_ANSWERED" -eq 0 ]]; then
+	exit 0
+fi
+
+# Reachable, but these particular calls did not come back. classified_null
+# overstates it — it says the model judged them, and nothing judged them — but
+# the reason enum has no value for "the call failed" and adding one is a schema
+# change in another repo. Recorded rather than silent: the artifacts are about
+# to pass out of the window, so a silent drop would be worse than an imprecise
+# one. Worth a follow-up alongside filter_markers_unavailable, which is the
+# same distinction already drawn one layer up.
+for _fid in ${FAILED_IDS+"${FAILED_IDS[@]}"}; do
+	POST_CLASSIFIER_DROPPED=$((POST_CLASSIFIER_DROPPED + 1))
+	librarian_emit "librarian.candidate.dropped" "$SESSION_ID" "$(jq -cn \
+		--arg reason "classified_null" \
+		--arg src "$_fid" \
+		'{ reason: $reason, source_artifact_id: (if $src == "" then null else $src end) }
+		 | with_entries(select(.value != null))')"
+done
+unset _fid
 
 # ---------------------------------------------------------------------------
 # Stage 5 — lesson transform.

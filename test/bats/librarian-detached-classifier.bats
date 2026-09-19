@@ -215,11 +215,31 @@ _events_of() {
 	queued=$(find "$QUEUE_DIR" -name '*.json' -type f | head -1)
 	[ -n "$queued" ] || return 1
 
-	# No claude on PATH at all: the worker can do nothing. Its input must stay
-	# on disk so a later run can retry, which is what keeps the watermark
-	# advance in SessionEnd safe.
-	run env PATH="/usr/bin:/bin" bash "$WORKER" "$queued"
-	[ -f "$queued" ]
+	# A claude that fails rather than a PATH without one. The first version of
+	# this test used PATH=/usr/bin:/bin, which on macOS also hides jq (it is in
+	# /opt/homebrew/bin) -- so the worker bailed at an early guard and the test
+	# passed without ever reaching the classifier. On Linux jq is in /usr/bin,
+	# the worker ran on, dropped every candidate and deleted the queue. CI found
+	# the bug the local pass had hidden.
+	#
+	# Failing in place is also the realistic shape: the account-picker stub that
+	# shadows `claude` in an interactive shell returns 1 exactly like this.
+	cat > "${STUB_BIN}/claude" <<'BROKEN'
+#!/usr/bin/env bash
+cat >/dev/null
+exit 1
+BROKEN
+	chmod +x "${STUB_BIN}/claude"
+
+	run bash "$WORKER" "$queued"
+	[ "$status" -eq 0 ] || return 1
+	# The input must stay on disk. The watermark has already advanced, so this
+	# file is the only remaining record of the window.
+	[ -f "$queued" ] || return 1
+	# And nothing may claim the scan finished, nor that the model judged these
+	# artifacts unworthy — no call was answered.
+	[ "$(_events_of librarian.scan.complete)" -eq 0 ] || return 1
+	[ "$(_events_of librarian.candidate.dropped)" -eq 0 ]
 }
 
 @test "a second worker will not run against a queue already in flight" {
