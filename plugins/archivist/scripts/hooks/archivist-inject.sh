@@ -70,7 +70,7 @@ archivist_config_load "$CWD"
 
 if [[ -z "$PROJECT_KEY" ]]; then
 	_emit ""
-	exit 0
+	hook_health_exit 0
 fi
 
 MAX_ITEMS=$(archivist_config_get '.archivist.injection.max_items')
@@ -87,7 +87,7 @@ TOTAL_ITEMS=$(printf '%s' "$RANKED" | jq 'length' 2>/dev/null) || TOTAL_ITEMS=0
 
 if [[ "$TOTAL_ITEMS" -eq 0 ]]; then
 	_emit ""
-	exit 0
+	hook_health_exit 0
 fi
 
 # Filter out kinds the user disabled.
@@ -150,11 +150,11 @@ done
 
 if [[ "$EMITTED" -eq 0 ]]; then
 	_emit ""
-	exit 0
+	hook_health_exit 0
 fi
 
 # Trailer with provenance + how to disable (helps future-you debug).
 RENDERED="${RENDERED}"$'\n\n'"(Archivist injected ${EMITTED}/${TOTAL_ITEMS} items for project key ${PROJECT_KEY}. Source: ${SOURCE}.)"
 
 _emit "$RENDERED"
-exit 0
+hook_health_exit 0

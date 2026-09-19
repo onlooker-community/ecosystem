@@ -68,9 +68,9 @@ REPO_ROOT=$(historian_project_repo_root "$CWD")
 historian_config_load "$CWD"
 
 PROJECT_KEY=$(historian_project_key "$CWD")
-[[ -z "$PROJECT_KEY" ]] && exit 0
+[[ -z "$PROJECT_KEY" ]] && hook_health_exit 0
 
-historian_storage_init "$PROJECT_KEY" || exit 0
+historian_storage_init "$PROJECT_KEY" || hook_health_exit 0
 REMOTE_URL=$(historian_project_remote_url "$CWD")
 historian_storage_write_manifest "$PROJECT_KEY" "$REMOTE_URL" "$REPO_ROOT" || true
 
@@ -100,7 +100,7 @@ _emit_skip() {
 
 if [[ -z "$TRANSCRIPT_PATH" || ! -f "$TRANSCRIPT_PATH" ]]; then
 	_emit_skip "transcript_unavailable"
-	exit 0
+	hook_health_exit 0
 fi
 
 MIN_CHARS=$(historian_config_get '.historian.indexing.min_transcript_chars_to_index')
@@ -117,7 +117,7 @@ historian_emit "historian.indexing.started" "$SESSION_ID" "$(jq -cn \
 
 if (( TRANSCRIPT_CHARS < MIN_CHARS )); then
 	_emit_skip "too_short"
-	exit 0
+	hook_health_exit 0
 fi
 
 # ----------------------------------------------------------------------------
@@ -236,4 +236,4 @@ historian_emit "historian.indexing.complete" "$SESSION_ID" "$(jq -cn \
 		duration_ms: $duration_ms
 	}')"
 
-exit 0
+hook_health_exit 0

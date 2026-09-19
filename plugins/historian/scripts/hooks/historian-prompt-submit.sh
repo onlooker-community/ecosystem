@@ -91,13 +91,13 @@ historian_config_load "$CWD"
 RETRIEVAL_ENABLED=$(historian_config_get '.historian.retrieval.enabled')
 if [[ "$RETRIEVAL_ENABLED" == "false" ]]; then
 	_emit_context ""
-	exit 0
+	hook_health_exit 0
 fi
 
 PROJECT_KEY=$(historian_project_key "$CWD")
 if [[ -z "$PROJECT_KEY" ]]; then
 	_emit_context ""
-	exit 0
+	hook_health_exit 0
 fi
 
 # ----------------------------------------------------------------------------
@@ -130,7 +130,7 @@ PROMPT_LEN=${#PROMPT}
 if (( PROMPT_LEN < MIN_PROMPT_CHARS )); then
 	_emit_complete_skipped "short_prompt"
 	_emit_context ""
-	exit 0
+	hook_health_exit 0
 fi
 
 COOLDOWN_SECONDS=$(historian_config_get '.historian.retrieval.cooldown_seconds')
@@ -149,13 +149,13 @@ COOLDOWN_MS=$((COOLDOWN_SECONDS * 1000))
 if (( PREV_LAST_MS > 0 && ELAPSED_MS < COOLDOWN_MS )); then
 	_emit_complete_skipped "cooldown"
 	_emit_context ""
-	exit 0
+	hook_health_exit 0
 fi
 
 if (( PREV_COUNT >= MAX_RETRIEVALS )); then
 	_emit_complete_skipped "budget"
 	_emit_context ""
-	exit 0
+	hook_health_exit 0
 fi
 
 # ----------------------------------------------------------------------------
@@ -173,14 +173,14 @@ if ! historian_embedder_available; then
 		--arg backend "$BACKEND" '{ backend: $backend }')"
 	_emit_complete_skipped "embedder_unavailable"
 	_emit_context ""
-	exit 0
+	hook_health_exit 0
 fi
 
 QUERY_EMBEDDING=$(historian_embedder_embed "$PROMPT")
 if [[ -z "$QUERY_EMBEDDING" ]]; then
 	_emit_complete_skipped "embedder_unavailable"
 	_emit_context ""
-	exit 0
+	hook_health_exit 0
 fi
 
 TOP_K=$(historian_config_get '.historian.retrieval.retrieval_top_k')
@@ -208,7 +208,7 @@ if [[ "$RESULT_COUNT" == "0" ]]; then
 		--argjson duration_ms "$DURATION_MS" \
 		'{ outcome: $outcome, duration_ms: $duration_ms }')"
 	_emit_context ""
-	exit 0
+	hook_health_exit 0
 fi
 
 # ----------------------------------------------------------------------------
@@ -268,4 +268,4 @@ historian_emit "historian.retrieval.complete" "$SESSION_ID" "$(jq -cn \
 	}')"
 
 _emit_context "$CONTEXT"
-exit 0
+hook_health_exit 0

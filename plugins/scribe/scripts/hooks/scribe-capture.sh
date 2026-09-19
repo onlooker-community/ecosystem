@@ -31,7 +31,7 @@ SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SE
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 PROMPT=$(printf '%s' "$INPUT" | jq -r '.prompt // ""' 2>/dev/null) || PROMPT=""
 
-_done() { exit 0; }
+_done() { hook_health_exit 0; }
 
 [[ -z "$SESSION_ID" || -z "$PROMPT" ]] && _done
 

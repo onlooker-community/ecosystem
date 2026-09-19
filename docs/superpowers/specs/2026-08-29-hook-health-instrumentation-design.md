@@ -4,6 +4,22 @@
 **Tracking:** `ecosystem-449.5` (under epic `ecosystem-449`)
 **Status:** designed, not implemented
 
+> **Amended 2026-09-18 by `ecosystem-449.66`** — see
+> [ADR-006](../../adr/006-hooks-mark-their-own-completion.md).
+>
+> The outcome model below is superseded. This design has `hook_health_register` arm an EXIT
+> trap that branches on the exit code, which **cannot tell a completed run from a killed one**:
+> when a signal terminates the shell bash still runs the trap, but `$?` there is the last
+> *completed* command's status. Measured in production, that reported 624 consecutive
+> `status=success` records for `librarian-session-end` while it was being killed at the 1500ms
+> SessionEnd deadline on nearly every session.
+>
+> Two additions close it. Hooks now mark their own completion via `hook_health_exit`, and an
+> unmarked exit records `terminated` rather than `success`. `hook_health_register` also writes
+> a `status=started` breadcrumb carrying a `run_id`, so a run killed by `SIGKILL` — where no
+> trap runs at all — is legible as a breadcrumb with no matching terminal record. This means
+> **the log now holds two lines per hook fire**, which every consumer had to learn.
+
 ## Problem
 
 Every wave of the dogfooding rollout states its exit criteria in latency terms — wave 1
@@ -69,10 +85,15 @@ New canonical lib holding the timing and logging code extracted from `validate-p
 `_HOOK_*` state, the clock, the record writer, and the public entry points.
 
 ```bash
-hook_health_register "<hook-name>"   # stamp start, arm the exit trap
-hook_health_success                  # explicit success (optional)
-hook_health_failure "<message>"      # explicit failure (optional)
+hook_health_register "<hook-name>"   # stamp start, write the breadcrumb, arm the exit trap
+hook_health_exit <code>              # mark completion and exit — REQUIRED in place of `exit`
+hook_health_complete                 # mark completion without exiting
+hook_health_success                  # explicit success (optional; implies completion)
+hook_health_failure "<message>"      # explicit failure (optional; implies completion)
 ```
+
+`hook_health_exit` and the breadcrumb are the 449.66 amendment above; the original design had
+only the three calls below it.
 
 Located from its own `${BASH_SOURCE[0]}`, never from a caller-supplied `$PLUGIN_ROOT` and never
 through a path that climbs to the repo root — both mistakes end with undefined functions while

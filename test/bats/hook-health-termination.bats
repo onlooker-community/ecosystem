@@ -36,11 +36,6 @@
 #
 # Between them, every way a hook can die is legible, and neither asks the dying
 # shell for information it provably does not have.
-#
-# THIS FILE COVERS THE SECOND MECHANISM ONLY. The breadcrumb is here; the
-# SIGTERM half needs every hook to route its exits through hook_health_exit
-# first, or flipping the trap would label all 33 of them terminated on every
-# fire. That conversion and its tests are the follow-up change.
 
 setup() {
 	source "${BATS_TEST_DIRNAME}/../helpers/setup.bash"
@@ -87,6 +82,66 @@ _breadcrumbs() {
 	local name="$1"
 	[ -f "$HEALTH_LOG" ] || return 0
 	jq -c --arg h "$name" 'select(.hook == $h and .status == "started")' "$HEALTH_LOG" 2>/dev/null
+}
+
+@test "a hook killed at its deadline is never recorded as success" {
+	local hook="${BATS_TEST_TMPDIR}/killed-hook.sh"
+	local marker="${BATS_TEST_TMPDIR}/ready-killed"
+	_write_blocking_hook "$hook" 'killed-hook' "$marker"
+
+	bash "$hook" &
+	local pid=$!
+	_await_marker "$marker" || return 1
+	kill -TERM "$pid" 2>/dev/null
+	wait "$pid" 2>/dev/null || true
+
+	# The defect: the EXIT trap saw jq's 0 and wrote success.
+	local successes
+	successes=$(_terminal_records 'killed-hook' | jq -rc 'select(.status == "success")' | wc -l | tr -d ' ')
+	[ "$successes" -eq 0 ]
+}
+
+@test "a hook killed by SIGTERM is recorded as terminated, not success" {
+	local hook="${BATS_TEST_TMPDIR}/killed-hook2.sh"
+	local marker="${BATS_TEST_TMPDIR}/ready-killed2"
+	_write_blocking_hook "$hook" 'killed-hook2' "$marker"
+
+	bash "$hook" &
+	local pid=$!
+	_await_marker "$marker" || return 1
+	kill -TERM "$pid" 2>/dev/null
+	wait "$pid" 2>/dev/null || true
+
+	# On SIGTERM the EXIT trap still runs, so there IS a terminal record. What
+	# changed is that it no longer claims success: the hook never marked
+	# completion, so the trap reports what it can actually support.
+	[ "$(_breadcrumbs 'killed-hook2' | wc -l | tr -d ' ')" -eq 1 ] || return 1
+	[ "$(_terminal_records 'killed-hook2' | wc -l | tr -d ' ')" -eq 1 ] || return 1
+	_terminal_records 'killed-hook2' | jq -e '
+		.status == "terminated"
+		and (.error | test("terminated_before_completion"))
+	' >/dev/null
+}
+
+# The forensic detail that made this bug invisible for weeks: the exit code the
+# trap observes for a killed hook is 0, because it belongs to the last command
+# that finished. Pinning it documents why the code cannot be trusted as a
+# health signal, and fails if someone later "simplifies" the trap back to
+# branching on it.
+@test "a killed hook's recorded last_exit_code is the completed command's zero" {
+	local hook="${BATS_TEST_TMPDIR}/killed-hook3.sh"
+	local marker="${BATS_TEST_TMPDIR}/ready-killed3"
+	_write_blocking_hook "$hook" 'killed-hook3' "$marker"
+
+	bash "$hook" &
+	local pid=$!
+	_await_marker "$marker" || return 1
+	kill -TERM "$pid" 2>/dev/null
+	wait "$pid" 2>/dev/null || true
+
+	_terminal_records 'killed-hook3' | jq -e '
+		.status == "terminated" and (.error | test("last_exit_code=0"))
+	' >/dev/null
 }
 
 @test "a hook killed with SIGKILL is also readable as terminated" {

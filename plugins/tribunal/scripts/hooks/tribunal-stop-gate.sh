@@ -73,7 +73,7 @@ TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | jq -r '.transcript_path // ""' 2>/dev/n
 # Stop hook MUST NOT emit any stdout besides the optional `{continue: ...}`
 # acknowledgement. Exiting 0 with no output is the safe path.
 _done() {
-	exit 0
+	hook_health_exit 0
 }
 
 REPO_ROOT=$(tribunal_project_repo_root "$CWD")

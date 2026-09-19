@@ -59,7 +59,7 @@ _emit() {
 
 _finish() {
 	_envelope "${1:-}"
-	exit 0
+	hook_health_exit 0
 }
 
 INPUT=$(cat 2>/dev/null || true)

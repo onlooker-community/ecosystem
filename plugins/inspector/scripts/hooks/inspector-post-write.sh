@@ -47,15 +47,15 @@ _INSPECTOR_JQ_FIELDS='(.cwd // "") + "\u0000" + (.session_id // "") + "\u0000" +
 export _HOOK_SESSION_ID
 
 # Bail on missing input — never block the tool call.
-[[ -z "$CWD" ]] && exit 0
+[[ -z "$CWD" ]] && hook_health_exit 0
 case "$TOOL_NAME" in
 	Write|Edit|MultiEdit) ;;
-	*) exit 0 ;;
+	*) hook_health_exit 0 ;;
 esac
 export INSPECTOR_TOOL_NAME="$TOOL_NAME"
 
 # Touched file came off the same jq pass above.
-[[ -z "$TOOL_TARGET" ]] && exit 0
+[[ -z "$TOOL_TARGET" ]] && hook_health_exit 0
 
 # Canonicalize through the same helper the repo root uses. The containment
 # check below is a prefix match, so both sides have to be resolved the same
@@ -75,7 +75,7 @@ if [[ "$CANONICAL" != "$REPO_ROOT"/* && "$CANONICAL" != "$REPO_ROOT" ]]; then
 	export INSPECTOR_FILE_RELATIVE="$CANONICAL"
 	inspector_config_load "$CWD"
 	inspector_emit_whole_file_skipped "not_in_repo"
-	exit 0
+	hook_health_exit 0
 fi
 export INSPECTOR_FILE_RELATIVE="${CANONICAL#"$REPO_ROOT"/}"
 
@@ -88,7 +88,7 @@ if [[ -n "$EXCLUDES" && "$EXCLUDES" != "null" && "$EXCLUDES" != "[]" ]]; then
 		'any(.[]; . as $p | $rel | startswith($p + "/") or . == $p or (("/" + $rel) | contains("/" + $p + "/")))' \
 		<<<"$EXCLUDES" >/dev/null 2>&1; then
 		inspector_emit_whole_file_skipped "excluded_path"
-		exit 0
+		hook_health_exit 0
 	fi
 fi
 
@@ -121,10 +121,10 @@ fi
 
 if [[ "$CHECKS" == "[]" ]]; then
 	inspector_emit_whole_file_skipped "no_extension_match"
-	exit 0
+	hook_health_exit 0
 fi
 
 # Execute. Always exit 0 regardless of check outcomes.
 inspector_run "$CHECKS" || true
 
-exit 0
+hook_health_exit 0

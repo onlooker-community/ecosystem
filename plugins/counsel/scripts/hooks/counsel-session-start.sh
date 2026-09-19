@@ -72,7 +72,7 @@ counsel_config_load "$CWD"
 PROJECT_KEY=$(counsel_project_key "$CWD")
 if [[ -z "$PROJECT_KEY" ]]; then
 	_emit ""
-	exit 0
+	hook_health_exit 0
 fi
 
 # Refresh detached when the brief has aged out. Synthesis is never run inline:
@@ -105,14 +105,14 @@ OUTPUT_PATH=$(counsel_brief_latest "$PROJECT_KEY" 2>/dev/null) || OUTPUT_PATH=""
 
 if [[ -z "$OUTPUT_PATH" || ! -f "$OUTPUT_PATH" ]]; then
 	_emit ""
-	exit 0
+	hook_health_exit 0
 fi
 
 # Already shown. A weekly brief injected every session until it ages out would
 # reach the user seven times.
 if counsel_brief_was_injected "$PROJECT_KEY" "$OUTPUT_PATH"; then
 	_emit ""
-	exit 0
+	hook_health_exit 0
 fi
 
 # Load the brief content and apply the configured char budget.
@@ -123,7 +123,7 @@ BRIEF_CONTENT=$(head -c "$BRIEF_MAX_CHARS" "$OUTPUT_PATH" 2>/dev/null) || BRIEF_
 
 if [[ -z "$BRIEF_CONTENT" ]]; then
 	_emit ""
-	exit 0
+	hook_health_exit 0
 fi
 
 CONTEXT="Counsel — weekly improvement brief (auto-generated from your onlooker event log):
@@ -135,4 +135,4 @@ ${BRIEF_CONTENT}
 counsel_brief_mark_injected "$PROJECT_KEY" "$OUTPUT_PATH" || true
 
 _emit "$CONTEXT"
-exit 0
+hook_health_exit 0

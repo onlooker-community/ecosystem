@@ -73,7 +73,7 @@ librarian_config_load "$CWD"
 PROJECT_KEY=$(librarian_project_key "$CWD")
 if [[ -z "$PROJECT_KEY" ]]; then
 	_emit ""
-	exit 0
+	hook_health_exit 0
 fi
 
 SKIP_WHEN_ZERO=$(librarian_config_get '.librarian.surfacer.skip_inject_when_zero')
@@ -90,7 +90,7 @@ LESSON_PENDING=$(librarian_lesson_list_pending "$PROJECT_KEY" | jq 'length' 2>/d
 
 if [[ "$PENDING" -eq 0 && "$LESSON_PENDING" -eq 0 && "$SKIP_WHEN_ZERO" == "true" ]]; then
 	_emit ""
-	exit 0
+	hook_health_exit 0
 fi
 
 # The two queues fill independently, so a lessons-only session (the common
@@ -130,4 +130,4 @@ if [[ -n "$LESSON_LINE" ]]; then
 fi
 
 _emit "$CONTEXT"
-exit 0
+hook_health_exit 0

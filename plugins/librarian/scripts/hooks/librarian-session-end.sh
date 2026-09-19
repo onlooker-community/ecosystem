@@ -88,10 +88,10 @@ SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SE
 librarian_config_load "$CWD"
 
 PROJECT_KEY=$(librarian_project_key "$CWD")
-[[ -z "$PROJECT_KEY" ]] && exit 0
+[[ -z "$PROJECT_KEY" ]] && hook_health_exit 0
 
 # Storage init + manifest refresh.
-librarian_storage_init "$PROJECT_KEY" || exit 0
+librarian_storage_init "$PROJECT_KEY" || hook_health_exit 0
 REMOTE_URL=$(librarian_project_remote_url "$CWD")
 REPO_ROOT=$(librarian_project_repo_root "$CWD")
 librarian_storage_write_manifest "$PROJECT_KEY" "$REMOTE_URL" "$REPO_ROOT" || true
@@ -155,7 +155,7 @@ if [[ "$ARTIFACT_COUNT" == "0" ]]; then
 		   candidates_proposed: $candidates_proposed,
 		   candidates_dropped: $candidates_dropped,
 		   artifact_count_in_window: $artifact_count_in_window }')"
-	exit 0
+	hook_health_exit 0
 fi
 
 # ----------------------------------------------------------------------------
@@ -206,7 +206,7 @@ if [[ "$ELAPSED_MS" -ge "$BUDGET_THRESHOLD_MS" ]]; then
 		   candidates_proposed: $candidates_proposed,
 		   candidates_dropped: $candidates_dropped,
 		   artifact_count_in_window: $artifact_count_in_window }')"
-	exit 0
+	hook_health_exit 0
 fi
 
 # ----------------------------------------------------------------------------
@@ -523,4 +523,4 @@ librarian_emit "librarian.scan.complete" "$SESSION_ID" "$(jq -cn \
 # (auto-promote path lands in the next commit).
 : "${AUTO_PROMOTE_THRESHOLD}"
 
-exit 0
+hook_health_exit 0

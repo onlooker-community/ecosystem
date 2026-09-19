@@ -52,7 +52,7 @@ export _HOOK_SESSION_ID="$SESSION_ID"
 
 compass_config_load "$CWD"
 
-[[ -z "$COMMAND" ]] && exit 0
+[[ -z "$COMMAND" ]] && hook_health_exit 0
 
 # -----------------------------------------------------------------------
 # Write-pattern detection — exit 0 immediately for read-only commands.
@@ -96,8 +96,8 @@ _is_write_command() {
 }
 
 if ! _is_write_command "$COMMAND"; then
-	exit 0
+	hook_health_exit 0
 fi
 
 compass_run_gate "Bash" "" "bash_write" "$COMMAND" "$SESSION_ID" "$CWD" "$TRANSCRIPT_PATH"
-exit $?
+hook_health_exit $?
