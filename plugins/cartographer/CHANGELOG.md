@@ -2,6 +2,14 @@
 
 All notable changes to the Cartographer plugin are documented here.
 
+## [0.10.4](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.10.3...cartographer-v0.10.4) (2026-09-19)
+
+
+### Bug Fixes
+
+* **hook-health:** see the runs that die without a trap :footprints: ([#341](https://github.com/onlooker-community/ecosystem/issues/341)) ([92a1a59](https://github.com/onlooker-community/ecosystem/commit/92a1a59d26e571dd13698125346c9144766c23b6))
+* **hook-health:** stop reading a killed hook as a healthy one :mag: ([#343](https://github.com/onlooker-community/ecosystem/issues/343)) ([6dfaaaf](https://github.com/onlooker-community/ecosystem/commit/6dfaaafe82c91e47606631f0675bba42f30b4230))
+
 ## [0.10.3](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.10.2...cartographer-v0.10.3) (2026-09-18)
 
 
