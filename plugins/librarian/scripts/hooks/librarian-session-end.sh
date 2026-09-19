@@ -210,317 +210,160 @@ if [[ "$ELAPSED_MS" -ge "$BUDGET_THRESHOLD_MS" ]]; then
 fi
 
 # ----------------------------------------------------------------------------
-# Classifier loop — one Haiku call per surviving candidate.
+# Hand the surviving window to a detached worker (ecosystem-449.72).
+#
+# Classification used to happen here, inline: one claude call per surviving
+# candidate, inside SessionEnd's 1500ms ceiling. Measured against the binary a
+# hook actually resolves, one call put its answer on stdout at +39,065ms and
+# exited at +46,484ms -- ~26x the whole budget, and most of it nested CLI
+# session startup rather than model work (ecosystem-449.73).
+#
+# The per-call timeout was 20s, below the ~39s a call needs, so every call was
+# killed before answering and recorded as classified_null. librarian has
+# therefore never proposed a memory (ecosystem-449.67). Neither capping calls to
+# the remaining budget nor timing them out inside it can work: one call does not
+# fit, at any bound.
+#
+# So the window goes to disk and a worker takes it with no ceiling. The queue
+# file is the durable record, which is what makes the watermark advance below
+# safe -- artifacts are handed off, not dropped, so this does not depend on
+# ecosystem-449.55.
 # ----------------------------------------------------------------------------
-
-CLASSIFIER_MODEL=$(librarian_config_get '.librarian.classifier.model')
-CLASSIFIER_TEMP=$(librarian_config_get '.librarian.classifier.temperature')
-CLASSIFIER_MAX=$(librarian_config_get '.librarian.classifier.max_output_tokens')
-MIN_CONFIDENCE=$(librarian_config_get '.librarian.classifier.min_classifier_confidence')
-[[ -z "$MIN_CONFIDENCE" || "$MIN_CONFIDENCE" == "null" ]] && MIN_CONFIDENCE="0.6"
-TOMBSTONE_TTL=$(librarian_config_get '.librarian.tombstones.ttl_days')
-[[ -z "$TOMBSTONE_TTL" || "$TOMBSTONE_TTL" == "null" ]] && TOMBSTONE_TTL=180
-AUTO_PROMOTE_THRESHOLD=$(librarian_config_get '.librarian.auto_promote_threshold')
-[[ -z "$AUTO_PROMOTE_THRESHOLD" || "$AUTO_PROMOTE_THRESHOLD" == "null" ]] && AUTO_PROMOTE_THRESHOLD="0.85"
 
 KEPT_COUNT=$(printf '%s' "$KEPT" | jq 'length' 2>/dev/null) || KEPT_COUNT=0
-PROPOSED_COUNT=0
-POST_CLASSIFIER_DROPPED=0
-NOW_TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-for ((i = 0; i < KEPT_COUNT; i++)); do
-	ARTIFACT=$(printf '%s' "$KEPT" | jq -c ".[$i]")
-	[[ -z "$ARTIFACT" || "$ARTIFACT" == "null" ]] && continue
+if [[ "$KEPT_COUNT" == "0" ]]; then
+	# Nothing to hand off, so nothing to defer. This path still reports for
+	# itself: a quiet session that emitted no outcome at all would be
+	# indistinguishable from one that died.
+	librarian_storage_write_last_scan "$PROJECT_KEY" || true
+	DURATION_MS=$(( $(librarian_now_ms) - SCAN_START_TS_MS ))
+	librarian_emit "librarian.scan.complete" "$SESSION_ID" "$(jq -cn \
+		--arg outcome "empty" \
+		--argjson duration_ms "$DURATION_MS" \
+		--argjson candidates_proposed 0 \
+		--argjson candidates_dropped "$DROPPED_TOTAL" \
+		--argjson artifact_count_in_window "$ARTIFACT_COUNT" \
+		'{ outcome: $outcome, duration_ms: $duration_ms,
+		   candidates_proposed: $candidates_proposed,
+		   candidates_dropped: $candidates_dropped,
+		   artifact_count_in_window: $artifact_count_in_window }')"
+	hook_health_exit 0
+fi
 
-	RESPONSE=$(librarian_classifier_call \
-		"$ARTIFACT" "$CLASSIFIER_MODEL" "$CLASSIFIER_TEMP" "$CLASSIFIER_MAX")
+# Matched pair with the restore block at the top of the worker: a field dropped
+# from here is silently empty there.
+_write_classify_queue() {
+	local dir="${ONLOOKER_DIR:-$HOME/.onlooker}/librarian/${PROJECT_KEY}/classify-queue"
+	mkdir -p "$dir" 2>/dev/null || return 1
+	local file="${dir}/$(librarian_ulid).json"
+	jq -n \
+		--arg cwd "$CWD" \
+		--arg session_id "$SESSION_ID" \
+		--arg project_key "$PROJECT_KEY" \
+		--argjson artifacts "$KEPT" \
+		--argjson artifact_count_in_window "$ARTIFACT_COUNT" \
+		--argjson candidates_dropped "$DROPPED_TOTAL" \
+		--argjson queued_at_ms "$SCAN_START_TS_MS" \
+		'{ cwd: $cwd, session_id: $session_id, project_key: $project_key,
+		   artifacts: $artifacts,
+		   artifact_count_in_window: $artifact_count_in_window,
+		   candidates_dropped: $candidates_dropped,
+		   queued_at_ms: $queued_at_ms }' \
+		> "$file" 2>/dev/null || return 1
+	printf '%s' "$file"
+	return 0
+}
 
-	if [[ -z "$RESPONSE" ]]; then
-		POST_CLASSIFIER_DROPPED=$((POST_CLASSIFIER_DROPPED + 1))
-		librarian_emit "librarian.candidate.dropped" "$SESSION_ID" "$(jq -cn \
-			--arg reason "classified_null" \
-			--arg src "$(printf '%s' "$ARTIFACT" | jq -r '.id // ""')" \
-			'{ reason: $reason, source_artifact_id: (if $src == "" then null else $src end) }
-			 | with_entries(select(.value != null))')"
-		continue
-	fi
+QUEUE_FILE=$(_write_classify_queue) || QUEUE_FILE=""
 
-	# Drop nulls and low-confidence classifications silently — by design,
-	# the proposal queue prefers misses over noise.
-	MEMORY_TYPE=$(printf '%s' "$RESPONSE" | jq -r '.type // ""')
-	CONFIDENCE=$(printf '%s' "$RESPONSE" | jq -r '.confidence // 0')
-	BODY=$(printf '%s' "$RESPONSE" | jq -r '.body // ""')
-	TITLE=$(printf '%s' "$RESPONSE" | jq -r '.title // ""')
+if [[ -z "$QUEUE_FILE" ]]; then
+	# The queue could not be written, so the window was neither classified nor
+	# handed off. Nothing is emitted here and the watermark is NOT advanced:
+	# the artifacts stay in the next scan's window and get another chance.
+	#
+	# No scan.complete deliberately. skip_reason's enum is
+	# archivist_not_present|memory_path_unresolved|disabled|no_new_artifacts,
+	# and none of them describes "storage refused the handoff". Reaching for the
+	# nearest one is the conflation ecosystem-449.39 records against stamping
+	# "empty" on two paths that mean opposite things, and adding a value is a
+	# change in a separate repo for a path that should be unreachable.
+	#
+	# The silence is not a gap: a scan.started with no scan.complete is exactly
+	# what "this scan did not finish" looks like, and since ecosystem-449.66
+	# that shape is legible rather than invisible.
+	hook_health_exit 0
+fi
 
-	BELOW_MIN=$(awk -v a="$CONFIDENCE" -v b="$MIN_CONFIDENCE" 'BEGIN { print (a < b) ? 1 : 0 }')
+# Detached, following plugin-currency-surfacer's _spawn_refresh: a subshell with
+# explicit env passthrough, output discarded, disowned so SessionEnd does not
+# wait on it. LIBRARIAN_CLASSIFY_WORKER is a test seam -- a real worker running
+# concurrently would race the assertions.
+_spawn_one() {
+	local worker="$1" queue="$2"
+	(
+		ONLOOKER_DIR="${ONLOOKER_DIR:-}" \
+			CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-}" \
+			ONLOOKER_ECOSYSTEM_ROOT="${ONLOOKER_ECOSYSTEM_ROOT:-}" \
+			CLAUDE_CONFIG_DIR="${CLAUDE_CONFIG_DIR:-}" \
+			CLAUDE_PROJECT_ENCODED="${CLAUDE_PROJECT_ENCODED:-}" \
+			LIBRARIAN_NESTED="" \
+			bash "$worker" "$queue"
+	) >/dev/null 2>&1 &
+	disown 2>/dev/null || true
+	return 0
+}
 
-	if [[ -z "$MEMORY_TYPE" || "$MEMORY_TYPE" == "null" ]]; then
-		POST_CLASSIFIER_DROPPED=$((POST_CLASSIFIER_DROPPED + 1))
-		librarian_emit "librarian.candidate.dropped" "$SESSION_ID" "$(jq -cn \
-			--arg reason "classified_null" \
-			--arg src "$(printf '%s' "$ARTIFACT" | jq -r '.id // ""')" \
-			'{ reason: $reason, source_artifact_id: (if $src == "" then null else $src end) }
-			 | with_entries(select(.value != null))')"
-		continue
-	fi
-
-	if [[ "$BELOW_MIN" == "1" ]]; then
-		POST_CLASSIFIER_DROPPED=$((POST_CLASSIFIER_DROPPED + 1))
-		librarian_emit "librarian.candidate.dropped" "$SESSION_ID" "$(jq -cn \
-			--arg reason "low_confidence" \
-			--arg src "$(printf '%s' "$ARTIFACT" | jq -r '.id // ""')" \
-			'{ reason: $reason, source_artifact_id: (if $src == "" then null else $src end) }
-			 | with_entries(select(.value != null))')"
-		continue
-	fi
-
-	# Skip if a tombstone exists for this exact body — the user already
-	# rejected this content, don't re-surface it.
-	BODY_HASH=$(librarian_body_hash "$BODY")
-	if [[ -n "$BODY_HASH" ]] && librarian_storage_has_tombstone \
-			"$PROJECT_KEY" "$BODY_HASH" "$TOMBSTONE_TTL"; then
-		POST_CLASSIFIER_DROPPED=$((POST_CLASSIFIER_DROPPED + 1))
-		librarian_emit "librarian.candidate.dropped" "$SESSION_ID" "$(jq -cn \
-			--arg reason "duplicate" \
-			--arg src "$(printf '%s' "$ARTIFACT" | jq -r '.id // ""')" \
-			'{ reason: $reason, source_artifact_id: (if $src == "" then null else $src end) }
-			 | with_entries(select(.value != null))')"
-		continue
-	fi
-
-	# Build and persist the proposal. Detect conflicts against the user's
-	# memory store before writing.
-	PROPOSAL_ID=$(librarian_ulid)
-	FILENAME=$(librarian_classifier_filename "$MEMORY_TYPE" "$TITLE")
-	ARTIFACT_ID=$(printf '%s' "$ARTIFACT" | jq -r '.id // ""')
-	ARTIFACT_SESSION=$(printf '%s' "$ARTIFACT" | jq -r '.session_id // ""')
-
-	# Resolve the typed memory store path for this project.
-	MEMORY_STORE_PATH=$(librarian_config_get '.librarian.memory_store_path')
-	[[ -z "$MEMORY_STORE_PATH" || "$MEMORY_STORE_PATH" == "null" ]] && \
-		MEMORY_STORE_PATH='${CLAUDE_CONFIG_DIR}/projects/${CLAUDE_PROJECT_ENCODED}/memory'
-
-	# Interpolate placeholders. This was `eval echo`, which command-substituted
-	# a value the config loader reads from <repo>/.claude/settings.json — so a
-	# cloned repo could run anything here, as the user, on every SessionEnd
-	# (ecosystem-18f).
-	MEMORY_STORE_PATH=$(librarian_memory_resolve_path "$MEMORY_STORE_PATH")
-
-	# Initialize conflict state; will scan if memory dir exists.
-	CONFLICT_STATE="none"
-	CONFLICT_WITH="[]"
-
-	# Detect conflicts against existing memories only if the directory exists.
-	if [[ -d "$MEMORY_STORE_PATH" ]]; then
-		# Build a temporary proposal for conflict detection.
-		TEMP_PROPOSAL=$(jq -n \
-			--arg id "$PROPOSAL_ID" \
-			--arg memory_type "$MEMORY_TYPE" \
-			--arg filename "$FILENAME" \
-			--arg title "$TITLE" \
-			--arg body "$BODY" \
-			--argjson classifier_confidence "$CONFIDENCE" \
-			'{
-				id: $id,
-				proposed: {
-					type: $memory_type,
-					filename: $filename,
-					title: $title,
-					body: $body,
-					classifier_confidence: $classifier_confidence
-				}
-			}')
-
-		# Detect conflicts against existing memories.
-		DUP_THRESHOLD=$(librarian_config_get '.librarian.conflict.duplicate_threshold')
-		[[ -z "$DUP_THRESHOLD" || "$DUP_THRESHOLD" == "null" ]] && DUP_THRESHOLD="0.7"
-		MERGE_THRESHOLD=$(librarian_config_get '.librarian.conflict.merge_candidate_threshold')
-		[[ -z "$MERGE_THRESHOLD" || "$MERGE_THRESHOLD" == "null" ]] && MERGE_THRESHOLD="0.45"
-
-		CONFLICT_RESULT=$(librarian_conflict_scan "$TEMP_PROPOSAL" "$MEMORY_STORE_PATH" \
-			"$DUP_THRESHOLD" "$MERGE_THRESHOLD" 2>/dev/null) || CONFLICT_RESULT=""
-
-		# Ensure we have valid JSON; fall back to "none" if scan fails.
-		if [[ -z "$CONFLICT_RESULT" ]] || ! printf '%s' "$CONFLICT_RESULT" | jq -e '.' >/dev/null 2>&1; then
-			CONFLICT_RESULT='{"conflict_state":"none","conflict_with":[]}'
-		fi
-
-		CONFLICT_STATE=$(printf '%s' "$CONFLICT_RESULT" | jq -r '.conflict_state // "none"' 2>/dev/null) || CONFLICT_STATE="none"
-		CONFLICT_WITH=$(printf '%s' "$CONFLICT_RESULT" | jq -c '.conflict_with // []' 2>/dev/null) || CONFLICT_WITH="[]"
-
-		# Silently drop duplicates — no proposal written.
-		if [[ "$CONFLICT_STATE" == "duplicate" ]]; then
-			POST_CLASSIFIER_DROPPED=$((POST_CLASSIFIER_DROPPED + 1))
-			librarian_emit "librarian.candidate.dropped" "$SESSION_ID" "$(jq -cn \
-				--arg reason "duplicate" \
-				--arg src "$ARTIFACT_ID" \
-				'{ reason: $reason, source_artifact_id: (if $src == "" then null else $src end) }
-				 | with_entries(select(.value != null))')"
-			continue
-		fi
-	fi
-
-	PROPOSAL_JSON=$(jq -n \
-		--arg id "$PROPOSAL_ID" \
-		--arg created_at "$NOW_TS" \
-		--arg memory_type "$MEMORY_TYPE" \
-		--arg filename "$FILENAME" \
-		--arg title "$TITLE" \
-		--arg body "$BODY" \
-		--argjson classifier_confidence "$CONFIDENCE" \
-		--arg conflict_state "$CONFLICT_STATE" \
-		--argjson conflict_with "$CONFLICT_WITH" \
-		--arg artifact_id "$ARTIFACT_ID" \
-		--arg artifact_session "$ARTIFACT_SESSION" \
-		'{
-			id: $id,
-			created_at: $created_at,
-			source_artifact_ids: (if $artifact_id == "" then [] else [$artifact_id] end),
-			source_session_ids: (if $artifact_session == "" then [] else [$artifact_session] end),
-			proposed: {
-				type: $memory_type,
-				filename: $filename,
-				title: $title,
-				body: $body,
-				classifier_confidence: $classifier_confidence
-			},
-			conflict_state: $conflict_state,
-			conflict_with: $conflict_with,
-			status: "pending"
-		}')
-
-	librarian_storage_write_proposal "$PROJECT_KEY" "$PROPOSAL_ID" "$PROPOSAL_JSON" >/dev/null \
-		|| continue
-
-	PROPOSED_COUNT=$((PROPOSED_COUNT + 1))
-
-	# Write a flat artifact JSON for the artifact browser. The proposal file
-	# uses a nested `proposed.*` structure; this flat copy matches the web's
-	# LibrarianContent type so the dashboard can render it directly.
-	ARTIFACT_CONTENT=$(jq -n \
-		--arg type "$MEMORY_TYPE" \
-		--arg title "$TITLE" \
-		--arg body "$BODY" \
-		--argjson classifier_confidence "$CONFIDENCE" \
-		--arg conflict_state "none" \
-		--argjson source_session_ids \
-			"$(if [[ -n "$ARTIFACT_SESSION" ]]; then
-				printf '["%s"]' "$ARTIFACT_SESSION"
-			else
-				printf '[]'
-			fi)" \
-		'{type: $type, title: $title, body: $body,
-		  classifier_confidence: $classifier_confidence,
-		  conflict_state: $conflict_state,
-		  source_session_ids: $source_session_ids}') || ARTIFACT_CONTENT=""
-
-	if [[ -n "$ARTIFACT_CONTENT" ]]; then
-		ARTIFACTS_DIR="$(librarian_project_dir "$PROJECT_KEY")/artifacts"
-		mkdir -p "$ARTIFACTS_DIR" 2>/dev/null || true
-		ARTIFACT_PATH="${ARTIFACTS_DIR}/${PROPOSAL_ID}.json"
-		printf '%s\n' "$ARTIFACT_CONTENT" > "$ARTIFACT_PATH" 2>/dev/null || ARTIFACT_PATH=""
-	fi
-
-	if [[ -n "${ARTIFACT_PATH:-}" ]]; then
-		librarian_emit "onlooker.artifact.ready" "$SESSION_ID" "$(jq -cn \
-			--arg plugin "librarian" \
-			--arg artifact_kind "proposal" \
-			--arg artifact_path "$ARTIFACT_PATH" \
-			--arg artifact_title "$TITLE" \
-			'{plugin: $plugin, artifact_kind: $artifact_kind,
-			  artifact_path: $artifact_path, artifact_title: $artifact_title}')"
-	fi
-
-	librarian_emit "librarian.candidate.proposed" "$SESSION_ID" "$(jq -cn \
-		--arg proposal_id "$PROPOSAL_ID" \
-		--arg memory_type "$MEMORY_TYPE" \
-		--argjson classifier_confidence "$CONFIDENCE" \
-		--arg conflict_state "$CONFLICT_STATE" \
-		--arg src "$ARTIFACT_ID" \
-		'{
-			proposal_id: $proposal_id,
-			memory_type: $memory_type,
-			classifier_confidence: $classifier_confidence,
-			conflict_state: $conflict_state,
-			source_artifact_ids: (if $src == "" then [] else [$src] end)
-		}')"
-done
-
-# ---------------------------------------------------------------------------
-# Stage 5 — lesson transform.
+# Spawn for every queued window, not just the one this session wrote.
 #
-# Runs over the same durability survivors the classifier saw. Each artifact is
-# independent: a decline or an outage on one never stops the rest.
+# A worker can die without finishing -- the session exits and takes it with it,
+# the machine reboots -- and it deletes its queue file only on success, so its
+# input is still there. But nothing else ever looks at it: this hook is the only
+# writer, and a later session writes a NEW file rather than draining the old
+# one. Without this loop those artifacts are stranded behind an already-advanced
+# watermark, which is precisely the loss the queue exists to prevent.
 #
-# Budgeted in aggregate, not just per call. Each transform carries a 20s
-# ceiling of its own, but nothing bounded KEPT_COUNT of them end to end, so a
-# backlog could hold SessionEnd open for minutes (ecosystem-qwi). The check is
-# per iteration rather than once before the loop: a pre-loop gate only decides
-# whether to start, and once started the cost is still unbounded — which is the
-# gap the classifier loop above still has.
-#
-# Skipping is the safe direction. Untransformed artifacts are reconsidered on a
-# later session, so the cost of stopping early is a delay; the cost of not
-# stopping is a session that will not close.
-# ---------------------------------------------------------------------------
-LESSON_PROPOSED=0
-LESSON_DECLINED=0
-LESSONS_SKIPPED=0
+# Spawning is a fork and a disown, so the extra ones are free, and a window
+# already in flight is a no-op because the worker cannot take its lock. Bounded
+# anyway: if orphans are piling up something is wrong, and starting an unbounded
+# number of LLM workers is not the way to find out.
+_spawn_classify() {
+	local worker="${LIBRARIAN_CLASSIFY_WORKER:-${PLUGIN_ROOT}/scripts/lib/librarian-classify-worker.sh}"
+	[[ -f "$worker" ]] || return 1
 
-LESSON_BUDGET_MS=$(librarian_config_get '.librarian.lesson_transform.total_budget_ms' 2>/dev/null)
-[[ -z "$LESSON_BUDGET_MS" || "$LESSON_BUDGET_MS" == "null" ]] && LESSON_BUDGET_MS=8000
-LESSON_START_MS=$(librarian_now_ms)
+	local dir="${ONLOOKER_DIR:-$HOME/.onlooker}/librarian/${PROJECT_KEY}/classify-queue"
+	local spawned=0 q
+	while IFS= read -r q; do
+		[[ -n "$q" ]] || continue
+		_spawn_one "$worker" "$q"
+		spawned=$((spawned + 1))
+		[[ "$spawned" -ge 5 ]] && break
+	done < <(ls -1t "$dir"/*.json 2>/dev/null)
 
-for ((li = 0; li < KEPT_COUNT; li++)); do
-	if [[ $(( $(librarian_now_ms) - LESSON_START_MS )) -ge "$LESSON_BUDGET_MS" ]]; then
-		LESSONS_SKIPPED=$(( KEPT_COUNT - li ))
-		break
-	fi
+	# Oldest-first would be fairer to a stranded window, but `ls -1t` is newest
+	# first on purpose: this session's own window is the one whose proposals the
+	# user is most likely to be waiting on, and it is always the newest.
+	[[ "$spawned" -gt 0 ]] || return 1
+	return 0
+}
 
-	LESSON_ARTIFACT=$(printf '%s' "$KEPT" | jq -c ".[$li]")
-	[[ -z "$LESSON_ARTIFACT" || "$LESSON_ARTIFACT" == "null" ]] && continue
-
-	LESSON_RESULT=$(librarian_lesson_transform_one "$PROJECT_KEY" "$LESSON_ARTIFACT")
-	case "$LESSON_RESULT" in
-		proposed:*) LESSON_PROPOSED=$((LESSON_PROPOSED + 1)) ;;
-		declined:*) LESSON_DECLINED=$((LESSON_DECLINED + 1)) ;;
-	esac
-done
-
-# LESSONS_SKIPPED rides on scan.complete below rather than becoming an event of
-# its own. A truncated stage 5 is not a truncated scan: the scan finishes
-# normally and only this stage stops early, so the count belongs beside a
-# healthy outcome rather than replacing it.
+_spawn_classify || true
 
 # ----------------------------------------------------------------------------
-# Watermark advance + scan.complete.
+# Watermark advance.
+#
+# Safe to advance even though nothing has been classified yet: the queue file
+# holds the window, and the worker deletes it only after succeeding. A worker
+# that dies leaves its input on disk rather than behind an advanced watermark.
+#
+# scan.complete is deliberately NOT emitted here. The outcome enum is
+# ok|empty|skipped|budget_exceeded with additionalProperties:false, and none of
+# those means "queued for a worker" -- claiming one would be a false report, and
+# adding a value would be a schema change in a separate repo. The worker emits
+# it with the real counts when it lands, exactly as the currency probe emits
+# onlooker.currency.checked for itself.
 # ----------------------------------------------------------------------------
 
 librarian_storage_write_last_scan "$PROJECT_KEY" || true
-
-TOTAL_DROPPED=$((DROPPED_TOTAL + POST_CLASSIFIER_DROPPED))
-OUTCOME="ok"
-[[ "$PROPOSED_COUNT" == "0" ]] && OUTCOME="empty"
-DURATION_MS=$(( $(librarian_now_ms) - SCAN_START_TS_MS ))
-
-librarian_emit "librarian.scan.complete" "$SESSION_ID" "$(jq -cn \
-	--arg outcome "$OUTCOME" \
-	--argjson candidates_proposed "$PROPOSED_COUNT" \
-	--argjson candidates_dropped "$TOTAL_DROPPED" \
-	--argjson lessons_skipped "$LESSONS_SKIPPED" \
-	--argjson duration_ms "$DURATION_MS" \
-	--argjson artifact_count_in_window "$ARTIFACT_COUNT" \
-	'{
-		outcome: $outcome,
-		candidates_proposed: $candidates_proposed,
-		candidates_dropped: $candidates_dropped,
-		lessons_skipped: $lessons_skipped,
-		duration_ms: $duration_ms,
-		artifact_count_in_window: $artifact_count_in_window
-	}')"
-
-# Suppress AUTO_PROMOTE_THRESHOLD shellcheck warning — read for future use
-# (auto-promote path lands in the next commit).
-: "${AUTO_PROMOTE_THRESHOLD}"
 
 hook_health_exit 0

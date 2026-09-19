@@ -320,11 +320,23 @@ _transform_setup() {
   cat > "${STUB_BIN}/claude" <<'STUB'
 #!/usr/bin/env bash
 prompt=$(cat)
+# The CLASSIFIER prompt is answered first, before any lesson branch. Since
+# ecosystem-449.72 both stages run in the same worker against the same stub,
+# and the classifier runs first — so a fixture whose detail contains
+# "module-runner" would otherwise be handed lesson-shaped JSON for its
+# classifier call, fail validation, and count as an unanswered call. Zero
+# answered calls is how the worker recognizes an unreachable classifier, and it
+# stops there rather than reaching stage 5 at all.
+#
+# Real claude serves both stages or neither, so answering only one is a shape
+# no production run takes.
+if [[ "$prompt" == *"classifying a session artifact"* ]]; then
+  printf '%s' '{"type":"project","title":"Pin vitest until Vite 6","body":"Vitest 4 cannot import vite/module-runner on Vite 5.\n\n**Why:** vite/module-runner ships in Vite 6.\n**How to apply:** Pin vitest to 3.x until Vite 6 lands.","confidence":0.88}'
 # Stub-selector markers are checked before the generic "module-runner"
 # content match: several fixtures embed real vitest/vite prose (which
 # contains "module-runner") alongside their marker, and the marker names
 # the intended stub behavior.
-if [[ "$prompt" == *"no-resolution-stub"* ]]; then
+elif [[ "$prompt" == *"no-resolution-stub"* ]]; then
   printf '%s' '{"eligible":false,"reason":"no_resolution"}'
 elif [[ "$prompt" == *"no-versions-stub"* ]]; then
   printf '%s' '{"eligible":false,"reason":"no_versions"}'
@@ -616,8 +628,24 @@ STUB
 
   input=$(jq -cn --arg cwd "$PROJECT_REPO" \
     '{cwd: $cwd, session_id: "sess-1", hook_event_name: "SessionEnd"}')
-  run bash -c "printf '%s' '$input' | '$HOOK'"
 
-  [ "$status" -eq 0 ]
+  # The lesson stage moved to the detached worker with the classifier
+  # (ecosystem-449.72): both reach claude, and one call costs ~39s against
+  # SessionEnd's 1500ms ceiling. The hook now queues the window, so driving it
+  # alone can no longer land a lesson. Suppress the real spawn and run the
+  # worker synchronously instead — a detached worker would race this
+  # assertion for the queue lock.
+  noop="${BATS_TEST_TMPDIR}/noop-worker.sh"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$noop"
+  chmod +x "$noop"
+  run env LIBRARIAN_CLASSIFY_WORKER="$noop" \
+    bash -c "printf '%s' '$input' | '$HOOK'"
+  [ "$status" -eq 0 ] || return 1
+
+  queued=$(find "${ONLOOKER_DIR}/librarian/${PROJECT_KEY}/classify-queue" \
+    -name '*.json' -type f 2>/dev/null | head -1)
+  [ -n "$queued" ] || return 1
+  bash "${PLUGIN_ROOT}/scripts/lib/librarian-classify-worker.sh" "$queued" || true
+
   [ -n "$(ls -A "${LESSONS_DIR}/proposals" 2>/dev/null)" ]
 }

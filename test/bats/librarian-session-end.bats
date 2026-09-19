@@ -97,9 +97,48 @@ _hook_input() {
     '{cwd: $cwd, session_id: $sid, hook_event_name: "SessionEnd"}'
 }
 
+# Run the whole scan: the hook, then the worker it queued.
+#
+# ecosystem-449.72 split the scan across two processes. Classification used to
+# happen inline in the hook, but one claude call costs ~39s against SessionEnd's
+# 1500ms ceiling, so the window is handed to a detached worker instead. The
+# tests below assert on what a scan PRODUCES -- proposals, counts, outcomes --
+# and that is still the right thing to assert; it just takes both halves now.
+#
+# The worker runs synchronously here on purpose. In production it is detached,
+# and waiting for it is what makes these assertions deterministic rather than a
+# race against a background process.
+_run_scan() {
+  # Suppress the hook's own detached spawn. Letting it run would race the
+  # synchronous drain below for the queue lock, and whichever lost would exit
+  # without classifying — so the assertions would depend on which process won.
+  local noop="${BATS_TEST_TMPDIR}/noop-worker.sh"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$noop"
+  chmod +x "$noop"
+
+  run env LIBRARIAN_CLASSIFY_WORKER="$noop" \
+    bash -c "printf '%s' '$(_hook_input)' | '$HOOK'"
+  local hook_status="$status"
+  local hook_output="$output"
+
+  local queue_dir="${LIBRARIAN_DIR}/classify-queue"
+  if [ -d "$queue_dir" ]; then
+    local q
+    while IFS= read -r q; do
+      [ -n "$q" ] || continue
+      bash "${PLUGIN_ROOT}/scripts/lib/librarian-classify-worker.sh" "$q" || true
+    done < <(find "$queue_dir" -name '*.json' -type f 2>/dev/null)
+  fi
+
+  # Re-expose the hook's result: `run` inside the worker loop above would
+  # otherwise have clobbered $status and $output for the caller.
+  status="$hook_status"
+  output="$hook_output"
+}
+
 
 @test "session-end emits a skipped scan when archivist has nothing" {
-  run bash -c "printf '%s' '$(_hook_input)' | '$HOOK'"
+  _run_scan
   [ "$status" -eq 0 ]
 
   # scan.started fired with artifact_count_in_window = 0.
@@ -134,7 +173,7 @@ _hook_input() {
     "ad hoc question" \
     "this short text contains no marker phrase and should be filtered out before the classifier runs"
 
-  run bash -c "printf '%s' '$(_hook_input)' | '$HOOK'"
+  _run_scan
   [ "$status" -eq 0 ]
 
   # Two proposals on disk.
@@ -172,7 +211,7 @@ _hook_input() {
     "low-conf-stub trigger" \
     "always prefer some thing because reasons that show a marker phrase but the stub returns low confidence"
 
-  run bash -c "printf '%s' '$(_hook_input)' | '$HOOK'"
+  _run_scan
   [ "$status" -eq 0 ]
 
   # No proposal written.
@@ -215,7 +254,7 @@ _seed_lessonable() {
 
 @test "stage 5 runs a lesson transform when the budget allows" {
   _seed_lessonable
-  run bash -c "printf '%s' '$(_hook_input)' | '$HOOK'"
+  _run_scan
   [ "$status" -eq 0 ] || return 1
   # One classifier call plus one lesson call.
   [ "$(_llm_calls)" -ge 2 ]
@@ -227,7 +266,7 @@ _seed_lessonable() {
 @test "a zero budget skips stage 5 entirely" {
   echo '{"librarian":{"lesson_transform":{"total_budget_ms":0}}}' | _settings
   _seed_lessonable
-  run bash -c "printf '%s' '$(_hook_input)' | '$HOOK'"
+  _run_scan
   [ "$status" -eq 0 ] || return 1
   [ "$(_llm_calls)" = "1" ]
 }
@@ -238,7 +277,7 @@ _seed_lessonable() {
 @test "the watermark still advances when the budget trips" {
   echo '{"librarian":{"lesson_transform":{"total_budget_ms":0}}}' | _settings
   _seed_lessonable
-  run bash -c "printf '%s' '$(_hook_input)' | '$HOOK'"
+  _run_scan
   [ "$status" -eq 0 ] || return 1
   [ -f "${LIBRARIAN_DIR}/last_scan.json" ] || return 1
   jq -e '.scanned_at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T")' "${LIBRARIAN_DIR}/last_scan.json" >/dev/null
@@ -247,7 +286,7 @@ _seed_lessonable() {
 @test "scan.complete is still emitted when the budget trips" {
   echo '{"librarian":{"lesson_transform":{"total_budget_ms":0}}}' | _settings
   _seed_lessonable
-  run bash -c "printf '%s' '$(_hook_input)' | '$HOOK'"
+  _run_scan
   [ "$status" -eq 0 ] || return 1
   grep '"event_type":"librarian.scan.complete"' "$ONLOOKER_EVENTS_LOG" \
     | jq -e '.payload.outcome == "ok" or .payload.outcome == "empty"' >/dev/null
@@ -258,7 +297,7 @@ _seed_lessonable() {
 @test "a tripped lesson budget does not discard classifier proposals" {
   echo '{"librarian":{"lesson_transform":{"total_budget_ms":0}}}' | _settings
   _seed_lessonable
-  run bash -c "printf '%s' '$(_hook_input)' | '$HOOK'"
+  _run_scan
   [ "$status" -eq 0 ] || return 1
   grep '"event_type":"librarian.scan.complete"' "$ONLOOKER_EVENTS_LOG" \
     | jq -e '.payload.candidates_proposed >= 1' >/dev/null
@@ -267,7 +306,7 @@ _seed_lessonable() {
 @test "the hook still exits 0 when the budget trips" {
   echo '{"librarian":{"lesson_transform":{"total_budget_ms":0}}}' | _settings
   _seed_lessonable
-  run bash -c "printf '%s' '$(_hook_input)' | '$HOOK'"
+  _run_scan
   [ "$status" -eq 0 ]
 }
 
@@ -288,7 +327,7 @@ _scan_complete() {
 @test "a truncated stage 5 reports how many artifacts it skipped" {
   echo '{"librarian":{"lesson_transform":{"total_budget_ms":0}}}' | _settings
   _seed_lessonable
-  run bash -c "printf '%s' '$(_hook_input)' | '$HOOK'"
+  _run_scan
   [ "$status" -eq 0 ] || return 1
   _scan_complete | jq -e '.payload.lessons_skipped >= 1' >/dev/null
 }
@@ -298,14 +337,14 @@ _scan_complete() {
 @test "the skip count rides alongside a normal outcome" {
   echo '{"librarian":{"lesson_transform":{"total_budget_ms":0}}}' | _settings
   _seed_lessonable
-  run bash -c "printf '%s' '$(_hook_input)' | '$HOOK'"
+  _run_scan
   [ "$status" -eq 0 ] || return 1
   _scan_complete | jq -e '.payload.outcome == "ok" or .payload.outcome == "empty"' >/dev/null
 }
 
 @test "an untruncated scan reports zero skipped" {
   _seed_lessonable
-  run bash -c "printf '%s' '$(_hook_input)' | '$HOOK'"
+  _run_scan
   [ "$status" -eq 0 ] || return 1
   _scan_complete | jq -e '.payload.lessons_skipped == 0' >/dev/null
 }
