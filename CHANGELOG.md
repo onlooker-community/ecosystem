@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.60.5](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.60.4...ecosystem-v0.60.5) (2026-09-19)
+
+
+### Bug Fixes
+
+* **hook-health:** see the runs that die without a trap :footprints: ([#341](https://github.com/onlooker-community/ecosystem/issues/341)) ([92a1a59](https://github.com/onlooker-community/ecosystem/commit/92a1a59d26e571dd13698125346c9144766c23b6))
+* **hook-health:** stop reading a killed hook as a healthy one :mag: ([#343](https://github.com/onlooker-community/ecosystem/issues/343)) ([6dfaaaf](https://github.com/onlooker-community/ecosystem/commit/6dfaaafe82c91e47606631f0675bba42f30b4230))
+
 ## [0.60.4](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.60.3...ecosystem-v0.60.4) (2026-09-18)
 
 
