@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.61.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.60.7...ecosystem-v0.61.0) (2026-09-19)
+
+
+### Features
+
+* **liveness:** tell "not yet" from "cannot run here" :triangular_ruler: ([#348](https://github.com/onlooker-community/ecosystem/issues/348)) ([5166c96](https://github.com/onlooker-community/ecosystem/commit/5166c96e8a930ce63293ba1104b039dbe2d2ec92))
+
 ## [0.60.7](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.60.6...ecosystem-v0.60.7) (2026-09-19)
 
 
