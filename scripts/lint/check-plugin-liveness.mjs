@@ -61,7 +61,13 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// This checker reads the SHIPPED config of the plugins in this repo, which is
+// not the same place as the project being checked — --project can point
+// anywhere, and for the dogfooding soak it points at a different repo entirely.
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 function parseArgs(argv) {
   const args = { project: null, onlookerDir: null, since: 30, strict: false, json: false };
@@ -127,6 +133,89 @@ function readJson(path) {
 
 // Scan a JSONL log once. Malformed lines are skipped rather than fatal: these
 // logs are appended to by concurrent hooks and a torn final line is normal.
+// Can this plugin do any work in this repo at all?
+//
+// Only inclusion globs answer that — see scripts/lib/repo-shaped-inputs.json for
+// why exclusion globs do not, and why the distinction has to be declared rather
+// than inferred. A plugin with no registered inclusion key is hostable
+// everywhere, which is the right default: most plugins react to events rather
+// than to a repo's shape.
+//
+// Fails OPEN. If the registry is unreadable, a glob is malformed, or the walk
+// errors, the answer is "hostable" — a readiness check that wrongly reports
+// "not hostable" would retire a plugin from the soak silently, which is a worse
+// error than leaving it at zero where someone will ask why.
+function isHostable(plugin, projectDir) {
+  let entry;
+  try {
+    const reg = JSON.parse(readFileSync(join(REPO_ROOT, 'scripts', 'lib', 'repo-shaped-inputs.json'), 'utf8'));
+    entry = reg.inclusion?.[plugin];
+  } catch {
+    return true;
+  }
+  if (!entry?.config_key) return true;
+
+  let globs;
+  try {
+    const cfg = JSON.parse(readFileSync(join(REPO_ROOT, 'plugins', plugin, 'config.json'), 'utf8'));
+    globs = entry.config_key.split('.').reduce((o, k) => (o == null ? o : o[k]), cfg);
+  } catch {
+    return true;
+  }
+  if (!Array.isArray(globs) || globs.length === 0) return true;
+
+  // git ls-files rather than a filesystem walk: it respects .gitignore, so a
+  // match inside node_modules or dist cannot make a plugin look hostable on
+  // files nobody tracks.
+  let tracked;
+  try {
+    tracked = execFileSync('git', ['-C', projectDir, 'ls-files'], {
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+    }).split('\n');
+  } catch {
+    return true;
+  }
+
+  return globs.some((g) => {
+    const re = globToRegExp(g);
+    return re !== null && tracked.some((f) => f && re.test(f));
+  });
+}
+
+// Minimal glob matcher for the shapes these configs actually use: `*` within a
+// path segment, `**` across segments, and a trailing `/` meaning "this
+// directory". Returns null for anything it cannot represent, and the caller
+// treats that as no-match-from-this-glob rather than guessing.
+function globToRegExp(glob) {
+  if (typeof glob !== 'string' || glob === '') return null;
+  const dirOnly = glob.endsWith('/');
+  const body = dirOnly ? glob.slice(0, -1) : glob;
+  let out = '';
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i];
+    if (c === '*') {
+      if (body[i + 1] === '*') {
+        out += '.*';
+        i++;
+        if (body[i + 1] === '/') i++;
+      } else {
+        out += '[^/]*';
+      }
+    } else if ('\\^$.|?+()[]{}'.includes(c)) {
+      out += `\\${c}`;
+    } else {
+      out += c;
+    }
+  }
+  // A trailing-slash glob names a directory, so anything beneath it counts.
+  try {
+    return new RegExp(`^${out}${dirOnly ? '/.*' : ''}$`);
+  } catch {
+    return null;
+  }
+}
+
 function scanJsonl(path, cutoffMs, onRecord) {
   if (!existsSync(path)) return false;
   let text;
@@ -225,14 +314,27 @@ const rows = enabled.map((plugin) => {
   const here = eventsHere.get(plugin) || 0;
   const anywhere = eventsAnywhere.get(plugin) || 0;
   let verdict;
-  if (hooks === 0) verdict = 'not_running';
+  // Applicability comes first, because it changes what silence MEANS
+  // (ecosystem-449.28). Every verdict below reads absence as a fault: a plugin
+  // at zero is not running, or running and mute. For a plugin whose inputs do
+  // not exist in this repo, absence is the correct outcome and forever will be
+  // — echo watching for agent files in a repo that has none is enabled, green,
+  // and measuring nothing, which is the Wave 0 failure where inspector shipped
+  // checks:{}. Reported separately so it does not sit at zero looking like a
+  // stalled wave, and excluded from findings because there is nothing to fix.
+  if (!isHostable(plugin, project)) verdict = 'not_hostable';
+  else if (hooks === 0) verdict = 'not_running';
   else if (anywhere === 0) verdict = 'silent';
   else if (here === 0) verdict = 'no_local_events';
   else verdict = 'live';
   return { plugin, hooks, here, anywhere, verdict };
 });
 
-const findings = rows.filter((r) => r.verdict !== 'live');
+// not_hostable is an answer, not a finding. The plugin has no inputs in this
+// repo, so there is nothing to fix and nothing to wait for; counting it would
+// make a correctly-configured soak look permanently broken, which is what
+// ecosystem-449.28 asked for in the first place.
+const findings = rows.filter((r) => r.verdict !== 'live' && r.verdict !== 'not_hostable');
 
 if (args.json) {
   process.stdout.write(`${JSON.stringify({ project, project_key: key, since_days: args.since, rows }, null, 2)}\n`);
