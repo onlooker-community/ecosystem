@@ -164,6 +164,57 @@ test('a start breadcrumb is not counted as a separate hook run', () => {
   assert.equal(demo.hooks, 1);
 });
 
+// ecosystem-449.28. Readiness asks whether a plugin has produced events in the
+// target repo, and every other verdict reads absence as a fault. For a plugin
+// whose inputs do not exist there, absence is correct and permanent — echo
+// watching for agent files in a repo with none is enabled, green, and measuring
+// nothing, the Wave 0 failure where inspector shipped checks:{}. These pin that
+// the checker can tell "not yet" from "not hostable here".
+//
+// echo is the real registered case: scripts/lib/repo-shaped-inputs.json lists
+// echo.watch_paths as an inclusion glob, so these use echo rather than a
+// synthetic plugin and exercise the shipped config.
+test('a plugin whose inclusion globs match nothing here is not_hostable, not a finding', () => {
+  const fx = fixture({ enabled: { 'echo@m': true }, hooks: ['echo-stop-gate'] });
+  // The fixture repo has settings and hooks.json, and no agent or skill files.
+  writeLogs(fx, { health: [{ hook: 'echo-stop-gate' }], events: [] });
+  const row = run(fx).rows.find((r) => r.plugin === 'echo');
+  assert.equal(row.verdict, 'not_hostable');
+});
+
+test('not_hostable does not count as a finding', () => {
+  const fx = fixture({ enabled: { 'echo@m': true }, hooks: ['echo-stop-gate'] });
+  writeLogs(fx, { health: [{ hook: 'echo-stop-gate' }], events: [] });
+  // --strict exits non-zero on findings. A plugin that cannot run here is an
+  // answer, so it must not fail the gate.
+  execFileSync(process.execPath, [SCRIPT, '--project', fx.project, '--onlooker-dir', fx.onlooker, '--strict'], {
+    encoding: 'utf8',
+  });
+});
+
+test('the same plugin is judged normally once its inputs exist', () => {
+  // The other half: without this, the test above would pass on a checker that
+  // simply called echo not_hostable everywhere.
+  const fx = fixture({ enabled: { 'echo@m': true }, hooks: ['echo-stop-gate'] });
+  mkdirSync(join(fx.project, '.claude', 'agents'), { recursive: true });
+  writeFileSync(join(fx.project, '.claude', 'agents', 'reviewer.md'), '# reviewer\n');
+  execFileSync('git', ['-C', fx.project, 'add', '-A'], { stdio: 'ignore' });
+
+  writeLogs(fx, { health: [{ hook: 'echo-stop-gate' }], events: [] });
+  const row = run(fx).rows.find((r) => r.plugin === 'echo');
+  assert.notEqual(row.verdict, 'not_hostable');
+  assert.equal(row.verdict, 'silent');
+});
+
+test('a plugin with no registered inclusion globs is hostable anywhere', () => {
+  // Most plugins react to events, not to a repo's shape. Absent a registry
+  // entry the answer must be "hostable", or every unregistered plugin would
+  // silently drop out of the soak.
+  const fx = fixture();
+  writeLogs(fx, { health: [{ hook: 'demo-stop' }], events: [] });
+  assert.equal(verdictOf(fx), 'silent');
+});
+
 test('a torn final log line is skipped rather than fatal', () => {
   const fx = fixture();
   const key = run(fx).project_key;
