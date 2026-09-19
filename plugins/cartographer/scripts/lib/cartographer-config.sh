@@ -65,7 +65,11 @@ cartographer_config_model_synthesis() {
 cartographer_config_phase_timeout() {
 	local v
 	v=$(cartographer_config_get '.cartographer.phase_timeout_seconds')
-	printf '%s' "${v:-60}"
+	# Keep in step with config.json. A config that fails to load falls back here
+	# SILENTLY (exit 0, accessors undefined), so a stale 60 would quietly restore
+	# ecosystem-449.64: every analyzer pass measured 67-131s, so 60 killed all of
+	# them, not just slow ones.
+	printf '%s' "${v:-180}"
 }
 
 cartographer_config_total_timeout() {

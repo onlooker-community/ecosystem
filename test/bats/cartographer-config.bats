@@ -58,11 +58,22 @@ setup() {
   [ "$v" = "claude-sonnet-4-6" ]
 }
 
-@test "phase_timeout_seconds defaults to 60" {
+@test "phase_timeout_seconds defaults to 180" {
   cartographer_config_load ""
   local v
   v=$(cartographer_config_phase_timeout)
-  [ "$v" = "60" ]
+  [ "$v" = "180" ]
+}
+
+# Pinned alongside the phase fallback so the pair cannot drift apart. The guard
+# in run-audit.sh compares these two, and config loading fails silently, so a
+# total that stopped tracking config.json would mis-budget the whole audit with
+# nothing to show for it. 600 covers the three model passes at 180 each.
+@test "total_timeout_seconds defaults to 600" {
+  cartographer_config_load ""
+  local v
+  v=$(cartographer_config_total_timeout)
+  [ "$v" = "600" ]
 }
 
 @test "audit_interval_hours defaults to 24" {
