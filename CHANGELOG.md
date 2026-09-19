@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.60.7](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.60.6...ecosystem-v0.60.7) (2026-09-19)
+
+
+### Bug Fixes
+
+* **archivist:** stop re-serializing the corpus once per artifact :zap: ([#346](https://github.com/onlooker-community/ecosystem/issues/346)) ([9c5f7e9](https://github.com/onlooker-community/ecosystem/commit/9c5f7e9e3c1408eb294bdf8a6485378b86f95ddd))
+
 ## [0.60.6](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.60.5...ecosystem-v0.60.6) (2026-09-19)
 
 
