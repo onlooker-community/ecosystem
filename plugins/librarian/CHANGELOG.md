@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.18.6](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.18.5...librarian-v0.18.6) (2026-09-19)
+
+
+### Bug Fixes
+
+* **librarian:** stop asking an LLM to answer inside 1500ms :hourglass: ([#344](https://github.com/onlooker-community/ecosystem/issues/344)) ([de6fc2e](https://github.com/onlooker-community/ecosystem/commit/de6fc2eaed0dfc6ffb44665f4093d17f1ddc4408))
+
 ## [0.18.5](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.18.4...librarian-v0.18.5) (2026-09-19)
 
 

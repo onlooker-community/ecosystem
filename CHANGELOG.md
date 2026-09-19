@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.60.6](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.60.5...ecosystem-v0.60.6) (2026-09-19)
+
+
+### Bug Fixes
+
+* **librarian:** stop asking an LLM to answer inside 1500ms :hourglass: ([#344](https://github.com/onlooker-community/ecosystem/issues/344)) ([de6fc2e](https://github.com/onlooker-community/ecosystem/commit/de6fc2eaed0dfc6ffb44665f4093d17f1ddc4408))
+
 ## [0.60.5](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.60.4...ecosystem-v0.60.5) (2026-09-19)
 
 
