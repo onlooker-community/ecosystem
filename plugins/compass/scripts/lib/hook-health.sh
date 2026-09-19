@@ -20,12 +20,24 @@
 #
 # What duration_ms actually measures, since consumers cannot infer it:
 # from the clock read inside hook_health_register to the clock read at the top
-# of _hook_health_write. Both stamps cost a subprocess whose pre-read startup
-# lands inside that window, so a hook doing no work still reports about 3ms on
-# the development machine. Reaching zero needs a subprocess-free clock, which
-# means bash 5's $EPOCHREALTIME — unavailable under the #!/usr/bin/env bash
-# shebang that resolves to 3.2 on macOS. Treat small values as a floor, not a
-# measurement. duration_ms is null when it could not be computed at all.
+# of _hook_health_write. Treat small values as a floor, not a measurement.
+# duration_ms is null when it could not be computed at all.
+#
+# How much of the instrument lands inside that window depends on the shell, and
+# the difference is not small (ecosystem-449.66):
+#
+#   bash 4.2+   Nothing. EPOCHREALTIME and printf %()T are builtins, so both
+#               stamps are free, and the start is re-read after the breadcrumb
+#               so its append is excluded too. Measured floor: ~1ms, the same
+#               as before this lib wrote two records per fire.
+#   bash 3.2    One jq fork for the end stamp, whose startup lands in the
+#               window, plus the breadcrumb's append — buying that exclusion
+#               would cost another jq fork, more than the append itself. On a
+#               loaded host this reads as tens of milliseconds and is mostly
+#               the instrument, not the hook.
+#
+# `#!/usr/bin/env bash` resolves to 3.2 on macOS and 5.x on Linux, so the
+# development machine gets the expensive path and CI the cheap one.
 
 # Content fingerprint of this file, stamped by scripts/sync-shared-libs.sh and
 # verified by test/bats/shared-lib-fingerprint.bats.
@@ -39,7 +51,7 @@
 # Derived from the bytes rather than declared: a version directory's name, its
 # package.json and its mtime have each been caught disagreeing with the contents
 # they label. A hand-maintained constant would be a fourth such label.
-_ONLOOKER_LIB_FINGERPRINT="4c9a52fe9a3d"
+_ONLOOKER_LIB_FINGERPRINT="8c3be235a600"
 
 # Do not clobber values a caller already set — several plugins set
 # _HOOK_SESSION_ID before sourcing, and their *-events.sh libs read it.
@@ -52,6 +64,22 @@ _HOOK_SESSION_ID="${_HOOK_SESSION_ID:-}"
 _HOOK_EVENT="${_HOOK_EVENT:-}"
 _HOOK_TOOL_NAME="${_HOOK_TOOL_NAME:-}"
 _HOOK_PRIOR_EXIT_CMD="${_HOOK_PRIOR_EXIT_CMD:-}"
+# The start stamp in ISO form, and the key that joins a breadcrumb to the
+# terminal record that closes it (ecosystem-449.66).
+_HOOK_START_ISO="${_HOOK_START_ISO:-}"
+_HOOK_RUN_ID="${_HOOK_RUN_ID:-}"
+# Set by hook_health_complete. Unset means the EXIT trap cannot prove the hook
+# reached a termination point it chose — it will mean "terminated" once the
+# follow-up change flips the trap and converts every hook; for now it is
+# recorded and not acted on.
+#
+# Deliberately NOT exported: a subshell that marks completion must not speak for
+# its parent, and losing the flag is the safe direction (a run will read as
+# terminated, never as a false success).
+_HOOK_COMPLETED="${_HOOK_COMPLETED:-}"
+# Separates two fires that land in the same millisecond in one process, which
+# is what re-registering inside a fast hook looks like.
+_HOOK_RUN_SEQ="${_HOOK_RUN_SEQ:-0}"
 
 # Which plugin copy is this, and which host process is running it.
 #
@@ -131,8 +159,26 @@ if [[ -z "${_ONLOOKER_PLUGIN_ORIGIN_DERIVED+set}" ]]; then
 	_hook_health_derive_origin
 fi
 
+# Resolve the log path into $_HH_LOG_PATH. One definition, no subprocess.
+#
+# Both writers sit inside the window duration_ms measures, so `$(hook_health_log_path)`
+# billed a fork to every hook's reported latency — one that predates this change
+# in _hook_health_write, and one the breadcrumb would have added. That is real
+# against a ~3ms floor, and hook-health.bats asserts duration_ms < 50 on a hook
+# that does no work. Setting a global instead of capturing stdout removes both.
+_HH_LOG_PATH=""
+_hook_health_resolve_log_path() {
+	_HH_LOG_PATH="${ONLOOKER_HOOK_HEALTH_LOG:-${ONLOOKER_DIR:-$HOME/.onlooker}/logs/hook-health.jsonl}"
+	return 0
+}
+
+# Public accessor, kept because callers and tests use it. Resolved fresh each
+# call rather than cached: ONLOOKER_HOOK_HEALTH_LOG is redirected between
+# register and write throughout the suite, and a cached value would quietly
+# send those records to the previous path.
 hook_health_log_path() {
-	printf '%s' "${ONLOOKER_HOOK_HEALTH_LOG:-${ONLOOKER_DIR:-$HOME/.onlooker}/logs/hook-health.jsonl}"
+	_hook_health_resolve_log_path
+	printf '%s' "$_HH_LOG_PATH"
 }
 
 # Milliseconds since the epoch, cheapest source first.
@@ -162,14 +208,209 @@ _hook_health_now_ms() {
 	printf '%s000' "$(date +%s 2>/dev/null || printf 0)"
 }
 
-# Start timing and arm the exit trap.
+# The same clock, returned through $_HH_NOW_MS instead of stdout. Returns 1 when
+# the shell has no free clock, so callers fall back to the cascade above.
+#
+# Capturing _hook_health_now_ms with `$(...)` forks even on the EPOCHREALTIME
+# path, where the read itself is free — and that fork lands inside the window
+# duration_ms measures, on both ends. Under bash 5 this makes the whole measured
+# window subprocess-free, which is how a no-work hook gets back under the
+# `duration_ms < 50` budget in hook-health.bats after the start breadcrumb
+# added a write to it.
+_HH_NOW_MS=""
+_hook_health_now_ms_var() {
+	[[ -n "${EPOCHREALTIME:-}" ]] || return 1
+	local er="${EPOCHREALTIME/,/.}"   # some locales render the separator as a comma
+	local s="${er%%.*}"
+	local us="${er#*.}000"
+	_HH_NOW_MS="${s}${us:0:3}"
+	return 0
+}
+
+# Set _HOOK_START_MS and _HOOK_START_ISO together, adding no subprocess to what
+# the clock already cost (ecosystem-449.66 needs both: ms to measure duration,
+# ISO because every existing consumer reads .timestamp off each line —
+# check-plugin-liveness.mjs does Date.parse(rec.timestamp) and drops a line
+# without one).
+#
+# bash 4.2+ has printf %()T, a builtin, so both stamps are free. It formats in
+# LOCAL time, so the TZ=UTC prefix is load-bearing and not cosmetic: measured on
+# bash 5.3 in a UTC-4 zone, the unprefixed form returned 00:29:50Z for a true
+# 04:29:50Z — a Z stamped on local time, four hours wrong. The prefix does not
+# leak TZ into the hook's environment (verified: TZ stays unset afterward).
+#
+# Under the #!/usr/bin/env bash that resolves to 3.2 on macOS there is no %()T,
+# but _hook_health_now_ms already spends a jq subprocess there, so asking that
+# same call for both values keeps the count at one.
+_hook_health_start_stamps() {
+	_HOOK_START_ISO=""
+
+	# Both stamps from builtins, no subprocess at all: EPOCHREALTIME by
+	# parameter expansion for the milliseconds, %()T for the ISO form. This
+	# path is strictly cheaper than before this change, which always spent a
+	# fork on $(_hook_health_now_ms).
+	# shellcheck disable=SC2059
+	if _hook_health_now_ms_var && printf -v _HOOK_START_ISO '%(%s)T' -1 2>/dev/null; then
+		_HOOK_START_MS="$_HH_NOW_MS"
+		TZ=UTC printf -v _HOOK_START_ISO '%(%Y-%m-%dT%H:%M:%SZ)T' -1 2>/dev/null
+		[[ -n "$_HOOK_START_ISO" ]] && return 0
+	fi
+
+	local pair
+	if command -v jq >/dev/null 2>&1; then
+		pair=$(jq -rn '[(now * 1000 | floor | tostring), (now | todate)] | join(" ")' 2>/dev/null)
+		if [[ -n "$pair" && "$pair" == *" "* ]]; then
+			_HOOK_START_MS="${pair%% *}"
+			_HOOK_START_ISO="${pair#* }"
+			return 0
+		fi
+	fi
+
+	# Last resort: two calls, or none. A missing ISO suppresses the breadcrumb
+	# rather than writing a line no consumer can date.
+	_HOOK_START_MS=$(_hook_health_now_ms)
+	_HOOK_START_ISO=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || printf '')
+	return 0
+}
+
+# Escape a value for embedding in a printf-built JSON string. The breadcrumb
+# cannot use jq — the whole point is that it costs no subprocess — so the two
+# characters that can break a JSON string, plus the control characters, are
+# handled here. One malformed line makes the log unparseable to a streaming
+# consumer, so this is not optional.
+#
+# Returns through the global $_HH_ESC rather than stdout, deliberately. A
+# `$(...)` capture is a fork, and the breadcrumb needs eight of these: written
+# the obvious way it cost more than the jq record it was meant to be cheaper
+# than, and blew the `duration_ms < 50` budget in hook-health.bats. Parameter
+# expansion only, no subprocess.
+# Make sure the log's directory exists, and do it OUTSIDE the timed window.
+#
+# This used to live in _hook_health_write, which runs after the end stamp, so
+# its cost fell outside every reported duration. The breadcrumb needs the
+# directory too, but it runs *before* the end stamp — so calling it there moved
+# `dirname` + `mkdir` inside the window and billed them to the hook. Measured in
+# a fresh bats fixture, where the directory never exists yet: duration_ms=55
+# against a budget of 50, from a hook that does nothing at all.
+#
+# ${path%/*} instead of $(dirname "$path"): same answer for an absolute path,
+# no fork. Only ever does real work once per machine.
+_hook_health_ensure_log_dir() {
+	_hook_health_resolve_log_path
+	[[ -f "$_HH_LOG_PATH" ]] && return 0
+	local dir="${_HH_LOG_PATH%/*}"
+	[[ -n "$dir" && "$dir" != "$_HH_LOG_PATH" ]] || return 0
+	[[ -d "$dir" ]] || mkdir -p "$dir" 2>/dev/null || return 0
+	return 0
+}
+
+_HH_ESC=""
+_hook_health_json_escape() {
+	_HH_ESC="${1:-}"
+	_HH_ESC="${_HH_ESC//\\/\\\\}"
+	_HH_ESC="${_HH_ESC//\"/\\\"}"
+	_HH_ESC="${_HH_ESC//$'\n'/ }"
+	_HH_ESC="${_HH_ESC//$'\r'/ }"
+	_HH_ESC="${_HH_ESC//$'\t'/ }"
+	return 0
+}
+
+# The completion sentinel: written up front, closed by the terminal record.
+#
+# A breadcrumb with no matching run_id is a run that was terminated. That
+# inference asks nothing of the dying shell, which is why it holds for SIGKILL
+# as well as SIGTERM — see the note above hook_health_register.
+_hook_health_breadcrumb() {
+	[[ -n "$_HOOK_NAME" && -n "$_HOOK_START_ISO" ]] || return 0
+
+	local path
+	_hook_health_resolve_log_path; path="$_HH_LOG_PATH"
+	# No mkdir here. hook_health_register already called
+	# _hook_health_ensure_log_dir, before the clock started, precisely so this
+	# cost is not billed to the hook. If that failed the append below is a no-op
+	# under `|| true`, which is the fail-soft behavior this lib promises.
+
+	local start="${_HOOK_START_MS:-0}"
+	[[ "$start" =~ ^[0-9]+$ ]] || start=0
+
+	# Each value escaped into a local first. No command substitution anywhere in
+	# here — see the note on _hook_health_json_escape.
+	local iso hook rid lib pname pver
+	_hook_health_json_escape "$_HOOK_START_ISO"; iso="$_HH_ESC"
+	_hook_health_json_escape "$_HOOK_NAME"; hook="$_HH_ESC"
+	_hook_health_json_escape "$_HOOK_RUN_ID"; rid="$_HH_ESC"
+	_hook_health_json_escape "$_ONLOOKER_LIB_FINGERPRINT"; lib="$_HH_ESC"
+
+	# null, not "", for an unknown plugin — the terminal record makes the same
+	# distinction, and a consumer joining the two must not see them disagree.
+	if [[ -n "$_ONLOOKER_PLUGIN_NAME" ]]; then
+		_hook_health_json_escape "$_ONLOOKER_PLUGIN_NAME"; pname="\"${_HH_ESC}\""
+	else
+		pname="null"
+	fi
+	if [[ -n "$_ONLOOKER_PLUGIN_VERSION" ]]; then
+		_hook_health_json_escape "$_ONLOOKER_PLUGIN_VERSION"; pver="\"${_HH_ESC}\""
+	else
+		pver="null"
+	fi
+
+	printf '{"timestamp":"%s","hook":"%s","status":"started","run_id":"%s","start_ms":%s,"host_pid":%s,"lib_schema":"%s","plugin_name":%s,"plugin_version":%s}\n' \
+		"$iso" "$hook" "$rid" "$start" "${_HOOK_HOST_PID:-0}" "$lib" "$pname" "$pver" \
+		>> "$path" 2>/dev/null || true
+	return 0
+}
+
+# Start timing, drop the completion sentinel, and arm the exit trap.
 #
 # Any EXIT trap already installed is preserved and run after we log. Six plugin
 # hooks depend on this: four remove a prompt file, and cartographer's two
 # release a lock, which a clobbered trap would strand.
+#
+# WHY A BREADCRUMB AND NOT A SIGNAL TRAP (ecosystem-449.66). The EXIT trap
+# cannot tell a completed run from a killed one: when a signal kills the shell
+# bash still runs the trap, but $? inside it is the status of the last COMPLETED
+# command — typically a successful jq — so a killed hook recorded success.
+# Measured: 624 librarian-session-end records, every one status=success, for a
+# hook being killed at the 1500ms SessionEnd deadline on nearly every session.
+#
+# The obvious repair — trap TERM/INT/HUP as well — is worse. Bash defers a
+# trapped signal while it waits on a foreground child. Measured with a TERM trap
+# and `sleep` in the foreground: signalled pid-only, the handler ran at +9630ms;
+# signalled process-group, +26ms. Untrapped, bash dies promptly in both. So a
+# signal trap can make a hook outlive the deadline that killed it, and SIGKILL
+# stays invisible regardless.
+#
+# So the discriminator is positional rather than reactive: record the start, and
+# let the ABSENCE of the terminal record mean termination. Nothing is asked of
+# the dying shell, so it holds for every way a hook can die.
 hook_health_register() {
 	_HOOK_NAME="${1:-unknown}"
-	_HOOK_START_MS=$(_hook_health_now_ms)
+	# A fresh fire has not completed yet, whatever a previous one in this shell
+	# managed to do.
+	_HOOK_COMPLETED=""
+	# Before the clock starts, deliberately. Creating the directory is setup for
+	# the instrument, not work the hook did, and it is the one thing here that
+	# can cost a real syscall. Doing it after the start stamp put it inside every
+	# reported duration.
+	_hook_health_ensure_log_dir
+	_hook_health_start_stamps
+	_HOOK_RUN_SEQ=$((_HOOK_RUN_SEQ + 1))
+	_HOOK_RUN_ID="${_HOOK_START_MS:-0}-$$-${_HOOK_RUN_SEQ}"
+	_hook_health_breadcrumb
+	# Re-stamp so the breadcrumb's own append is not billed to the hook. Writing
+	# it is instrument overhead, and it is not cheap: measured in the bats
+	# fixture on a loaded host, the append alone moved duration_ms from ~20ms to
+	# ~42ms, because a file open/write/close under I/O contention is expensive
+	# in a way the escaping and formatting around it are not (those are 0.27ms).
+	#
+	# Only when the clock is free. On bash 3.2 a second read means another jq
+	# fork, which would cost several times the append it is trying to exclude —
+	# so there the reported duration still includes it, as it always has. The
+	# breadcrumb keeps its own earlier stamp either way; a start a millisecond
+	# before the duration's origin is immaterial to pairing.
+	if _hook_health_now_ms_var; then
+		_HOOK_START_MS="$_HH_NOW_MS"
+	fi
 
 	local prior
 	prior=$(trap -p EXIT 2>/dev/null)
@@ -195,6 +436,12 @@ hook_health_register() {
 # excluding the hook's own cleanup from the recorded duration.
 _hook_health_on_exit() {
 	local exit_code="${1:-0}"
+	# NOTE (ecosystem-449.66, part 1 of 2): $_HOOK_COMPLETED is recorded but not
+	# yet acted on. Reporting an unmarked exit as "terminated" only becomes
+	# correct once every hook routes its exits through hook_health_exit —
+	# flipping it first would label all 33 of them terminated on every fire.
+	# The flip, and the conversion that earns it, land together in the next
+	# change. Until then this branches exactly as it always has.
 	if [[ "$exit_code" -eq 0 ]]; then
 		_hook_health_write "success" ""
 	else
@@ -244,11 +491,42 @@ hook_health_context() {
 	return 0
 }
 
+# Mark that the hook reached a termination point of its own choosing.
+#
+# This is the whole discriminator (ecosystem-449.66). The EXIT trap cannot infer
+# it: on fall-off-the-end BASH_COMMAND is the last command, which is
+# indistinguishable from a command interrupted by a signal, and $? is the last
+# COMPLETED command's status either way. So the normal path has to say so.
+#
+# Cheap by construction — a variable assignment, no subprocess, no write. The
+# record is still written once, by the EXIT trap.
+#
+# Inert until the follow-up change: the trap records the flag's effect only once
+# every hook sets it. Defining it here lets that conversion be a separate,
+# purely mechanical diff.
+hook_health_complete() {
+	_HOOK_COMPLETED=1
+	return 0
+}
+
+# Mark completion and exit, for hooks whose termination is a bare `exit`.
+# `builtin exit` rather than `exit` so this is safe even if a caller has its own
+# exit function, and so the hook's exit code passes through untouched.
+hook_health_exit() {
+	_HOOK_COMPLETED=1
+	builtin exit "${1:-0}"
+}
+
+# An explicit terminal record is itself a statement that the hook reached a
+# decision, so both of these imply completion. Marking before the write keeps
+# the EXIT trap from re-reporting a run these already closed as terminated.
 hook_health_success() {
+	_HOOK_COMPLETED=1
 	_hook_health_write "success" ""
 }
 
 hook_health_failure() {
+	_HOOK_COMPLETED=1
 	_hook_health_write "failure" "${1:-}"
 }
 
@@ -265,14 +543,31 @@ _hook_health_write() {
 	# dirname, mkdir, and jq's own startup — used to run between the two clock
 	# reads and land inside every reported duration. Measured cost of that:
 	# dirname 1.4ms, mkdir 1.05ms, plus jq's pre-read startup.
+	#
+	# The capture itself was part of that cost: `$(...)` forks even when the
+	# clock underneath is free, and the fork happens after the start stamp, so
+	# it was billed to the hook. Preferring the variable form makes the whole
+	# measured window subprocess-free under bash 5.
 	local end
-	end=$(_hook_health_now_ms)
+	if _hook_health_now_ms_var; then
+		end="$_HH_NOW_MS"
+	else
+		end=$(_hook_health_now_ms)
+	fi
 
 	local path
-	path=$(hook_health_log_path)
-	# -f is a builtin. The dirname/mkdir pair costs ~2.4ms of subprocess and is
-	# only needed until the log exists, which is once per machine.
-	[[ -f "$path" ]] || mkdir -p "$(dirname "$path")" 2>/dev/null || return 0
+	_hook_health_resolve_log_path; path="$_HH_LOG_PATH"
+	# Still guarded here as well as in register, for the callers that reach a
+	# terminal write without one — hook_health_success straight after a
+	# register that could not create the directory, say. Costs a builtin test
+	# once the log exists, which is after the first write on any machine.
+	#
+	# The trailing `|| return 0` is load-bearing, not decoration: without it a
+	# failed mkdir makes this the function's exit status, and the whole lib
+	# promises every function returns 0 so a hook never breaks because its
+	# instrument did. Dropping it turned an unwritable log into a failing
+	# hook_health_register.
+	_hook_health_ensure_log_dir || return 0
 
 	local start="${_HOOK_START_MS:-0}"
 	[[ "$start" =~ ^[0-9]+$ ]] || start=0
@@ -288,6 +583,7 @@ _hook_health_write() {
 		--arg lib "$_ONLOOKER_LIB_FINGERPRINT" \
 		--arg plugin_name "$_ONLOOKER_PLUGIN_NAME" \
 		--arg plugin_version "$_ONLOOKER_PLUGIN_VERSION" \
+		--arg run_id "$_HOOK_RUN_ID" \
 		--argjson host_pid "${_HOOK_HOST_PID:-0}" \
 		--argjson start "$start" \
 		--argjson end "$end" \
@@ -295,6 +591,10 @@ _hook_health_write() {
 			timestamp: (now | todate),
 			hook: $hook,
 			status: $hook_status,
+			# Joins this record to the breadcrumb hook_health_register wrote.
+			# A breadcrumb whose run_id never appears on a terminal record is a
+			# run that was terminated (ecosystem-449.66).
+			run_id: (if $run_id == "" then null else $run_id end),
 			# null means "could not be measured" — a bad stamp or a backward
 			# clock step. 0 means a genuinely sub-millisecond hook. Collapsing
 			# both onto 0 silently deflated the average consumers read.
@@ -316,8 +616,14 @@ _hook_health_write() {
 			host_pid: (if $host_pid > 0 then $host_pid else null end)
 		   }' >> "$path" 2>/dev/null || true
 
-	# Reset so a second write in the same shell cannot double-count.
+	# Reset so a second write in the same shell cannot double-count. The
+	# completion flag resets too: a hook that registers a second time must earn
+	# its own completion, or the first fire's mark would vouch for a second run
+	# that was killed.
 	_HOOK_NAME=""
 	_HOOK_START_MS=""
+	_HOOK_START_ISO=""
+	_HOOK_RUN_ID=""
+	_HOOK_COMPLETED=""
 	return 0
 }

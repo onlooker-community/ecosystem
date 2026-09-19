@@ -107,9 +107,15 @@ setup() {
 	' >/dev/null
 }
 
-@test "registering without writing produces no record" {
+# Since ecosystem-449.66 register DOES write: the start breadcrumb, which is
+# what makes a SIGKILLed hook legible. What must still be absent is a TERMINAL
+# record — registering alone has never been, and must never become, evidence
+# that a hook finished.
+@test "registering without writing produces a breadcrumb but no terminal record" {
 	hook_health_register "never-finished"
-	[ ! -f "$HEALTH_LOG" ]
+	[ -f "$HEALTH_LOG" ] || return 1
+	[ "$(jq -sc '[.[] | select(.status == "started")] | length' "$HEALTH_LOG")" -eq 1 ] || return 1
+	[ "$(jq -sc '[.[] | select(.status != "started")] | length' "$HEALTH_LOG")" -eq 0 ]
 }
 
 @test "an unwritable log directory does not fail the caller" {
@@ -201,7 +207,12 @@ setup() {
 	"
 	[ "$status" -eq 0 ] || return 1
 	[ -f "$HEALTH_LOG" ] || return 1
-	[ "$(grep -c '\"hook\":\"librarian-session-end\"' "$HEALTH_LOG")" -eq 1 ]
+	# One breadcrumb and exactly one TERMINAL record. The hazard this pins is a
+	# subshell producing a SECOND terminal record, which the breadcrumb count
+	# would not reveal (ecosystem-449.66 added the breadcrumb, not a second
+	# terminal write).
+	[ "$(jq -sc '[.[] | select(.hook == "librarian-session-end" and .status == "started")] | length' "$HEALTH_LOG")" -eq 1 ] || return 1
+	[ "$(jq -sc '[.[] | select(.hook == "librarian-session-end" and .status != "started")] | length' "$HEALTH_LOG")" -eq 1 ]
 }
 
 # librarian's lesson transform disarms its own EXIT trap the same way the
@@ -233,7 +244,12 @@ setup() {
 	"
 	[ "$status" -eq 0 ] || return 1
 	[ -f "$HEALTH_LOG" ] || return 1
-	[ "$(grep -c '\"hook\":\"librarian-session-end\"' "$HEALTH_LOG")" -eq 1 ]
+	# One breadcrumb and exactly one TERMINAL record. The hazard this pins is a
+	# subshell producing a SECOND terminal record, which the breadcrumb count
+	# would not reveal (ecosystem-449.66 added the breadcrumb, not a second
+	# terminal write).
+	[ "$(jq -sc '[.[] | select(.hook == "librarian-session-end" and .status == "started")] | length' "$HEALTH_LOG")" -eq 1 ] || return 1
+	[ "$(jq -sc '[.[] | select(.hook == "librarian-session-end" and .status != "started")] | length' "$HEALTH_LOG")" -eq 1 ]
 }
 
 # A real plugin hook, driven end to end, must name itself in the health log.
@@ -383,17 +399,47 @@ setup() {
 
 	hook_health_register "second-write-hook"
 	hook_health_success
-	[ "$(wc -l < "$HEALTH_LOG" | tr -d ' ')" -eq 2 ]
+	# Four lines, not two: since ecosystem-449.66 each fire writes a start
+	# breadcrumb as well as its terminal record. The breadcrumb is now the
+	# first write, so it is also the one that has to create the directory.
+	[ "$(wc -l < "$HEALTH_LOG" | tr -d ' ')" -eq 4 ] || return 1
+	[ "$(jq -sc '[.[] | select(.status == "started")] | length' "$HEALTH_LOG")" -eq 2 ]
 }
 
 # Loose bound only. The real improvement (a ~7.25ms floor down to ~3.15ms) is
 # not asserted numerically here: a tight timing assertion would be flaky on a
 # loaded machine or slower box, and a flaky test is worse than none. This
 # catches a catastrophic regression, nothing subtler.
+#
+# RECALIBRATED from 50ms to 150ms by ecosystem-449.66, which made the instrument
+# write two records per fire instead of one. The bound was chosen when it wrote
+# one, and the second append is not free: measured in this fixture on a loaded
+# host, baseline passed 8/8 while the breadcrumb version passed 3/8, with
+# duration_ms landing at 42-52 against 18-23. Bisected to the append itself —
+# not the escaping or formatting, which together cost 0.27ms.
+#
+# The append is now excluded from the window wherever a free clock lets it be
+# (see hook_health_register), but bash 3.2 has no free clock, and buying the
+# exclusion there with another jq fork would cost more than the append does.
+# So on macOS the reported duration still carries it.
+#
+# Raising a bound to make a test pass deserves suspicion, so: what this test is
+# for is catching catastrophe — a jq-per-line Stop cost, an accidental network
+# call, a sleep. Those are seconds, and 150ms still catches every one of them.
+# What it can no longer do is notice a few extra milliseconds, which it could
+# not reliably do at 50 either once the host was busy.
 @test "a hook that does no work reports a small duration" {
 	hook_health_register "trivial-hook"
 	hook_health_success
-	tail -n 1 "$HEALTH_LOG" | jq -e '.duration_ms < 50' >/dev/null
+	local observed
+	observed=$(tail -n 1 "$HEALTH_LOG" | jq -r '.duration_ms')
+	# Report the number when it blows. This used to fail through a bare
+	# `jq -e`, which prints nothing, so a CI failure said only that the budget
+	# was missed -- not whether by 1ms or by 200, and therefore not whether the
+	# cause was a real regression or a slow runner. Diagnosing one cost a round
+	# trip that the number would have answered outright.
+	[ "$observed" != "null" ] || { echo "duration_ms was null, not measured" >&2; return 1; }
+	[ "$observed" -lt 150 ] || { echo "duration_ms=${observed}, budget 150" >&2; return 1; }
 }
 
 # Re-registering in one process used to OVERWRITE _HOOK_PRIOR_EXIT_CMD with our
@@ -446,3 +492,4 @@ setup() {
 	done
 	[ -z "$offenders" ] || { echo "registers after another source: $offenders" >&2; return 1; }
 }
+

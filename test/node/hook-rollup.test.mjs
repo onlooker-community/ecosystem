@@ -26,16 +26,32 @@ function writeLines(path, records) {
   writeFileSync(path, `${records.map((r) => JSON.stringify(r)).join('\n')}\n`);
 }
 
-function health(hook, hookEvent, durationMs, { sid = SID, toolName = null, status = 'success' } = {}) {
+function health(hook, hookEvent, durationMs, { sid = SID, toolName = null, status = 'success', runId = null } = {}) {
   return {
     timestamp: '2026-09-05T12:00:00Z',
     hook,
     status,
+    run_id: runId,
     duration_ms: durationMs,
     error: null,
     session_id: sid,
     hook_event: hookEvent,
     tool_name: toolName,
+  };
+}
+
+// A start breadcrumb, as hook_health_register writes it (ecosystem-449.66).
+// Deliberately carries no session_id, hook_event, or duration_ms: register runs
+// before the hook reads stdin, so none of those are known yet. Fixtures that
+// invented them would hide exactly the handling this file is testing.
+function started(hook, runId) {
+  return {
+    timestamp: '2026-09-05T12:00:00Z',
+    hook,
+    status: 'started',
+    run_id: runId,
+    start_ms: 1757073600000,
+    host_pid: 4242,
   };
 }
 
@@ -210,5 +226,76 @@ describe('hook-rollup', () => {
     writeLines(s.events, [event('session.start')]);
     const r = run(s, '--health', join(s.root, 'missing.jsonl'));
     assert.equal(r.code, 2);
+  });
+
+  // ecosystem-449.66. register now writes a start breadcrumb, so the log holds
+  // two lines per fire. These pin that the extra line neither inflates the
+  // latency stats nor trips the contamination guard.
+  describe('start breadcrumbs (ecosystem-449.66)', () => {
+    it('does not count a breadcrumb as a latency sample', () => {
+      const s = scaffold();
+      writeLines(s.health, [
+        started('session-start-tracker', 'run-1'),
+        health('session-start-tracker', 'SessionStart', 120, { runId: 'run-1' }),
+      ]);
+      writeLines(s.events, [event('session.start')]);
+      const r = run(s, '--json');
+      assert.equal(r.code, 0);
+      const report = JSON.parse(r.stdout);
+      // One fire, not two: n must count the terminal record only.
+      assert.equal(report.records, 1);
+      const row = report.rows.find((x) => x.hook === 'session-start-tracker');
+      assert.equal(row.n, 1);
+      // And no bogus group from the breadcrumb's absent hook_event.
+      assert.equal(report.rows.length, 1);
+    });
+
+    it('does not let breadcrumbs trip the contamination guard', () => {
+      const s = scaffold();
+      // Two breadcrumbs plus two terminal records for one SessionStart fire
+      // each. Counting breadcrumbs as fires would report excess and exit 1.
+      writeLines(s.health, [
+        started('session-start-tracker', 'run-1'),
+        health('session-start-tracker', 'SessionStart', 100, { runId: 'run-1' }),
+      ]);
+      writeLines(s.events, [event('session.start')]);
+      const r = run(s);
+      assert.equal(r.code, 0);
+      assert.doesNotMatch(r.stderr, /CONTAMINATED/);
+    });
+
+    it('reports a start with no terminal record as an orphan', () => {
+      const s = scaffold();
+      writeLines(s.health, [
+        // Killed by SIGKILL: a breadcrumb and nothing else, since no trap ran.
+        started('librarian-session-end', 'run-orphan'),
+        started('session-start-tracker', 'run-1'),
+        health('session-start-tracker', 'SessionStart', 100, { runId: 'run-1' }),
+      ]);
+      writeLines(s.events, [event('session.start')]);
+      const r = run(s, '--json');
+      assert.equal(r.code, 0);
+      const report = JSON.parse(r.stdout);
+      assert.equal(report.orphaned_starts.total, 1);
+      assert.equal(report.orphaned_starts.by_hook['librarian-session-end'], 1);
+      // The paired one must not be counted as orphaned.
+      assert.equal(report.orphaned_starts.by_hook['session-start-tracker'], undefined);
+    });
+
+    it('does not invent orphans out of records written before run_id existed', () => {
+      const s = scaffold();
+      const legacy = { timestamp: '2026-08-01T12:00:00Z', hook: 'old-hook', status: 'started' };
+      writeLines(s.health, [
+        legacy,
+        started('session-start-tracker', 'run-1'),
+        health('session-start-tracker', 'SessionStart', 100, { runId: 'run-1' }),
+      ]);
+      writeLines(s.events, [event('session.start')]);
+      const r = run(s, '--json');
+      assert.equal(r.code, 0);
+      // A breadcrumb with no run_id is unpairable in both directions. Calling it
+      // orphaned would read an outage out of old data.
+      assert.equal(JSON.parse(r.stdout).orphaned_starts.total, 0);
+    });
   });
 });

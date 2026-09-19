@@ -147,6 +147,23 @@ test('--strict exits non-zero on findings, plain mode does not', () => {
   );
 });
 
+// ecosystem-449.66. One fire writes a start breadcrumb as well as its terminal
+// record, so a naive row count reports every plugin as running twice as often as
+// it did — and that count is what the "hooks ran Nx, emitted nothing" diagnosis
+// is built on.
+test('a start breadcrumb is not counted as a separate hook run', () => {
+  const fx = fixture();
+  writeLogs(fx, {
+    health: [
+      { hook: 'demo-stop', status: 'started', run_id: 'r1' },
+      { hook: 'demo-stop', status: 'success', run_id: 'r1' },
+    ],
+    events: [],
+  });
+  const demo = run(fx).rows.find((r) => r.plugin === 'demo');
+  assert.equal(demo.hooks, 1);
+});
+
 test('a torn final log line is skipped rather than fatal', () => {
   const fx = fixture();
   const key = run(fx).project_key;

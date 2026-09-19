@@ -171,3 +171,5 @@ Ecosystem-level decisions are recorded in [`docs/adr/`](adr/):
 - [ADR-002](adr/002-centralized-jsonl-event-log.md) — Centralized JSONL event log with schema validation
 - [ADR-003](adr/003-ulid-over-uuid.md) — ULID for all identifiers
 - [ADR-004](adr/004-plugin-config-with-settings-overlay.md) — Per-plugin config with settings.json overlay
+- [ADR-005](adr/005-runtime-emitter-fails-open.md) — The runtime emitter is dependency-free and fails open
+- [ADR-006](adr/006-hooks-mark-their-own-completion.md) — Hooks mark their own completion
