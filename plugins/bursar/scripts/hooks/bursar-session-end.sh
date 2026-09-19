@@ -101,12 +101,40 @@ _latest_governor_spend() {
 			2>/dev/null
 }
 
+# How far back to look. Measured over the 225 sessions in this machine's log
+# that carry both a governor.session.complete and the bursar.session.recorded
+# consuming it, the gap between them is 38 lines at p50, 100 at p90, 1879 at
+# p99 and 17433 at max. So the near slice covers p99 and the deep slice covers
+# the observed worst case, with margin.
+_BURSAR_SPEND_NEAR_LINES=2000
+_BURSAR_SPEND_DEEP_LINES=20000
+
 if [[ -f "$LOG" ]]; then
-	# The matching event was emitted seconds ago (governor's final Stop), so it is
-	# almost always near the tail. Scan a recent slice first to keep this hook
-	# fast as the global log grows; fall back to the full file only on a miss.
-	SPEND=$(tail -n 2000 "$LOG" 2>/dev/null | _latest_governor_spend)
-	[[ -z "$SPEND" ]] && SPEND=$(_latest_governor_spend < "$LOG")
+	# The matching event was emitted seconds ago, at governor's final Stop, so it
+	# is almost always within the near slice.
+	NEAR=$(tail -n "$_BURSAR_SPEND_NEAR_LINES" "$LOG" 2>/dev/null)
+	SPEND=$(printf '%s\n' "$NEAR" | _latest_governor_spend)
+
+	if [[ -z "$SPEND" ]]; then
+		# Nothing for this session nearby, so look deeper — but a BOUNDED amount.
+		#
+		# What this replaces scanned the ENTIRE log on every miss: measured
+		# 712-742ms against a 181,916-line log, 704ms of it grep, reading 2,843
+		# stale governor events from the era when governor ran only to filter
+		# every one out by session_id. Maximum work for a guaranteed-empty
+		# result. And it was not a corner case but the common path, because
+		# governor has been disabled since the 2026-09-07 rollback
+		# (ecosystem-449.44), so the near slice misses every single time.
+		#
+		# A first attempt at this skipped the deep look when the near slice held
+		# no governor events for ANY session, reasoning that governor must be
+		# off. That heuristic fails in exactly the case the deep look exists for:
+		# when a long session pushes its own governor event past the near slice,
+		# the presence check misses for the same reason the lookup did, and the
+		# event is never found. Bounded-and-always beats clever-and-wrong.
+		SPEND=$(tail -n "$_BURSAR_SPEND_DEEP_LINES" "$LOG" 2>/dev/null | _latest_governor_spend)
+	fi
+
 	if [[ -n "$SPEND" ]]; then
 		GOV_PRESENT="true"
 		IFS=$'\t' read -r COST TOKENS CALLS <<<"$SPEND"
