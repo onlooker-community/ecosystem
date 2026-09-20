@@ -2,6 +2,13 @@
 
 All notable changes to the Cartographer plugin are documented here.
 
+## [0.10.6](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.10.5...cartographer-v0.10.6) (2026-09-20)
+
+
+### Bug Fixes
+
+* **cartographer:** stop a dead analyzer passing as a clean audit :bell: ([#364](https://github.com/onlooker-community/ecosystem/issues/364)) ([84a4e52](https://github.com/onlooker-community/ecosystem/commit/84a4e52801473a4a258832b1ed87bfd307c268ec))
+
 ## [0.10.5](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.10.4...cartographer-v0.10.5) (2026-09-20)
 
 
