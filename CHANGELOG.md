@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.61.5](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.61.4...ecosystem-v0.61.5) (2026-09-20)
+
+
+### Bug Fixes
+
+* **lineage:** show how much of a change an answer covers :scales: ([#360](https://github.com/onlooker-community/ecosystem/issues/360)) ([39fa76a](https://github.com/onlooker-community/ecosystem/commit/39fa76ac0942c0852341416bd6f953cfc5add7cc))
+
 ## [0.61.4](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.61.3...ecosystem-v0.61.4) (2026-09-20)
 
 
