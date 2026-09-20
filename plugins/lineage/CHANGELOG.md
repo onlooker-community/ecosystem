@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.4](https://github.com/onlooker-community/ecosystem/compare/lineage-v0.6.3...lineage-v0.6.4) (2026-09-20)
+
+
+### Bug Fixes
+
+* **lineage:** show how much of a change an answer covers :scales: ([#360](https://github.com/onlooker-community/ecosystem/issues/360)) ([39fa76a](https://github.com/onlooker-community/ecosystem/commit/39fa76ac0942c0852341416bd6f953cfc5add7cc))
+
 ## [0.6.3](https://github.com/onlooker-community/ecosystem/compare/lineage-v0.6.2...lineage-v0.6.3) (2026-09-19)
 
 
