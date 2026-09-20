@@ -11,13 +11,23 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..');
 const GATE = join(REPO_ROOT, 'scripts', 'lint', 'check-bus-coverage.mjs');
 
-function reportDir(lines) {
+const RUN_ID = 'testrun-0001';
+
+// Mirrors what scripts/test/run-bats.sh leaves behind: the emissions plus the
+// completion sentinel. `sentinel: null` models a run that never finished (or
+// whose report a concurrent run clobbered), which is the case the gate has to
+// tell apart from a genuine coverage regression.
+function reportDir(
+  lines,
+  { sentinel = { run_id: RUN_ID, completed_at: '2026-09-20T00:00:00Z', bats_status: 0 } } = {},
+) {
   const dir = mkdtempSync(join(tmpdir(), 'bus-report-'));
   mkdirSync(dir, { recursive: true });
   writeFileSync(
     join(dir, 'emissions.jsonl'),
     lines.map((l) => JSON.stringify(l)).join('\n') + (lines.length ? '\n' : ''),
   );
+  if (sentinel) writeFileSync(join(dir, 'complete.json'), JSON.stringify(sentinel));
   return dir;
 }
 
@@ -156,5 +166,65 @@ describe('check-bus-coverage gate B', () => {
     for (const [type, reason] of Object.entries(committed.excluded)) {
       assert.ok(reason?.trim() && reason !== 'FILL IN', `${type} needs a real reason`);
     }
+  });
+});
+
+// The gate's hidden precondition: a COMPLETE test:bats must have run against
+// this report directory. Nothing used to enforce it, so a clobbered or partial
+// report produced a wall of "expected type never emitted" — which reads exactly
+// like a real coverage regression and cost an investigation every time. The
+// sentinel makes the precondition explicit and, crucially, SKIPS gate B when it
+// fails, so one accurate line replaces ninety misleading ones (ecosystem-0bh).
+describe('check-bus-coverage completeness sentinel', () => {
+  // A manifest gate B would certainly fail, to prove gate B never ran.
+  const WOULD_FAIL_GATE_B = manifestFile(fullManifest(['session.start', 'session.end']));
+
+  it('fails when no completed run is recorded', () => {
+    const r = runWith(reportDir([OK], { sentinel: null }), WOULD_FAIL_GATE_B);
+    assert.equal(r.code, 1);
+    assert.match(r.stderr, /no completed .*test:bats.* run/i);
+  });
+
+  it('does not report coverage gaps when the run never completed', () => {
+    const r = runWith(reportDir([OK], { sentinel: null }), WOULD_FAIL_GATE_B);
+    assert.doesNotMatch(r.stderr, /never emitted/i);
+    assert.doesNotMatch(r.stderr, /session\.end/);
+  });
+
+  it('fails when the report mixes records from another run', () => {
+    const mine = { ...OK, run_id: RUN_ID };
+    const theirs = { ...OK, run_id: 'testrun-9999' };
+    const r = runWith(reportDir([mine, theirs]), WOULD_FAIL_GATE_B);
+    assert.equal(r.code, 1);
+    assert.match(r.stderr, /concurrent|another run|testrun-9999/i);
+  });
+
+  it('does not report coverage gaps when the report was clobbered', () => {
+    const mine = { ...OK, run_id: RUN_ID };
+    const theirs = { ...OK, run_id: 'testrun-9999' };
+    const r = runWith(reportDir([mine, theirs]), WOULD_FAIL_GATE_B);
+    assert.doesNotMatch(r.stderr, /never emitted/i);
+  });
+
+  it('passes when every stamped record belongs to the recorded run', () => {
+    const mine = { ...OK, run_id: RUN_ID };
+    const r = runWith(reportDir([mine, mine]), manifestFile(fullManifest()));
+    assert.equal(r.code, 0, r.stderr);
+  });
+
+  // test:schema appends to the same report directory after the sentinel is
+  // written, without a run id. Those records are inert for both gates and must
+  // not be mistaken for a concurrent suite.
+  it('tolerates records that carry no run id', () => {
+    const stamped = { ...OK, run_id: RUN_ID };
+    const r = runWith(reportDir([stamped, OK]), manifestFile(fullManifest()));
+    assert.equal(r.code, 0, r.stderr);
+  });
+
+  it('reports a recorded run that exited non-zero', () => {
+    const sentinel = { run_id: RUN_ID, completed_at: '2026-09-20T00:00:00Z', bats_status: 1 };
+    const r = runWith(reportDir([{ ...OK, run_id: RUN_ID }], { sentinel }), manifestFile(fullManifest()));
+    assert.equal(r.code, 1);
+    assert.match(r.stderr, /exited 1|non-zero/i);
   });
 });

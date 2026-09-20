@@ -12,9 +12,18 @@
 // a validated emission during the suite, or the manifest excuses it with a
 // stated reason. See test/bus-coverage.json.
 //
+// Completeness gate: both gates above are only meaningful against a report that
+// one complete, uncontended `npm run test:bats` produced. scripts/test/run-bats.sh
+// stamps every emission with a run id and writes complete.json when the suite
+// finishes; this gate requires that sentinel and refuses a report carrying
+// records from any other run. Without it a clobbered report — two agents running
+// the suite in one checkout, where test:bats opens with `rm -rf` on a shared
+// path — produced a wall of "expected type never emitted" that reads exactly
+// like a real coverage regression. See ecosystem-0bh.
+//
 // Exit codes:
 //   0  ok
-//   1  gate A or gate B failure
+//   1  completeness, gate A, or gate B failure
 //   2  unknown argument
 //
 // Usage: check-bus-coverage.mjs [--report <dir>] [--manifest <path>]
@@ -53,6 +62,54 @@ function loadReport(dir) {
     .split('\n')
     .filter(Boolean)
     .map((l) => JSON.parse(l));
+}
+
+const SENTINEL = 'complete.json';
+
+function loadSentinel(dir) {
+  const p = join(dir, SENTINEL);
+  if (!existsSync(p)) return null;
+  try {
+    return JSON.parse(readFileSync(p, 'utf8'));
+  } catch {
+    // A corrupt sentinel is not a completed run either.
+    return null;
+  }
+}
+
+/**
+ * Completeness gate: did one whole, uncontended suite produce this report?
+ *
+ * Returns failures that must SUPPRESS gate B rather than accompany it — a
+ * partial report makes every unreached type look like a coverage regression.
+ */
+function gateComplete(lines, sentinel, dir) {
+  const failures = [];
+  if (!sentinel?.run_id) {
+    failures.push(
+      `no completed \`npm run test:bats\` run recorded — ${join(dir, SENTINEL)} is absent or ` +
+        'unreadable, so the suite either never ran against this report or did not finish. ' +
+        'Coverage was NOT checked.',
+    );
+    return failures;
+  }
+  if (sentinel.bats_status !== 0) {
+    failures.push(
+      `the recorded test:bats run exited ${sentinel.bats_status} — fix the suite before trusting ` +
+        'its coverage. Coverage was NOT checked.',
+    );
+  }
+  // Records with no run id are fine: test:schema appends to the same directory
+  // after the sentinel is written, and its records are inert for both gates.
+  const foreign = [...new Set(lines.map((l) => l.run_id).filter((id) => id != null && id !== sentinel.run_id))];
+  if (foreign.length) {
+    failures.push(
+      `report mixes records from ${foreign.length} other run(s) (${foreign.join(', ')}) — a ` +
+        'concurrent `npm run test:bats` in this checkout overwrote part of it. Re-run the suite ' +
+        'on its own. Coverage was NOT checked.',
+    );
+  }
+  return failures;
 }
 
 function gateA(lines) {
@@ -132,11 +189,15 @@ async function main() {
   const args = parseArgs(process.argv);
   const lines = loadReport(args.report);
   const failures = gateA(lines);
-  // Skip Gate B unless something was genuinely validated. A merely
-  // non-empty report where nothing validated (schema package never
-  // resolved) would otherwise bury the one real failure under a spurious
-  // "expected type never emitted" line for every expected type.
-  if (lines.some((l) => l.validated === true)) failures.push(...(await gateB(lines, args.manifest)));
+  const incomplete = gateComplete(lines, loadSentinel(args.report), args.report);
+  failures.push(...incomplete);
+  // Skip Gate B unless the report is both complete and genuinely validated. A
+  // partial report, or a merely non-empty one where nothing validated (schema
+  // package never resolved), would otherwise bury the one real failure under a
+  // spurious "expected type never emitted" line for every expected type.
+  if (incomplete.length === 0 && lines.some((l) => l.validated === true)) {
+    failures.push(...(await gateB(lines, args.manifest)));
+  }
   if (failures.length) {
     for (const f of failures) process.stderr.write(`check-bus-coverage: ${f}\n`);
     process.exit(1);
