@@ -51,6 +51,12 @@ tree. The content-anchored lookup tolerates it — a line is attributed to a
 slightly later change rather than to nothing — but a `cumulative` record is a
 weaker claim than a `delta` one.
 
+`/lineage` prints the scope on every answer, so the caveat travels with the
+claim instead of staying in the ledger. Records the tool itself reported —
+`Edit`, `Write`, `MultiEdit` — carry no `content_scope` and are shown as
+`exact`: the tool said what it changed. A `Bash` record with no scope predates
+the field and is shown as `unknown`.
+
 ### The historian join
 
 Lineage records only `session_id` + `turn` (+ a `transcript_path` pointer) on the

@@ -19,6 +19,81 @@ lineage_changes_for_file() {
 		"$path" 2>/dev/null
 }
 
+# How much of the change the captured content actually covers.
+#
+# Only the Bash path writes content_scope, because only it derives a record
+# from a git diff — and git diffs against the last commit, not the last edit,
+# so a tree that was already dirty makes the captured content wider than the
+# change that prompted it. Edit/Write/MultiEdit carry no scope and need none:
+# the tool said what it changed, so the content is that change. A Bash record
+# without one predates the field, and nothing about it says either way.
+#
+# Echoes one of: delta | cumulative | exact | unknown
+# Usage: lineage_scope_kind <content_scope> <tool>
+lineage_scope_kind() {
+	local scope="${1:-}" tool="${2:-}"
+	# jq renders a missing field as the string "null" unless the caller
+	# defaulted it, and printing that at a user is worse than saying nothing.
+	[[ "$scope" == "null" ]] && scope=""
+	if [[ -n "$scope" ]]; then
+		printf '%s' "$scope"
+		return 0
+	fi
+	case "$tool" in
+	Edit | Write | MultiEdit) printf 'exact' ;;
+	*) printf 'unknown' ;;
+	esac
+}
+
+# The caveat that belongs with a scope kind.
+#
+# Every kind gets a sentence, including the confident ones. An answer that
+# renders nothing here reads as certain, and a cumulative answer looking as
+# confident as an exact one is the failure this whole field exists to prevent.
+# Usage: lineage_scope_note <content_scope> <tool>
+lineage_scope_note() {
+	local kind
+	kind=$(lineage_scope_kind "${1:-}" "${2:-}")
+	case "$kind" in
+	delta)
+		printf 'Scope: delta — the file was clean beforehand, so the captured content is exactly this change.'
+		;;
+	cumulative)
+		printf 'Scope: cumulative — the captured content may also include earlier uncommitted work, since the record was built by diffing against the last commit rather than the last edit. A weaker claim than an exact match.'
+		;;
+	exact)
+		printf 'Scope: exact — the tool reported what it changed, so the captured content is this change and nothing else.'
+		;;
+	*)
+		printf 'Scope: unknown — this record carries no scope, so how much of the change it covers cannot be told.'
+		;;
+	esac
+}
+
+# Name the tool as something that reads inside a sentence.
+#
+# "by a Bash" was the old rendering, wrong twice over: Bash is not a thing a
+# change is made by, and an article chosen without looking at the word also
+# gets "a Edit" wrong. Known tools are named deliberately; anything else falls
+# back to articling on the first letter so a tool lineage has never seen still
+# reads as English.
+# Usage: lineage_tool_phrase <tool>
+lineage_tool_phrase() {
+	local tool="${1:-}"
+	if [[ -z "$tool" || "$tool" == "null" ]]; then
+		printf 'an unknown tool'
+		return 0
+	fi
+	if [[ "$tool" == "Bash" ]]; then
+		printf 'a shell command'
+		return 0
+	fi
+	case "$tool" in
+	[AEIOUaeiou]*) printf 'an %s' "$tool" ;;
+	*) printf 'a %s' "$tool" ;;
+	esac
+}
+
 # The newest change whose added content contains <line_text> (substring),
 # i.e. the change that introduced that content. Echoes one record or nothing.
 # Usage: lineage_match_line <project_key> <file_path> <line_text>

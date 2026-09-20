@@ -63,10 +63,13 @@ while IFS= read -r rec; do
   turn=$(jq -r '.turn // ""' <<<"$rec"); tool=$(jq -r '.tool' <<<"$rec")
   la=$(jq -r '.lines_added' <<<"$rec"); lr=$(jq -r '.lines_removed' <<<"$rec")
   tp=$(jq -r '.transcript_path // ""' <<<"$rec")
+  # How much of the change this record's content actually covers. Carried in
+  # the header because a list of changes is scanned, not read.
+  scope=$(lineage_scope_kind "$(jq -r '.content_scope // ""' <<<"$rec")" "$tool")
   resolved=$(lineage_resolve_prompt "$PROJECT_KEY" "$sid" "$turn" "$tp" "$PROMPT_SOURCE")
   prompt=$(jq -r '.prompt' <<<"$resolved"); via=$(jq -r '.resolved_via' <<<"$resolved")
   echo ""
-  echo "### ${ts} · ${tool} (+${la}/-${lr}) · session ${sid}${turn:+ · turn ${turn}}"
+  echo "### ${ts} · ${tool} (+${la}/-${lr}) · scope ${scope} · session ${sid}${turn:+ · turn ${turn}}"
   if [[ -n "$prompt" ]]; then
     echo "Prompt context (${via}):"; echo ""
     printf '%s\n' "$prompt" | head -c 600 | sed 's/^/> /'
@@ -111,10 +114,15 @@ else
   ts=$(jq -r '.ts' <<<"$rec"); sid=$(jq -r '.session_id' <<<"$rec")
   turn=$(jq -r '.turn // ""' <<<"$rec"); tool=$(jq -r '.tool' <<<"$rec")
   tp=$(jq -r '.transcript_path // ""' <<<"$rec")
+  scope_raw=$(jq -r '.content_scope // ""' <<<"$rec")
   resolved=$(lineage_resolve_prompt "$PROJECT_KEY" "$sid" "$turn" "$tp" "$PROMPT_SOURCE")
   prompt=$(jq -r '.prompt' <<<"$resolved"); via=$(jq -r '.resolved_via' <<<"$resolved")
   echo ""
-  echo "Introduced ${ts} by a ${tool} in session ${sid}${turn:+ (turn ${turn})}."
+  echo "Introduced ${ts} by $(lineage_tool_phrase "$tool") in session ${sid}${turn:+ (turn ${turn})}."
+  # Always printed. A single-line answer is the one most likely to be quoted
+  # back as fact, so it is the one that most needs to say what it is worth.
+  echo ""
+  echo "_$(lineage_scope_note "$scope_raw" "$tool")_"
   if [[ -n "$prompt" ]]; then
     echo ""; echo "Prompt context (${via}):"; echo ""
     printf '%s\n' "$prompt" | sed 's/^/> /'
