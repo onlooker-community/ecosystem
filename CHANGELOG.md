@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.61.6](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.61.5...ecosystem-v0.61.6) (2026-09-20)
+
+
+### Bug Fixes
+
+* **bus-coverage:** tell a clobbered report from a real regression :mag: ([#362](https://github.com/onlooker-community/ecosystem/issues/362)) ([5958573](https://github.com/onlooker-community/ecosystem/commit/59585731bf1948f500652e24387aa6a2997a0017))
+
 ## [0.61.5](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.61.4...ecosystem-v0.61.5) (2026-09-20)
 
 
