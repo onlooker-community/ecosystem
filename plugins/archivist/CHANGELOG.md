@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.4](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.7.3...archivist-v0.7.4) (2026-09-20)
+
+
+### Bug Fixes
+
+* **archivist:** write null when a commit has no session :see_no_evil: ([#355](https://github.com/onlooker-community/ecosystem/issues/355)) ([5474e20](https://github.com/onlooker-community/ecosystem/commit/5474e207ad058acbe11ce31e2828315a01460c37))
+
 ## [0.7.3](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.7.2...archivist-v0.7.3) (2026-09-19)
 
 
