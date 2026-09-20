@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-11
 **Tracking:** `ecosystem-449.55` (under epic `ecosystem-449`)
-**Status:** designed
+**Status:** implemented, with one amendment — see [Amendment: a third watermark write](#amendment-a-third-watermark-write)
 
 ## Problem
 
@@ -147,6 +147,45 @@ filter; classification does not run, because nothing is kept.
 
 The fourth case is the one that keeps this from becoming the bug it fixes: a hold triggered by
 ordinary verdicts would stall the pipeline permanently on any repo whose artifacts are thin.
+
+## Amendment: a third watermark write
+
+*Added 2026-09-20, during implementation.*
+
+This design was written against a hook with two watermark writes below the filter. `#344`
+(`ecosystem-449.72`) split the scan across two processes and added a third, and that third one
+is where a marker fault now actually exits:
+
+```sh
+KEPT_COUNT=$(printf '%s' "$KEPT" | jq 'length' 2>/dev/null) || KEPT_COUNT=0
+
+if [[ "$KEPT_COUNT" == "0" ]]; then
+	librarian_storage_write_last_scan "$PROJECT_KEY" || true
+```
+
+With no markers to match against, the filter keeps nothing. `KEPT_COUNT` is therefore `0` on
+exactly the scans this design exists to protect, and the scan leaves through this branch rather
+than through the handoff at the end of the hook.
+
+The design's stated rule already covers it — *one flag consulted at every watermark write below
+the filter* — so the implementation guards this site identically. Nothing about the rule
+changed; only the number of places it applies.
+
+**This was load-bearing, not bookkeeping.** Implementing the two sites the design names, and no
+more, leaves the primary test failing: the watermark still advances, because the scan never
+reaches either of them. Verified by mutation — reverting this one guard alone turns *a scan
+whose markers were unavailable does not advance the watermark* red while the other four stay
+green.
+
+The comment `#344` left above that branch — "the queue file is the durable record, which is
+what makes the watermark advance below safe ... this does not depend on `ecosystem-449.55`" —
+is sound, but it reasons about the *handoff*. On this path there is no queue file, because
+there was nothing to hand off.
+
+**The `empty` outcome on this path is deliberately left alone.** A held fault scan still reports
+`outcome: "empty"`, which the schema defines as "classification ran and proposed nothing" —
+untrue here, since classification never ran. That is `ecosystem-449.39`, which exists precisely
+because this outcome means two opposite things, and it is not folded in here.
 
 ## Out of scope, filed separately
 
