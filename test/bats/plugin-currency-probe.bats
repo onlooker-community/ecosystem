@@ -21,6 +21,11 @@ setup() {
 	CACHE="${BATS_TEST_TMPDIR}/probe.json"
 	STUB="${BATS_TEST_TMPDIR}/bin"
 	mkdir -p "$STUB"
+
+	# _plugin_currency_probe_emit returns early with no session id, so without
+	# this the probe runs correctly and publishes nothing -- and every assertion
+	# about its emission would pass vacuously.
+	export PLUGIN_CURRENCY_SESSION_ID="01JZZZZZZZZZZZZZZZZZZZZZZZ"
 }
 
 # Stub `node` so it emits $1 on stdout and exits $2, standing in for
@@ -28,6 +33,16 @@ setup() {
 _stub_node() {
 	cat >"${STUB}/node" <<STUBEOF
 #!/usr/bin/env bash
+# The probe shells out to node twice: once for check-plugin-installs, which is
+# what these tests control, and once for the canonical emitter. Only the first
+# is stubbed. Hijacking the emitter too would silently swallow every event the
+# probe publishes, which is the state that left onlooker.currency.checked with
+# no synchronous producer anywhere in the suite (ONL-86).
+for _a in "\$@"; do
+	case "\$_a" in
+		*onlooker-event.mjs) exec "${REAL_NODE}" "\$@" ;;
+	esac
+done
 printf '%s' '$1'
 exit $2
 STUBEOF
@@ -117,4 +132,35 @@ REAL_STALE_INSTALL='{"status":"failed","findings":[{"plugin":"mise@meaganewaller
 		  payload:{findings_count:($f|length), answer_age_seconds:0, findings:$f}}')
 	run bash -c "printf '%s' '$event' | ONLOOKER_DIR='$ONLOOKER_DIR' ONLOOKER_VALIDATE=1 '$REAL_NODE' '${REPO_ROOT}/scripts/lib/onlooker-event.mjs' emit"
 	[ "$status" -eq 0 ] || { echo "VALIDATION FAILED: $output" >&2; return 1; }
+}
+
+# The probe's own emission, which nothing asserted on before this.
+#
+# onlooker.currency.checked sits in test/bus-coverage.json's `expected` list, so
+# check-bus-coverage requires it to appear during the suite -- but its only
+# producer was the detached probe that plugin-currency-surfacer.sh spawns and
+# disowns. Six records landed per full run, all incidental, none asserted, and
+# all of them racing the end of the suite. The gate's coverage of this type
+# rested on a process nothing waits for. See ONL-86.
+_EVENTS_LOG() { printf '%s' "${ONLOOKER_DIR}/logs/onlooker-events.jsonl"; }
+
+@test "a successful probe emits onlooker.currency.checked" {
+	_stub_node '{"status":"ok","findings":[]}' 0
+	plugin_currency_probe_run "$PWD" "$CACHE" 5 onlooker-community
+	grep -q '"event_type":"onlooker.currency.checked"' "$(_EVENTS_LOG)"
+}
+
+@test "the emitted probe event carries its outcome and finding count" {
+	_stub_node '{"status":"failed","findings":[{"reason":"clone_behind","marketplace":"onlooker-community"}]}' 1
+	plugin_currency_probe_run "$PWD" "$CACHE" 5 onlooker-community
+	grep '"event_type":"onlooker.currency.checked"' "$(_EVENTS_LOG)" \
+		| jq -e '.payload.probe_outcome == "ok" and .payload.findings_count == 1' >/dev/null
+}
+
+@test "a failed probe reports the failure rather than staying silent" {
+	_stub_node 'check-plugin-installs: unknown argument --nope' 2
+	run plugin_currency_probe_run "$PWD" "$CACHE" 5 onlooker-community
+	[ "$status" -ne 0 ] || return 1
+	grep '"event_type":"onlooker.currency.checked"' "$(_EVENTS_LOG)" \
+		| jq -e '.payload.probe_outcome == "failed"' >/dev/null
 }
