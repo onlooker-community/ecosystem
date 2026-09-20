@@ -83,3 +83,77 @@ setup() {
 	[ "$(jq -r '.resolved_via' <<<"$output")" = "none" ]
 	[ "$(jq -r '.prompt' <<<"$output")" = "" ]
 }
+
+# The ledger's own word, when it has one. content_scope is written only by the
+# Bash path, which derives a record from a git diff and so cannot always say
+# the captured content is only this change.
+@test "scope_kind reports the ledger's content_scope when the record carries one" {
+	[ "$(lineage_scope_kind "cumulative" "Bash")" = "cumulative" ]
+	[ "$(lineage_scope_kind "delta" "Bash")" = "delta" ]
+}
+
+# An Edit/Write/MultiEdit record has no content_scope and needs none: the tool
+# reported what it changed, so the captured content is that change and nothing
+# else. Absent must not be rendered as doubt for these.
+@test "scope_kind calls a tool-reported change exact" {
+	[ "$(lineage_scope_kind "" "Edit")" = "exact" ]
+	[ "$(lineage_scope_kind "" "Write")" = "exact" ]
+	[ "$(lineage_scope_kind "" "MultiEdit")" = "exact" ]
+}
+
+# jq renders a missing field as the string "null" unless the caller defaults it.
+# Treating that as a scope would print "null" at the user.
+@test "scope_kind treats a literal null as absent" {
+	[ "$(lineage_scope_kind "null" "Edit")" = "exact" ]
+}
+
+# A Bash record with no content_scope predates the field. Nothing about it says
+# the content is only this change, and nothing says it isn't.
+@test "scope_kind says unknown for a shell record with no scope" {
+	[ "$(lineage_scope_kind "" "Bash")" = "unknown" ]
+}
+
+@test "scope_note names uncommitted work as what widens a cumulative answer" {
+	run lineage_scope_note "cumulative" "Bash"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"uncommitted"* ]]
+}
+
+@test "scope_note does not hedge an exact answer" {
+	run lineage_scope_note "" "Edit"
+	[ "$status" -eq 0 ]
+	[[ "$output" != *"uncommitted"* ]]
+	[ -n "$output" ]
+}
+
+@test "scope_note says every kind something, so no answer renders blank" {
+	local kind
+	for kind in cumulative delta exact unknown; do
+		run lineage_scope_note "$kind" "Bash"
+		[ "$status" -eq 0 ]
+		[ -n "$output" ]
+	done
+}
+
+# "by a Bash" is the phrasing this replaces.
+@test "tool_phrase names Bash as what it actually was" {
+	[ "$(lineage_tool_phrase "Bash")" = "a shell command" ]
+}
+
+@test "tool_phrase gets the article right for a vowel-initial tool" {
+	[ "$(lineage_tool_phrase "Edit")" = "an Edit" ]
+	[ "$(lineage_tool_phrase "Write")" = "a Write" ]
+	[ "$(lineage_tool_phrase "MultiEdit")" = "a MultiEdit" ]
+}
+
+# A tool lineage has never seen must still read as a sentence.
+@test "tool_phrase articles an unknown tool by its first letter" {
+	[ "$(lineage_tool_phrase "Oracle")" = "an Oracle" ]
+	[ "$(lineage_tool_phrase "Patch")" = "a Patch" ]
+}
+
+@test "tool_phrase does not produce a bare article for an empty tool" {
+	run lineage_tool_phrase ""
+	[ "$status" -eq 0 ]
+	[ "$output" = "an unknown tool" ]
+}
