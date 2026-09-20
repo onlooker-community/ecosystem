@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.61.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.61.1...ecosystem-v0.61.2) (2026-09-20)
+
+
+### Bug Fixes
+
+* **archivist:** write null when a commit has no session :see_no_evil: ([#355](https://github.com/onlooker-community/ecosystem/issues/355)) ([5474e20](https://github.com/onlooker-community/ecosystem/commit/5474e207ad058acbe11ce31e2828315a01460c37))
+* **cartographer:** raise phase timeout above every real pass :relieved: ([#353](https://github.com/onlooker-community/ecosystem/issues/353)) ([73bf4af](https://github.com/onlooker-community/ecosystem/commit/73bf4af86137e1a286f303946f526ab2aacce76f))
+
 ## [0.61.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.61.0...ecosystem-v0.61.1) (2026-09-19)
 
 

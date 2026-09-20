@@ -2,6 +2,13 @@
 
 All notable changes to the Cartographer plugin are documented here.
 
+## [0.10.5](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.10.4...cartographer-v0.10.5) (2026-09-20)
+
+
+### Bug Fixes
+
+* **cartographer:** raise phase timeout above every real pass :relieved: ([#353](https://github.com/onlooker-community/ecosystem/issues/353)) ([73bf4af](https://github.com/onlooker-community/ecosystem/commit/73bf4af86137e1a286f303946f526ab2aacce76f))
+
 ## [0.10.4](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.10.3...cartographer-v0.10.4) (2026-09-19)
 
 
