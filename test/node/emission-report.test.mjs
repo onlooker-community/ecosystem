@@ -20,13 +20,15 @@ const VALID = {
 };
 const INVALID = { ...VALID, payload: { working_directory: 42 } };
 
-function emit(params, { reportDir } = {}) {
+function emit(params, { reportDir, runId } = {}) {
   const env = {
     ...process.env,
     ONLOOKER_DIR: mkdtempSync(join(tmpdir(), 'emit-onlooker-')),
   };
   if (reportDir) env.ONLOOKER_TEST_REPORT_DIR = reportDir;
   else delete env.ONLOOKER_TEST_REPORT_DIR;
+  if (runId) env.ONLOOKER_TEST_RUN_ID = runId;
+  else delete env.ONLOOKER_TEST_RUN_ID;
   return spawnSync('node', [EMITTER, 'emit'], {
     input: JSON.stringify(params),
     encoding: 'utf8',
@@ -93,5 +95,23 @@ describe('emission report', () => {
       env: { ...process.env, ONLOOKER_TEST_REPORT_DIR: dir },
     });
     assert.equal(readReport(dir), null);
+  });
+});
+
+// The run id is what lets check-bus-coverage tell one suite's report from two
+// suites' reports interleaved in the same file (ecosystem-0bh).
+describe('emission report run id', () => {
+  it('stamps the run id when the suite sets one', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'emit-report-'));
+    const r = emit(VALID, { reportDir: dir, runId: 'run-abc' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(readReport(dir)[0].run_id, 'run-abc');
+  });
+
+  it('omits the run id outside a suite run', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'emit-report-'));
+    const r = emit(VALID, { reportDir: dir });
+    assert.equal(r.status, 0, r.stderr);
+    assert.ok(!('run_id' in readReport(dir)[0]));
   });
 });

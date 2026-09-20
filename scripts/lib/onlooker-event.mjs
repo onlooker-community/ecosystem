@@ -145,6 +145,10 @@ function recordEmission(event, check) {
     validated: check.available === true,
     valid: check.available === true ? check.valid === true : null,
   };
+  // Stamps which suite run produced this record, so check-bus-coverage can
+  // reject a report two concurrent runs interleaved (ecosystem-0bh).
+  const runId = process.env.ONLOOKER_TEST_RUN_ID;
+  if (runId) record.run_id = runId;
   if (check.available && !check.valid) record.errors = check.errors;
   try {
     mkdirSync(dir, { recursive: true });
