@@ -171,6 +171,29 @@ FILTERED=$(librarian_durability_filter "$ARTIFACTS" "$MARKERS_JSON" "$MIN_DETAIL
 KEPT=$(printf '%s' "$FILTERED" | jq '.kept')
 DROPPED=$(printf '%s' "$FILTERED" | jq '.dropped')
 
+# A scan that could not consult its markers has not judged its window, so it
+# must not claim to have handled it. Keyed on filter_markers_unavailable and
+# never on filter_marker_missing: the latter is an ordinary verdict, and
+# holding on it would stall every repo whose artifacts are thin.
+FAULT_DROPS=$(printf '%s' "$DROPPED" \
+	| jq '[.[] | select(.reason == "filter_markers_unavailable")] | length' 2>/dev/null) \
+	|| FAULT_DROPS=0
+MAX_FAULT_RETRY=$(librarian_config_get '.librarian.scan.max_fault_retry_artifacts')
+[[ -z "$MAX_FAULT_RETRY" || "$MAX_FAULT_RETRY" == "null" ]] && MAX_FAULT_RETRY=500
+
+# Bounded: load_since re-reads every artifact in the window each session, so an
+# unbounded hold degrades SessionEnd until the budget bail discards the backlog
+# anyway. Past the ceiling we abandon it and say so, per artifact.
+SHOULD_ADVANCE=1
+RETRY_CAP_HIT=0
+if [[ "$FAULT_DROPS" -gt 0 ]]; then
+	if [[ "$ARTIFACT_COUNT" -ge "$MAX_FAULT_RETRY" ]]; then
+		RETRY_CAP_HIT=1
+	else
+		SHOULD_ADVANCE=0
+	fi
+fi
+
 # Emit one librarian.candidate.dropped event per artifact we filtered out
 # pre-classifier. Caps at a sane number per scan so the event log stays
 # scannable even if archivist piled up months of artifacts.
@@ -179,9 +202,16 @@ DROPPED_TOTAL=$(printf '%s' "$DROPPED" | jq 'length' 2>/dev/null) || DROPPED_TOT
 DROPPED_EMIT_COUNT=$(( DROPPED_TOTAL < MAX_DROPPED_EVENTS ? DROPPED_TOTAL : MAX_DROPPED_EVENTS ))
 for ((i = 0; i < DROPPED_EMIT_COUNT; i++)); do
 	DROP=$(printf '%s' "$DROPPED" | jq -c ".[$i]")
+	# retry_cap_exceeded REPLACES filter_markers_unavailable rather than adding
+	# a second event. Both facts are true -- the markers were missing, and the
+	# artifact is being abandoned -- but only one is terminal, and the terminal
+	# one is what a reader needs.
 	librarian_emit "librarian.candidate.dropped" "$SESSION_ID" "$(jq -cn \
 		--argjson drop "$DROP" \
-		'{ reason: $drop.reason, source_artifact_id: $drop.artifact_id }
+		--argjson cap_hit "$RETRY_CAP_HIT" \
+		'{ reason: (if $cap_hit == 1 and $drop.reason == "filter_markers_unavailable"
+		            then "retry_cap_exceeded" else $drop.reason end),
+		   source_artifact_id: $drop.artifact_id }
 		 | with_entries(select(.value != null))')"
 done
 
@@ -194,7 +224,10 @@ done
 ELAPSED_MS=$(( $(librarian_now_ms) - SCAN_START_TS_MS ))
 BUDGET_THRESHOLD_MS=1000
 if [[ "$ELAPSED_MS" -ge "$BUDGET_THRESHOLD_MS" ]]; then
-	librarian_storage_write_last_scan "$PROJECT_KEY" || true
+	# The hold is a property of THIS scan, so it has to be honored wherever the
+	# scan exits -- otherwise it leaks through the budget path at exactly the
+	# moment the backlog is largest and load_since is slowest.
+	[[ "$SHOULD_ADVANCE" == "1" ]] && { librarian_storage_write_last_scan "$PROJECT_KEY" || true; }
 	DURATION_MS=$(( $(librarian_now_ms) - SCAN_START_TS_MS ))
 	librarian_emit "librarian.scan.complete" "$SESSION_ID" "$(jq -cn \
 		--arg outcome "budget_exceeded" \
@@ -236,7 +269,13 @@ if [[ "$KEPT_COUNT" == "0" ]]; then
 	# Nothing to hand off, so nothing to defer. This path still reports for
 	# itself: a quiet session that emitted no outcome at all would be
 	# indistinguishable from one that died.
-	librarian_storage_write_last_scan "$PROJECT_KEY" || true
+	#
+	# This is where a marker fault actually lands: with no markers to match,
+	# the filter keeps nothing, so KEPT_COUNT is 0 and the scan leaves here
+	# rather than through the handoff below. The comment above about the queue
+	# file making the advance safe reasons about the handoff path -- here there
+	# is no queue file, because there was nothing to put in one.
+	[[ "$SHOULD_ADVANCE" == "1" ]] && { librarian_storage_write_last_scan "$PROJECT_KEY" || true; }
 	DURATION_MS=$(( $(librarian_now_ms) - SCAN_START_TS_MS ))
 	librarian_emit "librarian.scan.complete" "$SESSION_ID" "$(jq -cn \
 		--arg outcome "empty" \
@@ -364,6 +403,6 @@ _spawn_classify || true
 # onlooker.currency.checked for itself.
 # ----------------------------------------------------------------------------
 
-librarian_storage_write_last_scan "$PROJECT_KEY" || true
+[[ "$SHOULD_ADVANCE" == "1" ]] && { librarian_storage_write_last_scan "$PROJECT_KEY" || true; }
 
 hook_health_exit 0
