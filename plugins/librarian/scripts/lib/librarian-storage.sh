@@ -175,11 +175,44 @@ librarian_storage_load_proposals() {
 	dir=$(librarian_proposals_dir "$key")
 	[[ -d "$dir" ]] || { echo '[]'; return 0; }
 
-	local file all='[]'
+	# One jq over the whole list, not two per proposal.
+	#
+	# This loop used to parse each file with its own jq and then run a SECOND
+	# jq to append it — `. + [$item]` re-parsing and re-serializing the whole
+	# accumulated array every iteration, so the work was quadratic in corpus
+	# size rather than linear. Measured directly on this function: 400 records
+	# took 5,754ms against 63ms for 10 — 40x the records for 91x the time. The
+	# batch read is 55ms at the same 400, and grows 3.9x over that range rather
+	# than 91x. Same defect archivist carried at 708 artifacts / 23,756ms.
+	#
+	# This directory grows without bound, so the cost has to be flat in corpus
+	# size, not merely smaller. See ecosystem-449.74.
+	local file
+	local files=()
 	for file in "$dir"/*.json; do
 		[[ -f "$file" ]] || continue
-		local item
+		files+=("$file")
+	done
+	[[ ${#files[@]} -eq 0 ]] && { printf '%s' '[]'; return 0; }
+
+	# Files reach jq as PATHS, never as an argument value: passing the corpus
+	# via --argjson puts it on the command line, which on a large project gives
+	# "Argument list too long" and an EMPTY result — fast and silently wrong.
+	local all
+	if all=$(jq -s 'map(select(type == "object"))' "${files[@]}" 2>/dev/null); then
+		printf '%s' "$all"
+		return 0
+	fi
+
+	# A batch parse aborts on the first malformed byte, which would let one
+	# corrupt file blank the entire read. The per-file loop cannot do that, so
+	# it stays as the fallback: slow, but it costs only the broken file. Also
+	# covers an argument list too long to exec.
+	all='[]'
+	local item
+	for file in "${files[@]}"; do
 		item=$(jq '.' "$file" 2>/dev/null) || continue
+		[[ -z "$item" || "$item" == "null" ]] && continue
 		all=$(printf '%s' "$all" | jq --argjson item "$item" '. + [$item]')
 	done
 	printf '%s' "$all"
