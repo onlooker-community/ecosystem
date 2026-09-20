@@ -227,6 +227,20 @@ run_relate() {
 run_synthesize() {
 	log "phase=synthesize starting"
 
+	# Each analyzer that dies records ITSELF in PHASES_FAILED, by name, rather
+	# than letting the phase report a blanket "synthesize" through main()'s `||`
+	# clause. Two reasons. The run JSON and the partial-audit log line both
+	# interpolate these tokens, so naming the analyzer is the difference between
+	# "something in synthesize broke" and "stale_ref broke"; and the phase keeps
+	# returning 0, because its remaining analyzers still produced real findings
+	# that the emit phase should store.
+	#
+	# Downgrading a dead analyzer to "[]" with no record was not just a
+	# reporting gap. PHASES_FAILED is what cartographer_resolution_is_sound
+	# reads, so an empty one let the resolve sweep treat every finding the dead
+	# analyzer would have re-observed as absent, and retire it. A stale_ref
+	# outage silently closed every open stale_ref finding.
+
 	# Each analyzer skipped under a type filter is an LLM call not made, which
 	# is where the flag earns its keep.
 	local stale_findings="[]" scope_findings="[]"
@@ -237,6 +251,7 @@ run_synthesize() {
 			   '$_model_synthesis' '$_max_tokens_synthesis' '$_phase_timeout'" \
 			2>>"$CARTOGRAPHER_DIR/audit.log") || {
 			log "phase=synthesize stale_ref analyzer failed"
+			PHASES_FAILED+=("stale_ref")
 			stale_findings="[]"
 		}
 	fi
@@ -248,6 +263,7 @@ run_synthesize() {
 			   '$_model_synthesis' '$_max_tokens_synthesis' '$_phase_timeout'" \
 			2>>"$CARTOGRAPHER_DIR/audit.log") || {
 			log "phase=synthesize scope_collision analyzer failed"
+			PHASES_FAILED+=("scope_collision")
 			scope_findings="[]"
 		}
 	fi
@@ -271,6 +287,7 @@ run_synthesize() {
 			   '$_undocumented_globs' '$_undocumented_exclude' '$_undocumented_max'" \
 			2>>"$CARTOGRAPHER_DIR/audit.log") || {
 			log "phase=synthesize undocumented_entity analyzer failed"
+			PHASES_FAILED+=("undocumented_entity")
 			omission_findings="[]"
 		}
 	fi
