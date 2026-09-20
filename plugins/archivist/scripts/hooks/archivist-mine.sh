@@ -117,7 +117,7 @@ while IFS=' ' read -r sha epoch; do
 			--arg summary "$summary" \
 			--arg detail "$detail" \
 			--argjson files "${files:-[]}" \
-			--arg session "${session:-unknown}" \
+			--arg session "$session" \
 			'{
 				id: $id,
 				kind: "decision",
@@ -128,7 +128,7 @@ while IFS=' ' read -r sha epoch; do
 				summary: $summary,
 				detail: $detail,
 				files: $files,
-				session_id: $session,
+				session_id: (if $session == "" then null else $session end),
 				trigger: "commit"
 			}' 2>/dev/null) || { record=""; continue; }
 
