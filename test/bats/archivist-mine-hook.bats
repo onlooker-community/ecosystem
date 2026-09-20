@@ -151,3 +151,41 @@ Because reasons that are durable."
 	[ "$status" -eq 0 ]
 	[ "$(artifact_count)" -eq 1 ]
 }
+
+_mined_artifact() {
+	find "$(archivist_project_dir "$KEY")/decisions" -name '*.json' | head -1
+}
+
+@test "records an absent session as null, not the string \"unknown\"" {
+	# archivist-extract.sh:251 writes null when it has no session. mine wrote
+	# the literal "unknown", which is well-formed and therefore indistinguishable
+	# from a real id to every consumer: lineage and historian joins matched
+	# nothing silently, and librarian copied it into source_session_ids, so a
+	# proposal asserted provenance it never had. 644 of 733 artifacts on the
+	# dogfood machine carried it. ONL-82.
+	make_repo "fix(thing): stop dropping events :bug:
+
+Because the old path dropped them on every restart."
+
+	run run_hook
+	[ "$status" -eq 0 ]
+
+	run jq -e '.session_id == null' "$(_mined_artifact)"
+	[ "$status" -eq 0 ]
+}
+
+@test "preserves the session id when the commit carries a Claude-Session trailer" {
+	# The trailer is the only way a mined commit can know its session, so the
+	# null above must not come at the cost of the case that does resolve.
+	make_repo "fix(thing): stop dropping events :bug:
+
+Because the old path dropped them on every restart.
+
+Claude-Session: session_abc123XYZ"
+
+	run run_hook
+	[ "$status" -eq 0 ]
+
+	run jq -r '.session_id' "$(_mined_artifact)"
+	[ "$output" = "abc123XYZ" ]
+}
