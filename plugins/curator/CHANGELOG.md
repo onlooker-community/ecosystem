@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.4](https://github.com/onlooker-community/ecosystem/compare/curator-v0.5.3...curator-v0.5.4) (2026-09-20)
+
+
+### Performance Improvements
+
+* **librarian,curator:** batch the storage read :fast_forward: ([#356](https://github.com/onlooker-community/ecosystem/issues/356)) ([f56e793](https://github.com/onlooker-community/ecosystem/commit/f56e79315b0eb373fbeeefdf8067e71ceafb3b5f))
+
 ## [0.5.3](https://github.com/onlooker-community/ecosystem/compare/curator-v0.5.2...curator-v0.5.3) (2026-09-19)
 
 
