@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.61.4](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.61.3...ecosystem-v0.61.4) (2026-09-20)
+
+
+### Bug Fixes
+
+* **librarian:** hold the watermark when markers are unavailable :shield: ([#358](https://github.com/onlooker-community/ecosystem/issues/358)) ([b1822c6](https://github.com/onlooker-community/ecosystem/commit/b1822c61b75b64744a116ce94237ca50710cd366))
+
 ## [0.61.3](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.61.2...ecosystem-v0.61.3) (2026-09-20)
 
 
