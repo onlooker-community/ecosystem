@@ -76,3 +76,49 @@ _run_json() {
 	_run_audit
 	[ ! -f "${CARTOGRAPHER_DIR}/last_audit_at" ]
 }
+
+# The fixture above fails EVERY model call, so relate fails too and the
+# watermark is held for a reason that has nothing to do with synthesize. These
+# isolate a single analyzer failure -- the state the orchestrator used to report
+# as a clean audit, stamping last_audit_at and closing the 24h gate behind it.
+_stub_claude_failing() {
+	local marker="$1"
+	cat > "${STUB_BIN}/claude" <<STUB
+#!/usr/bin/env bash
+prompt=\$(cat)
+if [[ "\$prompt" == *"${marker}"* ]]; then
+	printf 'error: analyzer failed\n' >&2
+	exit 1
+fi
+printf '[]'
+STUB
+	chmod +x "${STUB_BIN}/claude"
+}
+
+# Distinctive to the stale_ref prompt. relate and scope_collision do not carry
+# it, so both succeed with an empty result and only stale_ref dies.
+STALE_REF_MARKER="could not be resolved on the filesystem"
+
+@test "a failed stale_ref analyzer is named in phases_failed" {
+	_stub_claude_failing "$STALE_REF_MARKER"
+	_run_audit
+	# Empty-string entries are an artifact of "${PHASES_FAILED[@]:-}" rendering
+	# an empty array; filtering them also asserts stale_ref is the ONLY failure.
+	run bash -c '_j() { cat "$1"/runs/audit-*.json; }; _j "$0" | jq -c "[.phases_failed[] | select(. != \"\")]"' "$CARTOGRAPHER_DIR"
+	[ "$status" -eq 0 ] || return 1
+	[ "$output" = '["stale_ref"]' ]
+}
+
+@test "a stale_ref-only failure holds last_audit_at" {
+	_stub_claude_failing "$STALE_REF_MARKER"
+	_run_audit
+	[ ! -f "${CARTOGRAPHER_DIR}/last_audit_at" ]
+}
+
+# Control. Without this, the two tests above would also pass if the fixture
+# could never write the watermark at all, and would prove nothing.
+@test "an audit with every analyzer succeeding does advance last_audit_at" {
+	_stub_claude_failing "a marker that appears in no prompt"
+	_run_audit
+	[ -f "${CARTOGRAPHER_DIR}/last_audit_at" ]
+}
