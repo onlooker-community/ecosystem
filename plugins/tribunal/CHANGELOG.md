@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.4](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.5.3...tribunal-v1.5.4) (2026-09-21)
+
+
+### Bug Fixes
+
+* **hook-health:** stop hooks/.. erasing the plugin name :label: ([#367](https://github.com/onlooker-community/ecosystem/issues/367)) ([90af8c1](https://github.com/onlooker-community/ecosystem/commit/90af8c19df9c3536695eaad585608a87a874947d))
+
 ## [1.5.3](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.5.2...tribunal-v1.5.3) (2026-09-19)
 
 

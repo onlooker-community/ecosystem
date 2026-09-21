@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.4](https://github.com/onlooker-community/ecosystem/compare/counsel-v0.8.3...counsel-v0.8.4) (2026-09-21)
+
+
+### Bug Fixes
+
+* **hook-health:** stop hooks/.. erasing the plugin name :label: ([#367](https://github.com/onlooker-community/ecosystem/issues/367)) ([90af8c1](https://github.com/onlooker-community/ecosystem/commit/90af8c19df9c3536695eaad585608a87a874947d))
+
 ## [0.8.3](https://github.com/onlooker-community/ecosystem/compare/counsel-v0.8.2...counsel-v0.8.3) (2026-09-19)
 
 
