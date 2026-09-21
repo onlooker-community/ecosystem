@@ -225,3 +225,53 @@ _stage_substrate() {
 		.plugin_name == null and .plugin_version == null
 	' >/dev/null
 }
+
+# ---------------------------------------------------------------------------
+# A hook that sources the lib relative to its own directory reaches it by a
+# path that still carries the `..`: "$SCRIPT_DIR/../lib/hook-health.sh"
+# expands to <root>/scripts/hooks/../lib/hook-health.sh. The walk checks each
+# component by name rather than stripping blindly, so it read `..` where it
+# expected `scripts` and took the unrecognizable-shape branch.
+#
+# plugin-currency-surfacer is the only substrate hook that sources hook-health
+# first. The other fourteen reach it through validate-path.sh, which sources
+# from its own already-clean directory and wins under first-source-wins, so
+# the `..` path never became the derivation they used. It alone wrote null:
+# measured 2026-09-20, all 1,315 of its rows unattributed, and the only
+# unattributed hook among the 48,029 rows since 2026-09-19.
+# ---------------------------------------------------------------------------
+
+@test "a path through a hooks/.. segment still names the plugin" {
+	local root="${BATS_TEST_TMPDIR}/cache/onlooker-community/ecosystem/0.61.7"
+	mkdir -p "${root}/scripts/lib" "${root}/scripts/hooks"
+	cp "${REPO_ROOT}/scripts/lib/hook-health.sh" "${root}/scripts/lib/hook-health.sh"
+
+	env HOME="$HOME" ONLOOKER_DIR="$ONLOOKER_DIR" bash -c '
+		source "$1"
+		hook_health_register "dotdot-probe"
+		hook_health_success
+	' _ "${root}/scripts/hooks/../lib/hook-health.sh" >/dev/null 2>&1
+
+	tail -n 1 "$HEALTH_LOG" | jq -e '
+		.plugin_name == "ecosystem" and .plugin_version == "0.61.7"
+	' >/dev/null
+}
+
+# Guard against over-fixing. Collapsing `..` must make a legitimate shape
+# recognizable, not make an unrecognizable one pass: this path collapses to
+# /somewhere/odd, which is still not <root>/scripts/lib.
+@test "a .. segment does not rescue a layout that is still unrecognizable" {
+	local odd="${BATS_TEST_TMPDIR}/somewhere/odd"
+	mkdir -p "$odd"
+	cp "${REPO_ROOT}/scripts/lib/hook-health.sh" "${odd}/hook-health.sh"
+
+	env HOME="$HOME" ONLOOKER_DIR="$ONLOOKER_DIR" bash -c '
+		source "$1"
+		hook_health_register "odd-dotdot-probe"
+		hook_health_success
+	' _ "${odd}/../odd/hook-health.sh" >/dev/null 2>&1
+
+	tail -n 1 "$HEALTH_LOG" | jq -e '
+		.plugin_name == null and .plugin_version == null
+	' >/dev/null
+}

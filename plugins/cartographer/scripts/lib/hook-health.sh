@@ -51,7 +51,7 @@
 # Derived from the bytes rather than declared: a version directory's name, its
 # package.json and its mtime have each been caught disagreeing with the contents
 # they label. A hand-maintained constant would be a fourth such label.
-_ONLOOKER_LIB_FINGERPRINT="f25060e27474"
+_ONLOOKER_LIB_FINGERPRINT="6431e405ebd9"
 
 # Do not clobber values a caller already set — several plugins set
 # _HOOK_SESSION_ID before sourcing, and their *-events.sh libs read it.
@@ -111,6 +111,33 @@ _HOOK_HOST_PID="$PPID"
 
 _hook_health_derive_origin() {
 	local src="${BASH_SOURCE[0]}"
+	local before after
+
+	# A hook that sources this file relative to its own directory hands us a
+	# path that still carries the traversal: "$SCRIPT_DIR/../lib/hook-health.sh"
+	# arrives as <root>/scripts/hooks/../lib/hook-health.sh. The walk below
+	# reads components by name, so an uncollapsed `..` sits exactly where
+	# `scripts` is expected and a perfectly ordinary layout falls through to
+	# the null case. plugin-currency-surfacer hit this and nothing else did:
+	# it is the only substrate hook that sources hook-health first, so it is
+	# the only one whose winning derivation ran against the `..` path. All
+	# 1,315 of its rows were unattributed (measured 2026-09-20).
+	#
+	# Collapsed textually and in-process. No realpath, no `cd -P`, no fork:
+	# this runs on every hook invocation and a subprocess here is billed to
+	# every hook's reported duration_ms, which is the number the whole
+	# hook-cost thread is trying to measure.
+	#
+	# The rewrite assumes the cancelled component is a real directory and not
+	# a symlink pointing elsewhere. In the installed layout it is — a plain
+	# extracted tree — and a symlinked scripts/hooks would fail the name check
+	# below either way, which is the safe direction.
+	while [[ "$src" == */*/../* ]]; do
+		before="${src%%/../*}" # everything left of the first /..
+		after="${src#*/../}"   # everything right of it
+		before="${before%/*}"  # drop the component the .. cancels
+		src="${before}/${after}"
+	done
 
 	# Walk up from <root>/scripts/lib/hook-health.sh to <root>, checking each
 	# component by name. Pure parameter expansion: no dirname, no subprocess.
