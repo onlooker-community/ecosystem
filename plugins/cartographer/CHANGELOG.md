@@ -2,6 +2,13 @@
 
 All notable changes to the Cartographer plugin are documented here.
 
+## [0.10.8](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.10.7...cartographer-v0.10.8) (2026-09-22)
+
+
+### Bug Fixes
+
+* **hook-health:** stop a re-source relabeling lib_schema :relieved: ([#369](https://github.com/onlooker-community/ecosystem/issues/369)) ([ff2868f](https://github.com/onlooker-community/ecosystem/commit/ff2868f0f609ec29a1efcf665d873d0e5185ba82))
+
 ## [0.10.7](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.10.6...cartographer-v0.10.7) (2026-09-21)
 
 
