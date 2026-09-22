@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.61.9](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.61.8...ecosystem-v0.61.9) (2026-09-22)
+
+
+### Bug Fixes
+
+* **hook-health:** stop a re-source relabeling lib_schema :relieved: ([#369](https://github.com/onlooker-community/ecosystem/issues/369)) ([ff2868f](https://github.com/onlooker-community/ecosystem/commit/ff2868f0f609ec29a1efcf665d873d0e5185ba82))
+
 ## [0.61.8](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.61.7...ecosystem-v0.61.8) (2026-09-21)
 
 
