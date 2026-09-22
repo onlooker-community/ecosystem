@@ -51,7 +51,33 @@
 # Derived from the bytes rather than declared: a version directory's name, its
 # package.json and its mtime have each been caught disagreeing with the contents
 # they label. A hand-maintained constant would be a fourth such label.
-_ONLOOKER_LIB_FINGERPRINT="6431e405ebd9"
+_ONLOOKER_LIB_FINGERPRINT="18c8543e9cff"
+
+# What the record actually reports, and the reason it is a second variable.
+#
+# ecosystem-5ddlyv / ONL-98. The constant above is re-assigned by every
+# re-source, so reading it at write time made lib_schema last-source-wins
+# while plugin_name/plugin_version stayed first-source-wins behind the
+# _ONLOOKER_PLUGIN_ORIGIN_DERIVED sentinel below. The fourteen hooks that
+# source their vendored copy and then reach the substrate through
+# validate-path.sh:71 therefore stamped the plugin's identity beside the
+# substrate's fingerprint — and because the start breadcrumb is written
+# before that re-source and the terminal record after it, one run_id emitted
+# two rows disagreeing about which copy wrote it. Measured 2026-09-21: 22
+# such run_ids across librarian, tribunal, echo, assayer and archivist.
+#
+# This has to be a separate variable rather than a guard on the line above.
+# lib_fingerprint(), lib_fingerprint_stamped() and lib_fingerprint_stamp() in
+# scripts/lib-fingerprint.sh, and check-shared-lib-skew.mjs, all anchor on
+# `_ONLOOKER_LIB_FINGERPRINT=` at column 0 — sed's `^` and JS's startsWith.
+# Indenting the assignment into an `if` block, or renaming it, stops every one
+# of them matching, and they fail by silently finding no stamp rather than by
+# erroring.
+#
+# ${var=} rather than ${var:=}, matching the origin fields: it preserves an
+# existing empty value instead of refilling it. Not exported, so a subshell
+# re-deriving from its own copy is the safe direction.
+: "${_ONLOOKER_LIB_SCHEMA=$_ONLOOKER_LIB_FINGERPRINT}"
 
 # Do not clobber values a caller already set — several plugins set
 # _HOOK_SESSION_ID before sourcing, and their *-events.sh libs read it.
@@ -365,7 +391,7 @@ _hook_health_breadcrumb() {
 	_hook_health_json_escape "$_HOOK_START_ISO"; iso="$_HH_ESC"
 	_hook_health_json_escape "$_HOOK_NAME"; hook="$_HH_ESC"
 	_hook_health_json_escape "$_HOOK_RUN_ID"; rid="$_HH_ESC"
-	_hook_health_json_escape "$_ONLOOKER_LIB_FINGERPRINT"; lib="$_HH_ESC"
+	_hook_health_json_escape "$_ONLOOKER_LIB_SCHEMA"; lib="$_HH_ESC"
 
 	# null, not "", for an unknown plugin — the terminal record makes the same
 	# distinction, and a consumer joining the two must not see them disagree.
@@ -603,7 +629,7 @@ _hook_health_write() {
 		--arg session_id "$_HOOK_SESSION_ID" \
 		--arg hook_event "$_HOOK_EVENT" \
 		--arg tool_name "$_HOOK_TOOL_NAME" \
-		--arg lib "$_ONLOOKER_LIB_FINGERPRINT" \
+		--arg lib "$_ONLOOKER_LIB_SCHEMA" \
 		--arg plugin_name "$_ONLOOKER_PLUGIN_NAME" \
 		--arg plugin_version "$_ONLOOKER_PLUGIN_VERSION" \
 		--arg run_id "$_HOOK_RUN_ID" \
