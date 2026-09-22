@@ -275,3 +275,131 @@ _stage_substrate() {
 		.plugin_name == null and .plugin_version == null
 	' >/dev/null
 }
+
+# ---------------------------------------------------------------------------
+# lib_schema must name the same copy plugin_name/plugin_version came from.
+#
+# The three fields exist to be read together: 449.31 added lib_schema so a
+# rollup could partition rows by which copy's derivation produced the
+# attribution on them, rather than assuming every row in a mixed-version
+# window used one scheme. That only holds if all three describe one copy.
+#
+# They do not get the same protection. _ONLOOKER_PLUGIN_NAME/_VERSION are
+# derived once behind the _ONLOOKER_PLUGIN_ORIGIN_DERIVED sentinel
+# (hook-health.sh:184) -- first source wins. _ONLOOKER_LIB_FINGERPRINT
+# (hook-health.sh:54) is a plain assignment outside that guard, re-run by
+# every re-source, and both writers read it live at write time (:368, :606) --
+# last source wins.
+#
+# The existing double-source tests above cannot see this: they copy the same
+# canonical lib to both paths, so the two stamps are byte-identical. These
+# stage two copies that differ ONLY in the stamp, which is the one variable
+# under test.
+#
+# Field evidence, 2026-09-21: 4 rows reading tribunal 1.5.3 / 6431e405ebd9 and
+# 3 reading librarian 0.18.8 / 6431e405ebd9, where both plugins' own vendored
+# copies can only carry the older f25060e27474.
+# ---------------------------------------------------------------------------
+
+# Copy the canonical lib and restamp it, so two copies differ only in the
+# fingerprint constant. Restamping rather than editing the body keeps the
+# derivation logic identical across both copies.
+_stamped_copy() {
+	local dest="$1" stamp="$2"
+	mkdir -p "${dest%/*}"
+	sed "s/^_ONLOOKER_LIB_FINGERPRINT=.*/_ONLOOKER_LIB_FINGERPRINT=\"${stamp}\"/" \
+		"${REPO_ROOT}/scripts/lib/hook-health.sh" > "$dest"
+	# Fail loudly if the constant ever stops matching that pattern, rather
+	# than silently staging two identically-stamped copies and passing.
+	grep -q "^_ONLOOKER_LIB_FINGERPRINT=\"${stamp}\"$" "$dest"
+}
+
+@test "lib_schema names the first source, not the last" {
+	local plugin="${BATS_TEST_TMPDIR}/cache/onlooker-community/tribunal/1.5.3/scripts/lib"
+	local substrate="${BATS_TEST_TMPDIR}/cache/onlooker-community/ecosystem/0.61.8/scripts/lib"
+	_stamped_copy "${plugin}/hook-health.sh" "aaaaaaaaaaaa" || return 1
+	_stamped_copy "${substrate}/hook-health.sh" "bbbbbbbbbbbb" || return 1
+
+	env HOME="$HOME" ONLOOKER_DIR="$ONLOOKER_DIR" bash -c '
+		source "$1"
+		hook_health_register "fingerprint-double-source-probe"
+		source "$2"
+		hook_health_success
+	' _ "${plugin}/hook-health.sh" "${substrate}/hook-health.sh" >/dev/null 2>&1
+
+	# All three fields describe the copy that won the derivation.
+	tail -n 1 "$HEALTH_LOG" | jq -e '
+		.plugin_name == "tribunal"
+		and .plugin_version == "1.5.3"
+		and .lib_schema == "aaaaaaaaaaaa"
+	' >/dev/null
+}
+
+# The real path: the substrate is reached through validate-path.sh, exactly as
+# the fourteen affected hooks reach it.
+@test "lib_schema survives the substrate's validate-path.sh" {
+	local plugin="${BATS_TEST_TMPDIR}/cache/onlooker-community/librarian/0.18.8/scripts/lib"
+	local substrate="${BATS_TEST_TMPDIR}/cache/onlooker-community/ecosystem/0.61.8"
+	_stamped_copy "${plugin}/hook-health.sh" "aaaaaaaaaaaa" || return 1
+	_stage_substrate "$substrate"
+	_stamped_copy "${substrate}/scripts/lib/hook-health.sh" "bbbbbbbbbbbb" || return 1
+
+	env HOME="$HOME" ONLOOKER_DIR="$ONLOOKER_DIR" bash -c '
+		source "$1"
+		hook_health_register "fingerprint-validate-path-probe"
+		CLAUDE_PLUGIN_ROOT="$3" source "$2"
+		hook_health_success
+	' _ "${plugin}/hook-health.sh" "${substrate}/scripts/lib/validate-path.sh" "$substrate" >/dev/null 2>&1
+
+	tail -n 1 "$HEALTH_LOG" | jq -e '
+		.plugin_name == "librarian"
+		and .plugin_version == "0.18.8"
+		and .lib_schema == "aaaaaaaaaaaa"
+	' >/dev/null
+}
+
+# The start breadcrumb carries lib_schema too (:383) and is written from the
+# same global, so it must agree with the terminal record that closes it --
+# otherwise a run_id joins two rows claiming different copies.
+@test "the start breadcrumb and terminal record agree on lib_schema" {
+	local plugin="${BATS_TEST_TMPDIR}/cache/onlooker-community/tribunal/1.5.3/scripts/lib"
+	local substrate="${BATS_TEST_TMPDIR}/cache/onlooker-community/ecosystem/0.61.8/scripts/lib"
+	_stamped_copy "${plugin}/hook-health.sh" "aaaaaaaaaaaa" || return 1
+	_stamped_copy "${substrate}/hook-health.sh" "bbbbbbbbbbbb" || return 1
+
+	env HOME="$HOME" ONLOOKER_DIR="$ONLOOKER_DIR" bash -c '
+		source "$1"
+		hook_health_register "fingerprint-breadcrumb-probe"
+		source "$2"
+		hook_health_success
+	' _ "${plugin}/hook-health.sh" "${substrate}/hook-health.sh" >/dev/null 2>&1
+
+	local run_id
+	run_id=$(tail -n 1 "$HEALTH_LOG" | jq -r '.run_id')
+	[ -n "$run_id" ] || return 1
+
+	jq -e --arg rid "$run_id" -s '
+		map(select(.run_id == $rid))
+		| (map(.lib_schema) | unique | length) == 1
+	' "$HEALTH_LOG" >/dev/null
+}
+
+# Guard against over-fixing. An ecosystem hook sources only validate-path.sh,
+# so the substrate's own copy is the first one and its stamp must still land.
+@test "the substrate stamps its own fingerprint when it is the first source" {
+	local substrate="${BATS_TEST_TMPDIR}/cache/onlooker-community/ecosystem/0.61.8"
+	_stage_substrate "$substrate"
+	_stamped_copy "${substrate}/scripts/lib/hook-health.sh" "bbbbbbbbbbbb" || return 1
+
+	env HOME="$HOME" ONLOOKER_DIR="$ONLOOKER_DIR" bash -c '
+		CLAUDE_PLUGIN_ROOT="$2" source "$1"
+		hook_health_register "fingerprint-substrate-only-probe"
+		hook_health_success
+	' _ "${substrate}/scripts/lib/validate-path.sh" "$substrate" >/dev/null 2>&1
+
+	tail -n 1 "$HEALTH_LOG" | jq -e '
+		.plugin_name == "ecosystem"
+		and .plugin_version == "0.61.8"
+		and .lib_schema == "bbbbbbbbbbbb"
+	' >/dev/null
+}
