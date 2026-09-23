@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.61.10](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.61.9...ecosystem-v0.61.10) (2026-09-23)
+
+
+### Bug Fixes
+
+* **echo:** terminate a suite that started and scored nothing :satellite: ([#371](https://github.com/onlooker-community/ecosystem/issues/371)) ([bc2c299](https://github.com/onlooker-community/ecosystem/commit/bc2c299e8bb7d618780caa990c705303cf64cfe5))
+
 ## [0.61.9](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.61.8...ecosystem-v0.61.9) (2026-09-22)
 
 
