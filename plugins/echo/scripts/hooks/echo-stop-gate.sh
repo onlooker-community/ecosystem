@@ -140,12 +140,18 @@ ALL_CHANGED=$(printf '%s\n%s\n%s' "$CHANGED_FILES" "$STAGED_FILES" "$UNTRACKED_F
 # cannot distinguish these three from each other or from the hook never firing.
 # All three emit, not just content_unchanged: covering one would leave the
 # ambiguity half-open.
+#
+# suite is set only by the two callers downstream of the judge (ONL-101). The
+# three pre-start reasons fire before SUITE_ID is minted, and an empty suite_id
+# would be a worse lie than an absent one, so it is omitted rather than blank.
 _skip_suite() {
-	local reason="$1" considered="${2:-0}" first="${3:-}"
+	local reason="$1" considered="${2:-0}" first="${3:-}" suite="${4:-}"
 	local payload
 	payload=$(jq -cn --arg r "$reason" --argjson c "$considered" --arg f "$first" \
+		--arg s "$suite" \
 		'{reason: $r, considered_count: $c}
-		 + (if $f == "" then {} else {changed_file: $f} end)' 2>/dev/null) || return 0
+		 + (if $f == "" then {} else {changed_file: $f} end)
+		 + (if $s == "" then {} else {suite_id: $s} end)' 2>/dev/null) || return 0
 	echo_emit_event "echo.suite.skipped" "$payload" || true
 	return 0
 }
@@ -277,6 +283,11 @@ count_neutral=0
 sum_before=0
 sum_after=0
 file_count=0
+# Counted separately from file_count so a suite that scores nothing can say WHY
+# (ONL-101): every file already scored by a concurrent session is a working
+# optimization, every judge returning nothing usable is a broken judge, and
+# file_count alone reads both as the same silence.
+suppressed_count=0
 
 for rel_path in "${PENDING[@]}"; do
 	# Rebuilt against the tree the path was found in. Rooted at REPO_ROOT this
@@ -362,6 +373,7 @@ for rel_path in "${PENDING[@]}"; do
 		RECORDED_SHA=$(jq -r '.content_sha256 // empty' "$BASELINE_FILE" 2>/dev/null) || RECORDED_SHA=""
 	fi
 	if [[ -n "$JUDGED_SHA" && "$RECORDED_SHA" == "$JUDGED_SHA" ]]; then
+		suppressed_count=$((suppressed_count + 1))
 		continue
 	fi
 
@@ -435,7 +447,24 @@ for rel_path in "${PENDING[@]}"; do
 	fi
 done
 
-[[ "$file_count" -eq 0 ]] && _done
+# A suite that started and scored nothing still has to terminate (ONL-101).
+# This exit sits BEFORE the echo.suite.complete emit below, so before this it
+# left an echo.suite.started with no terminating event at all — and on the
+# suppression path that silence had already cost a full 26-60s judge. Measured
+# 2026-09-19: nine started, three complete.
+#
+# all_suppressed only when suppression accounts for EVERY file. A mix of
+# suppressed and unscorable is reported as no_scorable_files, because the
+# judge-side failure is the one worth surfacing and calling a partial failure
+# "all suppressed" would bury it.
+if [[ "$file_count" -eq 0 ]]; then
+	if [[ "$suppressed_count" -gt 0 && "$suppressed_count" -eq "${#PENDING[@]}" ]]; then
+		_skip_suite "all_suppressed" "${#PENDING[@]}" "$FIRST_CHANGED" "$SUITE_ID"
+	else
+		_skip_suite "no_scorable_files" "${#PENDING[@]}" "$FIRST_CHANGED" "$SUITE_ID"
+	fi
+	_done
+fi
 
 # ---------------------------------------------------------------------------
 # Emit suite events
