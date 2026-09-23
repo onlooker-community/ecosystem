@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.5](https://github.com/onlooker-community/ecosystem/compare/echo-v0.8.4...echo-v0.8.5) (2026-09-23)
+
+
+### Bug Fixes
+
+* **echo:** terminate a suite that started and scored nothing :satellite: ([#371](https://github.com/onlooker-community/ecosystem/issues/371)) ([bc2c299](https://github.com/onlooker-community/ecosystem/commit/bc2c299e8bb7d618780caa990c705303cf64cfe5))
+
 ## [0.8.4](https://github.com/onlooker-community/ecosystem/compare/echo-v0.8.3...echo-v0.8.4) (2026-09-22)
 
 
