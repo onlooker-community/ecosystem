@@ -65,6 +65,21 @@ Each watched file is scored 0.0–1.0 on four equally-weighted criteria:
 
 A score ≥ 0.7 is considered "passed". A delta beyond `drift_threshold` in either direction is classified as improvement or regression.
 
+### Measuring the judge
+
+The judge is not deterministic — scoring identical bytes twice returns two different numbers. `drift_threshold` only means something relative to that spread, so it is measured rather than chosen:
+
+```bash
+plugins/echo/scripts/measure-judge-spread.sh --dry-run    # show the plan, spend nothing
+plugins/echo/scripts/measure-judge-spread.sh              # 10 samples x 3 files = 30 judge calls
+```
+
+It scores unchanged files repeatedly and reports |delta| between independent evaluations — exactly what echo compares when it decides drift — for single-sample, median-of-3 and median-of-5 evaluations. Output is a `samples.json` carrying the raw scores plus the model and a prompt fingerprint, and a `stats.json` with the distributions.
+
+Re-run it whenever the evaluation prompt or model changes: the threshold is a property of one prompt scored by one model, and neither is stable. The prompt lives in [`scripts/lib/echo-judge-prompt.sh`](scripts/lib/echo-judge-prompt.sh), shared with the hook so the measurement and the thing measured cannot drift apart.
+
+Deliberately not part of `npm test` — a suite that costs 30 judge calls is one nobody runs. The plumbing is covered by `test/bats/echo-measure-judge-spread.bats` and the arithmetic exhaustively by `test/node/judge-spread-stats.test.mjs`, both with stubs.
+
 ## Storage layout
 
 ```text
