@@ -24,11 +24,28 @@ setup() {
 	[ "$t" = "60" ]
 }
 
-@test "default drift_threshold is 0.05" {
+# 0.28 is the measured p95 of |delta| between two independent judge
+# evaluations of IDENTICAL content, pooled across the file kinds watch_paths
+# actually covers (ONL-102, 86 judge calls over six files, haiku-4-5). The old
+# 0.05 sat far below the judge's own noise, so echo reported sampling error as
+# improvements and regressions. See
+# plugins/echo/docs/adr/004-drift-threshold-from-measured-spread.md.
+@test "default drift_threshold is the measured 0.28" {
 	CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" echo_config_load ""
 	local d
 	d=$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" echo_config_drift_threshold)
-	[ "$d" = "0.05" ]
+	[ "$d" = "0.28" ]
+}
+
+@test "the drift_threshold fallback matches the shipped default" {
+	# The accessor carries its own hardcoded fallback for a missing config.
+	# When it disagrees with config.json, a plugin with no config silently
+	# scores against a different threshold than one with it.
+	local shipped fallback
+	shipped=$(jq -r '.echo.drift_threshold' "${PLUGIN_ROOT}/config.json")
+	fallback=$(grep -o 'val:-[0-9.]*' "${PLUGIN_ROOT}/scripts/lib/echo-config.sh" \
+		| grep -o '[0-9]\+\.[0-9]\+' | head -1)
+	[ "$shipped" = "$fallback" ]
 }
 
 @test "default watch_paths includes plugins/*/agents/*.md" {

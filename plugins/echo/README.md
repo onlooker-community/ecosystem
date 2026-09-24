@@ -35,7 +35,7 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
   "echo": {
     "watch_paths": ["plugins/*/agents/*.md"],
     "exclude_paths": [],
-    "drift_threshold": 0.05,
+    "drift_threshold": 0.28,
     "evaluation": {
       "model": "claude-haiku-4-5-20251001",
       "timeout_seconds": 60
@@ -48,7 +48,7 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
 |-----|---------|-------------|
 | `watch_paths` | `["plugins/*/agents/*.md"]` | Glob patterns (relative to repo root) of files to watch. Bash extended glob syntax. |
 | `exclude_paths` | `[]` | Patterns to exclude. `plugins/echo/**` is always excluded regardless of this setting. |
-| `drift_threshold` | `0.05` | Minimum absolute score delta to classify a change as improvement or regression. Deltas below this are reported as neutral. |
+| `drift_threshold` | `0.28` | Minimum absolute score delta to classify a change as improvement or regression. Deltas below this are reported as neutral. Measured, not chosen — it is the p95 of the judge's own spread on identical content ([ADR-004](docs/adr/004-drift-threshold-from-measured-spread.md)). |
 | `evaluation.model` | `claude-haiku-4-5-20251001` | Model used for the quality pass. Haiku is fast and cheap; upgrade to Sonnet for higher-stakes repos. |
 | `evaluation.timeout_seconds` | `60` | Per-file wall-clock timeout passed to the `timeout` command. |
 
@@ -98,6 +98,7 @@ Echo emits the canonical `echo.*` event surface from [`@onlooker-community/schem
 | Event | When |
 |-------|------|
 | `echo.suite.started` | Before the evaluation loop begins. Includes `test_count` and `changed_file`. |
+| `echo.suite.skipped` | No suite ran, or one ran and scored nothing. `reason` says which: `no_changes`, `no_watched_changes`, `content_unchanged` before a suite starts; `all_suppressed`, `no_scorable_files` after one did, carrying the `suite_id` it terminates. |
 | `echo.improvement.detected` | A file's score increased beyond `drift_threshold`. |
 | `echo.regression.detected` | A file's score decreased beyond `drift_threshold`. |
 | `echo.suite.complete` | After all files are evaluated. Includes aggregate drift fields when a prior baseline exists. |
@@ -117,3 +118,4 @@ Key decisions made during initial design are recorded in [`docs/adr/`](docs/adr/
 - [ADR-001](docs/adr/001-echo-as-separate-plugin.md) — Echo as a separate plugin, not an extension of Tribunal
 - [ADR-002](docs/adr/002-direct-evaluation-vs-tribunal-pipeline.md) — Direct `claude -p` evaluation vs. routing through Tribunal's full pipeline
 - [ADR-003](docs/adr/003-stop-hook-trigger.md) — Stop hook as the trigger mechanism
+- [ADR-004](docs/adr/004-drift-threshold-from-measured-spread.md) — `drift_threshold` from a measured spread, not a chosen number
