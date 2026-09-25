@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.0](https://github.com/onlooker-community/ecosystem/compare/echo-v0.8.5...echo-v0.9.0) (2026-09-25)
+
+
+### Bug Fixes
+
+* **echo:** flag the drift_threshold jump as a behavior change :straight_ruler: ([#375](https://github.com/onlooker-community/ecosystem/issues/375)) ([39b3bba](https://github.com/onlooker-community/ecosystem/commit/39b3bbacb07f4c13fa9ce0a59bfad7a440926869))
+* **echo:** measure the judge's spread and set drift_threshold from it :straight_ruler: ([#373](https://github.com/onlooker-community/ecosystem/issues/373)) ([f627834](https://github.com/onlooker-community/ecosystem/commit/f627834d2b6ba5f5b704ab2b031e12177052b9da))
+
 ## [0.8.5](https://github.com/onlooker-community/ecosystem/compare/echo-v0.8.4...echo-v0.8.5) (2026-09-23)
 
 
