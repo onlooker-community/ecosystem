@@ -219,10 +219,20 @@ done
 # Runtime budget check: SessionEnd has 1.5s total. If we're running low on time,
 # skip classification to ensure scan.complete can be emitted before CLI timeout.
 # Retained artifacts will be re-scanned on the next session when time permits.
+#
+# The threshold is config-driven rather than hardcoded (ONL-104). Everything
+# between SCAN_START_TS_MS and here -- loading the window, the durability filter
+# loop, its per-artifact jq calls -- counts against this clock, so on a loaded
+# machine the gate trips before classification and the scan proposes nothing.
+# That is correct in production and ruinous in a test, where it made every
+# assertion about proposals race a one-second timer and
+# librarian-session-end.bats flake under `bats -j`. A knob lets a test pin the
+# budget above any plausible delay, and lets this branch be driven on purpose.
 # ----------------------------------------------------------------------------
 
 ELAPSED_MS=$(( $(librarian_now_ms) - SCAN_START_TS_MS ))
-BUDGET_THRESHOLD_MS=1000
+BUDGET_THRESHOLD_MS=$(librarian_config_get '.librarian.scan.budget_threshold_ms')
+[[ -z "$BUDGET_THRESHOLD_MS" || "$BUDGET_THRESHOLD_MS" == "null" ]] && BUDGET_THRESHOLD_MS=1000
 if [[ "$ELAPSED_MS" -ge "$BUDGET_THRESHOLD_MS" ]]; then
 	# The hold is a property of THIS scan, so it has to be honored wherever the
 	# scan exits -- otherwise it leaks through the budget path at exactly the
