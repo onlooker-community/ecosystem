@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.62.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.62.0...ecosystem-v0.62.1) (2026-09-25)
+
+
+### Bug Fixes
+
+* **changelog:** drop the 0.9.0 backlog dump from the root log :broom: ([#380](https://github.com/onlooker-community/ecosystem/issues/380)) ([8f047a1](https://github.com/onlooker-community/ecosystem/commit/8f047a17b5c85defa74e8746020ab8151ee80b58))
+
 ## [0.62.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.61.10...ecosystem-v0.62.0) (2026-09-25)
 
 
