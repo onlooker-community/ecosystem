@@ -80,6 +80,19 @@ Re-run it whenever the evaluation prompt or model changes: the threshold is a pr
 
 Deliberately not part of `npm test` — a suite that costs 30 judge calls is one nobody runs. The plumbing is covered by `test/bats/echo-measure-judge-spread.bats` and the arithmetic exhaustively by `test/node/judge-spread-stats.test.mjs`, both with stubs.
 
+## Upgrading to 0.9.0
+
+`drift_threshold` changed from `0.05` to `0.28`. This is a behavior change, not a tuning tweak: **echo will report improvements and regressions far less often, and on many repos not at all.**
+
+The old value sat well below the judge's own noise. Scoring identical bytes twice moves the score by 0.28 at p95, so a 0.05 threshold meant echo was reporting sampling error as drift and then storing the noisy score as the next run's baseline. The new value is that measured p95 — see [ADR-004](docs/adr/004-drift-threshold-from-measured-spread.md).
+
+Two things follow:
+
+- **Absence of drift events is no longer evidence that prompts are stable.** It mostly means nothing crossed a deliberately high bar.
+- **A previously "drifting" file may go quiet.** That is the fix working, not a regression.
+
+Projects watching only agent files — whose spread measured 0.18 rather than 0.28 — can reasonably set a tighter `drift_threshold` in their own settings.
+
 ## Storage layout
 
 ```text
