@@ -6,8 +6,22 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 export REPO_ROOT
 
 # BATS_TEST_TMPDIR may be unset during setup_file on some runners; ensure a temp base.
+#
+# mktemp, not a name derived from BATS_SUITE_TEST_NUMBER (ONL-61). Under `-j`
+# two files run concurrently in separate processes, and nothing stops them
+# computing the same suite test number. This directory becomes TEST_HOME,
+# ONLOOKER_DIR and every artifact path a test asserts on, so a collision means
+# one file counting another's leftovers. That is what made
+# librarian-session-end.bats:181 fail intermittently in CI and nowhere else:
+# `[ "${#proposals[@]}" -eq 2 ]` saw a proposals directory it did not own.
+#
+# The flake never reproduced locally because bats only leaves BATS_TEST_TMPDIR
+# unset on some runners, so the fallback -- the whole bug -- was unreachable
+# here. test/bats/setup-helper-isolation.bats forces it and pins this.
 if [[ -z "${BATS_TEST_TMPDIR:-}" ]]; then
-  export BATS_TEST_TMPDIR="${TMPDIR:-/tmp}/onlooker-bats-${BATS_SUITE_TEST_NUMBER:-$$}"
+  BATS_TEST_TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/onlooker-bats-XXXXXXXX" 2>/dev/null)" \
+    || BATS_TEST_TMPDIR="${TMPDIR:-/tmp}/onlooker-bats-$$-${BATS_SUITE_TEST_NUMBER:-0}"
+  export BATS_TEST_TMPDIR
   mkdir -p "$BATS_TEST_TMPDIR"
 fi
 
