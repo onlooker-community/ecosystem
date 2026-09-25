@@ -46,7 +46,12 @@ setup() {
 	printf '# Agent\n\nCOMMITTED BODY\n' > "${REPO}/agents/reviewer.md"
 	git -C "$REPO" add -A
 	git -C "$REPO" commit -qm init
-	printf '%s\n' '{"echo":{"watch_paths":["agents/*.md"]}}' > "${REPO}/.claude/settings.json"
+	# drift_threshold is pinned here rather than inherited. These tests exercise the
+	# drift MECHANICS with score pairs chosen to cross the bar; the shipped default is
+	# a measured property of the judge (ADR-004) and moved from 0.05 to 0.28, which
+	# would silently turn every assertion below into a no-op. What the default IS
+	# belongs to echo-config.bats, not here.
+	printf '%s\n' '{"echo":{"watch_paths":["agents/*.md"],"drift_threshold":0.05}}' > "${REPO}/.claude/settings.json"
 
 	source "${PLUGIN_ROOT}/scripts/lib/echo-project-key.sh"
 	PROJECT_KEY=$(echo_project_key "$REPO")

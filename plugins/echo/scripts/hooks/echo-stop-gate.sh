@@ -59,6 +59,8 @@ source "${PLUGIN_ROOT}/scripts/lib/echo-ulid.sh"
 CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" source "${PLUGIN_ROOT}/scripts/lib/echo-events.sh"
 # shellcheck source=../lib/watch-unmatched.sh
 source "${PLUGIN_ROOT}/scripts/lib/watch-unmatched.sh"
+# shellcheck source=../lib/echo-judge-prompt.sh
+source "${PLUGIN_ROOT}/scripts/lib/echo-judge-prompt.sh"
 
 INPUT=$(cat)
 hook_health_context "$INPUT"
@@ -308,30 +310,10 @@ for rel_path in "${PENDING[@]}"; do
 	TEST_ID=$(echo_test_id_for_path "$rel_path")
 	BASELINE_FILE="${BASELINE_DIR}/${TEST_ID}.json"
 
-	# Build the evaluation prompt.
-	{
-		printf '%s\n' 'You are evaluating an agent prompt file for quality. Return JSON only — no prose, no markdown fences.'
-		printf '\n'
-		printf '%s\n' 'Output schema (exactly these keys):'
-		printf '%s\n' '{'
-		printf '%s\n' '  "score": 0.0..1.0,'
-		printf '%s\n' '  "passed": true|false,'
-		printf '%s\n' '  "confidence": 0.0..1.0,'
-		printf '%s\n' '  "feedback": "1-2 sentences on the highest-leverage issue, if any."'
-		printf '%s\n' '}'
-		printf '\n'
-		printf '%s\n' 'Score on these criteria (equal weight):'
-		printf '%s\n' '  - Role clarity: does the file clearly define what the agent is and what it must do?'
-		printf '%s\n' '  - Output format: are output format and schema requirements unambiguous?'
-		printf '%s\n' '  - Criterion coverage: are all evaluation dimensions specified with enough detail to apply consistently?'
-		printf '%s\n' '  - Internal consistency: no contradictory instructions, no undefined terms.'
-		printf '\n'
-		printf '%s\n' "A score >= 0.7 is \"passed\". Be concise."
-		printf '\n'
-		printf '%s\n' "---FILE: ${rel_path}---"
-		printf '%s\n' "$FILE_CONTENT"
-		printf '%s\n' '---END FILE---'
-	} > "$PROMPT_FILE"
+	# Build the evaluation prompt. Shared with scripts/measure-judge-spread.sh,
+	# which must send the judge byte-identical input or its measured spread
+	# does not describe this hook (see echo-judge-prompt.sh).
+	echo_build_judge_prompt "$rel_path" "$FILE_CONTENT" > "$PROMPT_FILE"
 
 	CLAUDE_ARGS=(-p --max-turns 1)
 	[[ -n "$EVAL_MODEL" ]] && CLAUDE_ARGS+=(--model "$EVAL_MODEL")

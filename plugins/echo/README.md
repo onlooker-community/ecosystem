@@ -35,7 +35,7 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
   "echo": {
     "watch_paths": ["plugins/*/agents/*.md"],
     "exclude_paths": [],
-    "drift_threshold": 0.05,
+    "drift_threshold": 0.28,
     "evaluation": {
       "model": "claude-haiku-4-5-20251001",
       "timeout_seconds": 60
@@ -48,7 +48,7 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
 |-----|---------|-------------|
 | `watch_paths` | `["plugins/*/agents/*.md"]` | Glob patterns (relative to repo root) of files to watch. Bash extended glob syntax. |
 | `exclude_paths` | `[]` | Patterns to exclude. `plugins/echo/**` is always excluded regardless of this setting. |
-| `drift_threshold` | `0.05` | Minimum absolute score delta to classify a change as improvement or regression. Deltas below this are reported as neutral. |
+| `drift_threshold` | `0.28` | Minimum absolute score delta to classify a change as improvement or regression. Deltas below this are reported as neutral. Measured, not chosen — it is the p95 of the judge's own spread on identical content ([ADR-004](docs/adr/004-drift-threshold-from-measured-spread.md)). |
 | `evaluation.model` | `claude-haiku-4-5-20251001` | Model used for the quality pass. Haiku is fast and cheap; upgrade to Sonnet for higher-stakes repos. |
 | `evaluation.timeout_seconds` | `60` | Per-file wall-clock timeout passed to the `timeout` command. |
 
@@ -64,6 +64,21 @@ Each watched file is scored 0.0–1.0 on four equally-weighted criteria:
 | **Internal consistency** | No contradictory instructions; no undefined terms. |
 
 A score ≥ 0.7 is considered "passed". A delta beyond `drift_threshold` in either direction is classified as improvement or regression.
+
+### Measuring the judge
+
+The judge is not deterministic — scoring identical bytes twice returns two different numbers. `drift_threshold` only means something relative to that spread, so it is measured rather than chosen:
+
+```bash
+plugins/echo/scripts/measure-judge-spread.sh --dry-run    # show the plan, spend nothing
+plugins/echo/scripts/measure-judge-spread.sh              # 10 samples x 3 files = 30 judge calls
+```
+
+It scores unchanged files repeatedly and reports |delta| between independent evaluations — exactly what echo compares when it decides drift — for single-sample, median-of-3 and median-of-5 evaluations. Output is a `samples.json` carrying the raw scores plus the model and a prompt fingerprint, and a `stats.json` with the distributions.
+
+Re-run it whenever the evaluation prompt or model changes: the threshold is a property of one prompt scored by one model, and neither is stable. The prompt lives in [`scripts/lib/echo-judge-prompt.sh`](scripts/lib/echo-judge-prompt.sh), shared with the hook so the measurement and the thing measured cannot drift apart.
+
+Deliberately not part of `npm test` — a suite that costs 30 judge calls is one nobody runs. The plumbing is covered by `test/bats/echo-measure-judge-spread.bats` and the arithmetic exhaustively by `test/node/judge-spread-stats.test.mjs`, both with stubs.
 
 ## Storage layout
 
@@ -83,6 +98,7 @@ Echo emits the canonical `echo.*` event surface from [`@onlooker-community/schem
 | Event | When |
 |-------|------|
 | `echo.suite.started` | Before the evaluation loop begins. Includes `test_count` and `changed_file`. |
+| `echo.suite.skipped` | No suite ran, or one ran and scored nothing. `reason` says which: `no_changes`, `no_watched_changes`, `content_unchanged` before a suite starts; `all_suppressed`, `no_scorable_files` after one did, carrying the `suite_id` it terminates. |
 | `echo.improvement.detected` | A file's score increased beyond `drift_threshold`. |
 | `echo.regression.detected` | A file's score decreased beyond `drift_threshold`. |
 | `echo.suite.complete` | After all files are evaluated. Includes aggregate drift fields when a prior baseline exists. |
@@ -102,3 +118,4 @@ Key decisions made during initial design are recorded in [`docs/adr/`](docs/adr/
 - [ADR-001](docs/adr/001-echo-as-separate-plugin.md) — Echo as a separate plugin, not an extension of Tribunal
 - [ADR-002](docs/adr/002-direct-evaluation-vs-tribunal-pipeline.md) — Direct `claude -p` evaluation vs. routing through Tribunal's full pipeline
 - [ADR-003](docs/adr/003-stop-hook-trigger.md) — Stop hook as the trigger mechanism
+- [ADR-004](docs/adr/004-drift-threshold-from-measured-spread.md) — `drift_threshold` from a measured spread, not a chosen number

@@ -67,7 +67,7 @@ echo_config_timeout() {
 echo_config_drift_threshold() {
 	local val
 	val=$(echo_config_get '.echo.drift_threshold')
-	printf '%s' "${val:-0.05}"
+	printf '%s' "${val:-0.28}"
 }
 
 echo_config_watch_paths() {

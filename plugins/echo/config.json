@@ -15,7 +15,7 @@
       "plugins/*/skills/*/SKILL.md"
     ],
     "exclude_paths": [],
-    "drift_threshold": 0.05,
+    "drift_threshold": 0.28,
     "evaluation": {
       "model": "claude-haiku-4-5-20251001",
       "max_output_tokens": 512,
