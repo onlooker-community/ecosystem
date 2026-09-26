@@ -38,6 +38,15 @@ setup() {
 
   mkdir -p "${PROJECT_REPO}/.claude"
 
+  # The scan budget gate is wall clock (ONL-104). Its 1000ms production default
+  # is measured from before the window is even loaded, so on a loaded runner the
+  # durability filter can cross it and the hook bails with zero proposals --
+  # failing assertions about classification for a reason that has nothing to do
+  # with classification. Pin it past any plausible delay; _settings merges over
+  # this so a test can still drive the gate deliberately.
+  LIBRARIAN_TEST_BASE_SETTINGS='{"librarian":{"scan":{"budget_threshold_ms":600000}}}'
+  printf '%s' "$LIBRARIAN_TEST_BASE_SETTINGS" > "${PROJECT_REPO}/.claude/settings.json"
+
   # Stub `claude` CLI on PATH. Returns a deterministic classifier response
   # based on the artifact's summary contents.
   STUB_BIN="${BATS_TEST_TMPDIR}/bin"
@@ -177,7 +186,12 @@ _run_scan() {
   [ "$status" -eq 0 ]
 
   # Two proposals on disk.
+  # nullglob, or an unmatched pattern stays in the array and a scan that wrote
+  # nothing reports 1 instead of 0 -- which reads like a partial write and sent
+  # the ONL-104 investigation looking for one.
+  shopt -s nullglob
   proposals=("${LIBRARIAN_DIR}/proposals"/*.json)
+  shopt -u nullglob
   [ "${#proposals[@]}" -eq 2 ]
 
   # Both carry provenance back to their source artifact.
@@ -239,8 +253,15 @@ _llm_calls() {
   wc -l < "$CLAUDE_CALL_LOG" | tr -d ' '
 }
 
+# Merges the caller's settings over the pinned base instead of replacing it.
+# A bare overwrite would silently re-arm the wall-clock scan budget that setup
+# pinned out of reach, which is the flake ONL-104 fixed -- and it would do so
+# only in the tests that configure something, which is the worst possible
+# distribution for a race. A test that wants the gate still overrides it,
+# because the overlay wins on conflicting keys.
 _settings() {
-  cat > "${PROJECT_REPO}/.claude/settings.json"
+  jq -n --argjson base "$LIBRARIAN_TEST_BASE_SETTINGS" --argjson overlay "$(cat)" \
+    '$base * $overlay' > "${PROJECT_REPO}/.claude/settings.json"
 }
 
 # Carries the marker phrase the durability filter wants AND a version token,
@@ -378,4 +399,28 @@ _scan_complete() {
   # grep on a missing file errors rather than printing 0, which is why this
   # asserts absence directly instead of comparing a count.
   ! grep -q '"outcome":"gave_up"' "$ONLOOKER_EVENTS_LOG" 2>/dev/null
+}
+
+# The scan-level budget gate is wall clock, and before ONL-104 its threshold was
+# a hardcoded 1000ms with no override. That left the gate both untestable and
+# unavoidable: nothing could drive it deliberately, and every test expecting
+# proposals was racing it. On a loaded CI runner the pre-classification work
+# crosses 1000ms, the hook bails with zero proposals, and line 181 fails with
+# `1 != 2` -- 1, not 0, because an unmatched glob leaves its own pattern behind.
+@test "a zero scan budget trips the gate before classification" {
+  echo '{"librarian":{"scan":{"budget_threshold_ms":0}}}' | _settings
+
+  _seed_artifact "decisions" "01PROPOSEEFEEDBACK00000000" \
+    "User prefers functional patterns prefer-functional-stub" \
+    "User explicitly said: always prefer plain functions over classes when adding new code in the api layer."
+
+  _run_scan
+  [ "$status" -eq 0 ] || return 1
+
+  grep '"event_type":"librarian.scan.complete"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e '.payload.outcome == "budget_exceeded" and .payload.candidates_proposed == 0' >/dev/null \
+    || return 1
+
+  # The gate sits upstream of classification, so no model call was ever made.
+  [ ! -s "$CLAUDE_CALL_LOG" ]
 }
