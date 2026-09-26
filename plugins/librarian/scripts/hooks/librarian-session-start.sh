@@ -76,6 +76,14 @@ if [[ -z "$PROJECT_KEY" ]]; then
 	hook_health_exit 0
 fi
 
+# Unconditional: NOT gated on lesson_auto.enabled. Gating it would strand every
+# held lesson the moment the flag was turned off — written, judged, approved,
+# and invisible forever. Deterministic file movement, no LLM call, so ADR-003
+# is satisfied.
+librarian_lesson_sweep_held "$PROJECT_KEY" >/dev/null 2>&1 || true
+
+HELD=$(librarian_lesson_count_held "$PROJECT_KEY" 2>/dev/null) || HELD=0
+
 SKIP_WHEN_ZERO=$(librarian_config_get '.librarian.surfacer.skip_inject_when_zero')
 [[ -z "$SKIP_WHEN_ZERO" || "$SKIP_WHEN_ZERO" == "null" ]] && SKIP_WHEN_ZERO="true"
 
@@ -88,7 +96,12 @@ PENDING=$(librarian_storage_count_pending "$PROJECT_KEY")
 LESSON_PENDING=$(librarian_lesson_list_pending "$PROJECT_KEY" | jq 'length' 2>/dev/null) || LESSON_PENDING=0
 [[ -z "$LESSON_PENDING" || "$LESSON_PENDING" == "null" ]] && LESSON_PENDING=0
 
-if [[ "$PENDING" -eq 0 && "$LESSON_PENDING" -eq 0 && "$SKIP_WHEN_ZERO" == "true" ]]; then
+# HELD must count toward this gate, not just the other two queues: a
+# lessons-only-held session (no pending memory proposals, no pending lesson
+# candidates) would otherwise hit the default skip-when-zero exit before the
+# HELD_LINE below ever builds, shipping the held lesson next sweep with the
+# user never having seen the veto window at all.
+if [[ "$PENDING" -eq 0 && "$LESSON_PENDING" -eq 0 && "${HELD:-0}" -eq 0 && "$SKIP_WHEN_ZERO" == "true" ]]; then
 	_emit ""
 	hook_health_exit 0
 fi
@@ -126,6 +139,19 @@ if [[ -n "$LESSON_LINE" ]]; then
 		CONTEXT="${CONTEXT}"$'\n'"${LESSON_LINE}"
 	else
 		CONTEXT="$LESSON_LINE"
+	fi
+fi
+
+HELD_LINE=""
+if [[ "${HELD:-0}" -gt 0 ]]; then
+	HELD_LINE=$(printf '%s lesson(s) will leave this machine unless vetoed — run /librarian lessons queue' "$HELD")
+fi
+
+if [[ -n "$HELD_LINE" ]]; then
+	if [[ -n "$CONTEXT" ]]; then
+		CONTEXT="${CONTEXT}"$'\n'"${HELD_LINE}"
+	else
+		CONTEXT="$HELD_LINE"
 	fi
 fi
 

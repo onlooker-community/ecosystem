@@ -102,3 +102,66 @@ _seed_judged() {
 	[ "$status" -eq 0 ]
 	[ -f "${LESSONS_DIR}/approved/01M3ASXRSRGY9TXKV045NK8V7G.json" ]
 }
+
+@test "the sweep moves a held lesson whose window has elapsed" {
+	_hold_setup
+	_seed_judged 01M3B87J7046SJE5BECNMP670K model
+	librarian_lesson_promote "$PROJECT_KEY" 01M3B87J7046SJE5BECNMP670K
+	# Backdate the window so it is already past.
+	tmp=$(mktemp); jq '.shippable_after = "2020-01-01T00:00:00Z"' \
+		"${LESSONS_DIR}/proposals/01M3B87J7046SJE5BECNMP670K.json" > "$tmp"
+	mv "$tmp" "${LESSONS_DIR}/proposals/01M3B87J7046SJE5BECNMP670K.json"
+
+	run librarian_lesson_sweep_held "$PROJECT_KEY"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"01M3B87J7046SJE5BECNMP670K"* ]]
+	[ -f "${LESSONS_DIR}/approved/01M3B87J7046SJE5BECNMP670K.json" ]
+	[ ! -f "${LESSONS_DIR}/approved_held/01M3B87J7046SJE5BECNMP670K.json" ]
+}
+
+@test "the sweep leaves a held lesson whose window has not elapsed" {
+	_hold_setup
+	_seed_judged 01M33440PGTWP4QMMG1BVA52DR model
+	librarian_lesson_promote "$PROJECT_KEY" 01M33440PGTWP4QMMG1BVA52DR
+	tmp=$(mktemp); jq '.shippable_after = "2099-01-01T00:00:00Z"' \
+		"${LESSONS_DIR}/proposals/01M33440PGTWP4QMMG1BVA52DR.json" > "$tmp"
+	mv "$tmp" "${LESSONS_DIR}/proposals/01M33440PGTWP4QMMG1BVA52DR.json"
+
+	run librarian_lesson_sweep_held "$PROJECT_KEY"
+	[ "$status" -eq 0 ]
+	[ -z "$output" ]
+	[ -f "${LESSONS_DIR}/approved_held/01M33440PGTWP4QMMG1BVA52DR.json" ]
+}
+
+@test "a held lesson with no readable envelope is left alone, not shipped" {
+	_hold_setup
+	_seed_judged 01M3ASXRSRGY9TXKV045NK8V7G model
+	librarian_lesson_promote "$PROJECT_KEY" 01M3ASXRSRGY9TXKV045NK8V7G
+	rm -f "${LESSONS_DIR}/proposals/01M3ASXRSRGY9TXKV045NK8V7G.json"
+	run librarian_lesson_sweep_held "$PROJECT_KEY"
+	[ "$status" -eq 0 ]
+	# Unknown window must fail closed: a lesson whose window cannot be read
+	# must never be shipped by default.
+	[ -f "${LESSONS_DIR}/approved_held/01M3ASXRSRGY9TXKV045NK8V7G.json" ]
+}
+
+@test "the sweep is idempotent" {
+	_hold_setup
+	_seed_judged 01M3B93JPGAKHGEQ5KD9N836HD model
+	librarian_lesson_promote "$PROJECT_KEY" 01M3B93JPGAKHGEQ5KD9N836HD
+	tmp=$(mktemp); jq '.shippable_after = "2020-01-01T00:00:00Z"' \
+		"${LESSONS_DIR}/proposals/01M3B93JPGAKHGEQ5KD9N836HD.json" > "$tmp"
+	mv "$tmp" "${LESSONS_DIR}/proposals/01M3B93JPGAKHGEQ5KD9N836HD.json"
+	librarian_lesson_sweep_held "$PROJECT_KEY"
+	run librarian_lesson_sweep_held "$PROJECT_KEY"
+	[ "$status" -eq 0 ]
+	[ -z "$output" ]
+}
+
+@test "count_held counts only what is still held" {
+	_hold_setup
+	_seed_judged 01M3B87J7046SJE5BECNMP670K model
+	librarian_lesson_promote "$PROJECT_KEY" 01M3B87J7046SJE5BECNMP670K
+	run librarian_lesson_count_held "$PROJECT_KEY"
+	[ "$output" -eq 1 ]
+}

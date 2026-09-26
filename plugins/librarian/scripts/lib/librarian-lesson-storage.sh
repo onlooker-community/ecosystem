@@ -210,6 +210,59 @@ librarian_lesson_remove_declined() {
 	return 0
 }
 
+# Move every held lesson whose window has elapsed into approved/, printing the
+# ids it moved. Deterministic file movement, no LLM work, so it is safe on the
+# SessionStart path.
+#
+# Fails closed on an unreadable window: a held lesson whose envelope is missing
+# or whose shippable_after will not parse stays held. The alternative — treating
+# unknown as elapsed — would ship exactly the lessons whose provenance is
+# already in question.
+#
+# Usage: librarian_lesson_sweep_held <key>
+librarian_lesson_sweep_held() {
+	local key="$1"
+	[[ -z "$key" ]] && return 1
+
+	local dir held_dir
+	dir=$(librarian_lessons_dir "$key")
+	held_dir=$(librarian_lesson_held_dir "$key")
+	[[ -d "$held_dir" ]] || return 0
+
+	local now file id shippable
+	now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+	# nullglob so an empty hold yields nothing rather than the literal pattern.
+	local had_nullglob=0
+	shopt -q nullglob && had_nullglob=1
+	shopt -s nullglob
+	for file in "${held_dir}"/*.json; do
+		id=$(basename "$file" .json)
+		shippable=$(jq -r '.shippable_after // ""' \
+			"${dir}/proposals/${id}.json" 2>/dev/null) || shippable=""
+		[[ -z "$shippable" || "$shippable" == "null" ]] && continue
+		# RFC3339 UTC with a fixed width, so a lexical compare is a time
+		# compare. Both values are produced by `date -u +%Y-%m-%dT%H:%M:%SZ`.
+		[[ "$now" < "$shippable" ]] && continue
+		mkdir -p "${dir}/approved" 2>/dev/null
+		mv -f "$file" "${dir}/approved/${id}.json" 2>/dev/null || continue
+		printf '%s\n' "$id"
+	done
+	[[ "$had_nullglob" -eq 0 ]] && shopt -u nullglob
+	return 0
+}
+
+# Usage: librarian_lesson_count_held <key>
+librarian_lesson_count_held() {
+	local key="$1"
+	local held_dir
+	held_dir=$(librarian_lesson_held_dir "$key")
+	[[ -d "$held_dir" ]] || { printf '0'; return 0; }
+	local n
+	n=$(find "$held_dir" -maxdepth 1 -name '*.json' -type f 2>/dev/null | wc -l | tr -d ' ')
+	printf '%s' "${n:-0}"
+}
+
 librarian_lesson_seen() {
 	local key="$1"
 	local artifact_id="$2"
