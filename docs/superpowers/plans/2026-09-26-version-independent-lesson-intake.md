@@ -21,7 +21,9 @@
 - **Do not touch `plugins/librarian/schema/lesson-applies-to.subschema.json` or `lesson-evidence.subschema.json`.** They are vendored from the published lesson contract (`PROVENANCE.json`, `schema_version` 2) and represent what the *pool* accepts. `unscoped` never reaches the pool.
 - **`librarian-lesson-validate.sh` stays I/O-free and route-blind** (D4). No new parameters on either validator.
 - **Config defaults live in `plugins/librarian/config.json`**, read through `librarian_config_get`, and every accessor must tolerate a missing key by falling back to the shipped default.
-- **Run tests with `npm run test:bats`, never bare `bats`** — the wrapper sets `ONLOOKER_VALIDATE=1`, and without it negative schema tests pass locally and fail in CI.
+- **Never run bare `bats`** — `ONLOOKER_VALIDATE=1` must be set or negative schema tests pass locally and fail in CI.
+- **For a single file, call `scripts/test/run-bats.sh <file>` directly.** It sets `ONLOOKER_VALIDATE=1` itself, so it is safe. Do **not** use `npm run test:bats -- <file>`: that expands to `run-bats.sh test/bats <file>`, so bats receives the directory *and* the file, plans both, and then executes that file's tests **zero times** — exiting 0 with only a `bats warning: Executed N instead of expected M` line. Verified on this branch: the file holds 48 tests and the run executed exactly 48 fewer than planned, reporting no failures while a genuinely failing test never ran. Use `npm run test:bats` (no arguments) only for the whole suite.
+- **`run-bats.sh` `rm -rf`s a shared report directory**, so never start a second bats run while one is in flight — the emission-coverage gate then reports a wall of phantom regressions. One run at a time.
 
 ---
 
@@ -90,8 +92,12 @@ Append to `test/bats/librarian-lesson-transform.bats`. Its `setup()` already sou
 
 - [ ] **Step 2: Run them and confirm the first three fail**
 
-Run: `npm run test:bats -- test/bats/librarian-lesson-transform.bats`
-Expected: the three `unscoped` tests FAIL (`validate_candidate` rejects `unscoped` today, `validate_confirmed` accepts nothing new). The fourth PASSES already — it is a regression guard for Step 3, which makes the versions check conditional.
+Run: `scripts/test/run-bats.sh test/bats/librarian-lesson-transform.bats`
+Expected: exactly **one** failure — `validate_candidate accepts an unscoped candidate`. Verified on this branch. The other three pass before any implementation, each for a reason worth knowing:
+
+- *rejects unscoped carrying any extra key* passes **vacuously** today, because `validate_candidate` currently rejects every `unscoped` candidate. It only becomes meaningful after Step 4, which is why it must be re-read then rather than trusted now.
+- *validate_confirmed refuses unscoped* passes for the right reason already: that validator's scope clause never listed the kind. Step 5 only records why the omission is deliberate.
+- *still runs the range rules on a versioned candidate* is the regression guard for Step 4, which makes the versions check conditional.
 
 - [ ] **Step 3: Add the scope clause**
 
@@ -171,7 +177,7 @@ librarian_lesson_validate_candidate() {
 
 - [ ] **Step 6: Run the bats tests and confirm all four pass**
 
-Run: `npm run test:bats -- test/bats/librarian-lesson-transform.bats`
+Run: `scripts/test/run-bats.sh test/bats/librarian-lesson-transform.bats`
 Expected: PASS, including the pre-existing tests — especially `test/node`'s counterpart guard that `validate_candidate` still refuses `version_independent`.
 
 - [ ] **Step 7: Create the local pending schema**
@@ -348,7 +354,7 @@ Then the tests:
 
 - [ ] **Step 2: Run them and confirm they fail**
 
-Run: `npm run test:bats -- test/bats/librarian-lesson-transform.bats`
+Run: `scripts/test/run-bats.sh test/bats/librarian-lesson-transform.bats`
 Expected: the first, second and fourth FAIL — today the pre-gate returns `skipped:pregate` for a token-less artifact and `build_prompt` takes no mode argument. The third PASSES already and is the regression guard that the versioned route is untouched.
 
 - [ ] **Step 3: Give `build_prompt` a mode**
@@ -447,7 +453,7 @@ Leave everything downstream — the refusal branch, provenance stitching, `valid
 
 - [ ] **Step 6: Run the tests and confirm all four pass**
 
-Run: `npm run test:bats -- test/bats/librarian-lesson-transform.bats`
+Run: `scripts/test/run-bats.sh test/bats/librarian-lesson-transform.bats`
 Expected: PASS, with every pre-existing test in the file still green — in particular `transform_one declines the real vitest artifact for having no resolution` and `transform_one declines when the model cannot infer versions`, which prove the versioned route kept its refusals.
 
 - [ ] **Step 7: Commit**
@@ -505,7 +511,7 @@ Invoke `/git-workflow:commit`: a `feat(librarian)` change making the pre-gate ro
 
 - [ ] **Step 2: Run and confirm failure**
 
-Run: `npm run test:bats -- test/bats/librarian-lesson-transform.bats`
+Run: `scripts/test/run-bats.sh test/bats/librarian-lesson-transform.bats`
 Expected: FAIL — `transform_one` takes two arguments today, so the third is ignored and both artifacts are parked.
 
 - [ ] **Step 3: Add the cap check to `transform_one`**
@@ -598,7 +604,7 @@ In `plugins/librarian/config.json`, inside `librarian.lesson_transform`:
 
 - [ ] **Step 6: Run the tests**
 
-Run: `npm run test:bats -- test/bats/librarian-lesson-transform.bats`
+Run: `scripts/test/run-bats.sh test/bats/librarian-lesson-transform.bats`
 Expected: PASS, both new tests and every existing one.
 
 - [ ] **Step 7: Commit**
@@ -676,7 +682,7 @@ Then the tests — note `_review_setup` for the first three and `_cli_setup` for
 
 - [ ] **Step 2: Run and confirm failure**
 
-Run: `npm run test:bats -- test/bats/librarian-lesson-review.bats`
+Run: `scripts/test/run-bats.sh test/bats/librarian-lesson-review.bats`
 Expected: the first and fourth FAIL. The second and third may already pass — the justification rewrite is scope-kind-agnostic and the private guard at `:125` checks the resulting state — which is the point: confirm them as passing rather than assuming they need code.
 
 - [ ] **Step 3: Refuse a scopeless confirm**
@@ -697,7 +703,7 @@ In `librarian_lesson_confirm`, after the file is read and `candidate` extracted,
 
 - [ ] **Step 4: Mark parked candidates in `list` and `show`**
 
-Read `librarian_cli_lessons_list` and `librarian_cli_lessons_show`, then append ` — needs scope` to a parked row's rendered line and add a `scope: unscoped (needs a justification)` line to `show`'s output. Match each function's existing rendering style — if rows are built in a `jq -r` expression, extend that expression rather than post-processing its output.
+Read `librarian_cli_lessons_list` and `librarian_cli_lessons_show`, then append the suffix `— needs scope` (preceded by a space) to a parked row's rendered line and add a `scope: unscoped (needs a justification)` line to `show`'s output. Match each function's existing rendering style — if rows are built in a `jq -r` expression, extend that expression rather than post-processing its output.
 
 - [ ] **Step 5: Teach the walk**
 
@@ -714,7 +720,7 @@ In `plugins/librarian/skills/librarian/SKILL.md`, in the lesson walkthrough at s
 
 - [ ] **Step 6: Run the tests**
 
-Run: `npm run test:bats -- test/bats/librarian-lesson-review.bats`
+Run: `scripts/test/run-bats.sh test/bats/librarian-lesson-review.bats`
 Expected: PASS, all four plus the file's existing tests.
 
 - [ ] **Step 7: Commit**
@@ -808,7 +814,7 @@ _seed_artifact_on_disk() {
 
 - [ ] **Step 2: Run and confirm failure**
 
-Run: `npm run test:bats -- test/bats/librarian-lesson-reconsider.bats`
+Run: `scripts/test/run-bats.sh test/bats/librarian-lesson-reconsider.bats`
 Expected: FAIL — neither function exists.
 
 - [ ] **Step 3: Implement the removal**
@@ -951,7 +957,7 @@ Re-appending a decline for a skipped or missing artifact is deliberate: `remove_
 
 - [ ] **Step 5: Run the tests**
 
-Run: `npm run test:bats -- test/bats/librarian-lesson-reconsider.bats`
+Run: `scripts/test/run-bats.sh test/bats/librarian-lesson-reconsider.bats`
 Expected: PASS, all four.
 
 - [ ] **Step 6: Run everything**
