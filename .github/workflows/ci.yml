@@ -22,7 +22,7 @@ permissions:
 jobs:
   test:
     name: Test
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
 
@@ -58,7 +58,7 @@ jobs:
   # No `name:`, so the check context stays `coverage` exactly as it was when
   # this lived in its own workflow.
   coverage:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     # Narrower than the workflow default: only this job comments on the PR.
     permissions:
       contents: read
@@ -121,7 +121,7 @@ jobs:
 
   required:
     name: All checks passed
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [test, coverage]
     # Without always(), one failed dependency skips the gate rather than
     # failing it, and a skipped required check is pending forever.
