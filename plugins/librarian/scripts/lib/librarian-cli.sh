@@ -701,6 +701,59 @@ librarian_cli_lessons_status() {
 		"${counts[0]}" "${counts[1]}" "${counts[2]}" "${counts[3]}" "$awaiting"
 }
 
+# Replay artifacts that were declined no_versions back through the transform,
+# which now routes them to the unscoped path instead of refusing. Only
+# no_versions: no_resolution and schema_invalid are still correct refusals.
+#
+# Arg shape follows librarian_cli_lessons_promote: options, then an optional
+# trailing [cwd] positional that resolves the project key.
+librarian_cli_lessons_reconsider() {
+	local limit=0 cwd=""
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+			--limit) limit="${2:-0}"; shift 2 ;;
+			--*) printf 'unknown option: %s\n' "$1" >&2; return 1 ;;
+			*) cwd="$1"; shift ;;
+		esac
+	done
+
+	local key
+	key=$(_librarian_cli_project_key "$cwd")
+	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
+
+	local ids
+	ids=$(librarian_lesson_remove_declined "$key" no_versions) || return 1
+	[[ -z "$ids" ]] && { printf 'Nothing to reconsider: no no_versions declines.\n'; return 0; }
+
+	# remove_declined has already rewritten the file, so anything not replayed
+	# here has to have its decline put back. Without that, a --limit run would
+	# silently make every remaining id eligible on the next scan, outside the
+	# per-scan cap the transform applies.
+	local id artifact result count=0 unscoped=0
+	while IFS= read -r id; do
+		[[ -z "$id" ]] && continue
+		if [[ "$limit" -gt 0 && "$count" -ge "$limit" ]]; then
+			printf '%s: stopped at --limit %s\n' "$id" "$limit"
+			librarian_lesson_append_declined "$key" "$id" no_versions
+			continue
+		fi
+		artifact=$(librarian_archivist_load_by_id "$key" "$id" 2>/dev/null)
+		if [[ -z "$artifact" ]]; then
+			printf '%s: artifact missing, decline kept\n' "$id"
+			librarian_lesson_append_declined "$key" "$id" no_versions
+			continue
+		fi
+		result=$(librarian_lesson_transform_one "$key" "$artifact" "$unscoped")
+		printf '%s: %s\n' "$id" "$result"
+		case "$result" in
+			proposed:*:unscoped) unscoped=$((unscoped + 1)) ;;
+		esac
+		count=$((count + 1))
+	done <<< "$ids"
+
+	printf 'Reconsidered %s artifact(s).\n' "$count"
+}
+
 librarian_cli_lessons() {
 	local verb="${1:-list}"
 	shift || true
@@ -712,6 +765,7 @@ librarian_cli_lessons() {
 		unconfirm) librarian_cli_lessons_unconfirm "$@" ;;
 		judge) librarian_cli_lessons_judge "$@" ;;
 		promote) librarian_cli_lessons_promote "$@" ;;
+		reconsider) librarian_cli_lessons_reconsider "$@" ;;
 		defer) librarian_cli_lessons_defer "$@" ;;
 		status) librarian_cli_lessons_status "$@" ;;
 		*) printf 'unknown lessons action: %s\n' "$verb"; return 2 ;;

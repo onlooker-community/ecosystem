@@ -152,6 +152,51 @@ librarian_lesson_append_declined() {
 # and permanent, unlike tombstones (body-hash keyed, TTL'd).
 #
 # Usage: librarian_lesson_seen <key> <artifact_id>
+# Remove every decline record carrying the given reason, printing the removed
+# artifact_ids one per line. The only operation in the pipeline that retracts a
+# terminal decision, which is why it takes the reason explicitly rather than a
+# predicate: no_resolution and schema_invalid must never be swept up with it.
+#
+# Rewritten through a temp file in the same directory and mv'd into place, so a
+# concurrent reader sees either the old file or the new one, never a partial.
+#
+# The retention pass cannot use the `select(... == null)` shape it looks like it
+# wants: for a non-matching line the inner select yields `empty`, and `empty ==
+# null` is itself `empty` in jq, so the line would be dropped instead of kept —
+# every record gone. It tests the parsed reason against a variable instead.
+# Lines that are not JSON at all (a truncated tail from a killed append) parse
+# to null and are kept, same as librarian_lesson_seen's guard.
+#
+# Usage: librarian_lesson_remove_declined <key> <reason>
+librarian_lesson_remove_declined() {
+	local key="$1"
+	local reason="$2"
+	[[ -z "$key" || -z "$reason" ]] && return 1
+
+	local dir file
+	dir=$(librarian_lessons_dir "$key")
+	file="$dir/declined.jsonl"
+	[[ -f "$file" ]] || return 0
+
+	jq -Rr --arg r "$reason" '
+		fromjson? | objects | select(.reason == $r) | .artifact_id // empty
+	' "$file" 2>/dev/null
+
+	local tmp
+	tmp=$(mktemp "${file}.XXXXXX" 2>/dev/null) || return 1
+	if ! jq -Rr --arg r "$reason" '
+		. as $line
+		| (try (fromjson | if type == "object" then (.reason // null) else null end)
+		   catch null) as $rr
+		| if $rr == $r then empty else $line end
+	' "$file" > "$tmp" 2>/dev/null; then
+		rm -f "$tmp"
+		return 1
+	fi
+	mv -f "$tmp" "$file" || { rm -f "$tmp"; return 1; }
+	return 0
+}
+
 librarian_lesson_seen() {
 	local key="$1"
 	local artifact_id="$2"

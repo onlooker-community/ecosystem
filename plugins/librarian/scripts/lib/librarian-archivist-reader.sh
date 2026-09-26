@@ -22,6 +22,39 @@ librarian_archivist_project_dir() {
 	printf '%s' "$dir"
 }
 
+# Load one archivist artifact by its id, printing nothing when it is gone.
+#
+# reconsider needs a single artifact rather than a watermark window, so this
+# walks the three kind directories instead of reusing load_since's corpus-wide
+# jq. The kind list must stay identical to load_since's: a directory readable
+# here but not there would make reconsider recover artifacts the scan itself
+# never sees.
+#
+# Usage: librarian_archivist_load_by_id <project_key> <artifact_id>
+librarian_archivist_load_by_id() {
+	local project_key="$1"
+	local artifact_id="$2"
+	[[ -z "$project_key" || -z "$artifact_id" ]] && return 0
+
+	# The id comes off declined.jsonl, so it is untrusted input to a path. Only
+	# a bare ULID may through: anything with a slash or .. in it would otherwise
+	# read outside the project directory.
+	[[ "$artifact_id" =~ ^[0-9A-HJKMNP-TV-Z]{26}$ ]] || return 0
+
+	local project_dir
+	project_dir=$(librarian_archivist_project_dir "$project_key")
+	[[ -z "$project_dir" ]] && return 0
+
+	local kind file
+	for kind in decisions dead_ends open_questions; do
+		file="${project_dir}/${kind}/${artifact_id}.json"
+		[[ -f "$file" ]] || continue
+		jq -c 'objects' "$file" 2>/dev/null
+		return 0
+	done
+	return 0
+}
+
 # Load archivist artifacts created since the given watermark.
 #
 # Usage: librarian_archivist_load_since <project_key> <watermark_iso>
