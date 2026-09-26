@@ -25,6 +25,9 @@ _candidate() {
 
 _versioned() { printf '%s' '{"kind":"versioned","versions":{"vite":"<6"}}'; }
 _indep() { printf '%s' '{"kind":"version_independent","justification":"git aborts checkout on a dirty tree regardless of version."}'; }
+# A parked candidate: the transform could not bind a range and left the scope to
+# a human. Legal while pending and nowhere else (ONL-107).
+_unscoped() { printf '%s' '{"kind":"unscoped"}'; }
 
 @test "confirmed validator accepts a versioned candidate" {
 	run librarian_lesson_validate_confirmed "$(_candidate "$(_versioned)")"
@@ -112,6 +115,12 @@ _review_setup() {
 _seed_pending() {
 	librarian_lesson_write_proposal "$PROJECT_KEY" \
 		"$(_candidate "$(_versioned)")" "01KZ45MKAM734ZS7JK24D2DK0R"
+}
+
+# Seeds one PARKED pending proposal and prints its id.
+_seed_pending_unscoped() {
+	librarian_lesson_write_proposal "$PROJECT_KEY" \
+		"$(_candidate "$(_unscoped)")" "01M3B87J7046SJE5BECNMP670K"
 }
 
 @test "list_pending returns an empty array when the queue is empty" {
@@ -986,4 +995,49 @@ _set_status() {
 	grep -q "proposals/${id}.json" "$marker" || return 1
 	[ "$(jq -r '.status' "$(librarian_lessons_dir "$PROJECT_KEY")/proposals/${id}.json")" = "pending" ]
 	unset -f mv
+}
+
+# ── a parked candidate needs a human's scope before it goes anywhere ─────────
+
+@test "confirming a parked candidate without a justification is refused" {
+	_review_setup
+	id=$(_seed_pending_unscoped)
+	run librarian_lesson_confirm "$PROJECT_KEY" "$id" org
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"justification"* ]]
+}
+
+@test "confirming a parked candidate with a justification rewrites it to version_independent" {
+	_review_setup
+	id=$(_seed_pending_unscoped)
+	run librarian_lesson_confirm "$PROJECT_KEY" "$id" org \
+		"release-please applies an unscoped footer to the whole manifest in every version."
+	[ "$status" -eq 0 ]
+	jq -e '.candidate.applies_to.scope.kind == "version_independent"
+	   and (.candidate.applies_to.scope | has("versions") | not)' \
+		"${LESSONS_DIR}/proposals/${id}.json"
+}
+
+@test "a parked candidate cannot be confirmed private even with a justification" {
+	_review_setup
+	id=$(_seed_pending_unscoped)
+	run librarian_lesson_confirm "$PROJECT_KEY" "$id" private "holds regardless of version"
+	[ "$status" -ne 0 ]
+}
+
+@test "lessons list marks a parked candidate" {
+	_cli_setup
+	_seed_pending_unscoped >/dev/null
+	run librarian_cli lessons list "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"needs scope"* ]]
+}
+
+@test "lessons show says a parked candidate needs a justification" {
+	_cli_setup
+	id=$(_seed_pending_unscoped)
+	run librarian_cli lessons show "$id" "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"unscoped"* ]]
+	[[ "$output" == *"justification"* ]]
 }

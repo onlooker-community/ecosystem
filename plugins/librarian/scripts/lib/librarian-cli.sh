@@ -392,7 +392,13 @@ librarian_cli_lessons_list() {
 		printf 'No %s lessons.\n' "$status"
 		return 0
 	fi
-	printf '%s' "$rows" | jq -r '.[] | "\(.id)  \(.candidate.claim)"'
+	# A parked candidate is marked, because the walk has to ask for a
+	# justification on one and must not offer private. Without the marker the
+	# only signal is a refusal after the fact.
+	printf '%s' "$rows" | jq -r '.[]
+		| "\(.id)  \(.candidate.claim)"
+		  + (if .candidate.applies_to.scope.kind == "unscoped"
+		     then " — needs scope" else "" end)'
 }
 
 librarian_cli_lessons_show() {
@@ -420,6 +426,9 @@ librarian_cli_lessons_show() {
 		"resolution:  \(.candidate.evidence.resolution)",
 		"stack:       \(.candidate.applies_to.stack | join(", "))",
 		"scope:       \(.candidate.applies_to.scope | tojson)"
+			+ (if .candidate.applies_to.scope.kind == "unscoped"
+			   then "   — needs a justification, at org or public visibility"
+			   else "" end)
 	' "$path"
 }
 

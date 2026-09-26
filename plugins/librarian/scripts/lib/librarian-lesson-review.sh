@@ -101,6 +101,17 @@ librarian_lesson_confirm() {
 	candidate=$(printf '%s' "$proposal" | jq -c '.candidate' 2>/dev/null) || return 1
 	current_status=$(printf '%s' "$proposal" | jq -r '.status // ""' 2>/dev/null)
 
+	# A parked candidate carries no scope of its own. Confirming it without a
+	# justification would write a lesson asserting nothing, which
+	# librarian_lesson_validate_confirmed refuses anyway — but it refuses with a
+	# bare schema_invalid. Refuse here instead, where the message can say what is
+	# actually required.
+	if [[ -z "$justification" ]] && printf '%s' "$candidate" \
+		| jq -e '.applies_to.scope.kind == "unscoped"' >/dev/null 2>&1; then
+		printf 'this lesson has no version scope: confirming it requires a justification (why it holds regardless of version), at org or public visibility so a jury checks the claim\n' >&2
+		return 1
+	fi
+
 	# Snapshot the candidate before the rewrite, so unconfirm can put it back.
 	# Only when we actually rewrite: a plain confirm never touches .candidate,
 	# so a snapshot there would be dead weight that unconfirm has to reason
