@@ -479,8 +479,10 @@ Invoke `/git-workflow:commit`: a `feat(librarian)` change making the pre-gate ro
 ```bash
 @test "the unscoped route stops at the cap and declines nothing" {
   _transform_setup
-  printf '%s' '{"librarian":{"lesson_transform":{"unscoped_per_scan":1}}}' \
-    > "${TEST_HOME}/.claude/settings.json"
+  mkdir -p "${PROJECT_REPO}/.claude"
+  printf '%s\n' '{"librarian":{"lesson_transform":{"unscoped_per_scan":1}}}' \
+    > "${PROJECT_REPO}/.claude/settings.json"
+  librarian_config_load "$PROJECT_REPO"
 
   for i in 1 2; do
     art=$(_seed "01M3B87J7046SJE5BECNMP670${i}" "Release-As bumps every component" \
@@ -500,8 +502,10 @@ Invoke `/git-workflow:commit`: a `feat(librarian)` change making the pre-gate ro
 
 @test "the cap does not apply to the versioned route" {
   _transform_setup
-  printf '%s' '{"librarian":{"lesson_transform":{"unscoped_per_scan":0}}}' \
-    > "${TEST_HOME}/.claude/settings.json"
+  mkdir -p "${PROJECT_REPO}/.claude"
+  printf '%s\n' '{"librarian":{"lesson_transform":{"unscoped_per_scan":0}}}' \
+    > "${PROJECT_REPO}/.claude/settings.json"
+  librarian_config_load "$PROJECT_REPO"
   art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "Vitest 4.1.9 / Vite 5.x mismatch" \
     "Vitest 4.1.9 imports vite/module-runner which is absent in Vite 5.4.21.")
   run librarian_lesson_transform_one "$PROJECT_KEY" "$art" 99
@@ -509,7 +513,16 @@ Invoke `/git-workflow:commit`: a `feat(librarian)` change making the pre-gate ro
 }
 ```
 
-`setup_test_env` (`test/helpers/setup.bash:30-35`) exports `TEST_HOME`, sets `HOME="$TEST_HOME"`, and exports `ONLOOKER_DIR` and `CLAUDE_HOME` beneath it. `librarian-config.sh` reads user overrides from `~/.claude/settings.json`, which under that isolated home is exactly `${TEST_HOME}/.claude/settings.json` — the path used above. Create its parent with `mkdir -p "${TEST_HOME}/.claude"` before writing if the helper has not already.
+Use the pattern the file already proves at `:555` (`librarian_lesson_call reads timeout_seconds from config`), not a home-directory path: `_transform_setup` calls `librarian_config_load "$PROJECT_REPO"` once, so a settings file written afterward is invisible until config is re-loaded. Write to the project repo and re-load explicitly:
+
+```bash
+  mkdir -p "${PROJECT_REPO}/.claude"
+  printf '%s\n' '{"librarian":{"lesson_transform":{"unscoped_per_scan":1}}}' \
+    > "${PROJECT_REPO}/.claude/settings.json"
+  librarian_config_load "$PROJECT_REPO"
+```
+
+Writing to `${TEST_HOME}/.claude/settings.json` without the re-load leaves the shipped default in force, and the cap test then passes or fails for a reason unrelated to the cap.
 
 - [ ] **Step 2: Run and confirm failure**
 

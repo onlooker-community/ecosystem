@@ -249,14 +249,22 @@ librarian_lesson_call() {
 
 # Transform one artifact. Always exits 0. Prints exactly one of:
 #   proposed:<ulid>       candidate written
+#   proposed:<ulid>:unscoped  a PARKED candidate, awaiting a human's scope
 #   declined:<reason>     a real verdict, recorded in declined.jsonl
 #   skipped:seen          already handled
+#   skipped:unscoped_cap  cost control; nothing recorded, so it comes back
 #   unavailable           infrastructure failure; nothing recorded
 #
-# Usage: librarian_lesson_transform_one <key> <artifact_json>
+# Usage: librarian_lesson_transform_one <key> <artifact_json> [unscoped_so_far]
+#
+# unscoped_so_far is how many artifacts this scan has already routed to the
+# unscoped path. The caller owns the count, so this function keeps no
+# cross-invocation state and the cap stays directly testable. Omitted, it
+# defaults to 0, so a direct caller gets one parked candidate and no surprise.
 librarian_lesson_transform_one() {
 	local key="$1"
 	local artifact="$2"
+	local unscoped_so_far="${3:-0}"
 	[[ -z "$key" || -z "$artifact" ]] && { printf 'unavailable'; return 0; }
 
 	local artifact_id session_id project_key created_at
@@ -277,6 +285,21 @@ librarian_lesson_transform_one() {
 	# dropped without a record any more — see ONL-107.
 	local mode="versioned"
 	librarian_lesson_pregate "$artifact" || mode="unscoped"
+
+	if [[ "$mode" == "unscoped" ]]; then
+		local unscoped_cap
+		unscoped_cap=$(librarian_config_get '.librarian.lesson_transform.unscoped_per_scan' 2>/dev/null)
+		[[ -z "$unscoped_cap" || "$unscoped_cap" == "null" ]] && unscoped_cap=3
+		if [[ "$unscoped_so_far" -ge "$unscoped_cap" ]]; then
+			# Deliberately writes NO decline record. A decline is terminal
+			# (librarian_lesson_seen reads declined.jsonl), so recording one for
+			# a cost-control skip would destroy the candidate permanently.
+			# Skipping means the artifact is reconsidered on a later scan, which
+			# is the direction this stage already treats as safe.
+			printf 'skipped:unscoped_cap'
+			return 0
+		fi
+	fi
 
 	local model raw
 	model=$(librarian_config_get '.librarian.lesson_transform.model')
@@ -340,5 +363,15 @@ librarian_lesson_transform_one() {
 		printf 'unavailable'
 		return 0
 	}
-	printf 'proposed:%s' "$id"
+
+	# The route rides on stdout because it has to: this function is called
+	# inside a command substitution, so a variable it exported could not reach
+	# the worker's loop. `proposed:*` still matches both forms, so no existing
+	# caller or matcher breaks — but anything extracting the id has to strip
+	# twice for a parked result.
+	if [[ "$mode" == "unscoped" ]]; then
+		printf 'proposed:%s:unscoped' "$id"
+	else
+		printf 'proposed:%s' "$id"
+	fi
 }

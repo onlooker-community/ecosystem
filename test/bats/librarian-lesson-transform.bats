@@ -731,3 +731,48 @@ STUB
   [[ "$output" == *"<scope-mode>unscoped</scope-mode>"* ]]
   [[ "$output" != *"There is no version-independent option"* ]]
 }
+
+# --- the unscoped route is capped per scan ------------------------------------
+
+@test "the unscoped route stops at the cap and declines nothing" {
+  _transform_setup
+  mkdir -p "${PROJECT_REPO}/.claude"
+  printf '%s\n' '{"librarian":{"lesson_transform":{"unscoped_per_scan":1}}}' \
+    > "${PROJECT_REPO}/.claude/settings.json"
+  librarian_config_load "$PROJECT_REPO"
+
+  art1=$(_seed "01M3B87J7046SJE5BECNMP6701" "Release-As bumps every component" \
+    "A bare footer was meant for one package and hit the whole manifest.")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art1" 0
+  [[ "$output" == proposed:* ]]
+
+  art2=$(_seed "01M3B87J7046SJE5BECNMP6702" "Release-As bumps every component" \
+    "A bare footer was meant for one package and hit the whole manifest.")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art2" 1
+  [ "$output" = "skipped:unscoped_cap" ]
+
+  # A cost-control skip must leave no terminal record, or the artifact is lost.
+  [ ! -f "${LESSONS_DIR}/declined.jsonl" ] || \
+    ! grep -q "01M3B87J7046SJE5BECNMP6702" "${LESSONS_DIR}/declined.jsonl"
+}
+
+@test "the cap does not apply to the versioned route" {
+  _transform_setup
+  mkdir -p "${PROJECT_REPO}/.claude"
+  printf '%s\n' '{"librarian":{"lesson_transform":{"unscoped_per_scan":0}}}' \
+    > "${PROJECT_REPO}/.claude/settings.json"
+  librarian_config_load "$PROJECT_REPO"
+
+  art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "Vitest 4.1.9 / Vite 5.x mismatch" \
+    "Vitest 4.1.9 imports vite/module-runner which is absent in Vite 5.4.21.")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art" 99
+  [[ "$output" == proposed:* ]]
+}
+
+@test "a parked result reports its route so the worker can count it" {
+  _transform_setup
+  art=$(_seed "01M3B87J7046SJE5BECNMP670K" "Release-As bumps every component" \
+    "A bare footer was meant for one package and hit the whole manifest.")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
+  [[ "$output" == proposed:*:unscoped ]]
+}

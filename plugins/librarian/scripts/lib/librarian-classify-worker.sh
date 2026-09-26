@@ -462,6 +462,11 @@ unset _fid
 LESSON_PROPOSED=0
 LESSON_DECLINED=0
 LESSONS_SKIPPED=0
+# Parked candidates this scan, and artifacts the cap turned away. The first is
+# what transform_one compares against .unscoped_per_scan; the second is only
+# reported, since a capped artifact records nothing and returns on a later scan.
+LESSON_UNSCOPED=0
+LESSON_CAPPED=0
 
 LESSON_BUDGET_MS=$(librarian_config_get '.librarian.lesson_transform.total_budget_ms' 2>/dev/null)
 [[ -z "$LESSON_BUDGET_MS" || "$LESSON_BUDGET_MS" == "null" ]] && LESSON_BUDGET_MS=600000
@@ -476,10 +481,15 @@ for ((li = 0; li < KEPT_COUNT; li++)); do
 	LESSON_ARTIFACT=$(printf '%s' "$KEPT" | jq -c ".[$li]")
 	[[ -z "$LESSON_ARTIFACT" || "$LESSON_ARTIFACT" == "null" ]] && continue
 
-	LESSON_RESULT=$(librarian_lesson_transform_one "$PROJECT_KEY" "$LESSON_ARTIFACT")
+	LESSON_RESULT=$(librarian_lesson_transform_one "$PROJECT_KEY" "$LESSON_ARTIFACT" "$LESSON_UNSCOPED")
 	case "$LESSON_RESULT" in
+		proposed:*:unscoped)
+			LESSON_PROPOSED=$((LESSON_PROPOSED + 1))
+			LESSON_UNSCOPED=$((LESSON_UNSCOPED + 1))
+			;;
 		proposed:*) LESSON_PROPOSED=$((LESSON_PROPOSED + 1)) ;;
 		declined:*) LESSON_DECLINED=$((LESSON_DECLINED + 1)) ;;
+		skipped:unscoped_cap) LESSON_CAPPED=$((LESSON_CAPPED + 1)) ;;
 	esac
 done
 
