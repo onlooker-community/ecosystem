@@ -342,6 +342,11 @@ elif [[ "$prompt" == *"no-versions-stub"* ]]; then
   printf '%s' '{"eligible":false,"reason":"no_versions"}'
 elif [[ "$prompt" == *"npm-range-stub"* ]]; then
   printf '%s' '{"claim":"c","rationale":"r","evidence":{"resolution":"fix"},"applies_to":{"stack":["vite"],"scope":{"kind":"versioned","versions":{"vite":"^5.4.21"}},"file_patterns":[],"task_kinds":[]}}'
+# The unscoped route is selected by the prompt's own mode marker, not by a
+# fixture marker: build_prompt stamps it from the pre-gate, so matching on it
+# proves the routing rather than the fixture naming.
+elif [[ "$prompt" == *"<scope-mode>unscoped</scope-mode>"* ]]; then
+  printf '%s' '{"claim":"A bare Release-As footer bumps every component","rationale":"release-please applies an unscoped footer to the whole manifest.","evidence":{"resolution":"Scope the bump in the manifest instead."},"applies_to":{"stack":["release-please"],"scope":{"kind":"unscoped"},"file_patterns":[],"task_kinds":[]}}'
 elif [[ "$prompt" == *"module-runner"* ]]; then
   printf '%s' '{"claim":"Vitest 4 cannot import vite/module-runner on Vite 5","rationale":"vite/module-runner ships in Vite 6; Vitest 4 assumes it exists.","evidence":{"resolution":"Pin vitest to 3.x until Vite 6 lands."},"applies_to":{"stack":["vite","vitest"],"scope":{"kind":"versioned","versions":{"vite":"<6","vitest":">=4"}},"file_patterns":[],"task_kinds":[]}}'
 else
@@ -405,11 +410,14 @@ _seed() {
   [ "$output" = "declined:schema_invalid" ]
 }
 
-@test "transform_one skips a version-free artifact without touching the ledger" {
+@test "transform_one parks a version-free artifact without touching the ledger" {
   _transform_setup
   art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "Prefer functional patterns" "User said so.")
   run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
-  [ "$output" = "skipped:pregate" ]
+  # Asserted skipped:pregate before ONL-107. The artifact is now routed to the
+  # unscoped prompt and parked for a human rather than dropped with no record at
+  # all; the half that still holds is that it never reaches the decline ledger.
+  [[ "$output" == proposed:* ]]
   [ ! -f "${LESSONS_DIR}/declined.jsonl" ]
 }
 
@@ -677,4 +685,49 @@ STUB
   cand=$(_candidate '{"vite":"^5.4.21"}' '["vite"]')
   run librarian_lesson_validate_candidate "$cand"
   [ "$status" -ne 0 ]
+}
+
+# --- routing: the pre-gate selects a mode, it does not drop the artifact -----
+
+@test "transform_one parks an artifact with no version token instead of skipping it" {
+  _transform_setup
+  art=$(_seed "01M3B87J7046SJE5BECNMP670K" "Release-As bumps every component" \
+    "A bare footer was meant for one package and hit the whole manifest.")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
+  [ "$status" -eq 0 ]
+  [[ "$output" == proposed:* ]]
+  # Task 3 appends the route to a parked result, so strip twice. Written this
+  # way now so Task 3 does not have to come back and edit this test.
+  id="${output#proposed:}"; id="${id%%:*}"
+  jq -e '.candidate.applies_to.scope.kind == "unscoped"' \
+    "${LESSONS_DIR}/proposals/${id}.json"
+}
+
+@test "an artifact with no version token is never declined no_versions" {
+  _transform_setup
+  art=$(_seed "01M3B93JPGAKHGEQ5KD9N836HD" "Release-As bumps every component" \
+    "A bare footer was meant for one package and hit the whole manifest.")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
+  [ ! -f "${LESSONS_DIR}/declined.jsonl" ] || \
+    ! grep -q "01M3B93JPGAKHGEQ5KD9N836HD" "${LESSONS_DIR}/declined.jsonl"
+}
+
+@test "an artifact WITH a version token still takes the versioned route" {
+  _transform_setup
+  art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "Vitest 4.1.9 / Vite 5.x mismatch" \
+    "Vitest 4.1.9 imports vite/module-runner which is absent in Vite 5.4.21.")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
+  [[ "$output" == proposed:* ]]
+  id="${output#proposed:}"; id="${id%%:*}"
+  jq -e '.candidate.applies_to.scope.kind == "versioned"' \
+    "${LESSONS_DIR}/proposals/${id}.json"
+}
+
+@test "build_prompt marks the mode so the model knows which contract applies" {
+  _transform_setup
+  art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "no token here" "none either")
+  run librarian_lesson_build_prompt "$art" unscoped
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"<scope-mode>unscoped</scope-mode>"* ]]
+  [[ "$output" != *"There is no version-independent option"* ]]
 }

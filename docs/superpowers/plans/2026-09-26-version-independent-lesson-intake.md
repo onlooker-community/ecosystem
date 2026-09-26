@@ -355,7 +355,9 @@ Then the tests:
 - [ ] **Step 2: Run them and confirm they fail**
 
 Run: `scripts/test/run-bats.sh test/bats/librarian-lesson-transform.bats`
-Expected: the first, second and fourth FAIL — today the pre-gate returns `skipped:pregate` for a token-less artifact and `build_prompt` takes no mode argument. The third PASSES already and is the regression guard that the versioned route is untouched.
+Expected: the **first and fourth** FAIL — verified on this branch. Today the pre-gate returns `skipped:pregate`, so `${output#proposed:}` yields `skipped` and the proposal file does not exist; and `build_prompt` ignores a second argument, so the no-version-independent line is still in the prompt. The second passes **vacuously** (a skipped artifact writes no decline either) and only becomes meaningful after Step 5. The third is the regression guard that the versioned route is untouched.
+
+Then, after Step 5, one **pre-existing** test in the same file fails and must be updated rather than worked around: `transform_one skips a version-free artifact without touching the ledger` (:413) asserts `[ "$output" = "skipped:pregate" ]`, which is exactly the contract D1 replaces. Rewrite it to assert a parked result while keeping its distinctive half — that the artifact never reaches the decline ledger — and rename it to say "parks". Also delete the `skipped:pregate` line from the result-value comment above `librarian_lesson_transform_one`; the historical `docs/superpowers/plans/2026-08-09-lesson-transform.md` keeps its references, since it records what was built then.
 
 - [ ] **Step 3: Give `build_prompt` a mode**
 
