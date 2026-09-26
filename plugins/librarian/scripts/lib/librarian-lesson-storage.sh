@@ -17,12 +17,25 @@ librarian_lessons_dir() {
 	printf '%s/lessons' "$(librarian_project_dir "$key")"
 }
 
+# The hold: an approved lesson that is not yet allowed to leave the machine.
+#
+# `onlooker sync` reads lessons/approved/*.json and nothing else (see
+# apps/cli/src/lessons.ts in the onlooker repo), so holding a lesson is just
+# keeping it out of that directory. That is the whole mechanism — no field on
+# the pool entry, no change to sync, no change to the pool contract.
+#
+# Usage: librarian_lesson_held_dir <key>
+librarian_lesson_held_dir() {
+	local key="$1"
+	printf '%s/approved_held' "$(librarian_lessons_dir "$key")"
+}
+
 librarian_lesson_storage_init() {
 	local key="$1"
 	[[ -z "$key" ]] && return 1
 	local dir
 	dir=$(librarian_lessons_dir "$key")
-	mkdir -p "$dir/proposals" "$dir/approved" 2>/dev/null
+	mkdir -p "$dir/proposals" "$dir/approved" "$dir/approved_held" 2>/dev/null
 }
 
 # Write a file atomically: temp in the same directory, then mv.

@@ -61,6 +61,10 @@ librarian_lesson_promote() {
 	current_status=$(jq -r '.status // ""' "$path" 2>/dev/null)
 	visibility=$(jq -r '.visibility // ""' "$path" 2>/dev/null)
 
+	local asserted_by
+	asserted_by=$(jq -r '.asserted_by // "human"' "$path" 2>/dev/null)
+	[[ -z "$asserted_by" || "$asserted_by" == "null" ]] && asserted_by="human"
+
 	case "$current_status" in
 		approved|rejected) ;;
 		confirmed)
@@ -161,7 +165,14 @@ librarian_lesson_promote() {
 		# path before the terminal record lands writes NOTHING."
 		librarian_lesson_storage_init "$key" || return 1
 
-		pool_path="${dir}/approved/${lesson_id}.json"
+		# A model-asserted lesson is held: nobody chose to publish it, so it
+		# waits where sync cannot see it until the veto window elapses. A
+		# human-asserted one is unchanged — the attended path is not penalized.
+		if [[ "$asserted_by" == "model" ]]; then
+			pool_path="$(librarian_lesson_held_dir "$key")/${lesson_id}.json"
+		else
+			pool_path="${dir}/approved/${lesson_id}.json"
+		fi
 		if [[ ! -f "$pool_path" ]]; then
 			librarian_lesson_write_atomic "$pool_path" "$entry" || {
 				printf 'Lesson %s: cannot write the pool entry.\n' "$lesson_id" >&2
@@ -230,10 +241,34 @@ librarian_lesson_promote() {
 	local updated stamp_fail_msg
 	stamp_fail_msg=$(printf "Lesson %s: terminal record written but promoted_at could not be stamped; re-run 'lessons promote %s'." \
 		"$lesson_id" "$lesson_id")
-	updated=$(jq --arg t "$now" '.promoted_at = $t' "$path" 2>/dev/null) || {
-		printf '%s\n' "$stamp_fail_msg" >&2
-		return 1
-	}
+
+	# shippable_after goes on the ENVELOPE, never on the pool entry: the entry
+	# is ZLesson, a strictObject, and an extra key fails ingest at sync. One jq
+	# writes both stamps, so a held lesson can never end up with promoted_at and
+	# no window.
+	if [[ "$asserted_by" == "model" ]]; then
+		local window shippable
+		window=$(librarian_config_get '.librarian.lesson_auto.veto_window_hours' 2>/dev/null)
+		case "$window" in ''|null) window=72 ;; esac
+		# -v+NH is BSD (macOS), -d is GNU. The order matters: BSD date accepts
+		# -d as an entirely different flag, so GNU must be the fallback.
+		shippable=$(date -u -v"+${window}H" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null) \
+			|| shippable=$(date -u -d "+${window} hours" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)
+		if [[ -z "$shippable" ]]; then
+			printf '%s\n' "$stamp_fail_msg" >&2
+			return 1
+		fi
+		updated=$(jq --arg t "$now" --arg s "$shippable" \
+			'.promoted_at = $t | .shippable_after = $s' "$path" 2>/dev/null) || {
+			printf '%s\n' "$stamp_fail_msg" >&2
+			return 1
+		}
+	else
+		updated=$(jq --arg t "$now" '.promoted_at = $t' "$path" 2>/dev/null) || {
+			printf '%s\n' "$stamp_fail_msg" >&2
+			return 1
+		}
+	fi
 	if [[ -z "$updated" || "$updated" == "null" ]]; then
 		printf '%s\n' "$stamp_fail_msg" >&2
 		return 1
