@@ -1,5 +1,5 @@
 {
-  ".": "0.62.1",
+  ".": "0.62.2",
   "plugins/archivist": "0.7.6",
   "plugins/tribunal": "1.5.5",
   "plugins/echo": "0.9.0",
@@ -9,7 +9,7 @@
   "plugins/scribe": "0.8.6",
   "plugins/counsel": "0.8.5",
   "plugins/warden": "0.6.5",
-  "plugins/librarian": "0.18.10",
+  "plugins/librarian": "0.18.11",
   "plugins/curator": "0.5.6",
   "plugins/historian": "0.6.5",
   "plugins/assayer": "1.4.5",

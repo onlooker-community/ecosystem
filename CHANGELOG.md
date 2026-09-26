@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.62.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.62.1...ecosystem-v0.62.2) (2026-09-26)
+
+
+### Bug Fixes
+
+* **librarian:** make the scan budget configurable :stopwatch: ([#382](https://github.com/onlooker-community/ecosystem/issues/382)) ([eba9051](https://github.com/onlooker-community/ecosystem/commit/eba90514883c8d464ecec173f462a5f7b0e1ead3))
+
 ## [0.62.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.62.0...ecosystem-v0.62.1) (2026-09-25)
 
 
