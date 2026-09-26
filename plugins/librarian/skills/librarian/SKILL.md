@@ -20,6 +20,8 @@ Read the user's argument after `/librarian`:
 - `lessons`, `lessons review` → **walk the lesson queue** (see below)
 - `lessons list` / `lessons status` → print and stop (`lessons list --confirmed` lists confirmed lessons instead of pending ones)
 - `lessons judge` → **run the jury over confirmed candidates** (see below)
+- `lessons queue` → print held lessons and stop
+- `lessons veto <id> [reason]` → kill a held lesson before it ships
 
 If the user passes a free-form intent ("clear out the queue", "what's pending?"), map it to `review` or `list` as appropriate.
 

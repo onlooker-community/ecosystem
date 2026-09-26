@@ -184,3 +184,48 @@ _seed_judged() {
 	run librarian_lesson_count_held "$PROJECT_KEY"
 	[ "$output" -eq 1 ]
 }
+
+_hold_cli_setup() {
+	_hold_setup
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-config.sh"
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-emit.sh"
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-cli.sh"
+}
+
+@test "lessons queue lists a held lesson with its window" {
+	_hold_cli_setup
+	_seed_judged 01M3B87J7046SJE5BECNMP670K model
+	librarian_lesson_promote "$PROJECT_KEY" 01M3B87J7046SJE5BECNMP670K
+	run librarian_cli lessons queue "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"01M3B87J7046SJE5BECNMP670K"* ]]
+	[[ "$output" == *"shippable"* ]]
+}
+
+@test "lessons queue says so when nothing is held" {
+	_hold_cli_setup
+	run librarian_cli lessons queue "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"Nothing is waiting to leave"* ]]
+}
+
+@test "lessons veto removes a held lesson and tombstones it" {
+	_hold_cli_setup
+	_seed_judged 01M33440PGTWP4QMMG1BVA52DR model
+	librarian_lesson_promote "$PROJECT_KEY" 01M33440PGTWP4QMMG1BVA52DR
+	run librarian_cli lessons veto 01M33440PGTWP4QMMG1BVA52DR "overreaches" "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	[ ! -f "${LESSONS_DIR}/approved_held/01M33440PGTWP4QMMG1BVA52DR.json" ]
+	[ ! -f "${LESSONS_DIR}/approved/01M33440PGTWP4QMMG1BVA52DR.json" ]
+	tail -n 1 "${LESSONS_DIR}/declined.jsonl" | jq -e '.reason == "vetoed"'
+}
+
+@test "lessons veto refuses a lesson that is not held" {
+	_hold_cli_setup
+	run librarian_cli lessons veto 01M3ASXRSRGY9TXKV045NK8V7G "" "$PROJECT_REPO"
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"not held"* ]]
+}
