@@ -158,3 +158,44 @@ _seed_proposal() {
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"lesson"* ]] || return 1
 }
+
+# Helper: drop a held lesson pool entry plus its proposal envelope directly
+# (skipping the promote pipeline, which this file doesn't otherwise pull in),
+# with shippable_after far in the future so the hook's own sweep leaves it
+# held rather than shipping it out from under the test.
+_seed_held_lesson() {
+	local id="$1"
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-storage.sh"
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-storage.sh"
+	librarian_lesson_storage_init "$PROJECT_KEY"
+	jq -n --arg id "$id" \
+		'{id: $id, status: "approved", visibility: "public",
+		  artifact_id: "01KZ45MKAM734ZS7JK24D2DK0R",
+		  candidate: {claim: "c", rationale: "r"}}' \
+		> "${LIBRARIAN_DIR}/lessons/approved_held/${id}.json"
+	jq -n --arg id "$id" \
+		'{id: $id, status: "approved", shippable_after: "2099-01-01T00:00:00Z"}' \
+		> "${LIBRARIAN_DIR}/lessons/proposals/${id}.json"
+}
+
+@test "session-start surfaces the held count, with zero pending queues on either side" {
+	# The skip-when-zero gate is the whole reason the held count needs its
+	# own term in that condition: with zero pending memory proposals and
+	# zero pending lesson candidates, the default skip_inject_when_zero=true
+	# would otherwise exit before this line is ever built, and a held lesson
+	# would ship with the user never having seen the veto window.
+	_seed_held_lesson 01M3HELDSURFACE000000001
+
+	run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+	[ "$status" -eq 0 ]
+	local ctx
+	ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
+	[[ "$ctx" == *"1 lesson(s) will leave this machine unless vetoed"* ]] || return 1
+	[[ "$ctx" == *"/librarian lessons queue"* ]]
+	# Confirms the held lesson is still there — the sweep ran but its
+	# window (2099) hasn't elapsed, so this isn't accidentally passing
+	# because the lesson shipped and count_held now reads 0 some other way.
+	[ -f "${LIBRARIAN_DIR}/lessons/approved_held/01M3HELDSURFACE000000001.json" ]
+}

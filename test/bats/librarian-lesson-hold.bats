@@ -145,6 +145,25 @@ _seed_judged() {
 	[ -f "${LESSONS_DIR}/approved_held/01M3ASXRSRGY9TXKV045NK8V7G.json" ]
 }
 
+@test "a held lesson with a malformed shippable_after stays held" {
+	_hold_setup
+	_seed_judged 01M3B87J7046SJE5BECNMP670Z model
+	librarian_lesson_promote "$PROJECT_KEY" 01M3B87J7046SJE5BECNMP670Z
+	tmp=$(mktemp); jq '.shippable_after = "soon"' \
+		"${LESSONS_DIR}/proposals/01M3B87J7046SJE5BECNMP670Z.json" > "$tmp"
+	mv "$tmp" "${LESSONS_DIR}/proposals/01M3B87J7046SJE5BECNMP670Z.json"
+
+	run librarian_lesson_sweep_held "$PROJECT_KEY"
+	[ "$status" -eq 0 ]
+	# A value that isn't the exact fixed-width RFC3339 UTC shape the writer
+	# produces must fail closed exactly like a missing envelope: the lexical
+	# compare is only sound once the shape is known, so junk stays held
+	# rather than being fed into that compare either way.
+	[ -z "$output" ]
+	[ -f "${LESSONS_DIR}/approved_held/01M3B87J7046SJE5BECNMP670Z.json" ]
+	[ ! -f "${LESSONS_DIR}/approved/01M3B87J7046SJE5BECNMP670Z.json" ]
+}
+
 @test "the sweep is idempotent" {
 	_hold_setup
 	_seed_judged 01M3B93JPGAKHGEQ5KD9N836HD model

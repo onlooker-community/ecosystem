@@ -241,8 +241,14 @@ librarian_lesson_sweep_held() {
 		shippable=$(jq -r '.shippable_after // ""' \
 			"${dir}/proposals/${id}.json" 2>/dev/null) || shippable=""
 		[[ -z "$shippable" || "$shippable" == "null" ]] && continue
-		# RFC3339 UTC with a fixed width, so a lexical compare is a time
-		# compare. Both values are produced by `date -u +%Y-%m-%dT%H:%M:%SZ`.
+		# The lexical compare below is only sound once both operands are
+		# known to be the exact fixed-width RFC3339 UTC shape
+		# `librarian_lesson_promote` writes via `date -u
+		# +%Y-%m-%dT%H:%M:%SZ` ($now is built the same way, two lines up).
+		# A value that doesn't match this anchored pattern — truncated,
+		# a different offset, plain garbage — fails closed: stays held
+		# rather than feeding an unsound compare that could go either way.
+		[[ "$shippable" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] || continue
 		[[ "$now" < "$shippable" ]] && continue
 		mkdir -p "${dir}/approved" 2>/dev/null
 		mv -f "$file" "${dir}/approved/${id}.json" 2>/dev/null || continue
