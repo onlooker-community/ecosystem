@@ -33,9 +33,14 @@ _LIBRARIAN_LESSON_DEFAULT_TIMEOUT_SECONDS=20
 # anyway, so declining it is correct, not just expedient.
 _LIBRARIAN_LESSON_EXTRACT_MAX_CHARS=8192
 
-# Usage: librarian_lesson_build_prompt <artifact_json>
+# Usage: librarian_lesson_build_prompt <artifact_json> [mode]
+#
+# mode is "versioned" (default) or "unscoped", chosen by the caller from
+# librarian_lesson_pregate. The two differ in one section only: whether a claim
+# that cannot be bound to a version range is refused or parked for a human.
 librarian_lesson_build_prompt() {
 	local artifact="$1"
+	local mode="${2:-versioned}"
 	local summary detail files_list artifact_id session_id project_key created_at
 
 	summary=$(printf '%s' "$artifact" | jq -r '.summary // ""')
@@ -45,6 +50,37 @@ librarian_lesson_build_prompt() {
 	session_id=$(printf '%s' "$artifact" | jq -r '.session_id // ""')
 	project_key=$(printf '%s' "$artifact" | jq -r '.project_key // ""')
 	created_at=$(printf '%s' "$artifact" | jq -r '.created_at // ""')
+
+	local scope_rules
+	if [[ "$mode" == "unscoped" ]]; then
+		# No version token anywhere in the artifact, so asking for a range
+		# would only invite invention. The model states the claim and leaves
+		# the scope open; a human decides whether it truly holds regardless of
+		# version, and a jury checks that. no_versions is unreachable in this
+		# mode by construction — there is nothing to refuse for.
+		scope_rules='SCOPE — this artifact carries no version information.
+Do NOT invent a version range. Output scope exactly:
+  "scope": { "kind": "unscoped" }
+The scope object must contain nothing but that one key. A human will decide
+whether this lesson holds regardless of version; you are not asserting that.
+
+Refuse ONLY with "no_resolution" if the artifact records a problem but not
+what resolved it.'
+	else
+		scope_rules='SCOPE — VERSION RANGE RULES, strict, a violation is discarded:
+  "scope": { "kind": "versioned", "versions": { "<stack entry>": "<range>" } }
+- Allowed: "<6", "<=6", "=6", ">4", ">=4", or two-sided ">=4 <6".
+- FORBIDDEN: npm syntax. Never "^5.4.21", "~5", "5.x", or a bare "5.4.21".
+- FORBIDDEN: ">=0", ">=0.0", ">=0.0.0". An unbounded lower bound matches
+  everything and would never expire.
+- Every key in versions MUST also appear in stack.
+- Generalize honestly. Observing a break on vite 5.4.21 with vitest 4.1.9
+  supports {"vite": "<6", "vitest": ">=4"} only if the cause is the missing
+  API rather than that exact build.
+
+There is no version-independent option. If the claim is not bound to a
+version range, refuse with "no_versions".'
+	fi
 
 	cat <<EOF
 You are turning a session artifact into a shareable lesson, or refusing to.
@@ -71,25 +107,15 @@ Otherwise output:
   "evidence": { "resolution": "<what actually resolved it, from the artifact>" },
   "applies_to": {
     "stack": ["<tool or package name>", "<another tool or package name>"],
-    "scope": { "kind": "versioned", "versions": { "<stack entry>": "<range>" } },
+    "scope": <exactly as the SCOPE section below directs>,
     "file_patterns": [],
     "task_kinds": []
   }
 }
 
-VERSION RANGE RULES — these are strict and a violation is discarded:
-- Allowed: "<6", "<=6", "=6", ">4", ">=4", or two-sided ">=4 <6".
-- FORBIDDEN: npm syntax. Never "^5.4.21", "~5", "5.x", or a bare "5.4.21".
-- FORBIDDEN: ">=0", ">=0.0", ">=0.0.0". An unbounded lower bound matches
-  everything and would never expire.
-- Every key in versions MUST also appear in stack.
-- Generalize honestly. Observing a break on vite 5.4.21 with vitest 4.1.9
-  supports {"vite": "<6", "vitest": ">=4"} only if the cause is the missing
-  API rather than that exact build.
+${scope_rules}
 
-There is no version-independent option. If the claim is not bound to a
-version range, refuse with "no_versions".
-
+<scope-mode>${mode}</scope-mode>
 <artifact>
 id: ${artifact_id}
 summary: ${summary}
@@ -158,6 +184,7 @@ _librarian_lesson_extract_json_object() {
 librarian_lesson_call() {
 	local artifact="$1"
 	local model="${2:-}"
+	local mode="${3:-versioned}"
 
 	command -v claude >/dev/null 2>&1 || return 0
 	[[ -z "$artifact" ]] && return 0
@@ -168,7 +195,7 @@ librarian_lesson_call() {
 	# shellcheck disable=SC2064
 	trap "rm -f '$prompt_file'" EXIT
 
-	librarian_lesson_build_prompt "$artifact" > "$prompt_file" || return 0
+	librarian_lesson_build_prompt "$artifact" "$mode" > "$prompt_file" || return 0
 
 	local args=(-p --max-turns 1)
 	[[ -n "$model" ]] && args+=(--model "$model")
@@ -222,15 +249,30 @@ librarian_lesson_call() {
 
 # Transform one artifact. Always exits 0. Prints exactly one of:
 #   proposed:<ulid>       candidate written
+#   proposed:<ulid>:unscoped  a PARKED candidate, awaiting a human's scope
 #   declined:<reason>     a real verdict, recorded in declined.jsonl
-#   skipped:pregate       no version token; free to redo, nothing recorded
 #   skipped:seen          already handled
+#   skipped:unscoped_cap  cost control; nothing recorded, so it comes back
 #   unavailable           infrastructure failure; nothing recorded
 #
-# Usage: librarian_lesson_transform_one <key> <artifact_json>
+# Usage: librarian_lesson_transform_one <key> <artifact_json> [unscoped_so_far] [forced_mode]
+#
+# unscoped_so_far is how many artifacts this scan has already routed to the
+# unscoped path. The caller owns the count, so this function keeps no
+# cross-invocation state and the cap stays directly testable. Omitted, it
+# defaults to 0, so a direct caller gets one parked candidate and no surprise.
+#
+# forced_mode skips the pre-gate. Only "unscoped" is accepted, and only
+# reconsider passes it: an artifact already declined no_versions is by
+# construction one that PASSED the pre-gate — that is how it reached the model
+# to be refused — so replaying it would route versioned and be refused again.
+# The decline record is the evidence that route already failed on this artifact,
+# which is what earns skipping the gate rather than second-guessing it.
 librarian_lesson_transform_one() {
 	local key="$1"
 	local artifact="$2"
+	local unscoped_so_far="${3:-0}"
+	local forced_mode="${4:-}"
 	[[ -z "$key" || -z "$artifact" ]] && { printf 'unavailable'; return 0; }
 
 	local artifact_id session_id project_key created_at
@@ -245,15 +287,36 @@ librarian_lesson_transform_one() {
 		return 0
 	fi
 
-	if ! librarian_lesson_pregate "$artifact"; then
-		printf 'skipped:pregate'
-		return 0
+	# The pre-gate routes, it does not gate. A version-shaped token means a
+	# range is plausibly bindable, so ask for one; its absence means asking
+	# would invite invention, so park the claim for a human instead. Nothing is
+	# dropped without a record any more — see ONL-107.
+	local mode="versioned"
+	if [[ "$forced_mode" == "unscoped" ]]; then
+		mode="unscoped"
+	else
+		librarian_lesson_pregate "$artifact" || mode="unscoped"
+	fi
+
+	if [[ "$mode" == "unscoped" ]]; then
+		local unscoped_cap
+		unscoped_cap=$(librarian_config_get '.librarian.lesson_transform.unscoped_per_scan' 2>/dev/null)
+		[[ -z "$unscoped_cap" || "$unscoped_cap" == "null" ]] && unscoped_cap=3
+		if [[ "$unscoped_so_far" -ge "$unscoped_cap" ]]; then
+			# Deliberately writes NO decline record. A decline is terminal
+			# (librarian_lesson_seen reads declined.jsonl), so recording one for
+			# a cost-control skip would destroy the candidate permanently.
+			# Skipping means the artifact is reconsidered on a later scan, which
+			# is the direction this stage already treats as safe.
+			printf 'skipped:unscoped_cap'
+			return 0
+		fi
 	fi
 
 	local model raw
 	model=$(librarian_config_get '.librarian.lesson_transform.model')
 
-	raw=$(librarian_lesson_call "$artifact" "$model")
+	raw=$(librarian_lesson_call "$artifact" "$model" "$mode")
 
 	# Empty means infrastructure, not verdict. Leave the artifact untouched.
 	if [[ -z "$raw" ]]; then
@@ -312,5 +375,15 @@ librarian_lesson_transform_one() {
 		printf 'unavailable'
 		return 0
 	}
-	printf 'proposed:%s' "$id"
+
+	# The route rides on stdout because it has to: this function is called
+	# inside a command substitution, so a variable it exported could not reach
+	# the worker's loop. `proposed:*` still matches both forms, so no existing
+	# caller or matcher breaks — but anything extracting the id has to strip
+	# twice for a parked result.
+	if [[ "$mode" == "unscoped" ]]; then
+		printf 'proposed:%s:unscoped' "$id"
+	else
+		printf 'proposed:%s' "$id"
+	fi
 }

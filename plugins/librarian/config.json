@@ -22,7 +22,8 @@
     "lesson_transform": {
       "model": "claude-haiku-4-5-20251001",
       "timeout_seconds": 120,
-      "total_budget_ms": 600000
+      "total_budget_ms": 600000,
+      "unscoped_per_scan": 3
     },
     "lesson_judging": {
       "min_criterion_coverage": 0.6,
