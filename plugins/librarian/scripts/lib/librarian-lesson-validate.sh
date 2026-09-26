@@ -110,6 +110,21 @@ _LIBRARIAN_LESSON_SCOPE_VERSIONED='
 	and (.applies_to.scope.versions | length) > 0
 '
 
+# The unscoped branch. Legal ONLY while a candidate is pending.
+#
+# This is the model declining to bind a range, NOT a claim that the lesson
+# holds for every version — that assertion stays the human's, and
+# librarian_lesson_validate_confirmed refuses this kind precisely so the only
+# exit from the pending queue is a justification, which the review path forces
+# to org or public and therefore to a jury.
+#
+# `keys - ["kind"]` is the whole shape: no versions, no justification. An
+# unscoped scope that smuggled either would be asserting something.
+_LIBRARIAN_LESSON_SCOPE_UNSCOPED='
+	.applies_to.scope.kind == "unscoped"
+	and ((.applies_to.scope | keys) - ["kind"] | length) == 0
+'
+
 # Checks that only apply to a versioned candidate: the cross-field rule JSON
 # Schema cannot express, and the range pattern on each value.
 #
@@ -141,22 +156,37 @@ librarian_lesson_validate_candidate() {
 	local candidate="${1:-}"
 	[[ -z "$candidate" ]] && { printf 'schema_invalid\n' >&2; return 1; }
 
-	# versioned ONLY. This is the guarantee that stops the transform minting
-	# lessons that never expire: private lessons run no jury, so nothing
-	# downstream would catch a bad version_independent claim. A human may
-	# assert that branch — see librarian_lesson_validate_confirmed — because
-	# the constraint in the review path forces it to a judged visibility.
+	# versioned or unscoped, never version_independent. This is the guarantee
+	# that stops the transform minting lessons that never expire: private
+	# lessons run no jury, so nothing downstream would catch a bad
+	# version_independent claim. A human may assert that branch — see
+	# librarian_lesson_validate_confirmed — because the constraint in the
+	# review path forces it to a judged visibility.
+	#
+	# unscoped is the mirror image: legal here, refused there. It parks a claim
+	# for a human instead of discarding it, and cannot reach the pool.
+	local scope_clause='
+		(
+			('"${_LIBRARIAN_LESSON_SCOPE_VERSIONED}"')
+			or ('"${_LIBRARIAN_LESSON_SCOPE_UNSCOPED}"')
+		)
+	'
+
 	if ! printf '%s' "$candidate" | jq -e \
-		"${_LIBRARIAN_LESSON_STRUCTURAL} and ${_LIBRARIAN_LESSON_SCOPE_VERSIONED}" \
+		"${_LIBRARIAN_LESSON_STRUCTURAL} and ${scope_clause}" \
 		>/dev/null 2>&1; then
 		printf 'schema_invalid\n' >&2
 		return 1
 	fi
 
-	_librarian_lesson_check_versions "$candidate" || {
-		printf 'schema_invalid\n' >&2
-		return 1
-	}
+	# Range and subset rules apply only to the versioned branch — an unscoped
+	# candidate has no .versions for them to read.
+	if printf '%s' "$candidate" | jq -e '.applies_to.scope.kind == "versioned"' >/dev/null 2>&1; then
+		_librarian_lesson_check_versions "$candidate" || {
+			printf 'schema_invalid\n' >&2
+			return 1
+		}
+	fi
 
 	return 0
 }
@@ -178,6 +208,9 @@ librarian_lesson_validate_confirmed() {
 	local candidate="${1:-}"
 	[[ -z "$candidate" ]] && { printf 'schema_invalid\n' >&2; return 1; }
 
+	# versioned or version_independent. unscoped is deliberately absent: it is
+	# a pending-only shape, and permitting it here would let a parked claim
+	# reach the jury and the pool with nobody having asserted anything.
 	local scope_clause='
 		(
 			('"${_LIBRARIAN_LESSON_SCOPE_VERSIONED}"')

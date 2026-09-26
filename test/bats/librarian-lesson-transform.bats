@@ -649,3 +649,32 @@ STUB
 
   [ -n "$(ls -A "${LESSONS_DIR}/proposals" 2>/dev/null)" ]
 }
+
+# --- unscoped: the pending-only scope kind (ONL-107) ------------------------
+#
+# _candidate takes <versions_json> <stack_json> and always builds a versioned
+# scope, so these replace .applies_to.scope after the fact.
+
+@test "validate_candidate accepts an unscoped candidate" {
+  cand=$(_candidate '{"vite":"<6"}' '["vite"]' | jq -c '.applies_to.scope = {kind: "unscoped"}')
+  run librarian_lesson_validate_candidate "$cand"
+  [ "$status" -eq 0 ]
+}
+
+@test "validate_candidate rejects unscoped carrying any extra key" {
+  cand=$(_candidate '{"vite":"<6"}' '["vite"]' | jq -c '.applies_to.scope = {kind: "unscoped", versions: {vite: "<6"}}')
+  run librarian_lesson_validate_candidate "$cand"
+  [ "$status" -ne 0 ]
+}
+
+@test "validate_confirmed refuses unscoped: it may never leave the pending queue" {
+  cand=$(_candidate '{"vite":"<6"}' '["vite"]' | jq -c '.applies_to.scope = {kind: "unscoped"}')
+  run librarian_lesson_validate_confirmed "$cand"
+  [ "$status" -ne 0 ]
+}
+
+@test "validate_candidate still runs the range rules on a versioned candidate" {
+  cand=$(_candidate '{"vite":"^5.4.21"}' '["vite"]')
+  run librarian_lesson_validate_candidate "$cand"
+  [ "$status" -ne 0 ]
+}

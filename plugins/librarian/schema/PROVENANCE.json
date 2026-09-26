@@ -3,5 +3,8 @@
   "source_path": "packages/lesson-contract/schema/lesson.schema.json",
   "schema_version": 2,
   "extracted": ["properties.evidence", "properties.applies_to"],
+  "local_schemas": {
+    "lesson-applies-to-pending.local.schema.json": "Not vendored and deliberately not upstream. The pending-state mirror of librarian_lesson_validate_candidate, admitting `unscoped`. The pool contract does not have that kind and must not gain it - see ONL-107. Derived from lesson-applies-to.subschema.json by swapping the version_independent branch for unscoped; every other byte is identical, so re-derive it rather than hand-editing if the vendored file changes."
+  },
   "note": "Vendored because ajv is unavailable at runtime (ADR-005). Runtime enforcement is jq in librarian-lesson-validate.sh; these files are the source of truth those rules mirror. Upgrade to a fetch-and-compare guard once lesson schemas are published — schema.onlooker.dev serves none today."
 }

@@ -42,6 +42,21 @@ const ajv = new Ajv({ strict: false, allErrors: true, logger: false });
 const validateEvidence = ajv.compile(evidenceSchema);
 const validateAppliesTo = ajv.compile(appliesToSchema);
 
+// The pending-state counterpart, local and deliberately not upstream. jq's
+// transform-side validator is paired with THIS schema; the confirmed-side one
+// stays paired with the vendored contract above. That is what keeps agreement
+// total on both sides instead of leaving `unscoped` as a documented hole.
+const appliesToPendingSchema = JSON.parse(
+  readFileSync(join(SCHEMA_DIR, 'lesson-applies-to-pending.local.schema.json'), 'utf8'),
+);
+const validateAppliesToPending = ajv.compile(appliesToPendingSchema);
+
+// True when the local pending schema accepts the applies_to half, paired with
+// jqAccepts(candidate) the way schemaAccepts is paired with the confirmed one.
+function pendingSchemaAccepts(candidate) {
+  return validateEvidence(candidate.evidence) && validateAppliesToPending(candidate.applies_to);
+}
+
 // True when both vendored sub-schemas accept their half of the candidate.
 // Only these two fields are covered by a vendored schema — claim, rationale,
 // and the versions-keys-subset-of-stack cross-field rule are jq-only checks
@@ -179,5 +194,42 @@ describe('confirmed validator', () => {
     // The schema permits this branch; the transform's gate deliberately does not.
     assert.equal(schemaAccepts(candidate), true);
     assert.equal(jqAccepts(candidate), false);
+  });
+});
+
+describe('unscoped is a pending-only shape', () => {
+  const unscoped = () => {
+    const candidate = baseCandidate();
+    candidate.applies_to.scope = { kind: 'unscoped' };
+    return candidate;
+  };
+
+  it('the transform validator and the local pending schema agree it is accepted', () => {
+    assert.equal(jqAccepts(unscoped()), true);
+    assert.equal(pendingSchemaAccepts(unscoped()), true);
+  });
+
+  it('the vendored pool schema rejects it, so it can never be a pool shape', () => {
+    assert.equal(schemaAccepts(unscoped()), false);
+  });
+
+  it('the confirmed validator refuses it, so it can never leave the queue', () => {
+    assert.equal(jqAccepts(unscoped(), 'librarian_lesson_validate_confirmed'), false);
+  });
+
+  it('the local pending schema refuses version_independent, so a model cannot mint it', () => {
+    const candidate = baseCandidate();
+    candidate.applies_to.scope = {
+      kind: 'version_independent',
+      justification: 'holds regardless of version',
+    };
+    assert.equal(pendingSchemaAccepts(candidate), false);
+  });
+
+  it('agrees that unscoped carrying versions is rejected on both sides', () => {
+    const candidate = baseCandidate();
+    candidate.applies_to.scope = { kind: 'unscoped', versions: { vite: '<6' } };
+    assert.equal(jqAccepts(candidate), false);
+    assert.equal(pendingSchemaAccepts(candidate), false);
   });
 });
