@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.18.11](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.18.10...librarian-v0.18.11) (2026-09-26)
+
+
+### Bug Fixes
+
+* **librarian:** make the scan budget configurable :stopwatch: ([#382](https://github.com/onlooker-community/ecosystem/issues/382)) ([eba9051](https://github.com/onlooker-community/ecosystem/commit/eba90514883c8d464ecec173f462a5f7b0e1ead3))
+
 ## [0.18.10](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.18.9...librarian-v0.18.10) (2026-09-22)
 
 
