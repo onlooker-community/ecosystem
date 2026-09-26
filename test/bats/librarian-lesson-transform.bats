@@ -776,3 +776,25 @@ STUB
   run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
   [[ "$output" == proposed:*:unscoped ]]
 }
+
+@test "a forced unscoped mode parks an artifact that DOES carry a version token" {
+  _transform_setup
+  # The real population of no_versions declines. An artifact only reaches the
+  # model by passing the pre-gate, so every recorded no_versions decline
+  # contains a version-shaped token — here a bead id and a release number —
+  # and would route versioned on replay and be refused all over again. The
+  # decline record is itself the evidence that route already failed.
+  art=$(_seed "01M3B87J7046SJE5BECNMP670K" "restore the ecosystem version above 0.61.10" \
+    "A bare Release-As footer on 39b3bba hit every component. See 449.55.")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art" 0 unscoped
+  [ "$status" -eq 0 ]
+  [[ "$output" == proposed:*:unscoped ]]
+}
+
+@test "without a forced mode that same artifact still takes the versioned route" {
+  _transform_setup
+  art=$(_seed "01M3B93JPGAKHGEQ5KD9N836HD" "no-versions-stub: restore the version above 0.61.10" \
+    "A bare Release-As footer on 39b3bba hit every component.")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art" 0
+  [ "$output" = "declined:no_versions" ]
+}

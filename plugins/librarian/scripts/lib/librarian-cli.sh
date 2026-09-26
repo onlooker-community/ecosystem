@@ -743,7 +743,11 @@ librarian_cli_lessons_reconsider() {
 			librarian_lesson_append_declined "$key" "$id" no_versions
 			continue
 		fi
-		result=$(librarian_lesson_transform_one "$key" "$artifact" "$unscoped")
+		# Forced unscoped, not routed: this artifact's decline record says the
+		# versioned route already refused it, and the pre-gate would send it
+		# straight back there — every no_versions decline passed that gate by
+		# definition. See ONL-107.
+		result=$(librarian_lesson_transform_one "$key" "$artifact" "$unscoped" unscoped)
 		printf '%s: %s\n' "$id" "$result"
 		case "$result" in
 			proposed:*:unscoped) unscoped=$((unscoped + 1)) ;;

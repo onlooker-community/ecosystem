@@ -255,16 +255,24 @@ librarian_lesson_call() {
 #   skipped:unscoped_cap  cost control; nothing recorded, so it comes back
 #   unavailable           infrastructure failure; nothing recorded
 #
-# Usage: librarian_lesson_transform_one <key> <artifact_json> [unscoped_so_far]
+# Usage: librarian_lesson_transform_one <key> <artifact_json> [unscoped_so_far] [forced_mode]
 #
 # unscoped_so_far is how many artifacts this scan has already routed to the
 # unscoped path. The caller owns the count, so this function keeps no
 # cross-invocation state and the cap stays directly testable. Omitted, it
 # defaults to 0, so a direct caller gets one parked candidate and no surprise.
+#
+# forced_mode skips the pre-gate. Only "unscoped" is accepted, and only
+# reconsider passes it: an artifact already declined no_versions is by
+# construction one that PASSED the pre-gate — that is how it reached the model
+# to be refused — so replaying it would route versioned and be refused again.
+# The decline record is the evidence that route already failed on this artifact,
+# which is what earns skipping the gate rather than second-guessing it.
 librarian_lesson_transform_one() {
 	local key="$1"
 	local artifact="$2"
 	local unscoped_so_far="${3:-0}"
+	local forced_mode="${4:-}"
 	[[ -z "$key" || -z "$artifact" ]] && { printf 'unavailable'; return 0; }
 
 	local artifact_id session_id project_key created_at
@@ -284,7 +292,11 @@ librarian_lesson_transform_one() {
 	# would invite invention, so park the claim for a human instead. Nothing is
 	# dropped without a record any more — see ONL-107.
 	local mode="versioned"
-	librarian_lesson_pregate "$artifact" || mode="unscoped"
+	if [[ "$forced_mode" == "unscoped" ]]; then
+		mode="unscoped"
+	else
+		librarian_lesson_pregate "$artifact" || mode="unscoped"
+	fi
 
 	if [[ "$mode" == "unscoped" ]]; then
 		local unscoped_cap

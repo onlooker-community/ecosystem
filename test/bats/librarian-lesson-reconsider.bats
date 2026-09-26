@@ -103,9 +103,12 @@ _seed_artifact_on_disk() {
 
 @test "reconsider replays a no_versions decline into a parked proposal" {
   _reconsider_setup
+  # Carries a version-shaped token on purpose: every real no_versions decline
+  # does, because passing the pre-gate is how it reached the model at all. A
+  # token-free fixture here passes whether or not reconsider forces the route.
   _seed_artifact_on_disk "01M3B87J7046SJE5BECNMP670K" \
-    "Release-As bumps every component" \
-    "A bare footer was meant for one package and hit the whole manifest."
+    "restore the ecosystem version above 0.61.10" \
+    "A bare Release-As footer on 39b3bba hit every component. See 449.55."
   printf '%s\n' \
     '{"artifact_id":"01M3B87J7046SJE5BECNMP670K","reason":"no_versions","declined_at":"2026-09-20T17:39:59Z"}' \
     > "${LESSONS_DIR}/declined.jsonl"
