@@ -54,6 +54,16 @@ TRANSCRIPT_PATH="${SCRIBE_TRANSCRIPT:-}"
 
 ONLOOKER_DIR="${ONLOOKER_DIR:-${HOME}/.onlooker}"
 
+# The transcript check lives HERE rather than in the hook on purpose. Deciding
+# it in scribe-stop.sh would put the reporting of that decision on the Stop
+# path, which is the one thing ONL-41 is about keeping clear; down here the
+# emit costs the user nothing. The hook launches unconditionally and every
+# reason scribe declines is reported from the same side of the fork.
+if [[ -z "$TRANSCRIPT_PATH" || ! -f "$TRANSCRIPT_PATH" ]]; then
+	_scribe_emit_skip "no_transcript"
+	exit 0
+fi
+
 # Keyed by session, not by project: two sessions distilling at once write
 # different files and must not block each other, while two Stops of the SAME
 # session are the collision this exists to prevent.
@@ -66,6 +76,7 @@ mkdir -p "$(dirname "$LOCK_FILE")" 2>/dev/null || true
 # matches the timeout, which is the pairing portable-lock warns about — a stale
 # window wider than the timeout can never be reached by the acquire loop.
 if ! lock_acquire "$LOCK_FILE" 0 0; then
+	_scribe_emit_skip "already_running"
 	exit 0
 fi
 trap 'lock_release "$LOCK_FILE"' EXIT
@@ -76,8 +87,10 @@ _rc=0
 output_path=$(scribe_distill "$SESSION_ID" "$CWD" "$TRANSCRIPT_PATH") || _rc=$?
 
 if [[ $_rc -ne 0 ]]; then
-	# rc=2 means below min_turns — a silent skip, not an error.
-	if [[ $_rc -ne 2 ]]; then
+	# rc=2 (below min_turns) and rc=3 (too few new turns since the last pass)
+	# are deliberate skips, not errors. Neither is silent any more — each
+	# reports itself as scribe.distill.skipped before returning.
+	if [[ $_rc -ne 2 && $_rc -ne 3 ]]; then
 		printf '%s scribe: distillation failed for session %s (rc=%s)\n' \
 			"$(date '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || printf 'unknown')" \
 			"$SESSION_ID" "$_rc" >&2
