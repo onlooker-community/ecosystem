@@ -6,9 +6,15 @@
 # tradeoffs, and constraints, then writes a Markdown intent document to
 # ~/.onlooker/scribe/<project_key>/<date>-<session>.md.
 #
-# Skip conditions (all silent):
+# Skip conditions, all decided in run-distill.sh and all reported as
+# scribe.distill.skipped with a reason:
 #   - no transcript_path in hook input, or file is unreadable
 #   - session has fewer turns than scribe.capture.min_turns
+#   - too few new turns since the last pass covered this transcript
+#   - a pass for this session is already running
+#
+# The hook itself skips silently on one thing only: a missing session id,
+# which leaves nothing to attribute an event to.
 #
 # Hook contract:
 #   - Always exits 0. Never blocks Stop.
@@ -57,10 +63,10 @@ _done() { hook_health_exit 0; }
 
 scribe_config_load "$CWD"
 
-if [[ -z "$TRANSCRIPT_PATH" || ! -f "$TRANSCRIPT_PATH" ]]; then
-	_done
-fi
-
+# No transcript check here, deliberately. run-distill.sh makes that call, so
+# that reporting it costs the Stop path nothing — see the note there. The hook
+# launches unconditionally and decides nothing beyond having a session id.
+#
 # Distillation is launched, not awaited. It runs a `claude -p` pass over the
 # whole transcript under a 60s timeout, and calling it inline is what made this
 # hook contradict the contract at the top of this file: measured on 2026-09-26,

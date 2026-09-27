@@ -8,6 +8,7 @@
     },
     "capture": {
       "min_turns": 3,
+      "redistill_min_new_turns": 5,
       "prompt_max_chars": 1000,
       "transcript_chars_max": 40000
     },
