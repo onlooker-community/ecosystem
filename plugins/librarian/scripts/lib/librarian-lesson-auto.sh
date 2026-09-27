@@ -185,6 +185,21 @@ librarian_lesson_auto_judge_one() {
 	adv=$(_librarian_lesson_auto_judge tribunal-judge-adversarial "$prompt" "$model")
 	[[ -z "$std" || -z "$adv" ]] && { printf 'unavailable'; return 0; }
 
+	# Stamp judge_type from the dispatched agent name rather than trusting the
+	# model's self-report inside the verdict JSON. We already know which agent
+	# we called; librarian_lesson_judge checks the panel's judge_type multiset
+	# against the rubric's judge_types EXACTLY, so one slip in the model's own
+	# output (echoing the "standard|adversarial" literal from the prompt
+	# template, or both agents answering "standard") makes the panel
+	# permanently UNJUDGED — the candidate stays confirmed and both agent
+	# calls are re-billed every later scan, forever, with no backoff. Only
+	# this one field is overwritten; every other field in each verdict passes
+	# through verbatim.
+	std=$(printf '%s' "$std" | jq -c '.judge_type = "standard"' 2>/dev/null) \
+		|| { printf 'unavailable'; return 0; }
+	adv=$(printf '%s' "$adv" | jq -c '.judge_type = "adversarial"' 2>/dev/null) \
+		|| { printf 'unavailable'; return 0; }
+
 	verdicts=$(jq -cn --argjson a "$std" --argjson b "$adv" '[$a, $b]' 2>/dev/null) \
 		|| { printf 'unavailable'; return 0; }
 

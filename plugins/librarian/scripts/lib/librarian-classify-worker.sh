@@ -102,7 +102,7 @@ source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-auto.sh"
 # indistinguishable from "there was nothing to classify". One probe per lib
 # family turns that into a single explicit line in the log instead.
 for _fn in librarian_config_load librarian_storage_init librarian_emit \
-	librarian_classifier_call; do
+	librarian_classifier_call librarian_lesson_auto_stage; do
 	if ! declare -F "$_fn" >/dev/null 2>&1; then
 		printf 'librarian-classify-worker: %s undefined after sourcing from %s\n' \
 			"$_fn" "$PLUGIN_ROOT" >&2

@@ -199,3 +199,56 @@ _seed_held_lesson() {
 	# because the lesson shipped and count_held now reads 0 some other way.
 	[ -f "${LIBRARIAN_DIR}/lessons/approved_held/01M3HELDSURFACE000000001.json" ]
 }
+
+# Helper: same shape as _seed_held_lesson, but with an already-elapsed window
+# so this hook's own sweep ships it into approved/ during the run.
+_seed_shippable_lesson() {
+	local id="$1"
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-storage.sh"
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-storage.sh"
+	librarian_lesson_storage_init "$PROJECT_KEY"
+	jq -n --arg id "$id" \
+		'{id: $id, status: "approved", visibility: "public",
+		  artifact_id: "01KZ45MKAM734ZS7JK24D2DK0R",
+		  candidate: {claim: "c", rationale: "r"}}' \
+		> "${LIBRARIAN_DIR}/lessons/approved_held/${id}.json"
+	jq -n --arg id "$id" \
+		'{id: $id, status: "approved", shippable_after: "2020-01-01T00:00:00Z"}' \
+		> "${LIBRARIAN_DIR}/lessons/proposals/${id}.json"
+}
+
+@test "session-start surfaces what the sweep just shipped, with zero pending queues on either side" {
+	# Mirrors the held-count test above, but for the moment that count exists
+	# to prevent going silent about: the window has already elapsed, so this
+	# hook's own sweep ships the lesson during the run, and HELD reads 0
+	# afterward same as an empty queue would. Without a separate swept-count
+	# term in the skip-when-zero gate, this is exactly the scenario the
+	# review flagged as producing no line at all.
+	_seed_shippable_lesson 01M3SWEPTSURFACE00000001
+
+	run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+	[ "$status" -eq 0 ]
+	local ctx
+	ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
+	[[ "$ctx" == *"1 lesson(s) left this machine this session"* ]] || return 1
+	[[ "$ctx" == *"01M3SWEPTSURFACE00000001"* ]] || return 1
+	# The held line must NOT also fire for the same lesson — it shipped, it
+	# is no longer held.
+	[[ "$ctx" != *"will leave this machine unless vetoed"* ]]
+	[ -f "${LIBRARIAN_DIR}/lessons/approved/01M3SWEPTSURFACE00000001.json" ]
+	[ ! -f "${LIBRARIAN_DIR}/lessons/approved_held/01M3SWEPTSURFACE00000001.json" ]
+}
+
+@test "session-start surfaces the swept count alongside a pending held lesson" {
+	_seed_shippable_lesson 01M3SWEPTSURFACE00000002
+	_seed_held_lesson 01M3HELDSURFACE000000003
+
+	run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+	[ "$status" -eq 0 ]
+	local ctx
+	ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
+	[[ "$ctx" == *"1 lesson(s) left this machine this session"* ]] || return 1
+	[[ "$ctx" == *"1 lesson(s) will leave this machine unless vetoed"* ]] || return 1
+}

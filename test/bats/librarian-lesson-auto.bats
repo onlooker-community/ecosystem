@@ -271,6 +271,39 @@ STUB
 	[ ! -f "${LESSONS_DIR}/approved_held/${id}.json" ]
 }
 
+# Both agents answer "standard" in their own JSON (e.g. one echoed the literal
+# "standard|adversarial" template from the prompt, or just got it wrong) — the
+# self-reported judge_type is not what librarian_lesson_judge checks against
+# the rubric's judge_types. auto_judge_one stamps judge_type from the agent it
+# actually dispatched, so the panel is still a proper {standard, adversarial}
+# multiset and the candidate is judged rather than falling into
+# skipped:unjudged forever.
+_jury_stub_self_reports_standard_for_both() {
+	STUB_BIN="${BATS_TEST_TMPDIR}/bin"
+	mkdir -p "$STUB_BIN"
+	cat > "${STUB_BIN}/claude" <<'STUB'
+#!/usr/bin/env bash
+cat >/dev/null
+printf '%s' '{"score":0.93,"passed":true,"judge_type":"standard","feedback_summary":"ok","criterion_scores":{"grounding":0.9,"scope_accuracy":0.9,"generality":0.85,"disclosure":0.97}}'
+STUB
+	chmod +x "${STUB_BIN}/claude"
+	export PATH="${STUB_BIN}:${PATH}"
+}
+
+@test "auto_judge_one still judges a panel when both agents self-report the same judge_type" {
+	_auto_setup; _jury_stub_self_reports_standard_for_both
+	id=$(_seed_pending_unscoped)
+	librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	run librarian_lesson_auto_judge_one "$PROJECT_KEY" "$id"
+	[ "$status" -eq 0 ]
+	[ "$output" = "judged:${id}" ]
+	jq -e '.status == "approved"' "${LESSONS_DIR}/proposals/${id}.json"
+	# The stamped panel carries the dispatched agents' identities, not the
+	# self-reported (and here, wrong) "standard"/"standard".
+	jq -e '[.verdict.judges[].judge_type] | sort == ["adversarial","standard"]' \
+		"${LESSONS_DIR}/proposals/${id}.json"
+}
+
 @test "a judge returning nothing leaves the candidate confirmed for a retry" {
 	_auto_setup; _jury_stub
 	id=$(_seed_pending_unscoped)
