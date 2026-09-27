@@ -41,13 +41,30 @@ try:
                 rec = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            role = rec.get("role") or rec.get("type")
+            # Claude Code writes {"type":"user","message":{"role":...,
+            # "content":...}} — the role is on `type`, the content is NESTED
+            # under `message`. Reading a top-level `content` (which is what
+            # this did) found nothing on every real transcript: 0 turns, 0
+            # chars, and so every session tripped the min_chars gate and
+            # reported too_short. 1730 of them (ONL-121).
+            #
+            # The flat {"role":..., "content":...} form is still accepted so a
+            # non-Claude-Code adapter emitting it keeps working; `message`
+            # simply wins when present.
+            msg = rec.get("message")
+            msg = msg if isinstance(msg, dict) else None
+
+            role = (msg or {}).get("role") or rec.get("type") or rec.get("role")
             if role not in ("user", "assistant"):
                 continue
-            raw = rec.get("content", "")
+            raw = msg.get("content", "") if msg is not None else rec.get("content", "")
             if isinstance(raw, list):
                 # Anthropic content-blocks form. Concatenate the text-typed
-                # blocks; drop tool_use / tool_result entries here.
+                # blocks only; tool_use, tool_result and thinking are dropped
+                # here. thinking matters as much as the tool blocks: it is
+                # internal reasoning, often the largest part of an assistant
+                # turn, and indexing it would both bloat the store and surface
+                # working-out that was never addressed to anyone.
                 parts = []
                 for block in raw:
                     if not isinstance(block, dict):
