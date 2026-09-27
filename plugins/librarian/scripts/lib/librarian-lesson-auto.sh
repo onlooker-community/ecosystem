@@ -110,3 +110,126 @@ librarian_lesson_auto_confirm_one() {
 		>/dev/null 2>&1 || { printf 'unavailable'; return 0; }
 	printf 'confirmed:%s' "$lesson_id"
 }
+
+# Dispatch one judge by NAME and print its raw verdict JSON.
+#
+# `claude -p --agent <name>` resolves a plugin-provided agent, which is what
+# lets an unattended jury reuse tribunal's published definitions instead of
+# inlining copies of their prompts. ADR-002 forbids sourcing anything under
+# plugins/tribunal/ — dispatching by name is explicitly allowed, and this is
+# the bash equivalent of the Task-tool dispatch the skill walk performs.
+#
+# Usage: _librarian_lesson_auto_judge <agent_name> <prompt> [model]
+_librarian_lesson_auto_judge() {
+	local agent="$1" prompt="$2" model="${3:-}"
+	command -v claude >/dev/null 2>&1 || return 0
+
+	local args=(-p --max-turns 1 --agent "$agent")
+	[[ -n "$model" ]] && args+=(--model "$model")
+
+	local timeout_seconds response=""
+	timeout_seconds=$(librarian_config_get '.librarian.lesson_transform.timeout_seconds' 2>/dev/null)
+	case "$timeout_seconds" in ''|null) timeout_seconds=120 ;; esac
+
+	if command -v timeout >/dev/null 2>&1; then
+		response=$(printf '%s' "$prompt" | timeout "$timeout_seconds" claude "${args[@]}" 2>/dev/null) || response=""
+	elif command -v gtimeout >/dev/null 2>&1; then
+		response=$(printf '%s' "$prompt" | gtimeout "$timeout_seconds" claude "${args[@]}" 2>/dev/null) || response=""
+	else
+		response=$(printf '%s' "$prompt" | claude "${args[@]}" 2>/dev/null) || response=""
+	fi
+
+	# Reuse the transform's prose-tolerant extractor: a judge that wrapped its
+	# JSON in a sentence is a formatting slip, not a refusal.
+	_librarian_lesson_extract_json_object "$response" 2>/dev/null
+}
+
+# Judge one confirmed candidate with both judges and record the verdict.
+# Prints judged:<id>, skipped:unjudged, or unavailable.
+#
+# Usage: librarian_lesson_auto_judge_one <key> <lesson_id>
+librarian_lesson_auto_judge_one() {
+	local key="$1" lesson_id="$2"
+	[[ -z "$key" || -z "$lesson_id" ]] && { printf 'unavailable'; return 0; }
+
+	local path candidate visibility rubric_id rubric
+	path="$(librarian_lessons_dir "$key")/proposals/${lesson_id}.json"
+	[[ -f "$path" ]] || { printf 'unavailable'; return 0; }
+	candidate=$(jq -c '.candidate' "$path" 2>/dev/null) || { printf 'unavailable'; return 0; }
+	visibility=$(jq -r '.visibility // ""' "$path" 2>/dev/null)
+	rubric_id=$(librarian_lesson_rubric_id_for_visibility "$visibility" model) || { printf 'unavailable'; return 0; }
+	[[ -z "$rubric_id" ]] && { printf 'unavailable'; return 0; }
+	rubric=$(librarian_lesson_rubric_get "$rubric_id") || { printf 'unavailable'; return 0; }
+
+	# Every floored criterion must be scored by SOME judge or the panel is
+	# UNJUDGED, so the prompt names them all and says why omitting one is worse
+	# than scoring it badly.
+	local criteria prompt model
+	criteria=$(printf '%s' "$rubric" | jq -r \
+		'[.criteria[] | "- \(.name) (weight \(.weight), min_pass \(.min_pass))"] | join("\n")')
+	model=$(librarian_config_get '.librarian.lesson_auto.judge_model' 2>/dev/null)
+	case "$model" in ''|null) model="claude-haiku-4-5-20251001" ;; esac
+
+	prompt=$(printf '%s\n%s\n\n%s\n%s\n\n%s\n%s\n\n%s\n%s\n' \
+		'Score this lesson candidate for promotion to the shared lesson pool.' \
+		'A MODEL asserted that this lesson holds regardless of version; judge that assertion.' \
+		'CANDIDATE' \
+		"$(printf '%s' "$candidate" | jq -r '"claim: \(.claim)\nrationale: \(.rationale)\nresolution: \(.evidence.resolution)\napplies_to: \(.applies_to | tojson)"')" \
+		'RUBRIC — you MUST return a score in [0,1] for EVERY criterion listed. Omitting one makes the whole panel UNJUDGED and the candidate is re-judged at full cost, so an omission prevents a verdict rather than softening it. If you cannot assess one, say so and score your honest worst case.' \
+		"$criteria" \
+		'Return EXACTLY one JSON object as your final message, no prose around it:' \
+		'{"score": <0..1>, "passed": <true|false>, "judge_type": "standard|adversarial", "feedback_summary": "<why>", "criterion_scores": {<each criterion>: <0..1>}}')
+
+	local std adv verdicts
+	std=$(_librarian_lesson_auto_judge tribunal-judge-standard "$prompt" "$model")
+	adv=$(_librarian_lesson_auto_judge tribunal-judge-adversarial "$prompt" "$model")
+	[[ -z "$std" || -z "$adv" ]] && { printf 'unavailable'; return 0; }
+
+	verdicts=$(jq -cn --argjson a "$std" --argjson b "$adv" '[$a, $b]' 2>/dev/null) \
+		|| { printf 'unavailable'; return 0; }
+
+	librarian_lesson_judge "$key" "$lesson_id" "$verdicts" >/dev/null 2>&1
+	local rc=$?
+	case "$rc" in
+		0) librarian_lesson_promote "$key" "$lesson_id" >/dev/null 2>&1 || true
+		   printf 'judged:%s' "$lesson_id" ;;
+		2) printf 'skipped:unjudged' ;;
+		*) printf 'unavailable' ;;
+	esac
+}
+
+# Auto-confirm every parked candidate, then jury as many as the cap allows.
+# A no-op unless lesson_auto.enabled is true.
+#
+# Usage: librarian_lesson_auto_stage <key>
+librarian_lesson_auto_stage() {
+	local key="$1"
+	[[ -z "$key" ]] && return 0
+
+	local enabled
+	enabled=$(librarian_config_get '.librarian.lesson_auto.enabled' 2>/dev/null)
+	[[ "$enabled" != "true" ]] && return 0
+
+	local cap
+	cap=$(librarian_config_get '.librarian.lesson_auto.max_juries_per_scan' 2>/dev/null)
+	case "$cap" in ''|null) cap=1 ;; esac
+
+	local id
+	while IFS= read -r id; do
+		[[ -z "$id" ]] && continue
+		librarian_lesson_auto_confirm_one "$key" "$id" >/dev/null
+	done < <(librarian_lesson_list_pending "$key" | jq -r '.[].id' 2>/dev/null)
+
+	# The jury is the expensive step, so it is capped. An over-cap candidate
+	# stays `confirmed` and is judged on the next scan — never declined, since
+	# a decline is terminal.
+	local juried=0
+	while IFS= read -r id; do
+		[[ -z "$id" ]] && continue
+		[[ "$juried" -ge "$cap" ]] && break
+		librarian_lesson_auto_judge_one "$key" "$id" >/dev/null
+		juried=$((juried + 1))
+	done < <(librarian_lesson_list_by_status "$key" confirmed | jq -r '.[].id' 2>/dev/null)
+
+	return 0
+}

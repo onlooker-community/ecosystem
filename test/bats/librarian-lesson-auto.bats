@@ -33,7 +33,8 @@ _auto_setup() {
 	for lib in librarian-project-key librarian-ulid librarian-storage \
 		librarian-lesson-storage librarian-lesson-validate librarian-config \
 		librarian-author-key librarian-lesson-review librarian-lesson-rubric \
-		librarian-lesson-judge librarian-lesson-transform librarian-lesson-auto; do
+		librarian-lesson-judge librarian-lesson-promote librarian-lesson-transform \
+		librarian-lesson-auto; do
 		# shellcheck disable=SC1091
 		source "${PLUGIN_ROOT}/scripts/lib/${lib}.sh"
 	done
@@ -70,6 +71,13 @@ _seed_pending_unscoped_marked() {
 	local candidate
 	candidate=$(_candidate "$(_unscoped)" | jq -c --arg m "$marker" '.claim = .claim + " " + $m')
 	librarian_lesson_write_proposal "$PROJECT_KEY" "$candidate" "01M3B87J7046SJE5BECNMP670K"
+}
+
+# _seed_pending_unscoped with a different artifact id, so two proposals can
+# coexist without colliding on the same source artifact.
+_seed_pending_unscoped_other() {
+	librarian_lesson_write_proposal "$PROJECT_KEY" \
+		"$(_candidate "$(_unscoped)")" "01M3B87J7046SJE5BECNMP671Z"
 }
 
 @test "confirm records asserted_by human by default" {
@@ -206,4 +214,107 @@ STUB
 	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
 	[ "$output" = "skipped:not_parked" ]
 	jq -e '.status == "pending"' "${LESSONS_DIR}/proposals/${id}.json"
+}
+
+# ----------------------------------------------------------------------------
+# Task 6: auto-jury — dispatch the named judges from bash, and the stage
+# driver that runs unattended from the worker.
+# ----------------------------------------------------------------------------
+
+# Extend the stub to answer as each judge. `--agent` is how the judge is
+# selected, and the stub sees it in its own argv, not in the prompt — so it
+# must branch on "$@".
+_jury_stub() {
+	STUB_BIN="${BATS_TEST_TMPDIR}/bin"
+	mkdir -p "$STUB_BIN"
+	cat > "${STUB_BIN}/claude" <<'STUB'
+#!/usr/bin/env bash
+agent=""
+for ((i = 1; i <= $#; i++)); do
+  if [[ "${!i}" == "--agent" ]]; then j=$((i + 1)); agent="${!j}"; fi
+done
+prompt=$(cat)
+pass='{"score":0.93,"passed":true,"judge_type":"TYPE","feedback_summary":"ok","criterion_scores":{"grounding":0.9,"scope_accuracy":0.9,"generality":0.85,"disclosure":0.97}}'
+fail='{"score":0.6,"passed":false,"judge_type":"TYPE","feedback_summary":"no","criterion_scores":{"grounding":0.5,"scope_accuracy":0.4,"generality":0.5,"disclosure":0.97}}'
+case "$agent" in
+  tribunal-judge-standard)    printf '%s' "${pass//TYPE/standard}" ;;
+  tribunal-judge-adversarial)
+    if [[ "$prompt" == *"adversary-fails"* ]]; then printf '%s' "${fail//TYPE/adversarial}"
+    else printf '%s' "${pass//TYPE/adversarial}"; fi ;;
+  *) printf '%s' 'The failure is a property of the exec boundary, not of any release.' ;;
+esac
+STUB
+	chmod +x "${STUB_BIN}/claude"
+	export PATH="${STUB_BIN}:${PATH}"
+}
+
+@test "auto_judge_one promotes a candidate both judges pass" {
+	_auto_setup; _jury_stub
+	id=$(_seed_pending_unscoped)
+	librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	run librarian_lesson_auto_judge_one "$PROJECT_KEY" "$id"
+	[ "$status" -eq 0 ]
+	[ "$output" = "judged:${id}" ]
+	jq -e '.status == "approved"' "${LESSONS_DIR}/proposals/${id}.json"
+	# Model-asserted, so it is held rather than shipped (Task 1).
+	[ -f "${LESSONS_DIR}/approved_held/${id}.json" ]
+	[ ! -f "${LESSONS_DIR}/approved/${id}.json" ]
+}
+
+@test "auto_judge_one records a rejection when the adversary fails it" {
+	_auto_setup; _jury_stub
+	id=$(_seed_pending_unscoped_marked "adversary-fails")
+	librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	run librarian_lesson_auto_judge_one "$PROJECT_KEY" "$id"
+	[ "$output" = "judged:${id}" ]
+	jq -e '.status == "rejected"' "${LESSONS_DIR}/proposals/${id}.json"
+	[ ! -f "${LESSONS_DIR}/approved_held/${id}.json" ]
+}
+
+@test "a judge returning nothing leaves the candidate confirmed for a retry" {
+	_auto_setup; _jury_stub
+	id=$(_seed_pending_unscoped)
+	librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	rm -f "${STUB_BIN}/claude"
+	run librarian_lesson_auto_judge_one "$PROJECT_KEY" "$id"
+	[ "$output" = "unavailable" ]
+	jq -e '.status == "confirmed"' "${LESSONS_DIR}/proposals/${id}.json"
+	[ ! -f "${LESSONS_DIR}/declined.jsonl" ]
+}
+
+@test "the worker runs no auto stage when lesson_auto is disabled" {
+	_auto_setup; _jury_stub
+	mkdir -p "${PROJECT_REPO}/.claude"
+	printf '%s\n' '{"librarian":{"lesson_auto":{"enabled":false}}}' \
+		> "${PROJECT_REPO}/.claude/settings.json"
+	librarian_config_load "$PROJECT_REPO"
+	id=$(_seed_pending_unscoped)
+	run librarian_lesson_auto_stage "$PROJECT_KEY"
+	[ "$status" -eq 0 ]
+	jq -e '.status == "pending"' "${LESSONS_DIR}/proposals/${id}.json"
+}
+
+# The cap tests exactly what the brief's own assertions would not have caught:
+# `-le 2` / `-ge 1` pass even if the cap did nothing at all. With
+# max_juries_per_scan=1 and two parked candidates, auto_stage auto-confirms
+# BOTH (confirm is not capped — only the jury is), then juries exactly ONE.
+@test "the jury cap stops after N candidates and declines nothing" {
+	_auto_setup; _jury_stub
+	mkdir -p "${PROJECT_REPO}/.claude"
+	printf '%s\n' '{"librarian":{"lesson_auto":{"enabled":true,"max_juries_per_scan":1}}}' \
+		> "${PROJECT_REPO}/.claude/settings.json"
+	librarian_config_load "$PROJECT_REPO"
+	a=$(_seed_pending_unscoped); b=$(_seed_pending_unscoped_other)
+	run librarian_lesson_auto_stage "$PROJECT_KEY"
+	[ "$status" -eq 0 ]
+	# Exactly one proposal reached a jury and got a terminal verdict.
+	[ "$(jq -r -s '[.[] | select(.status == "approved" or .status == "rejected")] | length' \
+		"${LESSONS_DIR}/proposals/"*.json)" -eq 1 ]
+	# Exactly one is still confirmed, capped out for the next scan.
+	[ "$(jq -r -s '[.[] | select(.status == "confirmed")] | length' \
+		"${LESSONS_DIR}/proposals/"*.json)" -eq 1 ]
+	# Cost control must never write a decline — a decline is terminal
+	# (librarian_lesson_seen reads that file), so capping the jury must not
+	# look like judging the candidate that never reached one.
+	[ ! -f "${LESSONS_DIR}/declined.jsonl" ]
 }
