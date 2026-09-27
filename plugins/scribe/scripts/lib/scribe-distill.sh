@@ -133,7 +133,7 @@ _scribe_format_document() {
 				r=$(printf '%s' "$decisions_json" | jq -r ".[$i].reason // \"\"" 2>/dev/null) || r=""
 				alts=$(printf '%s' "$decisions_json" | jq -r ".[$i].alternatives // [] | .[]" 2>/dev/null) || alts=""
 				[[ -z "$d" ]] && continue
-				printf '- **%s** — %s\n' "$d" "$r"
+				printf -- '- **%s** — %s\n' "$d" "$r"
 				if [[ -n "$alts" ]]; then
 					printf '  - *Considered:* '
 					local first=1
@@ -156,7 +156,7 @@ _scribe_format_document() {
 		tradeoff_count=$(printf '%s' "$tradeoffs_json" | jq 'length' 2>/dev/null) || tradeoff_count=0
 		if [[ "$tradeoff_count" -gt 0 ]]; then
 			printf '%s' "$tradeoffs_json" | jq -r '.[]' 2>/dev/null | while IFS= read -r item; do
-				[[ -n "$item" ]] && printf '- %s\n' "$item"
+				[[ -n "$item" ]] && printf -- '- %s\n' "$item"
 			done
 			printf '\n'
 		else
@@ -168,7 +168,7 @@ _scribe_format_document() {
 		constraint_count=$(printf '%s' "$constraints_json" | jq 'length' 2>/dev/null) || constraint_count=0
 		if [[ "$constraint_count" -gt 0 ]]; then
 			printf '%s' "$constraints_json" | jq -r '.[]' 2>/dev/null | while IFS= read -r item; do
-				[[ -n "$item" ]] && printf '- %s\n' "$item"
+				[[ -n "$item" ]] && printf -- '- %s\n' "$item"
 			done
 			printf '\n'
 		else
@@ -180,7 +180,7 @@ _scribe_format_document() {
 		oos_count=$(printf '%s' "$out_of_scope_json" | jq 'length' 2>/dev/null) || oos_count=0
 		if [[ "$oos_count" -gt 0 ]]; then
 			printf '%s' "$out_of_scope_json" | jq -r '.[]' 2>/dev/null | while IFS= read -r item; do
-				[[ -n "$item" ]] && printf '- %s\n' "$item"
+				[[ -n "$item" ]] && printf -- '- %s\n' "$item"
 			done
 			printf '\n'
 		else

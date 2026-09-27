@@ -323,3 +323,89 @@ STUB
 	sleep 2
 	[ "$(_count_events scribe.distill.skipped)" -eq 0 ]
 }
+
+# ---------------------------------------------------------------------------
+# The document keeps its content
+# ---------------------------------------------------------------------------
+
+# Every bullet in the intent document is written with a format string that
+# STARTS WITH A DASH, which printf parses as options. So `printf '- %s\n'` has
+# never emitted anything: the Tradeoffs, Constraints and Out of Scope sections
+# came out empty however much the model found, Decisions kept only its indented
+# "Considered" sub-lines (those start with spaces), and every pass wrote
+# "printf: --: invalid option" to a stderr nobody read.
+#
+# Found by reading ~/.onlooker/scribe/distill.log, which is only worth reading
+# because #391 started writing it. Confirmed against a real artifact: its JSON
+# held 5 decisions, 3 tradeoffs and 5 constraints; its markdown rendered none of
+# them. The JSON sibling was always fine, so nothing upstream noticed.
+@test "the document renders the bullets its JSON carries" {
+	cat >"${STUB_BIN}/claude" <<'STUB'
+#!/usr/bin/env bash
+printf 'x\n' >> "CLAUDE_CALLED_PATH"
+printf '%s' '{"summary":"s","problem":"p",
+ "decisions":[{"decision":"detach the pass","reason":"Stop must not block","alternatives":["inline"]}],
+ "tradeoffs":["freshness for cost"],
+ "constraints":["no new SessionEnd hook"],
+ "out_of_scope":["the historian join"]}'
+STUB
+	sed -i.bak "s|CLAUDE_CALLED_PATH|${CLAUDE_CALLED}|" "${STUB_BIN}/claude"
+	chmod +x "${STUB_BIN}/claude"
+
+	_run_hook sess-doc >/dev/null
+	_wait_for_event "scribe.distill.complete" 1 || {
+		echo "no document was produced"
+		return 1
+	}
+
+	local doc
+	doc=$(find "${ONLOOKER_DIR}/scribe" -name '*-sess-doc.md' -o -name '*.md' \
+		-path '*scribe*' 2>/dev/null | grep -v sessions | head -1)
+	[ -n "$doc" ] || {
+		echo "no markdown artifact on disk"
+		return 1
+	}
+
+	grep -q 'detach the pass' "$doc" || {
+		echo "the decision bullet is missing:"
+		sed -n '/## Decisions/,/## Tradeoffs/p' "$doc"
+		return 1
+	}
+	grep -q 'freshness for cost' "$doc" || {
+		echo "the tradeoff bullet is missing"
+		return 1
+	}
+	grep -q 'no new SessionEnd hook' "$doc" || {
+		echo "the constraint bullet is missing"
+		return 1
+	}
+	grep -q 'the historian join' "$doc"
+}
+
+# The same dash-as-option bug, one line further down. Cheap to assert and it is
+# the separator a reader looks for between the body and the provenance footer.
+@test "the document keeps its closing rule" {
+	_run_hook sess-rule >/dev/null
+	_wait_for_event "scribe.distill.complete" 1 || return 1
+
+	local doc
+	doc=$(find "${ONLOOKER_DIR}/scribe" -name '*.md' 2>/dev/null | grep -v sessions | head -1)
+	[ -n "$doc" ] || return 1
+	grep -qx -- '---' "$doc"
+}
+
+# The pass must stop writing printf usage errors into the log that #391 made the
+# only place its diagnostics survive. A successful run should leave it clean.
+@test "a successful pass leaves no printf usage errors in the distill log" {
+	_run_hook sess-clean >/dev/null
+	_wait_for_event "scribe.distill.complete" 1 || return 1
+
+	local log="${ONLOOKER_DIR}/scribe/distill.log"
+	if [[ -f "$log" ]]; then
+		! grep -q 'invalid option' "$log" || {
+			echo "printf usage errors still in the log:"
+			grep 'invalid option' "$log" | head -3
+			return 1
+		}
+	fi
+}
