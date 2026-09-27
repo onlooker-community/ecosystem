@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.8](https://github.com/onlooker-community/ecosystem/compare/scribe-v0.8.7...scribe-v0.8.8) (2026-09-27)
+
+
+### Bug Fixes
+
+* **scribe:** distill on new turns, not on every Stop :recycle: ([#393](https://github.com/onlooker-community/ecosystem/issues/393)) ([d2eef66](https://github.com/onlooker-community/ecosystem/commit/d2eef668aa3d050272ce402d7494aece4d9a3b2f))
+
 ## [0.8.7](https://github.com/onlooker-community/ecosystem/compare/scribe-v0.8.6...scribe-v0.8.7) (2026-09-27)
 
 
