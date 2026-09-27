@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.64.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.64.0...ecosystem-v0.64.1) (2026-09-27)
+
+
+### Bug Fixes
+
+* **ecosystem:** span beside sum, and refuse mixed-version data :ruler: ([#389](https://github.com/onlooker-community/ecosystem/issues/389)) ([89ed792](https://github.com/onlooker-community/ecosystem/commit/89ed792c8e575424d2780f6bf563629b9f909a54))
+
 ## [0.64.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.63.0...ecosystem-v0.64.0) (2026-09-27)
 
 
