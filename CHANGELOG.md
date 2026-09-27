@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.64.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.63.0...ecosystem-v0.64.0) (2026-09-27)
+
+
+### Features
+
+* **librarian:** run the lesson pipeline with nobody watching :robot: ([#387](https://github.com/onlooker-community/ecosystem/issues/387)) ([798e6b3](https://github.com/onlooker-community/ecosystem/commit/798e6b336239d797f01f20f8ddffb29f55b40625))
+
 ## [0.63.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.62.2...ecosystem-v0.63.0) (2026-09-26)
 
 
