@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.0](https://github.com/onlooker-community/ecosystem/compare/historian-v0.6.5...historian-v0.7.0) (2026-09-27)
+
+
+### Features
+
+* **historian:** name the two causes transcript_unavailable merged :mag: ([#397](https://github.com/onlooker-community/ecosystem/issues/397)) ([dac4ab4](https://github.com/onlooker-community/ecosystem/commit/dac4ab4218fd4fe87e3c270b87d13d281b085a4f))
+
+
+### Bug Fixes
+
+* **historian:** read the transcript shape Claude Code actually writes :mag: ([#395](https://github.com/onlooker-community/ecosystem/issues/395)) ([636436c](https://github.com/onlooker-community/ecosystem/commit/636436c8d8b9be9d679a8e90e3a1d251fb1d37cb))
+
 ## [0.6.5](https://github.com/onlooker-community/ecosystem/compare/historian-v0.6.4...historian-v0.6.5) (2026-09-22)
 
 
