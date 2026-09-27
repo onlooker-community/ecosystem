@@ -98,8 +98,18 @@ _emit_skip() {
 		'{ outcome: $outcome, skip_reason: $skip_reason, duration_ms: $duration_ms }')"
 }
 
-if [[ -z "$TRANSCRIPT_PATH" || ! -f "$TRANSCRIPT_PATH" ]]; then
-	_emit_skip "transcript_unavailable"
+# These two used to share one reason, transcript_unavailable, and that merge
+# is why 2881 of historian's 4611 skips could not be acted on: a payload that
+# carried no transcript_path is a hook-contract problem, while a path that was
+# supplied with no file at it is a timing or lifetime problem, and the log said
+# only that one of them happened (ONL-121).
+if [[ -z "$TRANSCRIPT_PATH" ]]; then
+	_emit_skip "transcript_path_absent"
+	hook_health_exit 0
+fi
+
+if [[ ! -f "$TRANSCRIPT_PATH" ]]; then
+	_emit_skip "transcript_file_missing"
 	hook_health_exit 0
 fi
 
