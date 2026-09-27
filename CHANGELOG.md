@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.64.3](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.64.2...ecosystem-v0.64.3) (2026-09-27)
+
+
+### Bug Fixes
+
+* **scribe:** distill on new turns, not on every Stop :recycle: ([#393](https://github.com/onlooker-community/ecosystem/issues/393)) ([d2eef66](https://github.com/onlooker-community/ecosystem/commit/d2eef668aa3d050272ce402d7494aece4d9a3b2f))
+
 ## [0.64.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.64.1...ecosystem-v0.64.2) (2026-09-27)
 
 
