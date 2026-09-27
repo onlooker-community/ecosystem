@@ -78,11 +78,25 @@ _chunk_count() {
 }
 
 
-@test "session-end emits skip_reason transcript_unavailable when path missing" {
+# The two halves of the old transcript_unavailable. Keeping them apart is the
+# whole point: a payload with no transcript_path is a hook-contract problem, a
+# path with no file at it is a timing or lifetime problem, and 2881 of
+# historian's skips were unattributable because one reason covered both.
+@test "a path that exists in the payload but not on disk is transcript_file_missing" {
   run bash -c "printf '%s' '$(_input)' | '$HOOK'"
   [ "$status" -eq 0 ]
   grep '"event_type":"historian.indexing.complete"' "$ONLOOKER_EVENTS_LOG" \
-    | jq -e '.payload.outcome == "skipped" and .payload.skip_reason == "transcript_unavailable"' >/dev/null
+    | jq -e '.payload.outcome == "skipped" and .payload.skip_reason == "transcript_file_missing"' >/dev/null
+}
+
+@test "a payload carrying no transcript_path at all is transcript_path_absent" {
+  local input
+  input=$(jq -cn --arg cwd "$PROJECT_REPO" --arg sid "$SESSION_ID" \
+    '{cwd:$cwd, session_id:$sid, hook_event_name:"SessionEnd"}')
+  run bash -c "printf '%s' '$input' | '$HOOK'"
+  [ "$status" -eq 0 ]
+  grep '"event_type":"historian.indexing.complete"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e '.payload.outcome == "skipped" and .payload.skip_reason == "transcript_path_absent"' >/dev/null
 }
 
 @test "session-end emits skip_reason too_short for a tiny transcript" {
@@ -298,7 +312,7 @@ _chunk_count() {
     | jq -e '.payload.transcript_chars > 0' >/dev/null
 }
 
-@test "transcript_unavailable path emits complete without a started event" {
+@test "an unreadable transcript emits complete without a started event" {
   # When the transcript path is missing we never read it, so no started
   # event makes it to the log. Only the complete-with-skip remains.
   run bash -c "printf '%s' '$(_input)' | '$HOOK'"
