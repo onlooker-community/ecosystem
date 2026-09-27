@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.19.0](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.18.11...librarian-v0.19.0) (2026-09-26)
+
+
+### Features
+
+* **librarian:** admit a lesson that no version range can hold :unlock: ([#384](https://github.com/onlooker-community/ecosystem/issues/384)) ([942d3ac](https://github.com/onlooker-community/ecosystem/commit/942d3ac1bdd5a3570b9c7b70db9e0c2481ddab1e))
+
 ## [0.18.11](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.18.10...librarian-v0.18.11) (2026-09-26)
 
 

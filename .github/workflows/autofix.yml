@@ -17,7 +17,7 @@ permissions:
 jobs:
   autofix:
     name: Auto-format and lint
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     # On fork PRs the PAT secret is not available and we cannot push to the
     # contributor's branch, so skip the job rather than fail noisily. Same-repo
     # PRs (including release-please's) and pushes to main always run.

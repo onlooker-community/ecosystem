@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.63.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.62.2...ecosystem-v0.63.0) (2026-09-26)
+
+
+### Features
+
+* **librarian:** admit a lesson that no version range can hold :unlock: ([#384](https://github.com/onlooker-community/ecosystem/issues/384)) ([942d3ac](https://github.com/onlooker-community/ecosystem/commit/942d3ac1bdd5a3570b9c7b70db9e0c2481ddab1e))
+
 ## [0.62.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.62.1...ecosystem-v0.62.2) (2026-09-26)
 
 
