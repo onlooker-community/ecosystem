@@ -50,6 +50,18 @@
           "score_threshold": 0.75,
           "judge_types": ["standard", "adversarial"],
           "gate_policy": "majority"
+        },
+        {
+          "id": "lesson-promotion-public-auto",
+          "criteria": [
+            { "name": "grounding", "weight": 0.32, "min_pass": 0.8 },
+            { "name": "scope_accuracy", "weight": 0.24, "min_pass": 0.8 },
+            { "name": "generality", "weight": 0.14, "min_pass": 0.7 },
+            { "name": "disclosure", "weight": 0.3, "min_pass": 0.95 }
+          ],
+          "score_threshold": 0.85,
+          "judge_types": ["standard", "adversarial"],
+          "gate_policy": "majority"
         }
       ]
     },
