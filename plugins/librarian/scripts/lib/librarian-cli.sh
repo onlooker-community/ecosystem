@@ -825,12 +825,40 @@ librarian_cli_lessons_veto() {
 	dir=$(librarian_lessons_dir "$key")
 	held_dir=$(librarian_lesson_held_dir "$key")
 	path="${held_dir}/${lesson_id}.json"
-	[[ -f "$path" ]] || { printf 'Lesson %s is not held.\n' "$lesson_id" >&2; return 1; }
+
+	# "not held" used to fire identically for a typo'd id, a lesson that was
+	# never held (human-asserted, or judged but not yet promoted), and one
+	# whose window already elapsed so it shipped — three situations a human
+	# trying to stop a publication needs to tell apart.
+	if [[ ! -f "$path" ]]; then
+		if [[ -f "${dir}/approved/${lesson_id}.json" ]]; then
+			printf 'Lesson %s has already shipped; it cannot be recalled from here.\n' \
+				"$lesson_id" >&2
+		elif [[ -f "${dir}/proposals/${lesson_id}.json" ]]; then
+			printf 'Lesson %s is not held: it was never promoted.\n' "$lesson_id" >&2
+		else
+			printf 'Lesson %s is not held: no such lesson.\n' "$lesson_id" >&2
+		fi
+		return 1
+	fi
 
 	artifact_id=$(jq -r '.artifact_id // ""' "${dir}/proposals/${lesson_id}.json" 2>/dev/null)
 	rm -f "$path" || return 1
-	if [[ -n "$artifact_id" ]]; then
-		librarian_lesson_append_declined "$key" "$artifact_id" vetoed "$reason" "" "$lesson_id" || true
+
+	# The held file is gone at this point, so the lesson genuinely cannot
+	# ship — returning failure here would misreport that and invite a
+	# pointless re-run (a second `veto` on the same id only hits the refusal
+	# above). But a lost declined-ledger row is a real defect, an audit trail
+	# with a hole in it, so it must not be swallowed silently: same reasoning
+	# librarian_lesson_promote's stamp-failure path uses for a failure that
+	# happens AFTER its terminal record is already on disk — report it on
+	# stderr, keep the success line on stdout.
+	if [[ -z "$artifact_id" ]]; then
+		printf 'Lesson %s vetoed, but its artifact_id could not be resolved (proposal missing or unreadable); no declined-ledger row was recorded.\n' \
+			"$lesson_id" >&2
+	elif ! librarian_lesson_append_declined "$key" "$artifact_id" vetoed "$reason" "" "$lesson_id"; then
+		printf 'Lesson %s vetoed, but the declined-ledger row could not be written; the audit trail is incomplete.\n' \
+			"$lesson_id" >&2
 	fi
 	printf 'Lesson %s vetoed; it will not leave this machine.\n' "$lesson_id"
 	return 0

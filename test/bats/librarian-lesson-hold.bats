@@ -229,3 +229,34 @@ _hold_cli_setup() {
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"not held"* ]]
 }
+
+@test "lessons veto refuses and says so when the lesson has already shipped" {
+	_hold_cli_setup
+	_seed_judged 01M3CQEG6ZR2E4XJ0K6WY9J1QD human
+	librarian_lesson_promote "$PROJECT_KEY" 01M3CQEG6ZR2E4XJ0K6WY9J1QD
+	run librarian_cli lessons veto 01M3CQEG6ZR2E4XJ0K6WY9J1QD "" "$PROJECT_REPO"
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"already shipped"* ]]
+}
+
+@test "lessons veto refuses and says so when the lesson was never promoted" {
+	_hold_cli_setup
+	_seed_judged 01M3DHRTC1ZQXWQ5V7Y9F0K3MB model
+	run librarian_cli lessons veto 01M3DHRTC1ZQXWQ5V7Y9F0K3MB "" "$PROJECT_REPO"
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"never promoted"* ]]
+}
+
+@test "lessons veto still succeeds and warns on stderr when the proposal is unreadable" {
+	_hold_cli_setup
+	_seed_judged 01M3B87J7046SJE5BECNMP670K model
+	librarian_lesson_promote "$PROJECT_KEY" 01M3B87J7046SJE5BECNMP670K
+	# Same shape as the sweep's "no readable envelope" test above: the proposal
+	# that would have carried artifact_id is gone, so it can't be resolved.
+	rm -f "${LESSONS_DIR}/proposals/01M3B87J7046SJE5BECNMP670K.json"
+	run librarian_cli lessons veto 01M3B87J7046SJE5BECNMP670K "" "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	[ ! -f "${LESSONS_DIR}/approved_held/01M3B87J7046SJE5BECNMP670K.json" ]
+	[[ "$output" == *"artifact_id could not be resolved"* ]]
+	[[ "$output" == *"no declined-ledger row was recorded"* ]]
+}
