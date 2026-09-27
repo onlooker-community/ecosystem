@@ -25,6 +25,13 @@
       "total_budget_ms": 600000,
       "unscoped_per_scan": 3
     },
+    "lesson_auto": {
+      "enabled": false,
+      "visibility": "org",
+      "veto_window_hours": 72,
+      "max_juries_per_scan": 1,
+      "judge_model": "claude-haiku-4-5-20251001"
+    },
     "lesson_judging": {
       "min_criterion_coverage": 0.6,
       "rubrics": [

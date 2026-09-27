@@ -26,11 +26,14 @@ _candidate() {
 # a human. Legal while pending and nowhere else (ONL-107).
 _unscoped() { printf '%s' '{"kind":"unscoped"}'; }
 
+# A bound candidate: needs no justification to confirm.
+_versioned() { printf '%s' '{"kind":"versioned","versions":{"vite":"<6"}}'; }
+
 _auto_setup() {
 	for lib in librarian-project-key librarian-ulid librarian-storage \
 		librarian-lesson-storage librarian-lesson-validate librarian-config \
 		librarian-author-key librarian-lesson-review librarian-lesson-rubric \
-		librarian-lesson-judge; do
+		librarian-lesson-judge librarian-lesson-transform librarian-lesson-auto; do
 		# shellcheck disable=SC1091
 		source "${PLUGIN_ROOT}/scripts/lib/${lib}.sh"
 	done
@@ -51,6 +54,22 @@ _auto_setup() {
 _seed_pending_unscoped() {
 	librarian_lesson_write_proposal "$PROJECT_KEY" \
 		"$(_candidate "$(_unscoped)")" "01M3B87J7046SJE5BECNMP670K"
+}
+
+# A pending proposal with a bound version range — not parked, so auto-confirm
+# has nothing to assert.
+_seed_pending() {
+	librarian_lesson_write_proposal "$PROJECT_KEY" \
+		"$(_candidate "$(_versioned)")" "01KZ45MKAM734ZS7JK24D2DK0R"
+}
+
+# _seed_pending_unscoped with the marker spliced into the candidate's claim, so
+# the stubbed `claude` can select a branch on it.
+_seed_pending_unscoped_marked() {
+	local marker="$1"
+	local candidate
+	candidate=$(_candidate "$(_unscoped)" | jq -c --arg m "$marker" '.claim = .claim + " " + $m')
+	librarian_lesson_write_proposal "$PROJECT_KEY" "$candidate" "01M3B87J7046SJE5BECNMP670K"
 }
 
 @test "confirm records asserted_by human by default" {
@@ -119,4 +138,72 @@ _seed_pending_unscoped() {
 	[ "$status" -eq 0 ]
 	jq -e '.status == "rejected" and .verdict.failed_criterion == "scope_accuracy"' \
 		"${LESSONS_DIR}/proposals/${id}.json"
+}
+
+# ----------------------------------------------------------------------------
+# Task 5: auto-confirm — the model writes the version-independence
+# justification instead of a human.
+# ----------------------------------------------------------------------------
+
+_auto_stub() {
+	STUB_BIN="${BATS_TEST_TMPDIR}/bin"
+	mkdir -p "$STUB_BIN"
+	cat > "${STUB_BIN}/claude" <<'STUB'
+#!/usr/bin/env bash
+prompt=$(cat)
+if [[ "$prompt" == *"refuse-justification"* ]]; then
+  printf '%s' 'REFUSE'
+elif [[ "$prompt" == *"why this lesson holds regardless of version"* ]]; then
+  printf '%s' 'The failure is a property of the exec boundary, not of any release.'
+else
+  printf '%s' ''
+fi
+STUB
+	chmod +x "${STUB_BIN}/claude"
+	export PATH="${STUB_BIN}:${PATH}"
+}
+
+@test "auto_justify returns a one-line justification" {
+	_auto_setup; _auto_stub
+	run librarian_lesson_auto_justify "$(_candidate "$(_unscoped)")"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"exec boundary"* ]]
+	[ "$(printf '%s' "$output" | wc -l | tr -d ' ')" -le 1 ]
+}
+
+@test "auto_confirm_one confirms a parked candidate as model-asserted" {
+	_auto_setup; _auto_stub
+	id=$(_seed_pending_unscoped)
+	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	[ "$status" -eq 0 ]
+	[ "$output" = "confirmed:${id}" ]
+	jq -e '.status == "confirmed" and .asserted_by == "model"
+	   and .candidate.applies_to.scope.kind == "version_independent"' \
+		"${LESSONS_DIR}/proposals/${id}.json"
+}
+
+@test "a refusal leaves the candidate pending for a human and writes no decline" {
+	_auto_setup; _auto_stub
+	id=$(_seed_pending_unscoped_marked "refuse-justification")
+	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	[ "$output" = "skipped:no_justification" ]
+	jq -e '.status == "pending"' "${LESSONS_DIR}/proposals/${id}.json"
+	[ ! -f "${LESSONS_DIR}/declined.jsonl" ]
+}
+
+@test "an empty model response is infrastructure, not a verdict" {
+	_auto_setup; _auto_stub
+	rm -f "${STUB_BIN}/claude"
+	id=$(_seed_pending_unscoped)
+	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	[ "$output" = "unavailable" ]
+	jq -e '.status == "pending"' "${LESSONS_DIR}/proposals/${id}.json"
+}
+
+@test "auto_confirm_one refuses a candidate that is not parked" {
+	_auto_setup; _auto_stub
+	id=$(_seed_pending)   # versioned scope, needs no justification
+	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	[ "$output" = "skipped:not_parked" ]
+	jq -e '.status == "pending"' "${LESSONS_DIR}/proposals/${id}.json"
 }
