@@ -84,13 +84,25 @@ source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-validate.sh"
 source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-storage.sh"
 # shellcheck source=librarian-lesson-transform.sh
 source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-transform.sh"
+# shellcheck source=librarian-author-key.sh
+source "${PLUGIN_ROOT}/scripts/lib/librarian-author-key.sh"
+# shellcheck source=librarian-lesson-review.sh
+source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-review.sh"
+# shellcheck source=librarian-lesson-rubric.sh
+source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-rubric.sh"
+# shellcheck source=librarian-lesson-judge.sh
+source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-judge.sh"
+# shellcheck source=librarian-lesson-promote.sh
+source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-promote.sh"
+# shellcheck source=librarian-lesson-auto.sh
+source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-auto.sh"
 
 # The sources above cannot fail loudly: this runs without errexit, so a bad
 # PLUGIN_ROOT leaves every function undefined and the script still exits 0 —
 # indistinguishable from "there was nothing to classify". One probe per lib
 # family turns that into a single explicit line in the log instead.
 for _fn in librarian_config_load librarian_storage_init librarian_emit \
-	librarian_classifier_call; do
+	librarian_classifier_call librarian_lesson_auto_stage; do
 	if ! declare -F "$_fn" >/dev/null 2>&1; then
 		printf 'librarian-classify-worker: %s undefined after sourcing from %s\n' \
 			"$_fn" "$PLUGIN_ROOT" >&2
@@ -497,6 +509,17 @@ done
 # its own. A truncated stage 5 is not a truncated scan: the scan finishes
 # normally and only this stage stops early, so the count belongs beside a
 # healthy outcome rather than replacing it.
+
+# ---------------------------------------------------------------------------
+# Stage 6 — unattended auto-jury (ONL-111).
+#
+# A no-op unless librarian.lesson_auto.enabled is true. Auto-confirms every
+# parked candidate, then juries as many as max_juries_per_scan allows — the
+# jury is the expensive step, so it alone is capped; confirm is not. An
+# over-cap candidate stays `confirmed` and is retried on a later scan rather
+# than being declined, since a decline is terminal.
+# ---------------------------------------------------------------------------
+librarian_lesson_auto_stage "$PROJECT_KEY" || true
 
 # ----------------------------------------------------------------------------
 # Watermark advance + scan.complete.

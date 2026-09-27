@@ -25,6 +25,13 @@
       "total_budget_ms": 600000,
       "unscoped_per_scan": 3
     },
+    "lesson_auto": {
+      "enabled": false,
+      "visibility": "org",
+      "veto_window_hours": 72,
+      "max_juries_per_scan": 1,
+      "judge_model": "claude-haiku-4-5-20251001"
+    },
     "lesson_judging": {
       "min_criterion_coverage": 0.6,
       "rubrics": [
@@ -48,6 +55,18 @@
             { "name": "disclosure", "weight": 0.3, "min_pass": 0.9 }
           ],
           "score_threshold": 0.75,
+          "judge_types": ["standard", "adversarial"],
+          "gate_policy": "majority"
+        },
+        {
+          "id": "lesson-promotion-public-auto",
+          "criteria": [
+            { "name": "grounding", "weight": 0.32, "min_pass": 0.8 },
+            { "name": "scope_accuracy", "weight": 0.24, "min_pass": 0.8 },
+            { "name": "generality", "weight": 0.14, "min_pass": 0.7 },
+            { "name": "disclosure", "weight": 0.3, "min_pass": 0.95 }
+          ],
+          "score_threshold": 0.85,
           "judge_types": ["standard", "adversarial"],
           "gate_policy": "majority"
         }

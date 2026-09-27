@@ -7,7 +7,9 @@ description: Review the librarian's pending memory promotion proposals and lesso
 
 You are operating the **Librarian** review surface — the user-facing control for promoting per-session artifacts (decisions, dead-ends, open questions captured by Archivist) into the user's durable typed memory store.
 
-Auto-promotion is intentionally off. Librarian queues proposals; the user (with your help) confirms each one. Every accept writes a real file into `~/.claude/projects/<encoded>/memory/`, so every accept matters.
+Auto-promotion of MEMORY.md proposals is intentionally off, full stop — nothing in this skill or the worker ever writes to `~/.claude/projects/<encoded>/memory/` unattended. Librarian queues proposals; the user (with your help) confirms each one. Every accept writes a real file there, so every accept matters.
+
+Lessons are a separate queue with a separate default. By default this walk is also how a lesson gets confirmed and judged — nobody moves without you. But when a project turns on `lesson_auto.enabled`, the detached worker (never this skill) may itself assert a parked candidate's version-independence and dispatch its jury, with no human present — see ADR-004. That path never touches MEMORY.md, never bypasses this walk's `pass`/`veto` verbs, and only ever produces a *held* lesson behind a veto window (`/librarian lessons queue`, `/librarian lessons veto`) — but it is real auto-promotion of a lesson's scope assertion, and the sentence above about memory proposals must not be read as also covering it.
 
 ## Parse the request
 
@@ -20,6 +22,8 @@ Read the user's argument after `/librarian`:
 - `lessons`, `lessons review` → **walk the lesson queue** (see below)
 - `lessons list` / `lessons status` → print and stop (`lessons list --confirmed` lists confirmed lessons instead of pending ones)
 - `lessons judge` → **run the jury over confirmed candidates** (see below)
+- `lessons queue` → print held lessons and stop
+- `lessons veto <id> [reason]` → kill a held lesson before it ships
 
 If the user passes a free-form intent ("clear out the queue", "what's pending?"), map it to `review` or `list` as appropriate.
 
@@ -169,4 +173,4 @@ criterion asks whether it is **true**.
 - **Do not delete proposal files manually.** Reject (with a tombstone) is the cleanup path. Direct deletion would let the same body re-propose on the next scan.
 - **Conflict-state proposals deserve a careful read.** When `conflict_state` is `near_duplicate` or `contradicts_existing`, surface the conflict to the user before they decide. Often the right answer is reject (the existing memory is better) or accept-and-then-prune (you can mention that follow-up).
 - **Never confirm a lesson on the user's behalf without an explicit visibility.** Confirming commits a candidate toward leaving this machine — a decision separate from, and heavier than, accepting a memory proposal.
-- **Never dispatch judges without reporting the batch and getting the user's go-ahead first.** Judge dispatch is the most expensive step in the pipeline; report the confirmed and `public` counts and wait before spawning a single judge.
+- **In this skill, never dispatch judges without reporting the batch and getting the user's go-ahead first.** Judge dispatch is the most expensive step in the pipeline; report the confirmed and `public` counts and wait before spawning a single judge. This binds the skill agent, not the worker: with `lesson_auto.enabled` true, the detached worker dispatches judges on model-confirmed candidates with no go-ahead and no session present (ADR-004) — a compensating rubric, hold, and veto window stand in for the go-ahead this rule describes. If you see a candidate already judged when you walk in, that is expected on such a project, not a violation of this rule.

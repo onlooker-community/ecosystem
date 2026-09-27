@@ -17,12 +17,25 @@ librarian_lessons_dir() {
 	printf '%s/lessons' "$(librarian_project_dir "$key")"
 }
 
+# The hold: an approved lesson that is not yet allowed to leave the machine.
+#
+# `onlooker sync` reads lessons/approved/*.json and nothing else (see
+# apps/cli/src/lessons.ts in the onlooker repo), so holding a lesson is just
+# keeping it out of that directory. That is the whole mechanism — no field on
+# the pool entry, no change to sync, no change to the pool contract.
+#
+# Usage: librarian_lesson_held_dir <key>
+librarian_lesson_held_dir() {
+	local key="$1"
+	printf '%s/approved_held' "$(librarian_lessons_dir "$key")"
+}
+
 librarian_lesson_storage_init() {
 	local key="$1"
 	[[ -z "$key" ]] && return 1
 	local dir
 	dir=$(librarian_lessons_dir "$key")
-	mkdir -p "$dir/proposals" "$dir/approved" 2>/dev/null
+	mkdir -p "$dir/proposals" "$dir/approved" "$dir/approved_held" 2>/dev/null
 }
 
 # Write a file atomically: temp in the same directory, then mv.
@@ -195,6 +208,65 @@ librarian_lesson_remove_declined() {
 	fi
 	mv -f "$tmp" "$file" || { rm -f "$tmp"; return 1; }
 	return 0
+}
+
+# Move every held lesson whose window has elapsed into approved/, printing the
+# ids it moved. Deterministic file movement, no LLM work, so it is safe on the
+# SessionStart path.
+#
+# Fails closed on an unreadable window: a held lesson whose envelope is missing
+# or whose shippable_after will not parse stays held. The alternative — treating
+# unknown as elapsed — would ship exactly the lessons whose provenance is
+# already in question.
+#
+# Usage: librarian_lesson_sweep_held <key>
+librarian_lesson_sweep_held() {
+	local key="$1"
+	[[ -z "$key" ]] && return 1
+
+	local dir held_dir
+	dir=$(librarian_lessons_dir "$key")
+	held_dir=$(librarian_lesson_held_dir "$key")
+	[[ -d "$held_dir" ]] || return 0
+
+	local now file id shippable
+	now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+	# nullglob so an empty hold yields nothing rather than the literal pattern.
+	local had_nullglob=0
+	shopt -q nullglob && had_nullglob=1
+	shopt -s nullglob
+	for file in "${held_dir}"/*.json; do
+		id=$(basename "$file" .json)
+		shippable=$(jq -r '.shippable_after // ""' \
+			"${dir}/proposals/${id}.json" 2>/dev/null) || shippable=""
+		[[ -z "$shippable" || "$shippable" == "null" ]] && continue
+		# The lexical compare below is only sound once both operands are
+		# known to be the exact fixed-width RFC3339 UTC shape
+		# `librarian_lesson_promote` writes via `date -u
+		# +%Y-%m-%dT%H:%M:%SZ` ($now is built the same way, two lines up).
+		# A value that doesn't match this anchored pattern — truncated,
+		# a different offset, plain garbage — fails closed: stays held
+		# rather than feeding an unsound compare that could go either way.
+		[[ "$shippable" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] || continue
+		[[ "$now" < "$shippable" ]] && continue
+		mkdir -p "${dir}/approved" 2>/dev/null
+		mv -f "$file" "${dir}/approved/${id}.json" 2>/dev/null || continue
+		printf '%s\n' "$id"
+	done
+	[[ "$had_nullglob" -eq 0 ]] && shopt -u nullglob
+	return 0
+}
+
+# Usage: librarian_lesson_count_held <key>
+librarian_lesson_count_held() {
+	local key="$1"
+	local held_dir
+	held_dir=$(librarian_lesson_held_dir "$key")
+	[[ -d "$held_dir" ]] || { printf '0'; return 0; }
+	local n
+	n=$(find "$held_dir" -maxdepth 1 -name '*.json' -type f 2>/dev/null | wc -l | tr -d ' ')
+	printf '%s' "${n:-0}"
 }
 
 librarian_lesson_seen() {

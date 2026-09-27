@@ -236,8 +236,12 @@ librarian_lesson_judge() {
 		return 1
 	fi
 
+	local asserted_by
+	asserted_by=$(jq -r '.asserted_by // "human"' "$path" 2>/dev/null)
+	[[ -z "$asserted_by" || "$asserted_by" == "null" ]] && asserted_by="human"
+
 	local rubric_id
-	rubric_id=$(librarian_lesson_rubric_id_for_visibility "$visibility") || {
+	rubric_id=$(librarian_lesson_rubric_id_for_visibility "$visibility" "$asserted_by") || {
 		printf 'Lesson %s has an unrecognized visibility: %s\n' "$lesson_id" "$visibility" >&2
 		return 1
 	}

@@ -758,6 +758,112 @@ librarian_cli_lessons_reconsider() {
 	printf 'Reconsidered %s artifact(s).\n' "$count"
 }
 
+# List lessons that are approved but still held, with when each becomes
+# shippable. This is the only surface between an unattended promotion and the
+# pool, so it prints the claim too — an id alone is not reviewable.
+#
+# Arg shape follows librarian_cli_lessons_promote: options, then an optional
+# trailing [cwd] positional that resolves the project key.
+librarian_cli_lessons_queue() {
+	local cwd=""
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+			--*) printf 'unknown option: %s\n' "$1" >&2; return 1 ;;
+			*) cwd="$1"; shift ;;
+		esac
+	done
+
+	local key
+	key=$(_librarian_cli_project_key "$cwd")
+	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
+
+	local dir held_dir file id shippable claim found=0
+	dir=$(librarian_lessons_dir "$key")
+	held_dir=$(librarian_lesson_held_dir "$key")
+	if [[ -d "$held_dir" ]]; then
+		for file in "${held_dir}"/*.json; do
+			[[ -f "$file" ]] || continue
+			found=1
+			id=$(basename "$file" .json)
+			shippable=$(jq -r '.shippable_after // "unknown"' \
+				"${dir}/proposals/${id}.json" 2>/dev/null) || shippable="unknown"
+			claim=$(jq -r '.claim // ""' "$file" 2>/dev/null)
+			printf '%s  shippable %s  %s\n' "$id" "$shippable" "$claim"
+		done
+	fi
+	[[ "$found" -eq 0 ]] && printf 'Nothing is waiting to leave this machine.\n'
+	return 0
+}
+
+# Kill a held lesson before it ships. Writes a tombstone so the same content is
+# not re-proposed, and a declined row so the ledger records that a human
+# overrode the jury.
+librarian_cli_lessons_veto() {
+	local lesson_id="" reason="" cwd=""
+	local positional=0
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+			--*) printf 'unknown option: %s\n' "$1" >&2; return 1 ;;
+			*)
+				case "$positional" in
+					0) lesson_id="$1" ;;
+					1) reason="$1" ;;
+					*) cwd="$1" ;;
+				esac
+				positional=$((positional + 1))
+				shift
+				;;
+		esac
+	done
+	[[ -z "$lesson_id" ]] && { printf 'usage: librarian_cli lessons veto <lesson_id> [reason] [cwd]\n'; return 1; }
+
+	local key
+	key=$(_librarian_cli_project_key "$cwd")
+	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
+
+	local held_dir path dir artifact_id
+	dir=$(librarian_lessons_dir "$key")
+	held_dir=$(librarian_lesson_held_dir "$key")
+	path="${held_dir}/${lesson_id}.json"
+
+	# "not held" used to fire identically for a typo'd id, a lesson that was
+	# never held (human-asserted, or judged but not yet promoted), and one
+	# whose window already elapsed so it shipped — three situations a human
+	# trying to stop a publication needs to tell apart.
+	if [[ ! -f "$path" ]]; then
+		if [[ -f "${dir}/approved/${lesson_id}.json" ]]; then
+			printf 'Lesson %s has already shipped; it cannot be recalled from here.\n' \
+				"$lesson_id" >&2
+		elif [[ -f "${dir}/proposals/${lesson_id}.json" ]]; then
+			printf 'Lesson %s is not held: it was never promoted.\n' "$lesson_id" >&2
+		else
+			printf 'Lesson %s is not held: no such lesson.\n' "$lesson_id" >&2
+		fi
+		return 1
+	fi
+
+	artifact_id=$(jq -r '.artifact_id // ""' "${dir}/proposals/${lesson_id}.json" 2>/dev/null)
+	rm -f "$path" || return 1
+
+	# The held file is gone at this point, so the lesson genuinely cannot
+	# ship — returning failure here would misreport that and invite a
+	# pointless re-run (a second `veto` on the same id only hits the refusal
+	# above). But a lost declined-ledger row is a real defect, an audit trail
+	# with a hole in it, so it must not be swallowed silently: same reasoning
+	# librarian_lesson_promote's stamp-failure path uses for a failure that
+	# happens AFTER its terminal record is already on disk — report it on
+	# stderr, keep the success line on stdout.
+	if [[ -z "$artifact_id" ]]; then
+		printf 'Lesson %s vetoed, but its artifact_id could not be resolved (proposal missing or unreadable); no declined-ledger row was recorded.\n' \
+			"$lesson_id" >&2
+	elif ! librarian_lesson_append_declined "$key" "$artifact_id" vetoed "$reason" "" "$lesson_id"; then
+		printf 'Lesson %s vetoed, but the declined-ledger row could not be written; the audit trail is incomplete.\n' \
+			"$lesson_id" >&2
+	fi
+	printf 'Lesson %s vetoed; it will not leave this machine.\n' "$lesson_id"
+	return 0
+}
+
 librarian_cli_lessons() {
 	local verb="${1:-list}"
 	shift || true
@@ -770,6 +876,8 @@ librarian_cli_lessons() {
 		judge) librarian_cli_lessons_judge "$@" ;;
 		promote) librarian_cli_lessons_promote "$@" ;;
 		reconsider) librarian_cli_lessons_reconsider "$@" ;;
+		queue) librarian_cli_lessons_queue "$@" ;;
+		veto) librarian_cli_lessons_veto "$@" ;;
 		defer) librarian_cli_lessons_defer "$@" ;;
 		status) librarian_cli_lessons_status "$@" ;;
 		*) printf 'unknown lessons action: %s\n' "$verb"; return 2 ;;

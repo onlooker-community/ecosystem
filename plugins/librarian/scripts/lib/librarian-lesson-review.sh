@@ -68,24 +68,40 @@ _librarian_lesson_valid_visibility() {
 
 # Confirm a candidate for the jury.
 #
-# Usage: librarian_lesson_confirm <key> <lesson_id> <visibility> [justification]
+# Usage: librarian_lesson_confirm <key> <lesson_id> <visibility> [justification] [asserted_by]
 #
 # With a justification, the candidate's scope is rewritten to
 # version_independent. That branch is refused at private visibility: private
 # lessons run no jury, so the justification would reach the pool with nothing
 # checking it — the same hole the transform closes by refusing the branch
 # outright. Requiring org or public means scope_accuracy actually tests it.
+#
+# asserted_by records WHO is vouching for this scope — "human" (default) or
+# "model" — so downstream (rubric selection, the promotion hold) can hold a
+# model's assertion to a stricter standard than a human's. Anything else is
+# refused rather than written through: an unrecognized value here would
+# silently fall back to whatever the readers default to, and that default is
+# "human" — the least scrutiny, not the most.
 librarian_lesson_confirm() {
 	local key="$1"
 	local lesson_id="$2"
 	local visibility="${3:-}"
 	local justification="${4:-}"
+	local asserted_by="${5:-human}"
 	[[ -z "$key" || -z "$lesson_id" ]] && return 1
 
 	_librarian_lesson_valid_visibility "$visibility" || {
 		printf 'visibility must be one of: private, org, public\n' >&2
 		return 1
 	}
+
+	case "$asserted_by" in
+		human | model) ;;
+		*)
+			printf 'asserted_by must be human or model\n' >&2
+			return 1
+			;;
+	esac
 
 	if [[ -n "$justification" && "$visibility" == "private" ]]; then
 		printf 'version_independent requires org or public visibility: a private lesson runs no jury, so its justification would go unchecked and the lesson would never expire\n' >&2
@@ -182,11 +198,12 @@ librarian_lesson_confirm() {
 	# additionalProperties check on the way out the door.
 	if [[ -n "$candidate_before" ]]; then
 		updated=$(printf '%s' "$proposal" | jq \
-			--arg v "$visibility" --arg t "$now" \
+			--arg v "$visibility" --arg t "$now" --arg ab "$asserted_by" \
 			--argjson c "$candidate" --argjson cb "$candidate_before" \
 			'. * {status: "confirmed", visibility: $v, confirmed_at: $t}
 			 | .candidate = $c
-			 | .candidate_before_confirm = $cb' 2>/dev/null) || return 1
+			 | .candidate_before_confirm = $cb
+			 | .asserted_by = $ab' 2>/dev/null) || return 1
 	else
 		# No rewrite happened, so there is nothing to snapshot — and any field
 		# already on the proposal is stale by definition. Deleting it holds the
@@ -196,10 +213,11 @@ librarian_lesson_confirm() {
 		# unconfirm silently replaces .candidate with a snapshot describing a
 		# rewrite this confirm never performed.
 		updated=$(printf '%s' "$proposal" | jq \
-			--arg v "$visibility" --arg t "$now" --argjson c "$candidate" \
+			--arg v "$visibility" --arg t "$now" --arg ab "$asserted_by" --argjson c "$candidate" \
 			'. * {status: "confirmed", visibility: $v, confirmed_at: $t}
 			 | .candidate = $c
-			 | del(.candidate_before_confirm)' 2>/dev/null) || return 1
+			 | del(.candidate_before_confirm)
+			 | .asserted_by = $ab' 2>/dev/null) || return 1
 	fi
 	[[ -z "$updated" || "$updated" == "null" ]] && return 1
 	librarian_lesson_write_atomic "$path" "$updated"
@@ -249,11 +267,15 @@ librarian_lesson_unconfirm() {
 	# Restore the pre-confirm candidate when one was snapshotted, and delete
 	# the snapshot either way. A stale snapshot left on a pending proposal is
 	# indistinguishable from a live one at the next confirm, and would
-	# silently revert a later legitimate rewrite.
+	# silently revert a later legitimate rewrite. asserted_by is confirm-only
+	# state too — a pending proposal never carries it — so it comes off here
+	# for the same reason: leaving it behind would make a pending lesson
+	# reached only through unconfirm indistinguishable from one that was
+	# always pending.
 	local updated
 	updated=$(jq '
 		(if has("candidate_before_confirm") then .candidate = .candidate_before_confirm else . end)
-		| del(.candidate_before_confirm, .visibility, .confirmed_at)
+		| del(.candidate_before_confirm, .visibility, .confirmed_at, .asserted_by)
 		| .status = "pending"
 	' "$path" 2>/dev/null) || return 1
 	[[ -z "$updated" || "$updated" == "null" ]] && return 1

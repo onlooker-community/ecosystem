@@ -76,6 +76,29 @@ if [[ -z "$PROJECT_KEY" ]]; then
 	hook_health_exit 0
 fi
 
+# Unconditional: NOT gated on lesson_auto.enabled. Gating it would strand every
+# held lesson the moment the flag was turned off — written, judged, approved,
+# and invisible forever. Deterministic file movement, no LLM call, so ADR-003
+# is satisfied.
+#
+# The sweep's stdout is the ids it just moved into approved/ — the one moment
+# a lesson leaves this machine unattended. Captured here (rather than
+# discarded, as before) so that moment gets a line below instead of vanishing
+# the instant the veto window elapses between sessions.
+SWEPT_OUTPUT=$(librarian_lesson_sweep_held "$PROJECT_KEY" 2>/dev/null) || SWEPT_OUTPUT=""
+
+HELD=$(librarian_lesson_count_held "$PROJECT_KEY" 2>/dev/null) || HELD=0
+
+# bash 3.2 has no mapfile/readarray, so split the sweep's one-id-per-line
+# stdout by hand.
+SWEPT_IDS=()
+if [[ -n "$SWEPT_OUTPUT" ]]; then
+	while IFS= read -r _swept_id; do
+		[[ -n "$_swept_id" ]] && SWEPT_IDS+=("$_swept_id")
+	done <<< "$SWEPT_OUTPUT"
+fi
+SWEPT_COUNT=${#SWEPT_IDS[@]}
+
 SKIP_WHEN_ZERO=$(librarian_config_get '.librarian.surfacer.skip_inject_when_zero')
 [[ -z "$SKIP_WHEN_ZERO" || "$SKIP_WHEN_ZERO" == "null" ]] && SKIP_WHEN_ZERO="true"
 
@@ -88,7 +111,16 @@ PENDING=$(librarian_storage_count_pending "$PROJECT_KEY")
 LESSON_PENDING=$(librarian_lesson_list_pending "$PROJECT_KEY" | jq 'length' 2>/dev/null) || LESSON_PENDING=0
 [[ -z "$LESSON_PENDING" || "$LESSON_PENDING" == "null" ]] && LESSON_PENDING=0
 
-if [[ "$PENDING" -eq 0 && "$LESSON_PENDING" -eq 0 && "$SKIP_WHEN_ZERO" == "true" ]]; then
+# HELD and SWEPT_COUNT must count toward this gate too, not just the other two
+# queues: a lessons-only-held session (no pending memory proposals, no pending
+# lesson candidates) would otherwise hit the default skip-when-zero exit before
+# the HELD_LINE below ever builds, shipping the held lesson next sweep with the
+# user never having seen the veto window at all. The same is true the other
+# direction: a session whose sweep just shipped the last held lesson has
+# HELD == 0 by the time it's counted (the sweep already ran), so without
+# SWEPT_COUNT here that publication would be the one thing this hook has
+# nothing to say about.
+if [[ "$PENDING" -eq 0 && "$LESSON_PENDING" -eq 0 && "${HELD:-0}" -eq 0 && "${SWEPT_COUNT:-0}" -eq 0 && "$SKIP_WHEN_ZERO" == "true" ]]; then
 	_emit ""
 	hook_health_exit 0
 fi
@@ -126,6 +158,41 @@ if [[ -n "$LESSON_LINE" ]]; then
 		CONTEXT="${CONTEXT}"$'\n'"${LESSON_LINE}"
 	else
 		CONTEXT="$LESSON_LINE"
+	fi
+fi
+
+HELD_LINE=""
+if [[ "${HELD:-0}" -gt 0 ]]; then
+	HELD_LINE=$(printf '%s lesson(s) will leave this machine unless vetoed — run /librarian lessons queue' "$HELD")
+fi
+
+if [[ -n "$HELD_LINE" ]]; then
+	if [[ -n "$CONTEXT" ]]; then
+		CONTEXT="${CONTEXT}"$'\n'"${HELD_LINE}"
+	else
+		CONTEXT="$HELD_LINE"
+	fi
+fi
+
+# Composed the same way as HELD_LINE and LESSON_LINE above. Named ids when the
+# list is short enough to read at a glance; just the count once it isn't —
+# the count is what matters, the ids are a convenience for `lessons show <id>`.
+SWEPT_LINE=""
+if [[ "$SWEPT_COUNT" -gt 0 ]]; then
+	if [[ "$SWEPT_COUNT" -le 5 ]]; then
+		SWEPT_IDS_JOINED=$(IFS=', '; printf '%s' "${SWEPT_IDS[*]}")
+		SWEPT_LINE=$(printf '%s lesson(s) left this machine this session: %s' \
+			"$SWEPT_COUNT" "$SWEPT_IDS_JOINED")
+	else
+		SWEPT_LINE=$(printf '%s lesson(s) left this machine this session' "$SWEPT_COUNT")
+	fi
+fi
+
+if [[ -n "$SWEPT_LINE" ]]; then
+	if [[ -n "$CONTEXT" ]]; then
+		CONTEXT="${CONTEXT}"$'\n'"${SWEPT_LINE}"
+	else
+		CONTEXT="$SWEPT_LINE"
 	fi
 fi
 
