@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.7](https://github.com/onlooker-community/ecosystem/compare/scribe-v0.8.6...scribe-v0.8.7) (2026-09-27)
+
+
+### Bug Fixes
+
+* **scribe:** take the Haiku pass off the Stop path :zap: ([#391](https://github.com/onlooker-community/ecosystem/issues/391)) ([1d1ccc3](https://github.com/onlooker-community/ecosystem/commit/1d1ccc3366db5039fe5ee4a313fc0eae7aafe3b4))
+
 ## [0.8.6](https://github.com/onlooker-community/ecosystem/compare/scribe-v0.8.5...scribe-v0.8.6) (2026-09-22)
 
 
