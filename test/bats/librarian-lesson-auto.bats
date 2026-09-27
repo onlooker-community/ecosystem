@@ -318,3 +318,29 @@ STUB
 	# look like judging the candidate that never reached one.
 	[ ! -f "${LESSONS_DIR}/declined.jsonl" ]
 }
+
+# Fix round 1 (Critical): the jury loop reads the same `confirmed` queue the
+# attended `/librarian lessons judge` walk reads, and that walk's SKILL.md
+# makes "never dispatch judges without reporting the batch and getting the
+# user's go-ahead" a hard invariant — a human-confirmed candidate can sit
+# `confirmed` across sessions on purpose, waiting on a human's go-ahead.
+# Without a filter, an unattended scan would jury it anyway, and because a
+# human-asserted pass is not held, it would land straight in approved/ (the
+# live sync directory) with no veto window. The auto stage must only jury
+# candidates asserted_by == "model".
+@test "the auto stage never juries a human-confirmed candidate" {
+	_auto_setup; _jury_stub
+	mkdir -p "${PROJECT_REPO}/.claude"
+	printf '%s\n' '{"librarian":{"lesson_auto":{"enabled":true}}}' \
+		> "${PROJECT_REPO}/.claude/settings.json"
+	librarian_config_load "$PROJECT_REPO"
+	id=$(_seed_pending_unscoped)
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" org "holds regardless of version"
+	jq -e '.asserted_by == "human"' "${LESSONS_DIR}/proposals/${id}.json"
+	run librarian_lesson_auto_stage "$PROJECT_KEY"
+	[ "$status" -eq 0 ]
+	jq -e '.status == "confirmed"' "${LESSONS_DIR}/proposals/${id}.json"
+	jq -e '.verdict == null' "${LESSONS_DIR}/proposals/${id}.json"
+	[ ! -f "${LESSONS_DIR}/approved/${id}.json" ]
+	[ ! -f "${LESSONS_DIR}/approved_held/${id}.json" ]
+}

@@ -223,10 +223,26 @@ librarian_lesson_auto_stage() {
 	# The jury is the expensive step, so it is capped. An over-cap candidate
 	# stays `confirmed` and is judged on the next scan — never declined, since
 	# a decline is terminal.
+	#
+	# Filtered to asserted_by == "model" ONLY. `confirmed` is the same queue
+	# the attended `/librarian lessons judge` walk reads, and its SKILL.md
+	# makes "never dispatch judges without reporting the batch and getting the
+	# user's go-ahead" a hard invariant — a human-confirmed candidate can sit
+	# `confirmed` across sessions on purpose, waiting on that go-ahead. Without
+	# this filter, an unattended run would jury it anyway, and because a
+	# human-asserted pass is not held (unlike a model-asserted one), it would
+	# land straight in approved/ — the live sync directory — with no veto
+	# window at all. Read the envelope's asserted_by, not the candidate's
+	# scope kind: version_independent is reachable from both a human's
+	# justification and a model's, and would not tell them apart.
 	local juried=0
 	while IFS= read -r id; do
 		[[ -z "$id" ]] && continue
 		[[ "$juried" -ge "$cap" ]] && break
+		local proposal_path asserted_by
+		proposal_path="$(librarian_lessons_dir "$key")/proposals/${id}.json"
+		asserted_by=$(jq -r '.asserted_by // "human"' "$proposal_path" 2>/dev/null)
+		[[ "$asserted_by" != "model" ]] && continue
 		librarian_lesson_auto_judge_one "$key" "$id" >/dev/null
 		juried=$((juried + 1))
 	done < <(librarian_lesson_list_by_status "$key" confirmed | jq -r '.[].id' 2>/dev/null)
