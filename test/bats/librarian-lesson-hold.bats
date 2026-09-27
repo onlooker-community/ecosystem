@@ -1,5 +1,8 @@
 #!/usr/bin/env bats
 #
+# `run --separate-stderr` (used below) requires bats >= 1.5.0.
+bats_require_minimum_version 1.5.0
+#
 # The hold: a model-asserted lesson is promoted into approved_held/ instead of
 # approved/, so `onlooker sync` (which reads only approved/*.json) cannot see
 # it until something moves it out. A human-asserted lesson is unaffected.
@@ -225,26 +228,33 @@ _hold_cli_setup() {
 
 @test "lessons veto refuses a lesson that is not held" {
 	_hold_cli_setup
-	run librarian_cli lessons veto 01M3ASXRSRGY9TXKV045NK8V7G "" "$PROJECT_REPO"
+	# --separate-stderr: plain `run` merges stdout and stderr into $output, so
+	# a refusal message printed only to stderr could still make an assertion
+	# against $output pass without proving anything about which stream it
+	# landed on. See the same rationale in librarian-author-key.bats.
+	run --separate-stderr librarian_cli lessons veto 01M3ASXRSRGY9TXKV045NK8V7G "" "$PROJECT_REPO"
 	[ "$status" -ne 0 ]
-	[[ "$output" == *"not held"* ]]
+	[[ "$stderr" == *"not held"* ]]
+	[[ "$output" != *"not held"* ]]
 }
 
 @test "lessons veto refuses and says so when the lesson has already shipped" {
 	_hold_cli_setup
 	_seed_judged 01M3CQEG6ZR2E4XJ0K6WY9J1QD human
 	librarian_lesson_promote "$PROJECT_KEY" 01M3CQEG6ZR2E4XJ0K6WY9J1QD
-	run librarian_cli lessons veto 01M3CQEG6ZR2E4XJ0K6WY9J1QD "" "$PROJECT_REPO"
+	run --separate-stderr librarian_cli lessons veto 01M3CQEG6ZR2E4XJ0K6WY9J1QD "" "$PROJECT_REPO"
 	[ "$status" -ne 0 ]
-	[[ "$output" == *"already shipped"* ]]
+	[[ "$stderr" == *"already shipped"* ]]
+	[[ "$output" != *"already shipped"* ]]
 }
 
 @test "lessons veto refuses and says so when the lesson was never promoted" {
 	_hold_cli_setup
 	_seed_judged 01M3DHRTC1ZQXWQ5V7Y9F0K3MB model
-	run librarian_cli lessons veto 01M3DHRTC1ZQXWQ5V7Y9F0K3MB "" "$PROJECT_REPO"
+	run --separate-stderr librarian_cli lessons veto 01M3DHRTC1ZQXWQ5V7Y9F0K3MB "" "$PROJECT_REPO"
 	[ "$status" -ne 0 ]
-	[[ "$output" == *"never promoted"* ]]
+	[[ "$stderr" == *"never promoted"* ]]
+	[[ "$output" != *"never promoted"* ]]
 }
 
 @test "lessons veto still succeeds and warns on stderr when the proposal is unreadable" {
@@ -254,9 +264,29 @@ _hold_cli_setup() {
 	# Same shape as the sweep's "no readable envelope" test above: the proposal
 	# that would have carried artifact_id is gone, so it can't be resolved.
 	rm -f "${LESSONS_DIR}/proposals/01M3B87J7046SJE5BECNMP670K.json"
-	run librarian_cli lessons veto 01M3B87J7046SJE5BECNMP670K "" "$PROJECT_REPO"
+	run --separate-stderr librarian_cli lessons veto 01M3B87J7046SJE5BECNMP670K "" "$PROJECT_REPO"
 	[ "$status" -eq 0 ]
 	[ ! -f "${LESSONS_DIR}/approved_held/01M3B87J7046SJE5BECNMP670K.json" ]
-	[[ "$output" == *"artifact_id could not be resolved"* ]]
-	[[ "$output" == *"no declined-ledger row was recorded"* ]]
+	[[ "$stderr" == *"artifact_id could not be resolved"* ]]
+	[[ "$stderr" == *"no declined-ledger row was recorded"* ]]
+	[[ "$output" != *"artifact_id could not be resolved"* ]]
+	[[ "$output" == *"vetoed; it will not leave this machine"* ]]
+}
+
+@test "veto still succeeds and warns on stderr when the declined-ledger row cannot be written" {
+	_hold_cli_setup
+	_seed_judged 01M3B87J7046SJE5BECNMP670K model
+	librarian_lesson_promote "$PROJECT_KEY" 01M3B87J7046SJE5BECNMP670K
+	# librarian_lesson_append_declined's last statement is `printf >>
+	# declined.jsonl`. Replacing that file with a directory leaves
+	# librarian_lesson_storage_init (mkdir -p, already exists) succeeding
+	# while the trailing append fails — the exact mechanism the veto ruling
+	# was verified against by reading the source alone; this test drives it.
+	mkdir -p "${LESSONS_DIR}/declined.jsonl"
+	run --separate-stderr librarian_cli lessons veto 01M3B87J7046SJE5BECNMP670K "overreaches" "$PROJECT_REPO"
+	[ "$status" -eq 0 ]
+	[ ! -f "${LESSONS_DIR}/approved_held/01M3B87J7046SJE5BECNMP670K.json" ]
+	[[ "$stderr" == *"declined-ledger row could not be written"* ]]
+	[[ "$output" != *"declined-ledger row could not be written"* ]]
+	[[ "$output" == *"vetoed; it will not leave this machine"* ]]
 }
