@@ -46,19 +46,29 @@ _input() {
     '{cwd:$cwd, session_id:$sid, transcript_path:$transcript, hook_event_name:"SessionEnd"}'
 }
 
+# THE REAL CLAUDE CODE TRANSCRIPT SHAPE, which is not what this file used to
+# write. Entries are {"type":"user"|"assistant","message":{"content":...}} —
+# the role lives on `type` and the content is nested under `message`. The old
+# fixtures emitted a flat {role, content}, a shape nothing produces, so the
+# whole suite validated an invented format and a loader that read zero turns
+# from every real transcript passed every test (ONL-121).
 _append_text_turn() {
   local role="$1" text="$2"
   jq -cn --arg role "$role" --arg text "$text" \
-    '{role: $role, content: $text}' >> "$TRANSCRIPT"
+    '{type: $role, message: {content: $text}}' >> "$TRANSCRIPT"
 }
 
+# Assistant turns carry an array of content blocks. Only `text` is prose —
+# `thinking` is internal and `tool_use` is tool traffic, and historian drops
+# both.
 _append_block_turn() {
   local role="$1" text="$2"
   jq -cn --arg role "$role" --arg text "$text" \
-    '{role: $role, content: [
+    '{type: $role, message: {content: [
       { type: "text", text: $text },
+      { type: "thinking", thinking: "internal reasoning that must not be indexed" },
       { type: "tool_use", name: "Read", input: { file_path: "/tmp/x" } }
-    ]}' >> "$TRANSCRIPT"
+    ]}}' >> "$TRANSCRIPT"
 }
 
 _chunk_count() {
