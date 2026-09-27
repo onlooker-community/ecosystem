@@ -61,14 +61,38 @@ if [[ -z "$TRANSCRIPT_PATH" || ! -f "$TRANSCRIPT_PATH" ]]; then
 	_done
 fi
 
-_distill_rc=0
-output_path=$(scribe_distill "$SESSION_ID" "$CWD" "$TRANSCRIPT_PATH") || _distill_rc=$?
-if [[ $_distill_rc -ne 0 ]]; then
-	# rc=2 means below min_turns — silent skip, not an error.
-	[[ $_distill_rc -ne 2 ]] && printf 'scribe-stop: distillation failed for session %s\n' "$SESSION_ID" >&2
-	_done
-fi
+# Distillation is launched, not awaited. It runs a `claude -p` pass over the
+# whole transcript under a 60s timeout, and calling it inline is what made this
+# hook contradict the contract at the top of this file: measured on 2026-09-26,
+# three of five Stop fires in one session cost 53.6s, 40.9s and 45.1s, against
+# 95-253ms for every other Stop hook (ONL-41).
+#
+# The lock is deliberately NOT taken here. run-distill.sh acquires it, because a
+# launcher that acquires and then exits leaves portable-lock a holder pid that is
+# already dead, which the next caller reclaims as stale — a lock that excludes
+# nothing (ecosystem-hap).
+#
+# setsid detaches from the controlling terminal so ending the session does not
+# SIGHUP the pass mid-flight; nohup alone on macOS, where setsid is absent.
+#
+# stderr goes to a log rather than /dev/null, which is not a stylistic choice:
+# scribe already lost a `--max-tokens` bug to a discarded stderr and produced
+# nothing across 13,201 sessions without anyone noticing (ONL-30). Detaching the
+# work moves every remaining diagnostic off the terminal, so the one place it can
+# still be read has to be a file.
+DISTILL_LOG="${ONLOOKER_DIR:-${HOME}/.onlooker}/scribe/distill.log"
+mkdir -p "$(dirname "$DISTILL_LOG")" 2>/dev/null || true
 
-[[ -n "$output_path" ]] && printf 'scribe: intent document written → %s\n' "$output_path" >&2
+export SCRIBE_SESSION_ID="$SESSION_ID"
+export SCRIBE_CWD="$CWD"
+export SCRIBE_TRANSCRIPT="$TRANSCRIPT_PATH"
+export ONLOOKER_DIR="${ONLOOKER_DIR:-${HOME}/.onlooker}"
+
+if command -v setsid >/dev/null 2>&1; then
+	nohup setsid "${PLUGIN_ROOT}/scripts/run-distill.sh" >>"$DISTILL_LOG" 2>&1 &
+else
+	nohup "${PLUGIN_ROOT}/scripts/run-distill.sh" >>"$DISTILL_LOG" 2>&1 &
+fi
+disown 2>/dev/null || true
 
 _done
