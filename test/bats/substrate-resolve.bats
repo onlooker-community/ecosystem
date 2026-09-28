@@ -116,12 +116,31 @@ _hooks_using_resolver() {
 	grep -rl 'onlooker_resolve_substrate' "${REPO_ROOT}"/plugins/*/scripts/hooks/*.sh | sort
 }
 
+# Scripts that resolve the substrate without being hooks. Two do: assayer's
+# audit command, and historian's detached indexer.
+#
+# Sweeping only scripts/hooks/*.sh is how assayer-audit.sh kept its inline
+# two-dirname re-derive all the way through the fourteen-hook fix — it is a
+# command script, so nothing looked at it. The narrow scope then had the same
+# effect a second time, from the other direction: historian's SessionEnd hook
+# became a launcher and the whole pipeline, substrate lookup included, moved
+# into scripts/run-index.sh, which dropped straight out of the sweep and took
+# the hook count from 14 to 13 with it.
+_non_hook_scripts_using_resolver() {
+	grep -rl 'onlooker_resolve_substrate' "${REPO_ROOT}"/plugins/*/scripts/*.sh 2>/dev/null | sort
+}
+
 @test "the sweep finds the callers it claims to cover" {
-	# Guards the two sweeps below: if the grep stops matching, they would pass
-	# by iterating over nothing.
-	local count
-	count=$(_hooks_using_resolver | wc -l | tr -d ' ')
-	[ "$count" -ge 14 ]
+	# Guards the sweeps below: if either grep stops matching, they would pass
+	# by iterating over nothing. Counted separately so that a caller moving
+	# between the two shows up as a change here rather than cancelling out.
+	local hooks scripts
+	hooks=$(_hooks_using_resolver | wc -l | tr -d ' ')
+	scripts=$(_non_hook_scripts_using_resolver | wc -l | tr -d ' ')
+
+	[ "$hooks" -ge 13 ] || { echo "hooks: $hooks"; return 1; }
+	[ "$scripts" -ge 2 ] || { echo "non-hook scripts: $scripts"; return 1; }
+	[ "$((hooks + scripts))" -ge 15 ]
 }
 
 @test "no plugin script still carries its own inline substrate lookup" {
@@ -152,5 +171,36 @@ _hooks_using_resolver() {
 			failures+="${plugin}/$(basename "$hook"):$(head -1 "$MARKER") "
 		fi
 	done < <(_hooks_using_resolver)
+	[ -z "$failures" ] || { echo "failed: $failures"; return 1; }
+}
+
+@test "every non-hook script that resolves the substrate sources the newest one" {
+	# Same drive-it-for-real check as the hooks above. These were the callers
+	# nothing watched, so they get watched by name.
+	local failures="" script plugin root rel relpath
+	local snapshot="${BATS_TEST_TMPDIR}/snapshot.jsonl"
+	while IFS= read -r script; do
+		rel="${script#"${REPO_ROOT}/plugins/"}"
+		plugin="${rel%%/*}"
+		relpath="${rel#"${plugin}/"}"
+		rm -rf "$CACHE" "$MARKER"
+		root=$(_fake_cache "$plugin")
+		# CLAUDE_PLUGIN_ROOT is exported by whatever launches these, so the
+		# harness supplies it the same way rather than leaving the script to
+		# guess from a cwd the test controls.
+		#
+		# The throwaway snapshot is for assayer-audit.sh, which takes one as $1
+		# and exits 0 without it — before reaching the substrate lookup, so
+		# omitting it reports never-sourced for a script that is fine. Scripts
+		# that take no arguments ignore it. timeout because these are command
+		# scripts that go on to shell out; only the marker matters here.
+		: > "$snapshot"
+		printf '{}' | CLAUDE_PLUGIN_ROOT="$root" timeout 30 bash "${root}/${relpath}" "$snapshot" >/dev/null 2>&1 || true
+		if [[ ! -f "$MARKER" ]]; then
+			failures+="${plugin}/${relpath}:never-sourced "
+		elif [[ "$(head -1 "$MARKER")" != "0.49.2" ]]; then
+			failures+="${plugin}/${relpath}:$(head -1 "$MARKER") "
+		fi
+	done < <(_non_hook_scripts_using_resolver)
 	[ -z "$failures" ] || { echo "failed: $failures"; return 1; }
 }
