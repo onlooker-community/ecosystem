@@ -21,10 +21,14 @@
     "embedder": {
       "backend": "ollama",
       "_note": "Backend selector. `ollama` (default) talks to a local Ollama daemon. `none` skips embedding entirely; retrieval no-ops without vectors. `fastembed` and `remote` are reserved for a future landing.",
+      "max_input_chars": 6000,
+      "_max_input_chars_note": "Longest body worth sending to the embedder. nomic-embed-text holds roughly 2048 tokens and answers HTTP 500 above about 7k characters. The chunker splits turns to fit, so this is a backstop for a raised chunk_target_chars or a model with a smaller window; without it an oversize body comes back as a bare HTTP 500 that reads like a server fault.",
       "ollama": {
         "host": "http://127.0.0.1:11434",
         "model": "nomic-embed-text",
-        "request_timeout_seconds": 8
+        "request_timeout_seconds": 8,
+        "keep_alive": "30m",
+        "_keep_alive_note": "How long ollama holds the model in memory after a request. Its own default is 5 minutes, so any session starting more than five minutes after the last embed paid a cold load — measured at 11.24s against this 8s timeout, which therefore always failed. Holding it longer costs nothing when the model is already resident."
       }
     },
     "retrieval": {

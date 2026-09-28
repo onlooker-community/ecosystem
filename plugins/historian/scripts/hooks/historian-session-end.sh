@@ -1,60 +1,32 @@
 #!/usr/bin/env bash
-# Historian SessionEnd indexing pipeline.
+# Historian SessionEnd indexing launcher.
 #
-# Reads the session transcript, drops tool calls / tool results, chunks
-# the remaining user + assistant turns at turn boundaries, redacts
-# secret-shaped substrings, and appends one JSONL line per surviving
-# chunk to ~/.onlooker/historian/<project-key>/sessions/<session-id>.jsonl.
+# Launches the indexing pipeline and returns. The pipeline itself lives in
+# scripts/run-index.sh — see its header for why it cannot run here.
+#
+# The short version: a SessionEnd hook that declares no timeout is killed at
+# 1500ms. A warm embed costs 51ms, so the budget buys about 29 chunks, and a
+# real 8.5MB transcript chunks into 117. A cold model load costs 11.24s and so
+# never completes at all. Running inline, every historian.indexing.complete
+# with outcome "ok" in the live log indexed exactly 2 chunks — not historian
+# working, just the only size that fit — while the larger sessions show up in
+# hook-health.jsonl as `terminated` at 1503-1527ms (ONL-123).
 #
 # Hook contract:
 #   - Always exits 0. Never blocks session shutdown.
-#   - No-ops when there is no project key, no transcript path, or the
-#     transcript is shorter than min_transcript_chars_to_index.
-#   - Indexing failures are fail-soft: an emitted historian.indexing.complete
-#     with outcome "skipped" + a skip_reason is the worst case.
+#   - Decides nothing beyond having a session id. Every reason historian
+#     declines to index is emitted by run-index.sh, so that reporting costs
+#     the SessionEnd path nothing.
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
+export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 # shellcheck source=../lib/hook-health.sh
 source "${PLUGIN_ROOT}/scripts/lib/hook-health.sh"
 hook_health_register "historian-session-end"
-
-# Ecosystem substrate (validate-path.sh) lives in the sibling ecosystem plugin.
-# Resolution is shared rather than repeated: fourteen hooks each carried a
-# byte-identical copy of this lookup, and it was wrong the same two ways in all
-# fourteen (ecosystem-449.36, ecosystem-449.35). Fixing it fourteen times is how
-# it stayed broken. See scripts/lib/substrate-resolve.sh.
-# shellcheck source=../lib/substrate-resolve.sh
-source "${PLUGIN_ROOT}/scripts/lib/substrate-resolve.sh"
-_ECOSYSTEM_ROOT=$(onlooker_resolve_substrate "$PLUGIN_ROOT")
-
-if [[ -n "$_ECOSYSTEM_ROOT" && -f "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.sh" ]]; then
-	# shellcheck disable=SC1091
-	export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
-	source "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.sh"
-fi
-
-# shellcheck source=../lib/historian-config.sh
-source "${PLUGIN_ROOT}/scripts/lib/historian-config.sh"
-# shellcheck source=../lib/historian-project-key.sh
-source "${PLUGIN_ROOT}/scripts/lib/historian-project-key.sh"
-# shellcheck source=../lib/historian-ulid.sh
-source "${PLUGIN_ROOT}/scripts/lib/historian-ulid.sh"
-# shellcheck source=../lib/historian-storage.sh
-source "${PLUGIN_ROOT}/scripts/lib/historian-storage.sh"
-# shellcheck source=../lib/historian-emit.sh
-source "${PLUGIN_ROOT}/scripts/lib/historian-emit.sh"
-# shellcheck source=../lib/historian-transcript.sh
-source "${PLUGIN_ROOT}/scripts/lib/historian-transcript.sh"
-# shellcheck source=../lib/historian-chunker.sh
-source "${PLUGIN_ROOT}/scripts/lib/historian-chunker.sh"
-# shellcheck source=../lib/historian-sanitizer.sh
-source "${PLUGIN_ROOT}/scripts/lib/historian-sanitizer.sh"
-# shellcheck source=../lib/historian-embedder.sh
-source "${PLUGIN_ROOT}/scripts/lib/historian-embedder.sh"
 
 INPUT=$(cat 2>/dev/null || true)
 hook_health_context "$INPUT"
@@ -62,188 +34,41 @@ CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SESSION_ID=""
 TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | jq -r '.transcript_path // ""' 2>/dev/null) || TRANSCRIPT_PATH=""
 [[ -z "$CWD" ]] && CWD="$(pwd)"
-[[ -z "$SESSION_ID" ]] && SESSION_ID="unknown"
 
-REPO_ROOT=$(historian_project_repo_root "$CWD")
-historian_config_load "$CWD"
+# A session id is the one thing worth checking here: without it there is
+# nothing to attribute an event to, so the child could not report its own
+# skip either. Everything else — a missing transcript_path, a path with no
+# file at it, a transcript below the minimum — is decided and REPORTED by
+# run-index.sh. ONL-121 is still waiting on transcript_path_absent versus
+# transcript_file_missing to tell its two halves apart, and moving those
+# emits into the child keeps them firing while taking them off this path.
+[[ -z "$SESSION_ID" ]] && hook_health_exit 0
 
-PROJECT_KEY=$(historian_project_key "$CWD")
-[[ -z "$PROJECT_KEY" ]] && hook_health_exit 0
+# stderr goes to a log rather than /dev/null, which is not a stylistic choice:
+# scribe lost a --max-tokens bug to a discarded stderr and produced nothing
+# across 13,201 sessions without anyone noticing (ONL-30). Detaching the work
+# moves every remaining diagnostic off the terminal, so the one place it can
+# still be read has to be a file.
+INDEX_LOG="${ONLOOKER_DIR:-${HOME}/.onlooker}/historian/index.log"
+mkdir -p "$(dirname "$INDEX_LOG")" 2>/dev/null || true
 
-historian_storage_init "$PROJECT_KEY" || hook_health_exit 0
-REMOTE_URL=$(historian_project_remote_url "$CWD")
-historian_storage_write_manifest "$PROJECT_KEY" "$REMOTE_URL" "$REPO_ROOT" || true
+export HISTORIAN_SESSION_ID="$SESSION_ID"
+export HISTORIAN_CWD="$CWD"
+export HISTORIAN_TRANSCRIPT="$TRANSCRIPT_PATH"
+export ONLOOKER_DIR="${ONLOOKER_DIR:-${HOME}/.onlooker}"
 
-# ----------------------------------------------------------------------------
-# Transcript-availability check first — emit no started/complete for the
-# transcript_unavailable path, just a complete-with-skip so the timeline
-# reads cleanly. Once we have a real char count, emit started with that
-# count (the schema requires transcript_chars on started, so emitting
-# zero before the read produced misleading telemetry).
-# ----------------------------------------------------------------------------
-
-SCAN_START_MS=$(python3 -c 'import time; print(int(time.time() * 1000))' 2>/dev/null) \
-	|| SCAN_START_MS=$(($(date +%s) * 1000))
-
-_emit_skip() {
-	local reason="$1"
-	local now_ms duration_ms
-	now_ms=$(python3 -c 'import time; print(int(time.time() * 1000))' 2>/dev/null) \
-		|| now_ms=$(($(date +%s) * 1000))
-	duration_ms=$((now_ms - SCAN_START_MS))
-	historian_emit "historian.indexing.complete" "$SESSION_ID" "$(jq -cn \
-		--arg outcome "skipped" \
-		--arg skip_reason "$reason" \
-		--argjson duration_ms "$duration_ms" \
-		'{ outcome: $outcome, skip_reason: $skip_reason, duration_ms: $duration_ms }')"
-}
-
-# These two used to share one reason, transcript_unavailable, and that merge
-# is why 2881 of historian's 4611 skips could not be acted on: a payload that
-# carried no transcript_path is a hook-contract problem, while a path that was
-# supplied with no file at it is a timing or lifetime problem, and the log said
-# only that one of them happened (ONL-121).
-if [[ -z "$TRANSCRIPT_PATH" ]]; then
-	_emit_skip "transcript_path_absent"
-	hook_health_exit 0
+# The lock is deliberately NOT taken here. run-index.sh acquires it, because a
+# launcher that acquires and then exits leaves portable-lock a holder pid that
+# is already dead, which the next caller reclaims as stale — a lock that
+# excludes nothing (ecosystem-hap).
+#
+# setsid detaches from the controlling terminal so ending the session does not
+# SIGHUP the pass mid-flight; nohup alone on macOS, where setsid is absent.
+if command -v setsid >/dev/null 2>&1; then
+	nohup setsid "${PLUGIN_ROOT}/scripts/run-index.sh" >>"$INDEX_LOG" 2>&1 &
+else
+	nohup "${PLUGIN_ROOT}/scripts/run-index.sh" >>"$INDEX_LOG" 2>&1 &
 fi
-
-if [[ ! -f "$TRANSCRIPT_PATH" ]]; then
-	_emit_skip "transcript_file_missing"
-	hook_health_exit 0
-fi
-
-MIN_CHARS=$(historian_config_get '.historian.indexing.min_transcript_chars_to_index')
-[[ -z "$MIN_CHARS" || "$MIN_CHARS" == "null" ]] && MIN_CHARS=1200
-
-TURNS=$(historian_transcript_load "$TRANSCRIPT_PATH")
-TRANSCRIPT_CHARS=$(historian_transcript_char_count "$TURNS")
-[[ -z "$TRANSCRIPT_CHARS" || "$TRANSCRIPT_CHARS" == "null" ]] && TRANSCRIPT_CHARS=0
-
-historian_emit "historian.indexing.started" "$SESSION_ID" "$(jq -cn \
-	--arg session_id "$SESSION_ID" \
-	--argjson transcript_chars "$TRANSCRIPT_CHARS" \
-	'{ session_id: $session_id, transcript_chars: $transcript_chars }')"
-
-if (( TRANSCRIPT_CHARS < MIN_CHARS )); then
-	_emit_skip "too_short"
-	hook_health_exit 0
-fi
-
-# ----------------------------------------------------------------------------
-# Chunker → sanitizer → JSONL store.
-# ----------------------------------------------------------------------------
-
-TARGET_CHARS=$(historian_config_get '.historian.indexing.chunk_target_chars')
-[[ -z "$TARGET_CHARS" || "$TARGET_CHARS" == "null" ]] && TARGET_CHARS=2400
-OVERLAP_CHARS=$(historian_config_get '.historian.indexing.chunk_overlap_chars')
-[[ -z "$OVERLAP_CHARS" || "$OVERLAP_CHARS" == "null" ]] && OVERLAP_CHARS=400
-
-CHUNKS=$(historian_chunker_split "$TURNS" "$TARGET_CHARS" "$OVERLAP_CHARS")
-NEVER_INDEX_PATHS=$(historian_config_get '.historian.sanitization.never_index_paths | tojson')
-[[ -z "$NEVER_INDEX_PATHS" || "$NEVER_INDEX_PATHS" == "null" ]] && NEVER_INDEX_PATHS='[]'
-
-# Honor the two on/off knobs from the config block.
-REDACT_SECRETS=$(historian_config_get '.historian.sanitization.redact_secret_patterns')
-[[ -z "$REDACT_SECRETS" || "$REDACT_SECRETS" == "null" ]] && REDACT_SECRETS="true"
-DROP_SKIP=$(historian_config_get '.historian.sanitization.drop_skip_marker')
-[[ -z "$DROP_SKIP" || "$DROP_SKIP" == "null" ]] && DROP_SKIP="true"
-
-SANITIZED=$(historian_sanitizer_run "$CHUNKS" "$NEVER_INDEX_PATHS" "$REDACT_SECRETS" "$DROP_SKIP")
-KEPT=$(printf '%s' "$SANITIZED" | jq '.kept')
-DROPPED=$(printf '%s' "$SANITIZED" | jq '.dropped')
-
-# Probe the embedder once before the chunk loop. If unavailable we
-# index without vectors. The retriever shipped today is embedding-only,
-# so chunks written without an `embedding` field are persisted but
-# invisible to retrieval until they are re-indexed against a working
-# embedder. Chunk bodies stay intact, so re-indexing is a re-embed pass
-# rather than a full re-chunk.
-EMBEDDER_READY=0
-EMBEDDER_BACKEND=$(historian_config_get '.historian.embedder.backend')
-[[ -z "$EMBEDDER_BACKEND" || "$EMBEDDER_BACKEND" == "null" ]] && EMBEDDER_BACKEND="none"
-if [[ "$EMBEDDER_BACKEND" != "none" ]]; then
-	if historian_embedder_available; then
-		EMBEDDER_READY=1
-	else
-		historian_emit "historian.embedder.unavailable" "$SESSION_ID" "$(jq -cn \
-			--arg backend "$EMBEDDER_BACKEND" \
-			'{ backend: $backend }')"
-	fi
-fi
-
-# Re-indexing replaces the existing session file rather than appending,
-# so SessionEnd is safely idempotent if re-fired against the same id.
-historian_storage_reset_session "$PROJECT_KEY" "$SESSION_ID"
-
-NOW_TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-CHUNKS_INDEXED=0
-
-while IFS= read -r CHUNK; do
-	[[ -z "$CHUNK" || "$CHUNK" == "null" ]] && continue
-
-	CHUNK_ID=$(historian_ulid)
-	REDACTION_COUNT=$(printf '%s' "$CHUNK" | jq -r '.redaction_count // 0')
-	BODY=$(printf '%s' "$CHUNK" | jq -r '.body_redacted // ""')
-
-	# Build the base record. The embedding (if any) is added below.
-	RECORD=$(jq -cn \
-		--arg chunk_id "$CHUNK_ID" \
-		--arg session_id "$SESSION_ID" \
-		--argjson chunk_input "$CHUNK" \
-		--arg created_at "$NOW_TS" \
-		--arg source "local" \
-		'$chunk_input + {
-			chunk_id: $chunk_id,
-			session_id: $session_id,
-			created_at: $created_at,
-			source: $source
-		}')
-
-	if (( EMBEDDER_READY == 1 )) && [[ -n "$BODY" ]]; then
-		EMBEDDING=$(historian_embedder_embed "$BODY")
-		if [[ -n "$EMBEDDING" ]]; then
-			RECORD=$(printf '%s' "$RECORD" | jq -c --argjson v "$EMBEDDING" \
-				'. + { embedding: $v }')
-		fi
-	fi
-
-	if historian_storage_append_chunk "$PROJECT_KEY" "$SESSION_ID" "$RECORD"; then
-		CHUNKS_INDEXED=$((CHUNKS_INDEXED + 1))
-		if (( REDACTION_COUNT > 0 )); then
-			historian_emit "historian.chunk.sanitized" "$SESSION_ID" "$(jq -cn \
-				--arg chunk_id "$CHUNK_ID" \
-				--argjson redaction_count "$REDACTION_COUNT" \
-				'{ chunk_id: $chunk_id, redaction_count: $redaction_count }')"
-		fi
-	fi
-done < <(printf '%s' "$KEPT" | jq -c '.[]' 2>/dev/null)
-
-# Emit one chunk.dropped event per skip reason summary (caps at the
-# number of unique reasons; per-chunk emission would spam the log).
-DROPPED_COUNT=$(printf '%s' "$DROPPED" | jq 'length' 2>/dev/null) || DROPPED_COUNT=0
-if (( DROPPED_COUNT > 0 )); then
-	for reason in $(printf '%s' "$DROPPED" | jq -r '.[].reason' | sort -u); do
-		historian_emit "historian.chunk.dropped" "$SESSION_ID" "$(jq -cn \
-			--arg reason "$reason" \
-			'{ reason: $reason }')"
-	done
-fi
-
-NOW_MS=$(python3 -c 'import time; print(int(time.time() * 1000))' 2>/dev/null) \
-	|| NOW_MS=$(($(date +%s) * 1000))
-DURATION_MS=$((NOW_MS - SCAN_START_MS))
-
-historian_emit "historian.indexing.complete" "$SESSION_ID" "$(jq -cn \
-	--arg outcome "ok" \
-	--argjson chunks_indexed "$CHUNKS_INDEXED" \
-	--argjson chunks_dropped "$DROPPED_COUNT" \
-	--argjson duration_ms "$DURATION_MS" \
-	'{
-		outcome: $outcome,
-		chunks_indexed: $chunks_indexed,
-		chunks_dropped: $chunks_dropped,
-		duration_ms: $duration_ms
-	}')"
+disown 2>/dev/null || true
 
 hook_health_exit 0

@@ -3,7 +3,8 @@
 #
 # Given a JSON array of normalized turns (from historian-transcript.sh),
 # produces a JSON array of chunk records. Each chunk:
-#   - Respects turn boundaries (no mid-turn splits)
+#   - Prefers turn boundaries, splitting mid-turn only when a single turn
+#     is larger than `target_chars` (see the oversized-turn branch below)
 #   - Targets `target_chars` characters with `overlap_chars` overlap
 #     (carrying the last N chars of one chunk's content as the start of
 #     the next)
@@ -27,6 +28,14 @@ import json, sys
 target = int(sys.argv[1])
 overlap = max(0, int(sys.argv[2]))
 turns = json.loads(sys.argv[3] or "[]")
+
+# Overlap has to stay meaningfully below the target. A chunk is seeded with the
+# previous chunk's trailing `overlap` chars, so an overlap at or above the
+# target starts every chunk already over budget, and the oversized-turn window
+# below would advance by nothing. Half the target is the most that still leaves
+# room to make progress.
+if target > 0:
+    overlap = min(overlap, target // 2)
 
 chunks = []
 chunk_index = 0
@@ -81,19 +90,33 @@ for turn in turns:
     rendered_len = len(rendered)
 
     # If this single turn exceeds the target, flush whatever's pending and
-    # emit the oversized turn as its own chunk. The next chunk's overlap
-    # carries the last `overlap` chars of this turn's body.
+    # window the turn into target-sized pieces.
     if rendered_len > target:
         # Flush pending buffer first.
         if buf_parts:
             flush()
-        # Seed an oversized chunk on its own.
-        body_for_chunk = (pending_overlap + ("\n\n" if pending_overlap else "")) + rendered
-        # Set start/end markers for the standalone chunk.
-        buf_start = turn["turn_index"]
-        buf_end = turn["turn_index"]
-        flush(force_text=body_for_chunk)
-        pending_overlap = body_for_chunk[-overlap:] if overlap > 0 else ""
+        # A turn bigger than the target used to become one oversized chunk, on
+        # the theory that turn boundaries were worth preserving whole. They are
+        # not worth it at this price: nomic-embed-text answers HTTP 500 above
+        # roughly 7k chars, so those chunks were stored without a vector and the
+        # embedding-only retriever could never return them. The longest turns in
+        # a session are the substantial ones, so the index was losing exactly
+        # the material worth recalling (ONL-123).
+        #
+        # Slide a target-sized window over the turn instead, carrying `overlap`
+        # chars between windows so a match landing on a seam still reads in
+        # context. Every window is attributed to the turn it came from.
+        full = (pending_overlap + ("\n\n" if pending_overlap else "")) + rendered
+        stride = max(1, target - overlap)
+        pos = 0
+        while pos < len(full):
+            buf_start = turn["turn_index"]
+            buf_end = turn["turn_index"]
+            flush(force_text=full[pos:pos + target])
+            if pos + target >= len(full):
+                break
+            pos += stride
+        pending_overlap = full[-overlap:] if overlap > 0 else ""
         continue
 
     candidate_len = buf_chars + rendered_len + (2 if buf_parts else 0)  # 2 for "\n\n"
