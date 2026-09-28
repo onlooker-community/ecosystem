@@ -37,6 +37,7 @@
     "governor.session.complete",
     "historian.chunk.dropped",
     "historian.chunk.sanitized",
+    "historian.embedder.failed",
     "historian.embedder.unavailable",
     "historian.indexing.complete",
     "historian.indexing.started",

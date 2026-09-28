@@ -69,6 +69,14 @@ if [[ "$url" == */api/tags ]]; then
   exit 0
 fi
 
+# A second toggle fails only the EMBED calls, leaving the probe passing. That
+# is the state that hid ONL-123: /api/tags answers instantly from disk whether
+# or not the model is resident, so a cold daemon looks available and then times
+# out on every embed.
+if [[ "$url" == */api/embeddings && -n "${HISTORIAN_STUB_EMBED_RC:-}" ]]; then
+  exit "${HISTORIAN_STUB_EMBED_RC}"
+fi
+
 if [[ "$url" == */api/embeddings ]]; then
   prompt=$(printf '%s' "$payload" | jq -r '.prompt // ""' 2>/dev/null)
   case "$prompt" in
@@ -93,14 +101,8 @@ STUB
     '{"historian":{"indexing":{"min_transcript_chars_to_index":50,"chunk_target_chars":400,"chunk_overlap_chars":50},"retrieval":{"cooldown_seconds":60,"max_retrievals_per_session":5,"min_prompt_chars":40,"min_similarity":0.55,"max_age_days":365}}}' \
     > "${PROJECT_REPO}/.claude/settings.json"
 
-  INDEX_HOOK="${PLUGIN_ROOT}/scripts/hooks/historian-session-end.sh"
+  INDEX_RUNNER="${PLUGIN_ROOT}/scripts/run-index.sh"
   RETRIEVE_HOOK="${PLUGIN_ROOT}/scripts/hooks/historian-prompt-submit.sh"
-}
-
-_index_input() {
-  local sid="${1:-$SESSION_ID}"
-  jq -cn --arg cwd "$PROJECT_REPO" --arg sid "$sid" --arg transcript "$TRANSCRIPT" \
-    '{cwd:$cwd, session_id:$sid, transcript_path:$transcript, hook_event_name:"SessionEnd"}'
 }
 
 _retrieve_input() {
@@ -123,7 +125,16 @@ _index_session() {
     _append_text_turn "user" "$1"; shift
     [ $# -gt 0 ] && { _append_text_turn "assistant" "$1"; shift; }
   done
-  bash -c "printf '%s' '$(_index_input "$sid")' | '$INDEX_HOOK'" >/dev/null
+  # Seeds the index synchronously. The SessionEnd hook only launches this
+  # runner now (ONL-123), so going through the hook would return before any
+  # chunk existed and every retrieval test below would search an empty store.
+  env \
+    HISTORIAN_SESSION_ID="$sid" \
+    HISTORIAN_CWD="$PROJECT_REPO" \
+    HISTORIAN_TRANSCRIPT="$TRANSCRIPT" \
+    CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" \
+    ONLOOKER_DIR="$ONLOOKER_DIR" \
+    "$INDEX_RUNNER" >/dev/null
 }
 
 
@@ -227,4 +238,31 @@ _index_session() {
   echo "$output" | jq -e '.hookSpecificOutput.additionalContext == ""' >/dev/null
   grep '"event_type":"historian.retrieval.complete"' "$ONLOOKER_EVENTS_LOG" \
     | jq -e '.payload.outcome == "empty"' >/dev/null
+}
+
+@test "a failed embed is reported as embed_failed, not embedder_unavailable" {
+  # The probe passes and the embed times out — a cold model. Calling that
+  # "unavailable" names a probe failure that did not happen, and is what made
+  # 59 of 115 prompt submissions in the live log unattributable (ONL-123).
+  run env HISTORIAN_STUB_EMBED_RC=28 bash -c \
+    "printf '%s' '$(_retrieve_input "Hitting another redash dashboard timezone issue on the same saved query parameters again today")' | '$RETRIEVE_HOOK'"
+  [ "$status" -eq 0 ] || return 1
+
+  grep '"event_type":"historian.retrieval.complete"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e '.payload.outcome == "skipped" and .payload.skip_reason == "embed_failed"' >/dev/null || return 1
+
+  grep '"event_type":"historian.embedder.failed"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e '.payload.reason == "timeout" and .payload.attempted == 1 and .payload.failed == 1' >/dev/null
+}
+
+@test "an unreachable embedder still reports embedder_unavailable" {
+  # The converse, so the two reasons cannot collapse back into one.
+  run env HISTORIAN_STUB_OLLAMA_AVAILABLE=0 bash -c \
+    "printf '%s' '$(_retrieve_input "Hitting another redash dashboard timezone issue on the same saved query parameters again today")' | '$RETRIEVE_HOOK'"
+  [ "$status" -eq 0 ] || return 1
+
+  grep '"event_type":"historian.retrieval.complete"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e '.payload.skip_reason == "embedder_unavailable"' >/dev/null || return 1
+
+  ! grep -q '"event_type":"historian.embedder.failed"' "$ONLOOKER_EVENTS_LOG"
 }

@@ -176,9 +176,36 @@ if ! historian_embedder_available; then
 	hook_health_exit 0
 fi
 
-QUERY_EMBEDDING=$(historian_embedder_embed "$PROMPT")
+# Reaching this line means historian_embedder_available already passed, so a
+# failure here is NOT the embedder being unreachable — and reporting it as
+# embedder_unavailable is what hid ONL-123 on this path. The probe asks
+# /api/tags, which answers instantly from disk whether or not the model is
+# resident, so a cold daemon passes it and then times out on every embed.
+# Measured on the live log: 59 of 115 prompt submissions spent the full 8s
+# timeout that way, each one reported as the embedder being unreachable.
+historian_embedder_parse "$(historian_embedder_embed_reported "$PROMPT")"
+QUERY_EMBEDDING="$HISTORIAN_EMBEDDER_VECTOR"
 if [[ -z "$QUERY_EMBEDDING" ]]; then
-	_emit_complete_skipped "embedder_unavailable"
+	if [[ -n "$HISTORIAN_EMBEDDER_REASON" ]]; then
+		BACKEND=$(historian_config_get '.historian.embedder.backend')
+		[[ -z "$BACKEND" || "$BACKEND" == "null" ]] && BACKEND="none"
+		historian_emit "historian.embedder.failed" "$SESSION_ID" "$(jq -cn \
+			--arg backend "$BACKEND" \
+			--arg reason "$HISTORIAN_EMBEDDER_REASON" \
+			--arg error_summary "$HISTORIAN_EMBEDDER_DETAIL" \
+			'{ backend: $backend, reason: $reason, attempted: 1, failed: 1 }
+			 + (if $error_summary == "" then {} else { error_summary: $error_summary } end)')"
+
+		# A timeout means the model was almost certainly cold. Start loading it
+		# now, detached, so the next prompt finds it resident rather than
+		# paying the same 11.2s load again. Nothing here waits on it.
+		if [[ "$HISTORIAN_EMBEDDER_REASON" == "timeout" ]]; then
+			historian_embedder_warm
+		fi
+		_emit_complete_skipped "embed_failed"
+	else
+		_emit_complete_skipped "embedder_unavailable"
+	fi
 	_emit_context ""
 	hook_health_exit 0
 fi

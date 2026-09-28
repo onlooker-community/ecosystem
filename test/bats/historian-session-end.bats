@@ -38,12 +38,25 @@ setup() {
     > "${PROJECT_REPO}/.claude/settings.json"
 
   HOOK="${PLUGIN_ROOT}/scripts/hooks/historian-session-end.sh"
+  RUNNER="${PLUGIN_ROOT}/scripts/run-index.sh"
 }
 
-_input() {
-  jq -cn --arg cwd "$PROJECT_REPO" --arg sid "$SESSION_ID" \
-    --arg transcript "$TRANSCRIPT" \
-    '{cwd:$cwd, session_id:$sid, transcript_path:$transcript, hook_event_name:"SessionEnd"}'
+# The indexing pipeline moved off the SessionEnd path into run-index.sh
+# (ONL-123): a hook killed at 1500ms could not finish a real session, and
+# every indexing.complete with outcome "ok" in the live log had indexed
+# exactly 2 chunks because that was the only size that fit.
+#
+# These tests drive the runner directly and synchronously, so they exercise
+# the same pipeline they always did. The hook's own job — launch and return
+# without blocking — is covered in historian-nonblocking-session-end.bats.
+_run_index() {
+  run env \
+    HISTORIAN_SESSION_ID="$SESSION_ID" \
+    HISTORIAN_CWD="$PROJECT_REPO" \
+    HISTORIAN_TRANSCRIPT="${1-$TRANSCRIPT}" \
+    CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" \
+    ONLOOKER_DIR="$ONLOOKER_DIR" \
+    "$RUNNER"
 }
 
 # THE REAL CLAUDE CODE TRANSCRIPT SHAPE, which is not what this file used to
@@ -83,17 +96,16 @@ _chunk_count() {
 # path with no file at it is a timing or lifetime problem, and 2881 of
 # historian's skips were unattributable because one reason covered both.
 @test "a path that exists in the payload but not on disk is transcript_file_missing" {
-  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  _run_index
   [ "$status" -eq 0 ]
   grep '"event_type":"historian.indexing.complete"' "$ONLOOKER_EVENTS_LOG" \
     | jq -e '.payload.outcome == "skipped" and .payload.skip_reason == "transcript_file_missing"' >/dev/null
 }
 
 @test "a payload carrying no transcript_path at all is transcript_path_absent" {
-  local input
-  input=$(jq -cn --arg cwd "$PROJECT_REPO" --arg sid "$SESSION_ID" \
-    '{cwd:$cwd, session_id:$sid, hook_event_name:"SessionEnd"}')
-  run bash -c "printf '%s' '$input' | '$HOOK'"
+  # An empty transcript path is what the hook forwards when the SessionEnd
+  # payload carried no transcript_path key at all.
+  _run_index ""
   [ "$status" -eq 0 ]
   grep '"event_type":"historian.indexing.complete"' "$ONLOOKER_EVENTS_LOG" \
     | jq -e '.payload.outcome == "skipped" and .payload.skip_reason == "transcript_path_absent"' >/dev/null
@@ -103,7 +115,7 @@ _chunk_count() {
   _append_text_turn "user" "hi"
   _append_text_turn "assistant" "yo"
 
-  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  _run_index
   [ "$status" -eq 0 ]
   grep '"event_type":"historian.indexing.complete"' "$ONLOOKER_EVENTS_LOG" \
     | jq -e '.payload.outcome == "skipped" and .payload.skip_reason == "too_short"' >/dev/null
@@ -115,7 +127,7 @@ _chunk_count() {
   _append_text_turn "user" "What's the proposed fix?"
   _append_text_turn "assistant" "Move cache invalidation into the redirect handler, so it runs before the retry, not concurrently."
 
-  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  _run_index
   [ "$status" -eq 0 ]
 
   local count
@@ -151,7 +163,7 @@ _chunk_count() {
     "$fake_aws" "$fake_gh" "$fake_anthropic")
   _append_text_turn "user" "$turn_body"
 
-  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  _run_index
   [ "$status" -eq 0 ]
 
   local jsonl="${HIST_DIR}/sessions/${SESSION_ID}.jsonl"
@@ -175,7 +187,7 @@ _chunk_count() {
   _append_text_turn "user" "this turn is meant to be sensitive ${marker} please ignore"
   _append_text_turn "assistant" "$(printf 'second turn %.0s' {1..30})"
 
-  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  _run_index
   [ "$status" -eq 0 ]
   [ "$(_chunk_count)" -ge 1 ]
 
@@ -198,7 +210,7 @@ _chunk_count() {
   _append_text_turn "assistant" "second turn references restricted/notes.md which must be dropped from the index entirely"
   _append_text_turn "user" "$(printf 'third chunk %.0s' {1..30})"
 
-  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  _run_index
   [ "$status" -eq 0 ]
 
   ! grep -q 'restricted/notes.md' "${HIST_DIR}/sessions/${SESSION_ID}.jsonl" || return 1
@@ -211,7 +223,7 @@ _chunk_count() {
   _append_text_turn "user" "$(printf 'long enough %.0s' {1..30})"
   _append_block_turn "assistant" "Plain spoken assistant text that should appear in the index."
 
-  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  _run_index
   [ "$status" -eq 0 ]
 
   [ "$(_chunk_count)" -ge 1 ]
@@ -224,14 +236,14 @@ _chunk_count() {
   _append_text_turn "user" "$(printf 'first index %.0s' {1..30})"
   _append_text_turn "assistant" "$(printf 'response %.0s' {1..30})"
 
-  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  _run_index
   [ "$status" -eq 0 ]
   local first_count
   first_count=$(_chunk_count)
   [ "$first_count" -ge 1 ]
 
   rm -f "$ONLOOKER_EVENTS_LOG"
-  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  _run_index
   [ "$status" -eq 0 ]
   local second_count
   second_count=$(_chunk_count)
@@ -251,7 +263,7 @@ _chunk_count() {
   body=$(printf "Headers: %s; also %s; padding here for length." "$lower" "$mixed")
   _append_text_turn "user" "$body"
 
-  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  _run_index
   [ "$status" -eq 0 ]
 
   local jsonl="${HIST_DIR}/sessions/${SESSION_ID}.jsonl"
@@ -270,7 +282,7 @@ _chunk_count() {
   local fake_aws="AK""IAABCDEFGHIJKLMNOP"
   _append_text_turn "user" "Header: AWS=$fake_aws — please do not redact this value because the user explicitly opted out."
 
-  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  _run_index
   [ "$status" -eq 0 ]
 
   local jsonl="${HIST_DIR}/sessions/${SESSION_ID}.jsonl"
@@ -288,7 +300,7 @@ _chunk_count() {
   marker='[hist''orian:skip]'
   _append_text_turn "user" "Body that contains the ${marker} marker but should still be indexed when the flag is disabled. Padding to clear the min-chars threshold easily."
 
-  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  _run_index
   [ "$status" -eq 0 ]
 
   local jsonl="${HIST_DIR}/sessions/${SESSION_ID}.jsonl"
@@ -305,7 +317,7 @@ _chunk_count() {
   _append_text_turn "user" "$(printf 'long enough for chars %.0s' {1..20})"
   _append_text_turn "assistant" "$(printf 'response with content %.0s' {1..20})"
 
-  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  _run_index
   [ "$status" -eq 0 ]
 
   grep '"event_type":"historian.indexing.started"' "$ONLOOKER_EVENTS_LOG" \
@@ -315,7 +327,7 @@ _chunk_count() {
 @test "an unreadable transcript emits complete without a started event" {
   # When the transcript path is missing we never read it, so no started
   # event makes it to the log. Only the complete-with-skip remains.
-  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  _run_index
   [ "$status" -eq 0 ]
 
   ! grep -q '"event_type":"historian.indexing.started"' "$ONLOOKER_EVENTS_LOG" || return 1
