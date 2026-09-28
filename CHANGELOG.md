@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.65.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.65.0...ecosystem-v0.65.1) (2026-09-28)
+
+
+### Bug Fixes
+
+* **historian:** finish an index, and report what it loses :relieved: ([#398](https://github.com/onlooker-community/ecosystem/issues/398)) ([86fbf12](https://github.com/onlooker-community/ecosystem/commit/86fbf12449241dc72856486faae01dbe6b614595))
+
 ## [0.65.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.64.3...ecosystem-v0.65.0) (2026-09-27)
 
 
