@@ -43,7 +43,16 @@ _librarian_cli_memory_dir() {
 	if [[ -z "$encoded" ]]; then
 		local abs
 		abs=$(cd "$cwd" 2>/dev/null && pwd -P) || abs=""
-		[[ -n "$abs" ]] && encoded=$(printf '%s' "$abs" | sed -E 's#/#-#g')
+		# Claude Code encodes the project path by replacing BOTH path
+		# separators and dots with '-'. Replacing only '/' leaves a literal
+		# dot, which names a directory Claude Code never reads — so accept
+		# created it, wrote the memory into it, built a second MEMORY.md
+		# there, and printed that path as a success (ONL-125). Every repo
+		# cloned under a github.com-style path was affected.
+		#
+		# scripts/hooks/memory-recall-tracker.sh:126 carries the same
+		# encoder and the same reasoning (ecosystem-449.12).
+		[[ -n "$abs" ]] && encoded=$(printf '%s' "$abs" | sed -E 's#[/.]#-#g')
 	fi
 	[[ -z "$encoded" ]] && return 0
 
