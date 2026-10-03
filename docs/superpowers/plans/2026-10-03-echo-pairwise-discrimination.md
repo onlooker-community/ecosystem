@@ -740,9 +740,10 @@ STUB
 }
 
 @test "the self arm compares a document against its own content" {
-	run "$HARNESS" --repeats 1 --out "$OUT_DIR" "${SUBJECT_DIR}/one.md"
+	run "$HARNESS" --repeats 1 --out "$OUT_DIR" \
+		"${SUBJECT_DIR}/one.md" "${SUBJECT_DIR}/two.md"
 	[ "$status" -eq 0 ] || return 1
-	jq -e '.self | length == 1' "${OUT_DIR}/verdicts.json" >/dev/null || return 1
+	jq -e '.self | length == 2' "${OUT_DIR}/verdicts.json" >/dev/null || return 1
 	jq -e '.self[0].verdicts == ["same"]' "${OUT_DIR}/verdicts.json" >/dev/null
 }
 
@@ -756,7 +757,8 @@ STUB
 }
 
 @test "the run stamps the model and the prompt fingerprint" {
-	run "$HARNESS" --repeats 1 --out "$OUT_DIR" "${SUBJECT_DIR}/one.md"
+	run "$HARNESS" --repeats 1 --out "$OUT_DIR" \
+		"${SUBJECT_DIR}/one.md" "${SUBJECT_DIR}/two.md"
 	[ "$status" -eq 0 ] || return 1
 	jq -e '.prompt_sha256 | length == 64' "${OUT_DIR}/verdicts.json" >/dev/null || return 1
 	jq -e '.model | length > 0' "${OUT_DIR}/verdicts.json" >/dev/null
@@ -788,6 +790,10 @@ STUB
 	[ ! -f "$CALL_LOG" ]
 }
 
+# One file is refused rather than run self-only: a self-only run populates no cross
+# arm, so the stats module reports true_discrimination 0 and returns verdict "stop" --
+# a measured failure, when the truth is that no pairs were supplied. Same defect the
+# stats module took two fix rounds to remove, one layer up at the entry point.
 @test "fewer than two files cannot form a cross pair and is rejected" {
 	run "$HARNESS" --dry-run --repeats 1 "${SUBJECT_DIR}/one.md"
 	[ "$status" -ne 0 ] || return 1
