@@ -51,12 +51,19 @@ setup() {
 
 @test "the pairwise prompt defines better as referring to document B" {
 	run echo_build_pairwise_prompt "a.md" "A" "b.md" "B"
-	[[ "$output" == *"DOCUMENT B"* ]] || return 1
+	[[ "$output" == *"verdict is about DOCUMENT B"* ]] || return 1
+	[[ "$output" == *'"better" — DOCUMENT B is the better prompt file'* ]] || return 1
 }
 
-@test "the scoring prompt is unchanged by the pairwise addition" {
-	run echo_build_judge_prompt "x.md" "XBODY"
-	[ "$status" -eq 0 ] || return 1
-	[[ "$output" == *"Score on these criteria"* ]] || return 1
-	[[ "$output" == *'"score"'* ]] || return 1
+# The absolute rubric's signal-to-noise of 0.61 comes from measurement against THIS
+# exact prompt, so drift_threshold: 0.28 is a property of it. Any deliberate change
+# requires re-measuring and updating the hash below.
+@test "the scoring prompt byte-identity is pinned to measurement history" {
+	expected_hash="29667d3fea5764c93be6011eb69a7211ad09ea83729c772568806948575d1a70"
+	if command -v shasum >/dev/null 2>&1; then
+		actual_hash=$(echo_build_judge_prompt "x.md" "XBODY" | shasum -a 256 | cut -d' ' -f1)
+	else
+		actual_hash=$(echo_build_judge_prompt "x.md" "XBODY" | sha256sum | cut -d' ' -f1)
+	fi
+	[ "$actual_hash" = "$expected_hash" ] || return 1
 }
