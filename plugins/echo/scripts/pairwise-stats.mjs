@@ -63,19 +63,27 @@ function repeatIsAntisymmetric(ab, ba) {
 export function crossAntisymmetry(pairs) {
   const list = pairs ?? [];
   if (list.length === 0) return 0;
+  // Following ONL-102's precedent: absorbing failures into a short sample count
+  // does not just weaken the rate, it can delete a whole analysis without saying so.
+  // Count only pairs with usable repeats (both ab and ba verdicts), and exclude
+  // zero-usable pairs from the denominator entirely -- missing data is not
+  // measured failure.
   let acc = 0;
+  let usable = 0;
   for (const p of list) {
     const ab = p.ab ?? [];
     const ba = p.ba ?? [];
     const n = Math.min(ab.length, ba.length);
-    if (n === 0) continue;
+    if (n === 0) continue; // Exclude pairs with zero usable repeats
+    usable += 1;
     let ok = 0;
     for (let i = 0; i < n; i += 1) {
       if (repeatIsAntisymmetric(ab[i], ba[i])) ok += 1;
     }
     acc += ok / n;
   }
-  return round4(acc / list.length);
+  if (usable === 0) return 0;
+  return round4(acc / usable);
 }
 
 /**
@@ -85,16 +93,21 @@ export function crossAntisymmetry(pairs) {
  * All three conditions are required. A verdict that flips between runs is not
  * discrimination, and one that only holds in a single presentation order is
  * position bias.
+ *
+ * Following ONL-102's precedent: only pairs with usable repeats (both ab and ba
+ * verdicts) count in the denominator. Missing data is not failure to discriminate.
  */
 export function trueDiscrimination(pairs) {
   const list = pairs ?? [];
   if (list.length === 0) return 0;
   let discriminated = 0;
+  let usable = 0;
   for (const p of list) {
     const ab = p.ab ?? [];
     const ba = p.ba ?? [];
     const n = Math.min(ab.length, ba.length);
-    if (n === 0) continue;
+    if (n === 0) continue; // Exclude pairs with zero usable repeats
+    usable += 1;
     const first = ab[0];
     if (first === 'same') continue;
     let ok = true;
@@ -104,7 +117,8 @@ export function trueDiscrimination(pairs) {
     }
     if (ok) discriminated += 1;
   }
-  return round4(discriminated / list.length);
+  if (usable === 0) return 0;
+  return round4(discriminated / usable);
 }
 
 /** The full report, including the pass/fail the run exists to produce. */
@@ -122,7 +136,25 @@ export function pairwiseStats(doc) {
   const discrimination_pass = true_discrimination > false_discrimination;
 
   let self_comparisons = 0;
-  for (const entry of selfEntries) self_comparisons += (entry.verdicts ?? []).length;
+  let self_comparisons_usable = 0;
+  for (const entry of selfEntries) {
+    self_comparisons += (entry.verdicts ?? []).length;
+    self_comparisons_usable += (entry.verdicts ?? []).length;
+  }
+
+  // Count cross pairs with usable repeats (both ab and ba present for at least one repeat)
+  // and repeats dropped due to mismatched lengths.
+  let cross_pairs_usable = 0;
+  let repeats_dropped = 0;
+  for (const p of pairs) {
+    const ab = p.ab ?? [];
+    const ba = p.ba ?? [];
+    const n = Math.min(ab.length, ba.length);
+    if (n > 0) {
+      cross_pairs_usable += 1;
+      repeats_dropped += Math.abs(ab.length - ba.length);
+    }
+  }
 
   return {
     model: doc.model,
@@ -133,7 +165,13 @@ export function pairwiseStats(doc) {
     false_discrimination,
     cross_antisymmetry,
     true_discrimination,
-    counts: { self_comparisons, cross_pairs: pairs.length },
+    counts: {
+      self_comparisons,
+      self_comparisons_usable,
+      cross_pairs: pairs.length,
+      cross_pairs_usable,
+      repeats_dropped,
+    },
     kill: {
       self_tie_pass,
       antisymmetry_pass,

@@ -77,6 +77,30 @@ describe('crossAntisymmetry', () => {
   it('is 0 for no data rather than NaN', () => {
     assert.equal(crossAntisymmetry([]), 0);
   });
+
+  // A pair with zero usable repeats (both ab and ba empty, or both missing) must
+  // not be included in the denominator. Missing data is not measured failure --
+  // following ONL-102's precedent, absorbing failures into a short sample count
+  // can delete a whole analysis arm without saying so.
+  it('excludes pairs with zero usable repeats from the rate denominator', () => {
+    const r = crossAntisymmetry([
+      { a: 'a', b: 'b', ab: ['better'], ba: ['worse'] },
+      { a: 'a', b: 'c', ab: [], ba: [] },
+    ]);
+    // Only the first pair contributes: it is antisymmetric, so the rate is 1, not 0.5
+    assert.equal(r, 1);
+  });
+
+  // Mismatched lengths (e.g., one order succeeded 2 times, the other 1 time)
+  // must be counted as dropped repeats, not silently truncated.
+  it('counts mismatched ab/ba lengths as dropped repeats', () => {
+    const r = crossAntisymmetry([
+      { a: 'a', b: 'b', ab: ['better', 'better'], ba: ['worse'] },
+    ]);
+    // Only 1 usable repeat: ab[0]='better', ba[0]='worse' -- antisymmetric.
+    // The second repeat in ab is dropped. Rate should be 1, not involve the longer array.
+    assert.equal(r, 1);
+  });
 });
 
 describe('trueDiscrimination', () => {
@@ -114,6 +138,27 @@ describe('trueDiscrimination', () => {
       { a: 'a', b: 'c', ab: ['same'], ba: ['same'] },
     ]);
     assert.equal(r, 0.5);
+  });
+
+  // A pair with zero usable repeats must not be included in the share denominator.
+  // Missing data is not a failure to discriminate -- following ONL-102's precedent.
+  it('excludes pairs with zero usable repeats from the share denominator', () => {
+    const r = trueDiscrimination([
+      { a: 'a', b: 'b', ab: ['better'], ba: ['worse'] },
+      { a: 'a', b: 'c', ab: [], ba: [] },
+    ]);
+    // Only the first pair counts: it discriminates, so the share is 1, not 0.5
+    assert.equal(r, 1);
+  });
+
+  // Mismatched lengths must be handled by using only usable repeats.
+  it('counts mismatched ab/ba lengths as dropped repeats', () => {
+    const r = trueDiscrimination([
+      { a: 'a', b: 'b', ab: ['better', 'better'], ba: ['worse'] },
+    ]);
+    // Only 1 usable repeat: ab[0]='better', ba[0]='worse', and it is consistent
+    // and antisymmetric across that one repeat. The extra repeat in ab is dropped.
+    assert.equal(r, 1);
   });
 });
 
@@ -189,5 +234,19 @@ describe('pairwiseStats', () => {
   it('exposes the thresholds it judged against', () => {
     assert.equal(KILL.selfTie, 0.9);
     assert.equal(KILL.antisymmetry, 0.8);
+  });
+
+  it('reports usable counts separately from attempted counts', () => {
+    const bad = {
+      ...doc,
+      cross: [
+        { a: 'a.md', b: 'b.md', ab: ['better', 'better'], ba: ['worse'] },
+        { a: 'a.md', b: 'c.md', ab: [], ba: [] },
+      ],
+    };
+    const s = pairwiseStats(bad);
+    assert.equal(s.counts.cross_pairs, 2); // attempted
+    assert.equal(s.counts.cross_pairs_usable, 1); // only first pair has usable repeats
+    assert.equal(s.counts.repeats_dropped, 1); // one repeat in first pair is dropped
   });
 });
