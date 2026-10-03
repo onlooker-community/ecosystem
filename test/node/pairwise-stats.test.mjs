@@ -92,13 +92,13 @@ describe('crossAntisymmetry', () => {
   });
 
   // Mismatched lengths (e.g., one order succeeded 2 times, the other 1 time)
-  // must be counted as dropped repeats, not silently truncated.
-  it('counts mismatched ab/ba lengths as dropped repeats', () => {
+  // must be handled by using only paired repeats where both orders have verdicts.
+  it('uses only paired repeats when ab and ba lengths differ', () => {
     const r = crossAntisymmetry([
       { a: 'a', b: 'b', ab: ['better', 'better'], ba: ['worse'] },
     ]);
-    // Only 1 usable repeat: ab[0]='better', ba[0]='worse' -- antisymmetric.
-    // The second repeat in ab is dropped. Rate should be 1, not involve the longer array.
+    // Only 1 paired repeat: ab[0]='better', ba[0]='worse' -- antisymmetric.
+    // Rate is computed from the 1 paired repeat only, giving 1, not involving the longer array.
     assert.equal(r, 1);
   });
 });
@@ -151,13 +151,14 @@ describe('trueDiscrimination', () => {
     assert.equal(r, 1);
   });
 
-  // Mismatched lengths must be handled by using only usable repeats.
-  it('counts mismatched ab/ba lengths as dropped repeats', () => {
+  // Mismatched lengths must be handled by using only paired repeats.
+  it('uses only paired repeats when ab and ba lengths differ', () => {
     const r = trueDiscrimination([
       { a: 'a', b: 'b', ab: ['better', 'better'], ba: ['worse'] },
     ]);
-    // Only 1 usable repeat: ab[0]='better', ba[0]='worse', and it is consistent
-    // and antisymmetric across that one repeat. The extra repeat in ab is dropped.
+    // Only 1 paired repeat: ab[0]='better', ba[0]='worse', consistent and
+    // antisymmetric across that one repeat. Share is computed from the 1
+    // paired repeat only, giving 1, not involving the longer array.
     assert.equal(r, 1);
   });
 });
