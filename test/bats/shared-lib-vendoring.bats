@@ -75,36 +75,91 @@ _shared_libs() {
 		| jq -e '.hook == "standalone-hook"' >/dev/null
 }
 
-# portable-lock.sh is vendored on demand rather than into every plugin: only
-# four plugins lock anything. It went unsynced for long enough that governor,
-# cartographer, and lineage were all running a superseded generation of
-# lock_acquire (ecosystem-am1) — these two tests are what would have caught it.
-
-_plugins_sourcing_portable_lock() {
-	local d
-	while IFS= read -r d; do
-		grep -rlE '^[[:space:]]*(\.|source)[[:space:]].*portable-lock\.sh' \
-			"${d}/scripts" >/dev/null 2>&1 && basename "$d"
-	done < <(_plugin_dirs)
+# ON_DEMAND_LIBS are vendored only where a copy already exists, rather than
+# into every plugin: only a few plugins lock or watch anything. portable-lock.sh
+# went unsynced for long enough that governor, cartographer, and lineage were
+# all running a superseded generation of lock_acquire (ecosystem-am1).
+#
+# Read from the sync script for the same reason _shared_libs does, so adding a
+# lib to ON_DEMAND_LIBS cannot leave it silently unguarded. watch-unmatched.sh
+# was added to that list with no guard covering it at all (ONL-66).
+_on_demand_libs() {
+	sed -n 's/^ON_DEMAND_LIBS=(\(.*\))$/\1/p' "${REPO_ROOT}/scripts/sync-shared-libs.sh" | tr ' ' '\n'
 }
 
-@test "every plugin that sources portable-lock.sh vendors a copy of it" {
-	local missing="" name
-	while IFS= read -r name; do
-		[ -z "$name" ] && continue
-		[ -f "${REPO_ROOT}/plugins/${name}/scripts/lib/portable-lock.sh" ] \
-			|| missing+="$name "
-	done < <(_plugins_sourcing_portable_lock)
+@test "the on-demand lib list is readable and non-empty" {
+	local count
+	count=$(_on_demand_libs | grep -c .)
+	[ "$count" -gt 0 ]
+}
+
+@test "every plugin that sources an on-demand lib vendors a copy of it" {
+	local missing="" lib d
+	while IFS= read -r lib; do
+		[ -n "$lib" ] || continue
+		# Built by concatenation, not interpolated into a double-quoted
+		# string: there, bash collapses \$ to a bare $, which ERE then reads
+		# as end-of-line, and the pattern silently matches nothing.
+		# Dots in the lib name are escaped so they are not ERE wildcards.
+		local pat
+		pat='(^|[[:space:]])(\.|source)[[:space:]]+"\$\{?PLUGIN_ROOT\}?/scripts/lib/'"${lib//./\\.}"'"'
+		while IFS= read -r d; do
+			grep -rqE "$pat" "${d}/scripts" 2>/dev/null || continue
+			[ -f "${d}/scripts/lib/${lib}" ] || missing+="$(basename "$d")/${lib} "
+		done < <(_plugin_dirs)
+	done < <(_on_demand_libs)
 	[ -z "$missing" ] || { echo "sources it but does not vendor it: $missing"; return 1; }
 }
 
-@test "every vendored portable-lock.sh is byte-identical to the canonical copy" {
-	local canonical="${REPO_ROOT}/scripts/lib/portable-lock.sh"
-	local drifted="" d
-	while IFS= read -r d; do
-		[ -f "${d}/scripts/lib/portable-lock.sh" ] || continue
-		cmp -s "$canonical" "${d}/scripts/lib/portable-lock.sh" \
-			|| drifted+="$(basename "$d") "
-	done < <(_plugin_dirs)
+@test "every vendored on-demand lib is byte-identical to its canonical copy" {
+	local drifted="" lib d
+	while IFS= read -r lib; do
+		[ -n "$lib" ] || continue
+		while IFS= read -r d; do
+			[ -f "${d}/scripts/lib/${lib}" ] || continue
+			cmp -s "${REPO_ROOT}/scripts/lib/${lib}" "${d}/scripts/lib/${lib}" \
+				|| drifted+="$(basename "$d")/${lib} "
+		done < <(_plugin_dirs)
+	done < <(_on_demand_libs)
 	[ -z "$drifted" ] || { echo "drifted: $drifted"; return 1; }
+}
+
+# The guard sync-shared-libs.sh's header has always claimed, and which did not
+# exist for anything but portable-lock.sh (ONL-66). It covers every lib a hook
+# sources from its OWN tree, whichever list the lib is on and even if it is on
+# neither — a plugin-local lib counts too.
+#
+# Why it matters more than the list-driven tests above: a shared lib lands
+# everywhere automatically, so a missing copy is already impossible. An
+# on-demand lib is adopted by hand, and that is exactly where someone adds the
+# source line and forgets the copy. The failure is silent at runtime — the
+# source fails, every accessor is undefined, and the hook still exits 0
+# (CLAUDE.md item 8).
+#
+# $PLUGIN_ROOT paths only. A hook may legitimately source the substrate via
+# ${_ECOSYSTEM_ROOT}/scripts/lib/..., which the plugin must NOT vendor, so
+# anchoring on PLUGIN_ROOT is what keeps that out of the results. Libs sourced
+# through a BASH_SOURCE-relative variable are a different mechanism, covered by
+# config-lib-self-locating.bats.
+_libs_sourced_from_own_tree() {
+	local dir="$1"
+	grep -rhoE '(^|[[:space:]])(\.|source)[[:space:]]+"\$\{?PLUGIN_ROOT\}?/scripts/lib/[A-Za-z0-9._-]+\.sh"' \
+		"${dir}/scripts" 2>/dev/null \
+		| grep -oE '[A-Za-z0-9._-]+\.sh' | sort -u
+}
+
+@test "every plugin vendors every lib it sources from its own tree" {
+	local missing="" checked=0 d lib
+	while IFS= read -r d; do
+		while IFS= read -r lib; do
+			[ -n "$lib" ] || continue
+			checked=$((checked + 1))
+			[ -f "${d}/scripts/lib/${lib}" ] || missing+="$(basename "$d")/${lib} "
+		done < <(_libs_sourced_from_own_tree "$d")
+	done < <(_plugin_dirs)
+
+	# A regex that silently matches nothing would make this test vacuous, which
+	# is the shape of the bug it exists to prevent.
+	[ "$checked" -gt 0 ] || { echo "matched no source lines at all"; return 1; }
+	[ -z "$missing" ] || { echo "sources it but does not vendor it: $missing"; return 1; }
 }
