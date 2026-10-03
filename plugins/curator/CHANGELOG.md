@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.7](https://github.com/onlooker-community/ecosystem/compare/curator-v0.5.6...curator-v0.5.7) (2026-10-03)
+
+
+### Bug Fixes
+
+* **curator:** find the memory store, and stop calling a failure ok :mag: ([#402](https://github.com/onlooker-community/ecosystem/issues/402)) ([5fba0ac](https://github.com/onlooker-community/ecosystem/commit/5fba0ac19aeea5d9625e94f6f773fffd4f0bf688))
+
 ## [0.5.6](https://github.com/onlooker-community/ecosystem/compare/curator-v0.5.5...curator-v0.5.6) (2026-09-22)
 
 
