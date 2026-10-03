@@ -161,3 +161,91 @@ no absolute scale.
   `self-tie` fails for that reason rather than for an inability to compare, an explicit "identical
   is expected and common" instruction in the prompt is the first thing to try before concluding
   pairwise cannot work.
+
+---
+
+## Result
+
+Run on 2026-10-03, `claude-haiku-4-5-20251001`, `echo-judge-prompt.sh` at sha256
+`6b583b00080f77d5b2a44eb7d6d59412f6f97863ddea7a0cf366b8c801918779`, the six-file corpus
+above, `--repeats 2`. All 72 calls were issued and all 72 parsed: `attempted.self_calls`
+12, `attempted.cross_calls` 60, `repeats_dropped` 0, `cross_pairs_usable` 15 of 15. The
+run was not degraded, so nothing here is an artifact of missing data.
+
+| metric | value | threshold | |
+|---|---|---|---|
+| `self_tie_rate` | **1.0** | ≥ 0.90 | pass |
+| `false_discrimination` | 0.0 | — | |
+| `cross_antisymmetry` | **0.5667** | ≥ 0.80 | **fail** |
+| `true_discrimination` | 0.4 | > `false_discrimination` | pass |
+
+**Verdict: `stop`.**
+
+### What passed, and it is worth keeping
+
+`self_tie_rate` was **perfect: 12 of 12 self comparisons returned `same`**. The risk this
+spec flagged — that a model asked to compare is reluctant to call a tie, and would fail the
+self arm for a prompt reason rather than a capability reason — did not materialize at all.
+Haiku recognizes identical content as identical, reliably.
+
+ONL-103's literal acceptance criterion also passed: `true_discrimination` 0.4 exceeds
+`false_discrimination` 0.0. The judge does distinguish two different documents more
+reliably than it distinguishes one document from itself. That question is answered yes.
+
+### Why it still fails, and it is not the reason we expected
+
+The failure is **not position bias**. Classifying all 30 cross repeats:
+
+| class | count | share |
+|---|---|---|
+| antisymmetric — a directional verdict that correctly reversed | 17/30 | 56.7% |
+| **tie vs preference** — one order `same`, the other `better`/`worse` | **12/30** | **40.0%** |
+| position bias — both orders said `better` | 1/30 | 3.3% |
+
+Position bias, the failure the entire both-orders design exists to detect and the reason
+this spec called two orders non-optional, is **3.3%**. Essentially absent.
+
+What fails instead is stability. Alongside the tie/preference split above, **5 of 15 `ab`
+pairs and 6 of 15 `ba` pairs returned a different verdict on the second of two identical
+repeats.** Roughly a third of ordered pairs do not reproduce.
+
+### The conclusion, which undercuts both of ONL-103's options
+
+ONL-103 offered two directions: sharpen the rubric's anchors, or abandon absolute scoring
+for pairwise comparison. It preferred the second, on the reasoning that pairwise "does not
+require a stable absolute scale, which is precisely what the measurement says is missing."
+
+That reasoning was sound and the prediction was wrong. Pairwise removed everything it was
+supposed to remove — no absolute scale, identity recognized perfectly, no position bias —
+and the instability survived intact. It simply changed units, from a drifting 0.0–1.0 score
+to a verdict that flips between `same` and `better` on re-run.
+
+So the noise is **not an artifact of the scoring format**. It is in the judge's assessment
+of these documents. That localizes the problem away from both of ONL-103's options:
+re-anchoring the rubric reshapes the same unstable judgment into narrower buckets, and
+pairwise has now been measured doing exactly that. What is left is the judge itself (model
+choice, or sampling) or the question being asked of it.
+
+### Caveat: one metric definition is doing a lot of work
+
+`cross_antisymmetry` counts a tie-against-a-preference as a failure. That is a choice this
+spec made, not a fact. Counting only self-contradictory verdicts — both orders naming the
+same document better — gives **96.7%** instead of 56.7%, and the verdict would flip to
+`proceed`.
+
+The stricter definition is the right one for echo's purpose and the `stop` stands: echo
+compares two versions of one document after an edit, so a judge whose tie boundary moves
+when you swap the inputs cannot tell "this edit changed nothing" from "this edit made it
+worse." That is the product question, and 40% instability on it is disqualifying. But a
+reader who wanted a different question answered should know the number both ways rather
+than discover the threshold was load-bearing.
+
+### Not written
+
+No ADR. `plugins/echo/docs/adr/005-pairwise-vs-absolute-scoring.md` was conditional on a
+`proceed` verdict and does not exist. Nothing in echo's runtime changed; `drift_threshold`
+remains 0.28.
+
+Raw artifacts are preserved beside this plan's SDD workspace as `verdicts.json` and
+`stats.json`, with the model and prompt fingerprint stamped, so the run can be compared
+against a future one on a different model or prompt.
