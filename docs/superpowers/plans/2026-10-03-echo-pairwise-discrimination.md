@@ -92,16 +92,34 @@ setup() {
 	[[ "$output" == *"identical"* ]] || return 1
 }
 
+# Assert the directional SENTENCE, not the bare substring "DOCUMENT B" -- the
+# prompt emits "---DOCUMENT B: <path>---" as a block marker regardless, so a
+# substring check passes even if the direction were inferred from argument order
+# instead of stated. That direction is what the antisymmetry check rests on, so
+# the test has to gate it.
 @test "the pairwise prompt defines better as referring to document B" {
 	run echo_build_pairwise_prompt "a.md" "A" "b.md" "B"
-	[[ "$output" == *"DOCUMENT B"* ]] || return 1
+	[[ "$output" == *"verdict is about DOCUMENT B"* ]] || return 1
+	[[ "$output" == *'"better" — DOCUMENT B is the better prompt file'* ]] || return 1
 }
 
-@test "the scoring prompt is unchanged by the pairwise addition" {
-	run echo_build_judge_prompt "x.md" "XBODY"
-	[ "$status" -eq 0 ] || return 1
-	[[ "$output" == *"Score on these criteria"* ]] || return 1
-	[[ "$output" == *'"score"'* ]] || return 1
+# The absolute rubric's signal-to-noise of 0.61 was measured against THIS exact
+# prompt, so drift_threshold: 0.28 is a property of it. A deliberate change means
+# re-measuring and updating the hash.
+#
+# A substring check cannot do this job: a reword that keeps the substrings passes,
+# and byte-identity then rests on someone remembering to diff by hand. Pipe the
+# function's stdout straight into the hasher -- capturing through bats `run` strips
+# trailing newlines and makes the hash unstable -- and keep a sha256sum fallback so
+# the test works on Linux CI as well as macOS.
+@test "the scoring prompt byte-identity is pinned to measurement history" {
+	expected_hash="29667d3fea5764c93be6011eb69a7211ad09ea83729c772568806948575d1a70"
+	if command -v shasum >/dev/null 2>&1; then
+		actual_hash=$(echo_build_judge_prompt "x.md" "XBODY" | shasum -a 256 | cut -d' ' -f1)
+	else
+		actual_hash=$(echo_build_judge_prompt "x.md" "XBODY" | sha256sum | cut -d' ' -f1)
+	fi
+	[ "$actual_hash" = "$expected_hash" ] || return 1
 }
 ```
 
