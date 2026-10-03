@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.20.1](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.20.0...librarian-v0.20.1) (2026-10-03)
+
+
+### Bug Fixes
+
+* **librarian:** stop writing memories to a shadow dir :relieved: ([#400](https://github.com/onlooker-community/ecosystem/issues/400)) ([7e0b132](https://github.com/onlooker-community/ecosystem/commit/7e0b1324d659e461086e1522d9416f3e9636025a))
+
 ## [0.20.0](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.19.0...librarian-v0.20.0) (2026-09-27)
 
 

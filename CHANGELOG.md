@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.65.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.65.1...ecosystem-v0.65.2) (2026-10-03)
+
+
+### Bug Fixes
+
+* **librarian:** stop writing memories to a shadow dir :relieved: ([#400](https://github.com/onlooker-community/ecosystem/issues/400)) ([7e0b132](https://github.com/onlooker-community/ecosystem/commit/7e0b1324d659e461086e1522d9416f3e9636025a))
+
 ## [0.65.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.65.0...ecosystem-v0.65.1) (2026-09-28)
 
 
