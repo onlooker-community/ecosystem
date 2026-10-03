@@ -83,15 +83,48 @@ STUB
 	[ "$status" -eq 0 ] || return 1
 	jq -e '.cross | length == 1' "${OUT_DIR}/verdicts.json" >/dev/null || return 1
 	jq -e '.cross[0].ab | length == 1' "${OUT_DIR}/verdicts.json" >/dev/null || return 1
-	jq -e '.cross[0].ba | length == 1' "${OUT_DIR}/verdicts.json" >/dev/null
+	jq -e '.cross[0].ba | length == 1' "${OUT_DIR}/verdicts.json" >/dev/null || return 1
+
+	# The length checks above pass even if "both orders" were a lie: a call
+	# that sends (A, B) twice instead of (A, B) then (B, A) still lands one
+	# entry in each array. Pin the actual roles sent in each call instead of
+	# inferring them from counts. Each call's A and B headers always come from
+	# the same echo_build_pairwise_prompt invocation, so pairing the nearest
+	# A header to the B header that follows it reconstructs exactly which
+	# document sat in which slot for that call.
+	pairs=$(awk '
+		/^---DOCUMENT A: /{ sub(/^---DOCUMENT A: /, ""); sub(/---$/, ""); a = $0 }
+		/^---DOCUMENT B: /{ sub(/^---DOCUMENT B: /, ""); sub(/---$/, ""); print a "|" $0 }
+	' "$PROMPT_LOG")
+	printf '%s\n' "$pairs" | grep -qF "${SUBJECT_DIR}/one.md|${SUBJECT_DIR}/two.md" || return 1
+	printf '%s\n' "$pairs" | grep -qF "${SUBJECT_DIR}/two.md|${SUBJECT_DIR}/one.md"
 }
 
 @test "the run stamps the model and the prompt fingerprint" {
+	# `model | length > 0` alone cannot fail while echo_config_model()'s own
+	# hardcoded fallback happens to match the real shipped default -- the exact
+	# ecosystem-449.36/.35 shape, where a broken config mirror (e.g. CLAUDE_
+	# PLUGIN_ROOT not actually reaching the accessor at call time) keeps
+	# "working" by accident, and nothing reports that the run measured the
+	# DEFAULT model rather than echo's pinned judge. Pin the configured model
+	# to a sentinel no real default could ever equal, so only an
+	# actually-correct config read produces it.
+	mkdir -p "$CLAUDE_HOME"
+	cat > "${CLAUDE_HOME}/settings.json" <<'JSON'
+{
+	"echo": {
+		"evaluation": {
+			"model": "sentinel-model-for-task3-test"
+		}
+	}
+}
+JSON
+
 	run "$HARNESS" --repeats 1 --out "$OUT_DIR" \
 		"${SUBJECT_DIR}/one.md" "${SUBJECT_DIR}/two.md"
 	[ "$status" -eq 0 ] || return 1
 	jq -e '.prompt_sha256 | length == 64' "${OUT_DIR}/verdicts.json" >/dev/null || return 1
-	jq -e '.model | length > 0' "${OUT_DIR}/verdicts.json" >/dev/null
+	jq -e '.model == "sentinel-model-for-task3-test"' "${OUT_DIR}/verdicts.json" >/dev/null
 }
 
 @test "it writes a stats report carrying the kill verdict" {
