@@ -26,7 +26,7 @@ setup() {
   # Derive the encoded project dir under CLAUDE_HOME so the hook resolves
   # via the path-encoding fallback (CLAUDE_PROJECT_ENCODED unset).
   ABS_CWD=$(cd "$PROJECT_REPO" && pwd -P)
-  ENCODED=$(printf '%s' "$ABS_CWD" | sed -E 's#/#-#g')
+  ENCODED=$(printf '%s' "$ABS_CWD" | sed -E 's#[/.]#-#g')
   MEM_DIR="${TEST_HOME}/.claude/projects/${ENCODED}/memory"
   mkdir -p "$MEM_DIR"
 
@@ -171,7 +171,7 @@ _seed_memory() {
 
   local ABS_CWD2 ENCODED2 MEM_DIR2
   ABS_CWD2=$(cd "$clone2" && pwd -P)
-  ENCODED2=$(printf '%s' "$ABS_CWD2" | sed -E 's#/#-#g')
+  ENCODED2=$(printf '%s' "$ABS_CWD2" | sed -E 's#[/.]#-#g')
   MEM_DIR2="${TEST_HOME}/.claude/projects/${ENCODED2}/memory"
   mkdir -p "$MEM_DIR2"
   printf -- '---\nname: x\ntype: user\n---\n\nBody.\n' > "${MEM_DIR2}/user_x.md"

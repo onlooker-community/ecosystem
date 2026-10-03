@@ -60,8 +60,14 @@ setup() {
   # Where librarian_cli_accept writes typed memory. The CLI derives the
   # encoded path from cwd when CLAUDE_PROJECT_ENCODED is unset; mirror
   # that derivation so tests can assert against the resulting file.
+  #
+  # Claude Code encodes BOTH separators and dots as '-'. This used to
+  # replace only '/', matching a production bug rather than Claude Code,
+  # so every fixture here agreed with the defect and none could see it
+  # ($BATS_TEST_TMPDIR holds no dots, so the two encoders tie). The
+  # dotted-path tests at the bottom of this file cover that gap directly.
   ABS_CWD=$(cd "$PROJECT_REPO" && pwd -P)
-  ENCODED=$(printf '%s' "$ABS_CWD" | sed -E 's#/#-#g')
+  ENCODED=$(printf '%s' "$ABS_CWD" | sed -E 's#[/.]#-#g')
   MEM_DIR="${TEST_HOME}/.claude/projects/${ENCODED}/memory"
 
   librarian_storage_init "$PROJECT_KEY"
@@ -302,4 +308,83 @@ _seed_proposal() {
   run librarian_cli "show" "01DISPATCH00000000000000000" "$PROJECT_REPO"
   [ "$status" -eq 0 ]
   [[ "$output" == *"Dispatch test"* ]]
+}
+
+# ---------------------------------------------------------------------------
+# ONL-125 — the cwd fallback encoder.
+#
+# When CLAUDE_PROJECT_ENCODED is unset the CLI derives the encoded project
+# path itself. Claude Code encodes BOTH path separators and dots as '-', so a
+# repo under a github.com-style path must render as 'github-com'. Replacing
+# only '/' produces a directory Claude Code never reads, and accept reports
+# success with that path — the user's memory is written somewhere nothing
+# loads it.
+#
+# The expected encoding below is deliberately spelled out rather than taken
+# from the lib under test. A test that derives the expectation the same way
+# production does agrees with production by construction and cannot catch a
+# wrong encoder — which is exactly how this shipped: the setup() above mirrors
+# the '/'-only sed, and $BATS_TEST_TMPDIR holds no dots, so both encoders
+# agreed on every existing fixture and the defect stayed invisible.
+#
+# Every fixture here therefore lives under a path containing a literal dot.
+# ---------------------------------------------------------------------------
+
+# Stand up a git repo at a github.com-shaped path and resolve its project key.
+# Sets DOTTED_ABS (absolute, symlink-resolved) and PROJECT_KEY so
+# _seed_proposal targets this repo. Must NOT be called in a command
+# substitution — the assignments have to land in the test shell.
+_dotted_repo() {
+  local repo="${BATS_TEST_TMPDIR}/src/github.com/org/dotted"
+  mkdir -p "$repo"
+  git -C "$repo" init -q
+  git -C "$repo" config user.email t@example.com
+  git -C "$repo" config user.name "Test"
+  git -C "$repo" remote add origin git@github.com:org/dotted.git
+
+  DOTTED_ABS=$(cd "$repo" && pwd -P)
+  PROJECT_KEY=$(librarian_project_key "$repo")
+  [ -n "$PROJECT_KEY" ] || return 1
+  librarian_storage_init "$PROJECT_KEY"
+}
+
+@test "accept encodes dots in the project path when CLAUDE_PROJECT_ENCODED is unset" {
+  unset CLAUDE_PROJECT_ENCODED
+
+  _dotted_repo
+  # Independent statement of Claude Code's encoding: separators AND dots.
+  local expected
+  expected="${TEST_HOME}/.claude/projects/$(printf '%s' "$DOTTED_ABS" | sed -E 's#[/.]#-#g')/memory"
+
+  _seed_proposal "01DOTTEDACCEPT000000000000" \
+    "project" "Dotted path survives encoding" "project_dotted.md" \
+    "Body for the dotted-path case."
+
+  run librarian_cli_accept "01DOTTEDACCEPT000000000000" "$DOTTED_ABS"
+  [ "$status" -eq 0 ] || return 1
+
+  # The memory file lands where Claude Code will actually read it.
+  [ -f "${expected}/project_dotted.md" ] || return 1
+  # And the index it maintains lands beside it.
+  [ -f "${expected}/MEMORY.md" ] || return 1
+}
+
+@test "accept creates no project dir containing a literal dot" {
+  unset CLAUDE_PROJECT_ENCODED
+
+  _dotted_repo
+
+  _seed_proposal "01DOTTEDNODIR00000000000000" \
+    "project" "No shadow dir" "project_no_shadow.md" \
+    "Body for the shadow-dir case."
+
+  run librarian_cli_accept "01DOTTEDNODIR00000000000000" "$DOTTED_ABS"
+  [ "$status" -eq 0 ] || return 1
+
+  # An encoded project dir can never contain a dot. One that does is the
+  # shadow directory, and anything written into it is unreachable.
+  local dotted_dirs
+  dotted_dirs=$(find "${TEST_HOME}/.claude/projects" -mindepth 1 -maxdepth 1 \
+    -type d -name '*.*' 2>/dev/null)
+  [ -z "$dotted_dirs" ] || return 1
 }
