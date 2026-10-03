@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.65.3](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.65.2...ecosystem-v0.65.3) (2026-10-03)
+
+
+### Bug Fixes
+
+* **curator:** find the memory store, and stop calling a failure ok :mag: ([#402](https://github.com/onlooker-community/ecosystem/issues/402)) ([5fba0ac](https://github.com/onlooker-community/ecosystem/commit/5fba0ac19aeea5d9625e94f6f773fffd4f0bf688))
+
 ## [0.65.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.65.1...ecosystem-v0.65.2) (2026-10-03)
 
 
