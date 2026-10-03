@@ -89,17 +89,46 @@ MEM_PATH_TEMPLATE=$(curator_config_get '.curator.memory_store_path')
 if [[ -z "$MEM_PATH_TEMPLATE" || "$MEM_PATH_TEMPLATE" == "null" ]]; then
 	MEM_PATH_TEMPLATE='${HOME}/.claude/projects/${CLAUDE_PROJECT_ENCODED}/memory'
 fi
-MEM_DIR=$(curator_memory_resolve_path "$MEM_PATH_TEMPLATE")
+# Claude Code exports CLAUDE_PROJECT_ENCODED to hook processes, but not
+# always, and curator_memory_resolve_path bails to empty rather than
+# substituting nothing (ecosystem-18f). Derive it from cwd when it is absent,
+# the way the substrate does at scripts/hooks/memory-recall-tracker.sh:126 —
+# BOTH path separators and dots become '-', so a repo under a github.com-style
+# path encodes as github-com.
+#
+# Without this the audit never started, and the branch below reported that as
+# outcome: "ok" (ONL-126).
+ENCODED="${CLAUDE_PROJECT_ENCODED:-}"
+if [[ -z "$ENCODED" ]]; then
+	ABS_CWD=$(cd "$CWD" 2>/dev/null && pwd -P) || ABS_CWD=""
+	[[ -n "$ABS_CWD" ]] && ENCODED=$(printf '%s' "$ABS_CWD" | sed -E 's#[/.]#-#g')
+fi
+MEM_DIR=$(curator_memory_resolve_path "$MEM_PATH_TEMPLATE" "$ENCODED")
 
-if [[ -z "$MEM_DIR" || ! -d "$MEM_DIR" ]]; then
-	# No memory store, nothing to audit. Still emit a scan event so the
-	# observability stream shows curator ran.
+# Emit a started/complete pair for a scan that does no work, so the
+# observability stream still shows curator ran.
+_scan_noop() {
+	local outcome="$1"
 	curator_emit "curator.scan.started" "$SESSION_ID" "$(jq -cn '{ mode: "cheap" }')"
-	curator_emit "curator.scan.complete" "$SESSION_ID" "$(jq -cn '{
-		mode: "cheap", outcome: "ok",
+	curator_emit "curator.scan.complete" "$SESSION_ID" "$(jq -cn --arg o "$outcome" '{
+		mode: "cheap", outcome: $o,
 		findings_new: 0, findings_resolved: 0, duration_ms: 0
 	}')"
 	_emit ""
+}
+
+if [[ -z "$MEM_DIR" ]]; then
+	# Could not work out WHERE the store lives. That is a failure, not an
+	# empty store, and calling it "ok" is what hid ONL-126 for months.
+	# Defense in depth: with the derivation above, reaching this needs cwd
+	# itself to be unreadable, which the project-key gate already rejects.
+	_scan_noop "skipped"
+	hook_health_exit 0
+fi
+
+if [[ ! -d "$MEM_DIR" ]]; then
+	# Resolved fine; there is just no store yet. Genuinely nothing to audit.
+	_scan_noop "ok"
 	hook_health_exit 0
 fi
 
