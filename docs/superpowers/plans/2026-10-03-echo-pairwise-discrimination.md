@@ -628,7 +628,7 @@ if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `node --test test/node/pairwise-stats.test.mjs`
-Expected: PASS, 24 tests.
+Expected: PASS, 22 tests.
 
 Then confirm the whole node suite is still green: `npm run test:schema`
 Expected: PASS, 0 fail.
