@@ -16,7 +16,7 @@
 - Both presentation orders of every cross pair are evaluated. Single-order measurement is not acceptable — position bias manufactures discrimination that looks real.
 - Kill criterion, fixed before any run: `self_tie_rate >= 0.90`, `cross_antisymmetry >= 0.80`, `true_discrimination > false_discrimination`.
 - Default `--repeats 2`. At R=2 the run is 72 judge calls (6 self × 2, plus 15 pairs × 2 orders × 2).
-- Neither the runner nor its bats test is wired into `npm test`. A suite costing 72 Haiku calls is one nobody runs.
+- The **runner** is never wired into `npm test` — a suite costing 72 Haiku calls is one nobody runs. Its **bats test** is, and must be: `test:bats` runs `scripts/test/run-bats.sh test/bats` with no exclusions, `echo-measure-judge-spread.bats` is already in that run, and the stub makes it free. Do not exclude the new file.
 - Every run stamps the model and a `sha256` of `echo-judge-prompt.sh`. A measurement taken against a different prompt does not transfer.
 - The pairwise prompt lives in `echo-judge-prompt.sh`, never copied into the runner. Two copies of a prompt drift apart silently.
 - American English in all comments, commits, and docs.
@@ -657,7 +657,8 @@ Create `test/bats/echo-measure-pairwise.bats`:
 # The 72 real judge calls are manual. Nothing here spends a token: the stub
 # stands in for the judge so the plumbing can be tested exhaustively. A test
 # suite that costs 72 Haiku calls is a trap nobody runs -- the same reasoning
-# that keeps measure-judge-spread.sh out of npm test.
+# that keeps the measure-* scripts themselves out of npm test, while this file
+# runs in it for free.
 
 setup() {
 	# shellcheck source=../helpers/setup.bash
@@ -812,9 +813,10 @@ Create `plugins/echo/scripts/measure-pairwise-discrimination.sh` and `chmod 755`
 # The self arm runs first: it is the cheapest kill. A judge that will not call
 # identical content identical is ruled out for a sixth of the calls.
 #
-# NOT WIRED INTO npm test, deliberately -- a full run is 72 judge calls.
-# test/bats/echo-measure-pairwise.bats covers the plumbing with a stub, and
-# test/node/pairwise-stats.test.mjs covers the arithmetic exhaustively.
+# THIS SCRIPT is never run by npm test -- a full run is 72 judge calls. Its
+# tests are: test/bats/echo-measure-pairwise.bats covers the plumbing against
+# a stub, and test/node/pairwise-stats.test.mjs covers the arithmetic. Both of
+# those DO run in npm test, and cost nothing.
 #
 # Usage:
 #   measure-pairwise-discrimination.sh [--repeats N] [--out DIR] [--dry-run] [FILE...]
