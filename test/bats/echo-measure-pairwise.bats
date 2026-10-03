@@ -115,7 +115,11 @@ STUB
 }
 
 @test "an unreadable file is rejected before any judge call" {
-	run "$HARNESS" --repeats 1 --out "$OUT_DIR" "${SUBJECT_DIR}/nope.md"
+	# Two files, not one: with a single nonexistent file the <2-files arity
+	# guard answers first and the readability loop is never reached, so this
+	# test would pass even if the readability check were deleted entirely.
+	run "$HARNESS" --repeats 1 --out "$OUT_DIR" \
+		"${SUBJECT_DIR}/one.md" "${SUBJECT_DIR}/nope.md"
 	[ "$status" -ne 0 ] || return 1
 	[ ! -f "$CALL_LOG" ]
 }
