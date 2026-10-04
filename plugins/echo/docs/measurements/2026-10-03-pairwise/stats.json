@@ -1,0 +1,23 @@
+{
+  "model": "claude-haiku-4-5-20251001",
+  "prompt_sha256": "6b583b00080f77d5b2a44eb7d6d59412f6f97863ddea7a0cf366b8c801918779",
+  "measured_at": "2026-10-03T23:36:59Z",
+  "repeats": 2,
+  "self_tie_rate": 1,
+  "false_discrimination": 0,
+  "cross_antisymmetry": 0.5667,
+  "true_discrimination": 0.4,
+  "counts": {
+    "self_comparisons": 12,
+    "self_comparisons_usable": 12,
+    "cross_pairs": 15,
+    "cross_pairs_usable": 15,
+    "repeats_dropped": 0
+  },
+  "kill": {
+    "self_tie_pass": true,
+    "antisymmetry_pass": false,
+    "discrimination_pass": true,
+    "verdict": "stop"
+  }
+}
