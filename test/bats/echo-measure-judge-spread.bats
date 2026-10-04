@@ -166,3 +166,27 @@ STUB
 	[ "$status" -ne 0 ] || return 1
 	[ "$(_calls)" -le 10 ]
 }
+
+@test "a non-numeric --samples is rejected before any judge call" {
+	# Same defect as the pairwise runner, same cause: $(( SAMPLES * N )) with a
+	# bare word, `set -u` without `set -e`, status 0 and nothing written.
+	# Fixed in both because it is one class, not two bugs.
+	run "$HARNESS" --samples abc --out "$OUT_DIR" "${SUBJECT_DIR}/one.md"
+	[ "$status" -ne 0 ] || return 1
+	[[ "$output" == *"samples"* ]] || return 1
+	[ ! -f "$CALL_LOG" ]
+}
+
+@test "a zero --samples is rejected as an argument, not reported as a failed measurement" {
+	run "$HARNESS" --samples 0 --out "$OUT_DIR" "${SUBJECT_DIR}/one.md"
+	[ "$status" -ne 0 ] || return 1
+	[[ "$output" == *"samples"* ]] || return 1
+	[ ! -f "$CALL_LOG" ]
+}
+
+@test "a negative --samples does not produce a dry-run plan" {
+	run "$HARNESS" --dry-run --samples -1 "${SUBJECT_DIR}/one.md"
+	[ "$status" -ne 0 ] || return 1
+	[[ "$output" == *"samples"* ]] || return 1
+	[ ! -f "$CALL_LOG" ]
+}
