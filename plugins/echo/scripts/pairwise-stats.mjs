@@ -136,10 +136,8 @@ export function pairwiseStats(doc) {
   const discrimination_pass = true_discrimination > false_discrimination;
 
   let self_comparisons = 0;
-  let self_comparisons_usable = 0;
   for (const entry of selfEntries) {
     self_comparisons += (entry.verdicts ?? []).length;
-    self_comparisons_usable += (entry.verdicts ?? []).length;
   }
 
   // Count cross pairs with usable repeats (both ab and ba present for at least one repeat)
@@ -167,7 +165,6 @@ export function pairwiseStats(doc) {
     true_discrimination,
     counts: {
       self_comparisons,
-      self_comparisons_usable,
       cross_pairs: pairs.length,
       cross_pairs_usable,
       repeats_dropped,

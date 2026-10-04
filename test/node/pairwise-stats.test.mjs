@@ -142,13 +142,23 @@ describe('trueDiscrimination', () => {
 
   // A pair with zero usable repeats must not be included in the share denominator.
   // Missing data is not a failure to discriminate -- following ONL-102's precedent.
+  //
+  // The fixture must distinguish "excluded from the denominator" from "excluded
+  // from the numerator": a non-discriminating first pair makes that possible. If
+  // the zero-usable pair at index 1 were instead counted as usable (the mutation
+  // `if (n === 0) continue` -> `if (false) continue` makes it so), its empty `ab`
+  // and `ba` arrays vacuously satisfy the consistency loop below and it would be
+  // counted as discriminating -- giving 0.5 (2 usable, 1 "discriminating") instead
+  // of the correct 0 (1 usable, 0 discriminating). The prior fixture used a
+  // discriminating first pair, under which both the correct code and that mutant
+  // return 1, so it passed either way.
   it('excludes pairs with zero usable repeats from the share denominator', () => {
     const r = trueDiscrimination([
-      { a: 'a', b: 'b', ab: ['better'], ba: ['worse'] },
+      { a: 'a', b: 'b', ab: ['same'], ba: ['same'] },
       { a: 'a', b: 'c', ab: [], ba: [] },
     ]);
-    // Only the first pair counts: it discriminates, so the share is 1, not 0.5
-    assert.equal(r, 1);
+    // Only the first pair counts, and it is a tie, so the share is 0, not 0.5.
+    assert.equal(r, 0);
   });
 
   // Mismatched lengths must be handled by using only paired repeats.

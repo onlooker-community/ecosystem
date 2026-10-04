@@ -58,7 +58,7 @@ STUB
 		"${SUBJECT_DIR}/one.md" "${SUBJECT_DIR}/two.md" "${SUBJECT_DIR}/three.md"
 	[ "$status" -eq 0 ] || return 1
 	# 3 self x 2 repeats + 3 pairs x 2 orders x 2 repeats = 6 + 12 = 18
-	[[ "$output" == *"18"* ]] || return 1
+	[[ "$output" == *"would run 18 judge calls"* ]] || return 1
 	[ ! -f "$CALL_LOG" ]
 }
 
@@ -131,7 +131,7 @@ JSON
 	run "$HARNESS" --repeats 2 --out "$OUT_DIR" \
 		"${SUBJECT_DIR}/one.md" "${SUBJECT_DIR}/two.md"
 	[ "$status" -eq 0 ] || return 1
-	jq -e '.kill.verdict == "proceed" or .kill.verdict == "stop"' "${OUT_DIR}/stats.json" >/dev/null || return 1
+	jq -e '.kill.verdict == "proceed"' "${OUT_DIR}/stats.json" >/dev/null || return 1
 	jq -e 'has("self_tie_rate") and has("true_discrimination")' "${OUT_DIR}/stats.json" >/dev/null
 }
 
@@ -223,4 +223,26 @@ STUB
 	usable_cross=$(jq '[.cross[].ab[], .cross[].ba[]] | length' "${OUT_DIR}/verdicts.json")
 	[ "$usable_self" -lt 4 ] || return 1
 	[ "$usable_cross" -lt 4 ]
+}
+
+# measure-judge-spread.sh's "a judge that returns nothing usable is skipped,
+# not fatal" has no equivalent here: stubbing every call unparseable yielded
+# exit 0, a written stats.json, and verdict "stop" -- indistinguishable from a
+# real kill unless someone reads counts.cross_pairs_usable: 0. Had the real
+# 72-call run hit a bad API window, it would have recorded that same "stop" and
+# the spec would have concluded pairwise does not discriminate from 72 failed
+# calls. ONL-103 final review.
+@test "a judge that never parses is fatal, not a measured stop" {
+	cat > "${STUB_BIN}/claude" <<'STUB'
+#!/usr/bin/env bash
+cat >/dev/null
+printf 'not json at all'
+STUB
+	chmod +x "${STUB_BIN}/claude"
+
+	run "$HARNESS" --repeats 2 --out "$OUT_DIR" \
+		"${SUBJECT_DIR}/one.md" "${SUBJECT_DIR}/two.md"
+	[ "$status" -ne 0 ] || return 1
+	[[ "$output" == *"no usable"* ]] || return 1
+	[ ! -f "${OUT_DIR}/stats.json" ]
 }

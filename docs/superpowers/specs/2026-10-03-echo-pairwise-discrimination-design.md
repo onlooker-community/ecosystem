@@ -1,6 +1,6 @@
 # Echo Pairwise Discrimination — Measurement Design
 
-**Status:** Approved, not started.
+**Status:** Complete. Verdict: `stop`.
 **Tracked by:** [ONL-103](https://linear.app/onlooker/issue/ONL-103) (`ecosystem-q023x9`).
 Follows [ONL-102](https://linear.app/onlooker/issue/ONL-102) (merged), which set
 `drift_threshold` to the measured 0.28 and produced the numbers below.
@@ -228,17 +228,26 @@ choice, or sampling) or the question being asked of it.
 
 ### Caveat: one metric definition is doing a lot of work
 
-`cross_antisymmetry` counts a tie-against-a-preference as a failure. That is a choice this
-spec made, not a fact. Counting only self-contradictory verdicts — both orders naming the
-same document better — gives **96.7%** instead of 56.7%, and the verdict would flip to
-`proceed`.
+`cross_antisymmetry` counts a tie-against-a-preference as a failure. Counting only
+self-contradictory verdicts — both orders naming the same document better — gives
+**96.7%** instead of 56.7%, and the verdict would flip to `proceed`.
 
-The stricter definition is the right one for echo's purpose and the `stop` stands: echo
-compares two versions of one document after an edit, so a judge whose tie boundary moves
-when you swap the inputs cannot tell "this edit changed nothing" from "this edit made it
-worse." That is the product question, and 40% instability on it is disqualifying. But a
-reader who wanted a different question answered should know the number both ways rather
-than discover the threshold was load-bearing.
+But the strict `{better, worse}`-or-`{same, same}` definition and the 0.80 bar were both
+**pre-registered**, in the pre-run spec at commit `14e15c2`, before any data existed. So
+96.7% is the **post-hoc** reading, arrived at by loosening the definition after seeing the
+result — not the honest one. This is not rationalizing a guessed threshold; it is declining
+to loosen a pre-registered definition after seeing data, which is the opposite failure and
+the defensible direction.
+
+The conclusion does not rest on that definitional choice anyway. **11 of 30 ordered pairs
+returned a different verdict across two identical repeats** (5/15 `ab`, 6/15 `ba`) — a
+threshold-free instability no choice of antisymmetry definition can touch. And the stricter
+definition is still the right one for echo's purpose: echo compares two versions of one
+document after an edit, so a judge whose tie boundary moves when you swap the inputs cannot
+tell "this edit changed nothing" from "this edit made it worse." That is the product
+question, and 40% instability on it is disqualifying. A reader who wanted the looser
+question answered should know the number both ways rather than discover the threshold was
+load-bearing.
 
 ### Not written
 

@@ -160,6 +160,12 @@ done
 SELF_ATTEMPTED=0
 CROSS_ATTEMPTED=0
 
+# Total verdicts that parsed, across both arms. Mirrors measure-judge-spread.sh's
+# USABLE: a zero here means the whole run produced nothing to measure, as
+# opposed to one pair or one file coming back empty, which a tie-heavy but
+# otherwise healthy run can do legitimately.
+USABLE=0
+
 # --- self arm, first: the cheapest kill -------------------------------------
 printf 'self arm (%d calls):\n' "$SELF_CALLS" >&2
 for i in "${!RELS[@]}"; do
@@ -170,6 +176,7 @@ for i in "${!RELS[@]}"; do
 		SELF_ATTEMPTED=$((SELF_ATTEMPTED + 1))
 		if [[ -z "$v" ]]; then printf 'x' >&2; continue; fi
 		printf '.' >&2
+		USABLE=$((USABLE + 1))
 		csv="${csv}${csv:+,}\"${v}\""
 	done
 	printf '\n' >&2
@@ -188,10 +195,10 @@ for ((i = 0; i < N; i++)); do
 		for ((r = 0; r < REPEATS; r++)); do
 			v=$(_ask "${RELS[$i]}" "${BODIES[$i]}" "${RELS[$j]}" "${BODIES[$j]}")
 			CROSS_ATTEMPTED=$((CROSS_ATTEMPTED + 1))
-			if [[ -n "$v" ]]; then printf '.' >&2; ab_csv="${ab_csv}${ab_csv:+,}\"${v}\""; else printf 'x' >&2; fi
+			if [[ -n "$v" ]]; then printf '.' >&2; USABLE=$((USABLE + 1)); ab_csv="${ab_csv}${ab_csv:+,}\"${v}\""; else printf 'x' >&2; fi
 			v=$(_ask "${RELS[$j]}" "${BODIES[$j]}" "${RELS[$i]}" "${BODIES[$i]}")
 			CROSS_ATTEMPTED=$((CROSS_ATTEMPTED + 1))
-			if [[ -n "$v" ]]; then printf '.' >&2; ba_csv="${ba_csv}${ba_csv:+,}\"${v}\""; else printf 'x' >&2; fi
+			if [[ -n "$v" ]]; then printf '.' >&2; USABLE=$((USABLE + 1)); ba_csv="${ba_csv}${ba_csv:+,}\"${v}\""; else printf 'x' >&2; fi
 		done
 		printf '\n' >&2
 		jq --arg a "${RELS[$i]}" --arg b "${RELS[$j]}" \
@@ -200,6 +207,13 @@ for ((i = 0; i < N; i++)); do
 			&& mv "${CROSS_JSON}.next" "$CROSS_JSON"
 	done
 done
+
+if [[ "$USABLE" -eq 0 ]]; then
+	printf 'no usable judge responses across %d calls — nothing to measure\n' \
+		"$((SELF_ATTEMPTED + CROSS_ATTEMPTED))" >&2
+	rm -f "$SELF_JSON" "$CROSS_JSON"
+	exit 1
+fi
 
 VERDICTS_JSON="${OUT_DIR}/verdicts.json"
 jq -n \
