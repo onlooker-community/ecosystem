@@ -280,3 +280,45 @@ config_get_json() {
 	local config_json="${!config_var}"
 	printf '%s' "$config_json" | jq -c "${path}" 2>/dev/null
 }
+
+# Get a non-negative integer from loaded config, falling back on anything else.
+#
+# Arguments:
+#   $1 = variable name containing the config JSON (e.g., "_BURSAR_CONFIG")
+#   $2 = jq path to the value (e.g., '.bursar.max_items')
+#   $3 = default, used whenever the configured value is not a non-negative integer
+#
+# Outputs: a non-negative integer. ALWAYS -- that invariant is the whole point.
+# A caller can do (( )) on the result with no guard of its own, which is what
+# makes one accessor worth having instead of 34 hand-rolled checks.
+#
+# Policy, and why:
+#   - ^[0-9]+$ only. A float is refused because bash arithmetic cannot take one
+#     (governor's .governor.estimation.safety_margin is 1.3, and a caller that
+#     wants that is not an int caller). A negative is refused because every
+#     current consumer is a count, limit or budget where a negative is
+#     meaningless, and accepting -1 as a budget would be its own silent
+#     failure. This matches the four hand-rolled guards already in the tree.
+#   - A non-numeric DEFAULT is a bug in the calling code, not in the user's
+#     config, and passing it on would move the hole from the settings file
+#     into the source where it is harder to see. It is reported on stderr and
+#     replaced with 0. Reporting rather than dying keeps the hook alive, which
+#     is the same reason these scripts omit -e in the first place.
+config_get_int() {
+	local config_var="${1:-}"
+	local path="${2:-}"
+	local default="${3:-}"
+
+	[[ -z "$config_var" ]] && return 1
+
+	if [[ ! "$default" =~ ^[0-9]+$ ]]; then
+		printf 'config_get_int: default %s for %s is not a non-negative integer; using 0\n' \
+			"${default:-<empty>}" "${path:-<no path>}" >&2
+		default=0
+	fi
+
+	local v
+	v=$(config_get "$config_var" "$path") || v=""
+	[[ "$v" =~ ^[0-9]+$ ]] || v="$default"
+	printf '%s' "$v"
+}
