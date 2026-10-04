@@ -171,20 +171,22 @@ test('a start breadcrumb is not counted as a separate hook run', () => {
 // nothing, the Wave 0 failure where inspector shipped checks:{}. These pin that
 // the checker can tell "not yet" from "not hostable here".
 //
-// echo is the real registered case: scripts/lib/repo-shaped-inputs.json lists
-// echo.watch_paths as an inclusion glob, so these use echo rather than a
-// synthetic plugin and exercise the shipped config.
+// cartographer is the real registered case: scripts/lib/repo-shaped-inputs.json
+// lists cartographer.undocumented_entity.globs as an inclusion glob, so these
+// use cartographer rather than a synthetic plugin and exercise the shipped
+// config. It took over from echo, whose watch_paths was the original registered
+// case until ONL-103 retired the stop gate that read it.
 test('a plugin whose inclusion globs match nothing here is not_hostable, not a finding', () => {
-  const fx = fixture({ enabled: { 'echo@m': true }, hooks: ['echo-stop-gate'] });
-  // The fixture repo has settings and hooks.json, and no agent or skill files.
-  writeLogs(fx, { health: [{ hook: 'echo-stop-gate' }], events: [] });
-  const row = run(fx).rows.find((r) => r.plugin === 'echo');
+  const fx = fixture({ enabled: { 'cartographer@m': true }, hooks: ['cartographer-session-start'] });
+  // The fixture repo tracks nothing, so no entity directory can match.
+  writeLogs(fx, { health: [{ hook: 'cartographer-session-start' }], events: [] });
+  const row = run(fx).rows.find((r) => r.plugin === 'cartographer');
   assert.equal(row.verdict, 'not_hostable');
 });
 
 test('not_hostable does not count as a finding', () => {
-  const fx = fixture({ enabled: { 'echo@m': true }, hooks: ['echo-stop-gate'] });
-  writeLogs(fx, { health: [{ hook: 'echo-stop-gate' }], events: [] });
+  const fx = fixture({ enabled: { 'cartographer@m': true }, hooks: ['cartographer-session-start'] });
+  writeLogs(fx, { health: [{ hook: 'cartographer-session-start' }], events: [] });
   // --strict exits non-zero on findings. A plugin that cannot run here is an
   // answer, so it must not fail the gate.
   execFileSync(process.execPath, [SCRIPT, '--project', fx.project, '--onlooker-dir', fx.onlooker, '--strict'], {
@@ -194,16 +196,43 @@ test('not_hostable does not count as a finding', () => {
 
 test('the same plugin is judged normally once its inputs exist', () => {
   // The other half: without this, the test above would pass on a checker that
-  // simply called echo not_hostable everywhere.
-  const fx = fixture({ enabled: { 'echo@m': true }, hooks: ['echo-stop-gate'] });
+  // simply called cartographer not_hostable everywhere.
+  const fx = fixture({ enabled: { 'cartographer@m': true }, hooks: ['cartographer-session-start'] });
   mkdirSync(join(fx.project, '.claude', 'agents'), { recursive: true });
   writeFileSync(join(fx.project, '.claude', 'agents', 'reviewer.md'), '# reviewer\n');
   execFileSync('git', ['-C', fx.project, 'add', '-A'], { stdio: 'ignore' });
 
-  writeLogs(fx, { health: [{ hook: 'echo-stop-gate' }], events: [] });
-  const row = run(fx).rows.find((r) => r.plugin === 'echo');
+  writeLogs(fx, { health: [{ hook: 'cartographer-session-start' }], events: [] });
+  const row = run(fx).rows.find((r) => r.plugin === 'cartographer');
   assert.notEqual(row.verdict, 'not_hostable');
   assert.equal(row.verdict, 'silent');
+});
+
+// A plugin that declares no hooks at all. Echo after ONL-103 is the live case:
+// the stop gate was retired and only the measurement harness remains, so it
+// ships no hooks.json. Without this split such a plugin read as not_running,
+// whose advice is "check enablement and install" -- a fault hunt with no fault
+// at the end of it.
+test('a plugin that declares no hooks is no_runtime, not not_running', () => {
+  const fx = fixture({ enabled: { 'demo@m': true }, hooks: [] });
+  writeLogs(fx, { health: [{ hook: 'other-hook' }], events: [] });
+  assert.equal(verdictOf(fx), 'no_runtime');
+});
+
+test('no_runtime does not count as a finding', () => {
+  const fx = fixture({ enabled: { 'demo@m': true }, hooks: [] });
+  writeLogs(fx, { health: [{ hook: 'other-hook' }], events: [] });
+  execFileSync(process.execPath, [SCRIPT, '--project', fx.project, '--onlooker-dir', fx.onlooker, '--strict'], {
+    encoding: 'utf8',
+  });
+});
+
+test('declaring hooks that never ran is still not_running', () => {
+  // The other half of the split: no_runtime must not swallow the real fault it
+  // was carved out of.
+  const fx = fixture({ enabled: { 'demo@m': true }, hooks: ['demo-stop'] });
+  writeLogs(fx, { health: [{ hook: 'someone-elses-hook' }], events: [] });
+  assert.equal(verdictOf(fx), 'not_running');
 });
 
 test('a plugin with no registered inclusion globs is hostable anywhere', () => {

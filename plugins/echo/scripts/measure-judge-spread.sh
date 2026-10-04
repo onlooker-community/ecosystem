@@ -81,10 +81,12 @@ for f in "${FILES[@]}"; do
 	fi
 done
 
-# Mirrors echo-stop-gate.sh:86 and :264 exactly, CLAUDE_PLUGIN_ROOT included.
-# The accessors read it at call time, so a plain echo_config_load leaves every
-# value empty and the run would silently measure whatever the DEFAULT model is
-# rather than echo's pinned judge -- a measurement that describes nothing.
+# CLAUDE_PLUGIN_ROOT is set on each call deliberately: the accessors read it at
+# call time, so a plain echo_config_load leaves every value empty and the run
+# would silently measure whatever the DEFAULT model is rather than the pinned
+# judge -- a measurement that describes nothing. This mirrored the stop gate
+# until ONL-103 retired it; the reason is a property of the accessors, not of
+# the hook, so it outlived it.
 CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" echo_config_load "$REPO_ROOT"
 EVAL_MODEL=$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" echo_config_model)
 TIMEOUT_SECS=$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" echo_config_timeout)

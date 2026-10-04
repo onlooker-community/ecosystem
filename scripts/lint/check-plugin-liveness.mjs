@@ -272,8 +272,11 @@ function declaredHooks(plugin) {
 const EMITTER_ALIAS = new Map([['ecosystem', 'onlooker']]);
 
 const hookOwner = new Map();
+const declaredCounts = new Map();
 for (const plugin of enabled) {
-  for (const hook of declaredHooks(plugin)) hookOwner.set(hook, plugin);
+  const declared = declaredHooks(plugin);
+  declaredCounts.set(plugin, declared.length);
+  for (const hook of declared) hookOwner.set(hook, plugin);
 }
 const byEmitter = new Map(enabled.map((p) => [EMITTER_ALIAS.get(p) || p, p]));
 
@@ -314,15 +317,26 @@ const rows = enabled.map((plugin) => {
   const here = eventsHere.get(plugin) || 0;
   const anywhere = eventsAnywhere.get(plugin) || 0;
   let verdict;
-  // Applicability comes first, because it changes what silence MEANS
+  // Declaring no hooks at all comes before everything else, because a plugin
+  // with no runtime cannot run in ANY repo — which makes the repo-shaped
+  // question below moot rather than merely unanswered. Kept distinct from
+  // not_running, which means hooks are declared and none of them fired: that
+  // is an install or enablement fault with something to fix, and its advice
+  // ("check enablement and install") would send a reader after a fault that
+  // does not exist here. Echo after ONL-103 is the first of these — its stop
+  // gate was retired as measured-ineffective and only the judge-measurement
+  // harness remains, so zero is the correct and permanent answer.
+  if (declaredCounts.get(plugin) === 0) verdict = 'no_runtime';
+  // Applicability comes next, because it changes what silence MEANS
   // (ecosystem-449.28). Every verdict below reads absence as a fault: a plugin
   // at zero is not running, or running and mute. For a plugin whose inputs do
   // not exist in this repo, absence is the correct outcome and forever will be
-  // — echo watching for agent files in a repo that has none is enabled, green,
-  // and measuring nothing, which is the Wave 0 failure where inspector shipped
-  // checks:{}. Reported separately so it does not sit at zero looking like a
-  // stalled wave, and excluded from findings because there is nothing to fix.
-  if (!isHostable(plugin, project)) verdict = 'not_hostable';
+  // — cartographer walking for entity directories in a repo that has none is
+  // enabled, green, and measuring nothing, which is the Wave 0 failure where
+  // inspector shipped checks:{}. Reported separately so it does not sit at
+  // zero looking like a stalled wave, and excluded from findings because there
+  // is nothing to fix.
+  else if (!isHostable(plugin, project)) verdict = 'not_hostable';
   else if (hooks === 0) verdict = 'not_running';
   else if (anywhere === 0) verdict = 'silent';
   else if (here === 0) verdict = 'no_local_events';
@@ -330,11 +344,13 @@ const rows = enabled.map((plugin) => {
   return { plugin, hooks, here, anywhere, verdict };
 });
 
-// not_hostable is an answer, not a finding. The plugin has no inputs in this
-// repo, so there is nothing to fix and nothing to wait for; counting it would
-// make a correctly-configured soak look permanently broken, which is what
+// not_hostable and no_runtime are answers, not findings. The first has no
+// inputs in this repo, the second has no hooks anywhere; either way there is
+// nothing to fix and nothing to wait for, and counting them would make a
+// correctly-configured soak look permanently broken, which is what
 // ecosystem-449.28 asked for in the first place.
-const findings = rows.filter((r) => r.verdict !== 'live' && r.verdict !== 'not_hostable');
+const ANSWERS = new Set(['live', 'not_hostable', 'no_runtime']);
+const findings = rows.filter((r) => !ANSWERS.has(r.verdict));
 
 if (args.json) {
   process.stdout.write(`${JSON.stringify({ project, project_key: key, since_days: args.since, rows }, null, 2)}\n`);
