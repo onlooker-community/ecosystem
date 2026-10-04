@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.66.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.66.0...ecosystem-v0.66.1) (2026-10-04)
+
+
+### Bug Fixes
+
+* **echo:** reject a bad count flag instead of exiting 0 silently :relieved: ([#407](https://github.com/onlooker-community/ecosystem/issues/407)) ([6447776](https://github.com/onlooker-community/ecosystem/commit/644777615da614cf12664374a2bb5638695dd740))
+
 ## [0.66.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.65.3...ecosystem-v0.66.0) (2026-10-04)
 
 

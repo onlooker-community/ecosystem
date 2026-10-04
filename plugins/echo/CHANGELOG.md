@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.1](https://github.com/onlooker-community/ecosystem/compare/echo-v0.10.0...echo-v0.10.1) (2026-10-04)
+
+
+### Bug Fixes
+
+* **echo:** reject a bad count flag instead of exiting 0 silently :relieved: ([#407](https://github.com/onlooker-community/ecosystem/issues/407)) ([6447776](https://github.com/onlooker-community/ecosystem/commit/644777615da614cf12664374a2bb5638695dd740))
+
 ## [0.10.0](https://github.com/onlooker-community/ecosystem/compare/echo-v0.9.0...echo-v0.10.0) (2026-10-04)
 
 
