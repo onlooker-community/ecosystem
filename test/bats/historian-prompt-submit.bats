@@ -266,3 +266,102 @@ _index_session() {
 
   ! grep -q '"event_type":"historian.embedder.failed"' "$ONLOOKER_EVENTS_LOG"
 }
+
+@test "a prompt past max_input_chars is still embedded instead of dropped" {
+  # ONL-131: the prompt path gated on min_prompt_chars and had no ceiling, so a
+  # prompt past the embedder's max_input_chars (6000 default) failed `oversized`
+  # inside the embedder and retrieval returned an empty context block. 93 of 246
+  # live retrievals since 2026-09-29 died this way — 38%, and the failures
+  # cluster on the busiest days, when retrieval is worth the most.
+  _index_session "past-oversized" \
+    "We are debugging a redash dashboard problem with timezone offsets and saved query parameters this morning." \
+    "Sure — the latest version always passes UTC because of a chart migration we did last week."
+
+  # Sentinel text first so it survives a head-truncation, then pad well past
+  # the 6000-char default.
+  local long_prompt padding
+  padding=$(printf 'additional context line %s. ' $(seq 1 400))
+  long_prompt="Hitting another redash dashboard timezone issue on the same saved query parameters again today. ${padding}"
+  [ "${#long_prompt}" -gt 6000 ] || return 1
+
+  run bash -c "printf '%s' '$(_retrieve_input "$long_prompt")' | '$RETRIEVE_HOOK'"
+  [ "$status" -eq 0 ] || return 1
+
+  # Nothing on this path may report `oversized` any more: the ceiling belongs to
+  # the prompt path, not to a failure discovered inside the embedder.
+  local oversized
+  oversized=$(grep '"event_type":"historian.embedder.failed"' "$ONLOOKER_EVENTS_LOG" 2>/dev/null \
+    | jq -rc 'select(.payload.reason == "oversized") | .payload.reason' | wc -l | tr -d ' ')
+  [ "$oversized" -eq 0 ] || return 1
+
+  grep '"event_type":"historian.retrieval.surfaced"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e '.payload.source_session_id == "past-oversized"' >/dev/null
+}
+
+@test "a non-numeric max_input_chars does not break the prompt path" {
+  # max_input_chars is user-editable config (ADR-004), so a typo is reachable.
+  # Unguarded, `(( PROMPT_LEN > abc ))` reads abc as 0 and the substring
+  # expansion ${PROMPT:0:abc} is then a bash arithmetic error inside the hook.
+  # The hook must still complete and report an outcome rather than die mid-path.
+  printf '%s\n' \
+    '{"historian":{"indexing":{"min_transcript_chars_to_index":50,"chunk_target_chars":400,"chunk_overlap_chars":50},"embedder":{"max_input_chars":"not-a-number"},"retrieval":{"cooldown_seconds":60,"max_retrievals_per_session":5,"min_prompt_chars":40,"min_similarity":0.55,"max_age_days":365}}}' \
+    > "${PROJECT_REPO}/.claude/settings.json"
+
+  run bash -c "printf '%s' '$(_retrieve_input "Hitting another redash dashboard timezone issue on the same saved query parameters again today")' | '$RETRIEVE_HOOK'"
+  [ "$status" -eq 0 ] || return 1
+
+  # No bash diagnostic leaked into the hook's own output.
+  [[ "$output" != *"substitution"* ]] || return 1
+  [[ "$output" != *"syntax error"* ]] || return 1
+
+  # And it still reached the point of reporting a retrieval outcome.
+  grep -q '"event_type":"historian.retrieval.complete"' "$ONLOOKER_EVENTS_LOG"
+}
+
+@test "retrieval.started reports embed_chars when the query was truncated" {
+  # ONL-131 done-when: a truncated query must be distinguishable from a complete
+  # one in the event stream. prompt_chars is the whole prompt, embed_chars is
+  # what actually reached the embedder, so embed_chars < prompt_chars is the
+  # truncation — readable without knowing the configured limit at the time.
+  local long_prompt padding
+  padding=$(printf 'additional context line %s. ' $(seq 1 400))
+  long_prompt="Hitting another redash dashboard timezone issue on the same saved query parameters again today. ${padding}"
+
+  run bash -c "printf '%s' '$(_retrieve_input "$long_prompt")' | '$RETRIEVE_HOOK'"
+  [ "$status" -eq 0 ] || return 1
+
+  grep '"event_type":"historian.retrieval.started"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e --argjson n "${#long_prompt}" \
+      '.payload.prompt_chars == $n and .payload.embed_chars == 6000' >/dev/null
+}
+
+@test "retrieval.started omits embed_chars when the whole prompt was embedded" {
+  # The converse, so "truncated" cannot collapse into "always reported".
+  run bash -c "printf '%s' '$(_retrieve_input "Hitting another redash dashboard timezone issue on the same saved query parameters again today")' | '$RETRIEVE_HOOK'"
+  [ "$status" -eq 0 ] || return 1
+
+  grep '"event_type":"historian.retrieval.started"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e 'has("payload") and (.payload | has("embed_chars") | not)' >/dev/null
+}
+
+@test "embed_chars reports the fitted query even when the embed never happens" {
+  # retrieval.started is emitted before the availability probe, so a truncated
+  # query that then meets an unreachable embedder still reports embed_chars.
+  # Pinning it deliberately: the field describes the query as fitted, which is
+  # decided before the attempt, not a confirmation that bytes reached ollama.
+  # The outcome event is what says whether the embed happened.
+  local long_prompt padding
+  padding=$(printf 'additional context line %s. ' $(seq 1 400))
+  long_prompt="Hitting another redash dashboard timezone issue on the same saved query parameters again today. ${padding}"
+
+  run env HISTORIAN_STUB_OLLAMA_AVAILABLE=0 bash -c \
+    "printf '%s' '$(_retrieve_input "$long_prompt")' | '$RETRIEVE_HOOK'"
+  [ "$status" -eq 0 ] || return 1
+
+  grep '"event_type":"historian.retrieval.started"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e '.payload.embed_chars == 6000' >/dev/null || return 1
+
+  # ...and the outcome is what reports that nothing was embedded.
+  grep '"event_type":"historian.retrieval.complete"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e '.payload.outcome == "skipped" and .payload.skip_reason == "embedder_unavailable"' >/dev/null
+}
