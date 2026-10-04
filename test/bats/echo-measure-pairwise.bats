@@ -246,3 +246,42 @@ STUB
 	[[ "$output" == *"no usable"* ]] || return 1
 	[ ! -f "${OUT_DIR}/stats.json" ]
 }
+
+@test "a non-numeric --repeats is rejected before any judge call" {
+	# `--repeats abc` aborted inside $(( N * REPEATS )): bash reads the bare
+	# word as a variable name, set -u calls it unbound, and because these
+	# runners use `set -uo pipefail` deliberately without -e, the script left
+	# **status 0 with nothing written** -- not even the out dir, since mkdir
+	# comes later. A caller or CI step reads success and finds no artifacts,
+	# which is the worst shape a measurement runner can fail in.
+	run "$HARNESS" --repeats abc --out "$OUT_DIR" \
+		"${SUBJECT_DIR}/one.md" "${SUBJECT_DIR}/two.md"
+	[ "$status" -ne 0 ] || return 1
+	# Must name the flag. Asserting only on a non-zero status would pass on the
+	# pre-fix "nothing to measure" path, which reports a measured failure
+	# instead of a bad argument.
+	[[ "$output" == *"repeats"* ]] || return 1
+	[ ! -f "$CALL_LOG" ]
+}
+
+@test "a zero --repeats is rejected as an argument, not reported as a failed measurement" {
+	# Zero already exited non-zero, but only after planning the run and
+	# reaching "no usable judge responses across 0 calls -- nothing to
+	# measure". That is missing data dressed as a measured result, the same
+	# defect the <2-files guard above exists to prevent.
+	run "$HARNESS" --repeats 0 --out "$OUT_DIR" \
+		"${SUBJECT_DIR}/one.md" "${SUBJECT_DIR}/two.md"
+	[ "$status" -ne 0 ] || return 1
+	[[ "$output" == *"repeats"* ]] || return 1
+	[ ! -f "$CALL_LOG" ]
+}
+
+@test "a negative --repeats does not produce a dry-run plan" {
+	# --dry-run prints its plan and exits 0 before any loop, so a negative
+	# count reported a negative number of calls and looked like a valid plan.
+	run "$HARNESS" --dry-run --repeats -1 \
+		"${SUBJECT_DIR}/one.md" "${SUBJECT_DIR}/two.md"
+	[ "$status" -ne 0 ] || return 1
+	[[ "$output" == *"repeats"* ]] || return 1
+	[ ! -f "$CALL_LOG" ]
+}

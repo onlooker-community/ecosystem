@@ -49,6 +49,21 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
+# A count flag that is not a positive integer has to fail here, loudly. Reaching
+# the arithmetic below with a bare word makes bash read it as a variable name;
+# `set -u` then calls it unbound and, because these runners use `set -uo pipefail`
+# deliberately without `-e`, the script stopped with status 0 having written
+# nothing -- not even the out dir, since mkdir comes later. A caller or CI step
+# reads success and finds no artifacts.
+#
+# Zero is rejected here rather than downstream at "nothing to measure", which
+# reports a bad argument as a measured result -- the same defect the readability
+# guard below exists to prevent.
+if [[ ! "$SAMPLES" =~ ^[1-9][0-9]*$ ]]; then
+	printf -- '--samples must be a positive integer; got: %s\n' "$SAMPLES" >&2
+	exit 1
+fi
+
 # The three files echo has actually scored in this repo, so the spread is
 # measured on the kind of content echo really watches rather than a fixture.
 if [[ "${#FILES[@]}" -eq 0 ]]; then
