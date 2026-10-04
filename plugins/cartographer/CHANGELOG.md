@@ -2,6 +2,13 @@
 
 All notable changes to the Cartographer plugin are documented here.
 
+## [0.11.0](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.10.8...cartographer-v0.11.0) (2026-10-04)
+
+
+### Features
+
+* **config:** add a validating integer accessor :shield: ([#415](https://github.com/onlooker-community/ecosystem/issues/415)) ([879969e](https://github.com/onlooker-community/ecosystem/commit/879969ecc01cf1e293135d52c77aab4985575221))
+
 ## [0.10.8](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.10.7...cartographer-v0.10.8) (2026-09-22)
 
 
