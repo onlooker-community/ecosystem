@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/onlooker-community/ecosystem/compare/historian-v0.7.1...historian-v0.8.0) (2026-10-04)
+
+
+### Features
+
+* **historian:** bound and report the retrieval query :mag: ([#409](https://github.com/onlooker-community/ecosystem/issues/409)) ([e5034eb](https://github.com/onlooker-community/ecosystem/commit/e5034ebef508d3c04ccaf597d89a2bd4318cf7cd))
+
 ## [0.7.1](https://github.com/onlooker-community/ecosystem/compare/historian-v0.7.0...historian-v0.7.1) (2026-09-28)
 
 
