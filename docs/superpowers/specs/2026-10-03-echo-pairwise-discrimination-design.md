@@ -255,6 +255,8 @@ No ADR. `plugins/echo/docs/adr/005-pairwise-vs-absolute-scoring.md` was conditio
 `proceed` verdict and does not exist. Nothing in echo's runtime changed; `drift_threshold`
 remains 0.28.
 
-Raw artifacts are preserved beside this plan's SDD workspace as `verdicts.json` and
-`stats.json`, with the model and prompt fingerprint stamped, so the run can be compared
-against a future one on a different model or prompt.
+Raw artifacts are committed at
+`plugins/echo/docs/measurements/2026-10-03-pairwise/`, with the model and prompt
+fingerprint stamped, so the run can be compared against a future one on a different model
+or prompt — and so the per-pair verdicts behind the classification above can be
+recomputed under a different antisymmetry definition without spending 72 calls again.
