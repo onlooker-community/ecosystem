@@ -4,10 +4,16 @@
     "",
     "ecosystem-449.28. Wave readiness asks 'has this plugin produced write-path events",
     "in the target repo?', and a plugin sitting at zero reads as a stalled wave. But some",
-    "plugins cannot produce events in some repos at all: echo's watch_paths match agent",
-    "and skill files, and the soak target has none, so echo there would be enabled, green,",
-    "and measuring nothing -- the exact Wave 0 failure where inspector shipped checks:{}.",
-    "Readiness needs to tell 'not yet' from 'not hostable here' before it can mean anything.",
+    "plugins cannot produce events in some repos at all: cartographer's undocumented_entity",
+    "check needs entity directories to walk, and a repo with none would leave it enabled,",
+    "green, and measuring nothing -- the exact Wave 0 failure where inspector shipped",
+    "checks:{}. Readiness needs to tell 'not yet' from 'not hostable here' before it can",
+    "mean anything.",
+    "",
+    "The original motivating case was echo.watch_paths (ecosystem-449.15), which matched",
+    "agent and skill files the soak target did not have. Echo's stop gate was retired in",
+    "ONL-103 and its watch_paths went with it, so the entry is gone -- but the mechanism",
+    "it motivated is unchanged.",
     "",
     "Inclusion globs answer that question: if none of them match a file in the target repo,",
     "the plugin has no inputs there. Exclusion globs do not -- a skip list matching nothing",
@@ -20,10 +26,6 @@
     "test/bus-coverage.json, for the same reason."
   ],
   "inclusion": {
-    "echo": {
-      "config_key": "echo.watch_paths",
-      "why": "Scores prompt-shaped files. A repo with no agents, commands or skills gives it nothing to watch (ecosystem-449.15)."
-    },
     "cartographer": {
       "config_key": "cartographer.undocumented_entity.globs",
       "why": "The undocumented_entity check needs entity directories to walk. Its CLAUDE.md/AGENTS.md audit still has targets anywhere, so cartographer is only partially inapplicable -- see the note in ecosystem-449.28."

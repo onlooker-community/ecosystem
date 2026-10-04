@@ -25,7 +25,7 @@
 # Same function, same arguments; only the sink differs.
 #
 # Note what let this survive: every existing events test exports
-# ONLOOKER_EVENTS_LOG in setup (echo-events.bats:12 and its siblings), so the
+# ONLOOKER_EVENTS_LOG in setup (assayer-events.bats:16 and its siblings), so the
 # unset case -- the one production actually hits when the substrate is missing
 # -- was never exercised. These tests deliberately leave it unset.
 

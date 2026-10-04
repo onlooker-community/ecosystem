@@ -27,7 +27,8 @@ function choose(n, k) {
 }
 
 /**
- * Round to 4 decimals, matching what echo-stop-gate.sh does to DELTA.
+ * Round to 4 decimals. Matched the stop gate's own DELTA rounding until
+ * ONL-103 retired it; kept because the reason below is self-standing.
  *
  * Without this, 0.85 - 0.8 reports as 0.050000000000000044 and every
  * percentile in the output carries a tail of float noise.

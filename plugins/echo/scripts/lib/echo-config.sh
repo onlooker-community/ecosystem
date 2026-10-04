@@ -63,29 +63,3 @@ echo_config_timeout() {
 	val=$(echo_config_get '.echo.evaluation.timeout_seconds')
 	printf '%s' "${val:-60}"
 }
-
-echo_config_drift_threshold() {
-	local val
-	val=$(echo_config_get '.echo.drift_threshold')
-	printf '%s' "${val:-0.28}"
-}
-
-echo_config_watch_paths() {
-	local raw
-	raw=$(echo_config_get_json '.echo.watch_paths')
-	if [[ -n "$raw" && "$raw" != "null" ]]; then
-		printf '%s' "$raw" | jq -r '.[]' 2>/dev/null
-	else
-		printf 'plugins/*/agents/*.md\n'
-	fi
-}
-
-echo_config_exclude_paths() {
-	local raw
-	raw=$(echo_config_get_json '.echo.exclude_paths')
-	if [[ -n "$raw" && "$raw" != "null" ]]; then
-		printf '%s' "$raw" | jq -r '.[]' 2>/dev/null
-	fi
-	# Always exclude Echo's own tree — hardcoded, not overridable.
-	printf 'plugins/echo/**\n'
-}

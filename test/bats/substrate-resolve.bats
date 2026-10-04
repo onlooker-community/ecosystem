@@ -134,13 +134,20 @@ _non_hook_scripts_using_resolver() {
 	# Guards the sweeps below: if either grep stops matching, they would pass
 	# by iterating over nothing. Counted separately so that a caller moving
 	# between the two shows up as a change here rather than cancelling out.
+	#
+	# The hook floor went 14 -> 13 when historian's SessionEnd hook became a
+	# launcher and moved its lookup into scripts/run-index.sh, and 13 -> 12
+	# when ONL-103 retired echo-stop-gate.sh. Both are real removals, so the
+	# floor tracks them rather than being held high as aspiration -- a floor
+	# above the true count fails every run and teaches people to edit the
+	# number without reading it.
 	local hooks scripts
 	hooks=$(_hooks_using_resolver | wc -l | tr -d ' ')
 	scripts=$(_non_hook_scripts_using_resolver | wc -l | tr -d ' ')
 
-	[ "$hooks" -ge 13 ] || { echo "hooks: $hooks"; return 1; }
+	[ "$hooks" -ge 12 ] || { echo "hooks: $hooks"; return 1; }
 	[ "$scripts" -ge 2 ] || { echo "non-hook scripts: $scripts"; return 1; }
-	[ "$((hooks + scripts))" -ge 15 ]
+	[ "$((hooks + scripts))" -ge 14 ]
 }
 
 @test "no plugin script still carries its own inline substrate lookup" {

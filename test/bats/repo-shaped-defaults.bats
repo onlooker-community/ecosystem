@@ -14,8 +14,13 @@
 # against layouts actually observed on disk, so a repo-shaped default cannot
 # be reintroduced without a test naming the repo it would exclude.
 #
-# Matching here mirrors the hook exactly: bash `[[ $f == $pat ]]`, where `*`
-# crosses `/` (unlike pathname globbing). Tests are written against that.
+# ONL-103 retired echo's stop gate and watch_paths went with it, so the echo
+# arm of this file is gone. Worth knowing how it went: once the key was absent
+# jq returned null, three of its four tests failed loudly — and the fourth,
+# which asserted the defaults do NOT match ordinary source files, passed
+# VACUOUSLY, because a negated match over an empty pattern list always
+# succeeds. cartographer carries the guard now, plus the generic sweep at the
+# bottom, which reads every plugin config and so covers plugins added later.
 
 setup() {
 	source "${BATS_TEST_DIRNAME}/../helpers/setup.bash"
@@ -33,39 +38,7 @@ _matches_any() {
 	return 1
 }
 
-_echo_watch_paths() { jq -c '.echo.watch_paths' "${REPO_ROOT}/plugins/echo/config.json"; }
-_carto_globs()      { jq -c '.cartographer.undocumented_entity.globs' "${REPO_ROOT}/plugins/cartographer/config.json"; }
-
-# Layouts observed on this machine, each from a different real repository.
-# plugins/*/agents/     — this repo (5 tribunal agent files)
-# .agents/skills/       — onlooker-community/onlooker, the web app
-# .claude/agents/       — meaganewaller/dotfiles
-@test "echo's default watch_paths matches agent files in a plain Claude Code project" {
-	local p; p=$(_echo_watch_paths)
-	_matches_any ".claude/agents/reviewer.md" "$p" || { echo "missed .claude/agents/"; return 1; }
-	_matches_any ".claude/commands/deploy.md" "$p" || { echo "missed .claude/commands/"; return 1; }
-	_matches_any ".claude/skills/writing/SKILL.md" "$p"
-}
-
-@test "echo's default watch_paths matches the .agents layout the web app actually uses" {
-	# onlooker-community/onlooker has .agents/skills/beads/SKILL.md and no
-	# plugins/ directory at all. Under the old default echo was a permanent
-	# no-op there, which is how this bug was found.
-	_matches_any ".agents/skills/beads/SKILL.md" "$(_echo_watch_paths)"
-}
-
-@test "echo's default watch_paths still matches this repo's marketplace layout" {
-	local p; p=$(_echo_watch_paths)
-	_matches_any "plugins/tribunal/agents/tribunal-judge-standard.md" "$p" || { echo "regressed this repo"; return 1; }
-	_matches_any "plugins/lineage/skills/lineage/SKILL.md" "$p"
-}
-
-@test "echo's default watch_paths does not match ordinary source files" {
-	local p; p=$(_echo_watch_paths)
-	! _matches_any "src/index.ts" "$p" || { echo "matched a .ts source file"; return 1; }
-	! _matches_any "README.md" "$p" || { echo "matched the top-level README"; return 1; }
-	! _matches_any "docs/architecture.md" "$p"
-}
+_carto_globs() { jq -c '.cartographer.undocumented_entity.globs' "${REPO_ROOT}/plugins/cartographer/config.json"; }
 
 # cartographer expands its globs with real pathname globbing under `shopt -s
 # nullglob` (cartographer-omission.sh:69), where `*` does NOT cross `/`. That

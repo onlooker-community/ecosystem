@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
 # The evaluation prompt echo's judge is given.
 #
-# Extracted from echo-stop-gate.sh so the spread harness
-# (scripts/measure-judge-spread.sh) can send the judge exactly what the hook
-# sends it. A measurement taken against a different prompt does not transfer,
-# and two copies of a prompt drift apart silently -- this repo already learned
+# Originally extracted from echo-stop-gate.sh so the spread harness could send
+# the judge exactly what the hook sent it. ONL-103 retired that hook, and the
+# lib stays here because both runners now share it
+# (scripts/measure-judge-spread.sh and scripts/measure-pairwise-discrimination.sh):
+# two copies of a prompt drift apart silently, and this repo already learned
 # that the expensive way, with fourteen hooks hand-rolling one substrate lookup
 # and all fourteen wrong the same two ways (ecosystem-449.36, ecosystem-449.35).
 #
-# Changing anything below invalidates the measured drift_threshold, because the
-# threshold is a property of THIS prompt scored by a particular model. See
-# plugins/echo/docs/adr/004-drift-threshold-from-measured-spread.md.
+# Changing anything below invalidates comparison against every committed
+# measurement, because each result is a property of THIS prompt scored by a
+# particular model. Both runners stamp a prompt fingerprint into their output
+# so a changed prompt is detectable rather than merely suspected. See
+# plugins/echo/docs/adr/004-drift-threshold-from-measured-spread.md and
+# docs/adr/005-retire-the-stop-gate.md.
 #
 # Exposes:
 #   echo_build_judge_prompt <rel_path> <content>   # writes the prompt to stdout
