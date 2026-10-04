@@ -1,6 +1,6 @@
 {
   "name": "echo",
-  "version": "0.10.1",
+  "version": "0.11.0",
   "description": "Measurement harness for LLM-as-judge evaluation of prompt-shaped files. Measures whether a judge discriminates between different inputs more reliably than it reproduces itself on identical input. Ships no hooks: the prompt-regression stop gate was retired in ONL-103 as measured-ineffective (see docs/adr/005).",
   "author": {
     "name": "Onlooker Community",
