@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/onlooker-community/ecosystem/compare/echo-v0.10.1...echo-v0.11.0) (2026-10-04)
+
+
+### Features
+
+* **echo:** retire the measured-ineffective stop gate :coffin: ([#411](https://github.com/onlooker-community/ecosystem/issues/411)) ([94687fd](https://github.com/onlooker-community/ecosystem/commit/94687fd3dca766a927a48a117887e54e87b079ff))
+
 ## [0.10.1](https://github.com/onlooker-community/ecosystem/compare/echo-v0.10.0...echo-v0.10.1) (2026-10-04)
 
 
