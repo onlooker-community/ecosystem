@@ -13,7 +13,7 @@ See [`docs/design.md`](docs/design.md) and [ADR-001](docs/adr/001-local-embeddin
 | Hook | What Historian does |
 |------|---------------------|
 | `SessionEnd` | Launches `scripts/run-index.sh` detached and exits. The indexer reads the transcript at `transcript_path`, drops tool calls and tool results (keeps user + assistant messages), chunks inside the configured character target with overlap, runs the sanitizer (secret redaction + `[historian:skip]` markers + path-deny list), embeds each surviving chunk via the configured backend, and appends one JSONL line per chunk to the session's file. Emits `historian.indexing.*`, `historian.chunk.*`, `historian.embedder.unavailable` and `historian.embedder.failed` events along the way. |
-| `UserPromptSubmit` | Rate-gated retrieval: short prompts, cooldown windows, and per-session caps short-circuit before the embedder runs. Otherwise embeds the prompt, streams every JSONL chunk for the project, and injects an `additionalContext` block — a header pointer line plus a multi-line excerpt — for the top cosine-similarity match above the floor. Excludes chunks from the current session id (a session retrieving its own chunks is the degenerate case). Emits `historian.retrieval.started` when the rate gate clears, `historian.retrieval.surfaced` on the surfaced outcome, and `historian.retrieval.complete` with `outcome: surfaced\|empty\|skipped` and a `skip_reason` enum for skipped runs. |
+| `UserPromptSubmit` | Rate-gated retrieval: short prompts, cooldown windows, and per-session caps short-circuit before the embedder runs. Otherwise embeds the prompt, streams every JSONL chunk for the project, and injects an `additionalContext` block — a header pointer line plus a multi-line excerpt — for the top cosine-similarity match above the floor. Excludes chunks from the current session id (a session retrieving its own chunks is the degenerate case). Emits `historian.retrieval.started` when the rate gate clears (with `prompt_chars`, plus `embed_chars` when the query had to be fitted to the embedder's `max_input_chars`), `historian.retrieval.surfaced` on the surfaced outcome, and `historian.retrieval.complete` with `outcome: surfaced\|empty\|skipped` and a `skip_reason` enum for skipped runs. |
 
 ## Activation
 
@@ -94,6 +94,23 @@ How many there are is reported rather than left to be discovered: every
 `historian.embedder.failed` with the reason (`timeout`, `http_error`,
 `oversized`, …). That event means calls were attempted and lost;
 `historian.embedder.unavailable` means the probe failed and none were tried.
+
+### The query has the same limit, and no chunker
+
+`max_input_chars` bounds what the embedder will accept. The chunker fits every
+indexed turn to it, so on the indexing path hitting the limit means something is
+misconfigured — and `oversized` is the right answer there. Nothing sits upstream
+of the **retrieval query**, so a long prompt used to reach the embedder whole,
+fail `oversized`, and leave retrieval with no vector to search on: 93 of 246
+retrievals, 38%, over the five days after the counters shipped.
+
+The prompt path now fits the query to the same limit before embedding, keeping
+the head so a given opening text embeds to the same vector whatever follows it.
+Truncating silently would just move the problem, so `historian.retrieval.started`
+carries `embed_chars` — what was actually sent — alongside the `prompt_chars` it
+always had. The field is **present only when the two differ**, so
+`embed_chars < prompt_chars` is the truncation, readable from the one event
+without knowing what the limit happened to be at the time.
 
 ## Embedder
 

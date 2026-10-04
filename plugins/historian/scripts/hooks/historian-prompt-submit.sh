@@ -162,9 +162,27 @@ fi
 # Embed the prompt + search.
 # ----------------------------------------------------------------------------
 
+# The query has no chunker upstream of it, so a prompt past the embedder's
+# max_input_chars used to fail `oversized` in the embedder and return an empty
+# context block — 93 of 246 live retrievals (ONL-131). Fit it to the limit here
+# instead. Truncating the head keeps the prefix stable, so the same opening text
+# embeds to the same vector whatever follows it.
+#
+# This runs before retrieval.started so the event can carry what was actually
+# sent. A shortened query that looks identical to a complete one is the silent
+# degradation ONL-123 existed to remove, so embed_chars is only present when it
+# differs from prompt_chars, and the pair is the signal.
+EMBED_TEXT="$PROMPT"
+MAX_EMBED_CHARS=$(historian_embedder_max_input_chars)
+if [[ "$MAX_EMBED_CHARS" =~ ^[0-9]+$ ]] && (( PROMPT_LEN > MAX_EMBED_CHARS )); then
+	EMBED_TEXT="${PROMPT:0:MAX_EMBED_CHARS}"
+fi
+
 historian_emit "historian.retrieval.started" "$SESSION_ID" "$(jq -cn \
 	--argjson prompt_chars "$PROMPT_LEN" \
-	'{ prompt_chars: $prompt_chars }')"
+	--argjson embed_chars "${#EMBED_TEXT}" \
+	'{ prompt_chars: $prompt_chars }
+	 + (if $embed_chars == $prompt_chars then {} else { embed_chars: $embed_chars } end)')"
 
 if ! historian_embedder_available; then
 	BACKEND=$(historian_config_get '.historian.embedder.backend')
@@ -174,17 +192,6 @@ if ! historian_embedder_available; then
 	_emit_complete_skipped "embedder_unavailable"
 	_emit_context ""
 	hook_health_exit 0
-fi
-
-# The query has no chunker upstream of it, so a prompt past the embedder's
-# max_input_chars used to fail `oversized` in the embedder and return an empty
-# context block — 93 of 246 live retrievals (ONL-131). Fit it to the limit here
-# instead. Truncating the head keeps the prefix stable, so the same opening text
-# embeds to the same vector whatever follows it.
-EMBED_TEXT="$PROMPT"
-MAX_EMBED_CHARS=$(historian_embedder_max_input_chars)
-if [[ "$MAX_EMBED_CHARS" =~ ^[0-9]+$ ]] && (( PROMPT_LEN > MAX_EMBED_CHARS )); then
-	EMBED_TEXT="${PROMPT:0:MAX_EMBED_CHARS}"
 fi
 
 # Reaching this line means historian_embedder_available already passed, so a

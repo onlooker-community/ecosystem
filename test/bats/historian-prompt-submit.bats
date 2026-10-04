@@ -317,3 +317,51 @@ _index_session() {
   # And it still reached the point of reporting a retrieval outcome.
   grep -q '"event_type":"historian.retrieval.complete"' "$ONLOOKER_EVENTS_LOG"
 }
+
+@test "retrieval.started reports embed_chars when the query was truncated" {
+  # ONL-131 done-when: a truncated query must be distinguishable from a complete
+  # one in the event stream. prompt_chars is the whole prompt, embed_chars is
+  # what actually reached the embedder, so embed_chars < prompt_chars is the
+  # truncation — readable without knowing the configured limit at the time.
+  local long_prompt padding
+  padding=$(printf 'additional context line %s. ' $(seq 1 400))
+  long_prompt="Hitting another redash dashboard timezone issue on the same saved query parameters again today. ${padding}"
+
+  run bash -c "printf '%s' '$(_retrieve_input "$long_prompt")' | '$RETRIEVE_HOOK'"
+  [ "$status" -eq 0 ] || return 1
+
+  grep '"event_type":"historian.retrieval.started"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e --argjson n "${#long_prompt}" \
+      '.payload.prompt_chars == $n and .payload.embed_chars == 6000' >/dev/null
+}
+
+@test "retrieval.started omits embed_chars when the whole prompt was embedded" {
+  # The converse, so "truncated" cannot collapse into "always reported".
+  run bash -c "printf '%s' '$(_retrieve_input "Hitting another redash dashboard timezone issue on the same saved query parameters again today")' | '$RETRIEVE_HOOK'"
+  [ "$status" -eq 0 ] || return 1
+
+  grep '"event_type":"historian.retrieval.started"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e 'has("payload") and (.payload | has("embed_chars") | not)' >/dev/null
+}
+
+@test "embed_chars reports the fitted query even when the embed never happens" {
+  # retrieval.started is emitted before the availability probe, so a truncated
+  # query that then meets an unreachable embedder still reports embed_chars.
+  # Pinning it deliberately: the field describes the query as fitted, which is
+  # decided before the attempt, not a confirmation that bytes reached ollama.
+  # The outcome event is what says whether the embed happened.
+  local long_prompt padding
+  padding=$(printf 'additional context line %s. ' $(seq 1 400))
+  long_prompt="Hitting another redash dashboard timezone issue on the same saved query parameters again today. ${padding}"
+
+  run env HISTORIAN_STUB_OLLAMA_AVAILABLE=0 bash -c \
+    "printf '%s' '$(_retrieve_input "$long_prompt")' | '$RETRIEVE_HOOK'"
+  [ "$status" -eq 0 ] || return 1
+
+  grep '"event_type":"historian.retrieval.started"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e '.payload.embed_chars == 6000' >/dev/null || return 1
+
+  # ...and the outcome is what reports that nothing was embedded.
+  grep '"event_type":"historian.retrieval.complete"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e '.payload.outcome == "skipped" and .payload.skip_reason == "embedder_unavailable"' >/dev/null
+}
