@@ -176,6 +176,17 @@ if ! historian_embedder_available; then
 	hook_health_exit 0
 fi
 
+# The query has no chunker upstream of it, so a prompt past the embedder's
+# max_input_chars used to fail `oversized` in the embedder and return an empty
+# context block — 93 of 246 live retrievals (ONL-131). Fit it to the limit here
+# instead. Truncating the head keeps the prefix stable, so the same opening text
+# embeds to the same vector whatever follows it.
+EMBED_TEXT="$PROMPT"
+MAX_EMBED_CHARS=$(historian_embedder_max_input_chars)
+if [[ "$MAX_EMBED_CHARS" =~ ^[0-9]+$ ]] && (( PROMPT_LEN > MAX_EMBED_CHARS )); then
+	EMBED_TEXT="${PROMPT:0:MAX_EMBED_CHARS}"
+fi
+
 # Reaching this line means historian_embedder_available already passed, so a
 # failure here is NOT the embedder being unreachable — and reporting it as
 # embedder_unavailable is what hid ONL-123 on this path. The probe asks
@@ -183,7 +194,7 @@ fi
 # resident, so a cold daemon passes it and then times out on every embed.
 # Measured on the live log: 59 of 115 prompt submissions spent the full 8s
 # timeout that way, each one reported as the embedder being unreachable.
-historian_embedder_parse "$(historian_embedder_embed_reported "$PROMPT")"
+historian_embedder_parse "$(historian_embedder_embed_reported "$EMBED_TEXT")"
 QUERY_EMBEDDING="$HISTORIAN_EMBEDDER_VECTOR"
 if [[ -z "$QUERY_EMBEDDING" ]]; then
 	if [[ -n "$HISTORIAN_EMBEDDER_REASON" ]]; then

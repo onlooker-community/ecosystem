@@ -107,6 +107,14 @@ _historian_embedder_max_chars() {
 	printf '%s' "$v"
 }
 
+# Public read of the same limit, for callers that must fit text to it *before*
+# embedding rather than learn about it from a failure. The comment above assumes
+# the chunker is upstream of every embed; the retrieval query has nothing
+# upstream of it, so the prompt path reads this and truncates (ONL-131).
+historian_embedder_max_input_chars() {
+	_historian_embedder_max_chars
+}
+
 # Returns 0 if the currently-configured embedder is reachable AND the
 # target model is installed. A side-effect-free probe.
 #
