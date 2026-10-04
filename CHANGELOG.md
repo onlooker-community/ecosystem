@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.66.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.65.3...ecosystem-v0.66.0) (2026-10-04)
+
+
+### Features
+
+* **echo:** measure pairwise discrimination :thinking: ([#405](https://github.com/onlooker-community/ecosystem/issues/405)) ([5305354](https://github.com/onlooker-community/ecosystem/commit/5305354878586eeeeeed962817b0037920ac75ec))
+
 ## [0.65.3](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.65.2...ecosystem-v0.65.3) (2026-10-03)
 
 
