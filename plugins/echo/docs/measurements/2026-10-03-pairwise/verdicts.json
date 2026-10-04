@@ -10,227 +10,119 @@
   "self": [
     {
       "path": ".claude/skills/writing-tests/SKILL.md",
-      "verdicts": [
-        "same",
-        "same"
-      ]
+      "verdicts": ["same", "same"]
     },
     {
       "path": "plugins/lineage/skills/lineage/SKILL.md",
-      "verdicts": [
-        "same",
-        "same"
-      ]
+      "verdicts": ["same", "same"]
     },
     {
       "path": "plugins/tribunal/agents/tribunal-actor.md",
-      "verdicts": [
-        "same",
-        "same"
-      ]
+      "verdicts": ["same", "same"]
     },
     {
       "path": "plugins/tribunal/agents/tribunal-judge-adversarial.md",
-      "verdicts": [
-        "same",
-        "same"
-      ]
+      "verdicts": ["same", "same"]
     },
     {
       "path": "plugins/tribunal/agents/tribunal-judge-standard.md",
-      "verdicts": [
-        "same",
-        "same"
-      ]
+      "verdicts": ["same", "same"]
     },
     {
       "path": "plugins/tribunal/agents/tribunal-meta-judge.md",
-      "verdicts": [
-        "same",
-        "same"
-      ]
+      "verdicts": ["same", "same"]
     }
   ],
   "cross": [
     {
       "a": ".claude/skills/writing-tests/SKILL.md",
       "b": "plugins/lineage/skills/lineage/SKILL.md",
-      "ab": [
-        "same",
-        "better"
-      ],
-      "ba": [
-        "better",
-        "better"
-      ]
+      "ab": ["same", "better"],
+      "ba": ["better", "better"]
     },
     {
       "a": ".claude/skills/writing-tests/SKILL.md",
       "b": "plugins/tribunal/agents/tribunal-actor.md",
-      "ab": [
-        "same",
-        "same"
-      ],
-      "ba": [
-        "worse",
-        "worse"
-      ]
+      "ab": ["same", "same"],
+      "ba": ["worse", "worse"]
     },
     {
       "a": ".claude/skills/writing-tests/SKILL.md",
       "b": "plugins/tribunal/agents/tribunal-judge-adversarial.md",
-      "ab": [
-        "better",
-        "better"
-      ],
-      "ba": [
-        "same",
-        "worse"
-      ]
+      "ab": ["better", "better"],
+      "ba": ["same", "worse"]
     },
     {
       "a": ".claude/skills/writing-tests/SKILL.md",
       "b": "plugins/tribunal/agents/tribunal-judge-standard.md",
-      "ab": [
-        "better",
-        "better"
-      ],
-      "ba": [
-        "worse",
-        "worse"
-      ]
+      "ab": ["better", "better"],
+      "ba": ["worse", "worse"]
     },
     {
       "a": ".claude/skills/writing-tests/SKILL.md",
       "b": "plugins/tribunal/agents/tribunal-meta-judge.md",
-      "ab": [
-        "better",
-        "better"
-      ],
-      "ba": [
-        "worse",
-        "worse"
-      ]
+      "ab": ["better", "better"],
+      "ba": ["worse", "worse"]
     },
     {
       "a": "plugins/lineage/skills/lineage/SKILL.md",
       "b": "plugins/tribunal/agents/tribunal-actor.md",
-      "ab": [
-        "better",
-        "worse"
-      ],
-      "ba": [
-        "same",
-        "better"
-      ]
+      "ab": ["better", "worse"],
+      "ba": ["same", "better"]
     },
     {
       "a": "plugins/lineage/skills/lineage/SKILL.md",
       "b": "plugins/tribunal/agents/tribunal-judge-adversarial.md",
-      "ab": [
-        "better",
-        "better"
-      ],
-      "ba": [
-        "worse",
-        "worse"
-      ]
+      "ab": ["better", "better"],
+      "ba": ["worse", "worse"]
     },
     {
       "a": "plugins/lineage/skills/lineage/SKILL.md",
       "b": "plugins/tribunal/agents/tribunal-judge-standard.md",
-      "ab": [
-        "better",
-        "better"
-      ],
-      "ba": [
-        "worse",
-        "same"
-      ]
+      "ab": ["better", "better"],
+      "ba": ["worse", "same"]
     },
     {
       "a": "plugins/lineage/skills/lineage/SKILL.md",
       "b": "plugins/tribunal/agents/tribunal-meta-judge.md",
-      "ab": [
-        "better",
-        "better"
-      ],
-      "ba": [
-        "worse",
-        "worse"
-      ]
+      "ab": ["better", "better"],
+      "ba": ["worse", "worse"]
     },
     {
       "a": "plugins/tribunal/agents/tribunal-actor.md",
       "b": "plugins/tribunal/agents/tribunal-judge-adversarial.md",
-      "ab": [
-        "better",
-        "better"
-      ],
-      "ba": [
-        "worse",
-        "worse"
-      ]
+      "ab": ["better", "better"],
+      "ba": ["worse", "worse"]
     },
     {
       "a": "plugins/tribunal/agents/tribunal-actor.md",
       "b": "plugins/tribunal/agents/tribunal-judge-standard.md",
-      "ab": [
-        "better",
-        "better"
-      ],
-      "ba": [
-        "worse",
-        "worse"
-      ]
+      "ab": ["better", "better"],
+      "ba": ["worse", "worse"]
     },
     {
       "a": "plugins/tribunal/agents/tribunal-actor.md",
       "b": "plugins/tribunal/agents/tribunal-meta-judge.md",
-      "ab": [
-        "better",
-        "better"
-      ],
-      "ba": [
-        "worse",
-        "same"
-      ]
+      "ab": ["better", "better"],
+      "ba": ["worse", "same"]
     },
     {
       "a": "plugins/tribunal/agents/tribunal-judge-adversarial.md",
       "b": "plugins/tribunal/agents/tribunal-judge-standard.md",
-      "ab": [
-        "better",
-        "same"
-      ],
-      "ba": [
-        "same",
-        "better"
-      ]
+      "ab": ["better", "same"],
+      "ba": ["same", "better"]
     },
     {
       "a": "plugins/tribunal/agents/tribunal-judge-adversarial.md",
       "b": "plugins/tribunal/agents/tribunal-meta-judge.md",
-      "ab": [
-        "same",
-        "worse"
-      ],
-      "ba": [
-        "better",
-        "same"
-      ]
+      "ab": ["same", "worse"],
+      "ba": ["better", "same"]
     },
     {
       "a": "plugins/tribunal/agents/tribunal-judge-standard.md",
       "b": "plugins/tribunal/agents/tribunal-meta-judge.md",
-      "ab": [
-        "same",
-        "worse"
-      ],
-      "ba": [
-        "better",
-        "better"
-      ]
+      "ab": ["same", "worse"],
+      "ba": ["better", "better"]
     }
   ]
 }

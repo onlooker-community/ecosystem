@@ -112,8 +112,14 @@ export function trueDiscrimination(pairs) {
     if (first === 'same') continue;
     let ok = true;
     for (let i = 0; i < n; i += 1) {
-      if (ab[i] !== first) { ok = false; break; }
-      if (!repeatIsAntisymmetric(ab[i], ba[i])) { ok = false; break; }
+      if (ab[i] !== first) {
+        ok = false;
+        break;
+      }
+      if (!repeatIsAntisymmetric(ab[i], ba[i])) {
+        ok = false;
+        break;
+      }
     }
     if (ok) discriminated += 1;
   }
@@ -173,8 +179,7 @@ export function pairwiseStats(doc) {
       self_tie_pass,
       antisymmetry_pass,
       discrimination_pass,
-      verdict:
-        self_tie_pass && antisymmetry_pass && discrimination_pass ? 'proceed' : 'stop',
+      verdict: self_tie_pass && antisymmetry_pass && discrimination_pass ? 'proceed' : 'stop',
     },
   };
 }

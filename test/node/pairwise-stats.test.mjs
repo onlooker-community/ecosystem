@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
-  KILL,
   crossAntisymmetry,
+  KILL,
   pairwiseStats,
   selfTieRate,
   trueDiscrimination,
@@ -40,9 +40,7 @@ describe('selfTieRate', () => {
 
 describe('crossAntisymmetry', () => {
   it('counts better/worse in opposite orders as antisymmetric', () => {
-    const r = crossAntisymmetry([
-      { a: 'a', b: 'b', ab: ['better'], ba: ['worse'] },
-    ]);
+    const r = crossAntisymmetry([{ a: 'a', b: 'b', ab: ['better'], ba: ['worse'] }]);
     assert.equal(r, 1);
   });
 
@@ -55,9 +53,7 @@ describe('crossAntisymmetry', () => {
   // orders say "better", which is self-contradictory, and a judge doing this
   // produces discrimination that looks excellent and means nothing.
   it('counts better/better as NOT antisymmetric', () => {
-    const r = crossAntisymmetry([
-      { a: 'a', b: 'b', ab: ['better'], ba: ['better'] },
-    ]);
+    const r = crossAntisymmetry([{ a: 'a', b: 'b', ab: ['better'], ba: ['better'] }]);
     assert.equal(r, 0);
   });
 
@@ -68,9 +64,7 @@ describe('crossAntisymmetry', () => {
 
   it('averages over repeats within a pair', () => {
     // repeat 1 antisymmetric, repeat 2 not.
-    const r = crossAntisymmetry([
-      { a: 'a', b: 'b', ab: ['better', 'better'], ba: ['worse', 'better'] },
-    ]);
+    const r = crossAntisymmetry([{ a: 'a', b: 'b', ab: ['better', 'better'], ba: ['worse', 'better'] }]);
     assert.equal(r, 0.5);
   });
 
@@ -94,9 +88,7 @@ describe('crossAntisymmetry', () => {
   // Mismatched lengths (e.g., one order succeeded 2 times, the other 1 time)
   // must be handled by using only paired repeats where both orders have verdicts.
   it('uses only paired repeats when ab and ba lengths differ', () => {
-    const r = crossAntisymmetry([
-      { a: 'a', b: 'b', ab: ['better', 'better'], ba: ['worse'] },
-    ]);
+    const r = crossAntisymmetry([{ a: 'a', b: 'b', ab: ['better', 'better'], ba: ['worse'] }]);
     // Only 1 paired repeat: ab[0]='better', ba[0]='worse' -- antisymmetric.
     // Rate is computed from the 1 paired repeat only, giving 1, not involving the longer array.
     assert.equal(r, 1);
@@ -105,30 +97,22 @@ describe('crossAntisymmetry', () => {
 
 describe('trueDiscrimination', () => {
   it('requires a non-tie verdict consistent across every repeat and both orders', () => {
-    const r = trueDiscrimination([
-      { a: 'a', b: 'b', ab: ['better', 'better'], ba: ['worse', 'worse'] },
-    ]);
+    const r = trueDiscrimination([{ a: 'a', b: 'b', ab: ['better', 'better'], ba: ['worse', 'worse'] }]);
     assert.equal(r, 1);
   });
 
   it('does not count a pair the judge called same', () => {
-    const r = trueDiscrimination([
-      { a: 'a', b: 'b', ab: ['same', 'same'], ba: ['same', 'same'] },
-    ]);
+    const r = trueDiscrimination([{ a: 'a', b: 'b', ab: ['same', 'same'], ba: ['same', 'same'] }]);
     assert.equal(r, 0);
   });
 
   it('does not count a pair whose verdict flipped between repeats', () => {
-    const r = trueDiscrimination([
-      { a: 'a', b: 'b', ab: ['better', 'worse'], ba: ['worse', 'better'] },
-    ]);
+    const r = trueDiscrimination([{ a: 'a', b: 'b', ab: ['better', 'worse'], ba: ['worse', 'better'] }]);
     assert.equal(r, 0);
   });
 
   it('does not count a pair that fails antisymmetry', () => {
-    const r = trueDiscrimination([
-      { a: 'a', b: 'b', ab: ['better', 'better'], ba: ['better', 'better'] },
-    ]);
+    const r = trueDiscrimination([{ a: 'a', b: 'b', ab: ['better', 'better'], ba: ['better', 'better'] }]);
     assert.equal(r, 0);
   });
 
@@ -163,9 +147,7 @@ describe('trueDiscrimination', () => {
 
   // Mismatched lengths must be handled by using only paired repeats.
   it('uses only paired repeats when ab and ba lengths differ', () => {
-    const r = trueDiscrimination([
-      { a: 'a', b: 'b', ab: ['better', 'better'], ba: ['worse'] },
-    ]);
+    const r = trueDiscrimination([{ a: 'a', b: 'b', ab: ['better', 'better'], ba: ['worse'] }]);
     // Only 1 paired repeat: ab[0]='better', ba[0]='worse', consistent and
     // antisymmetric across that one repeat. Share is computed from the 1
     // paired repeat only, giving 1, not involving the longer array.
@@ -183,9 +165,7 @@ describe('pairwiseStats', () => {
       { path: 'a.md', verdicts: ['same', 'same'] },
       { path: 'b.md', verdicts: ['same', 'same'] },
     ],
-    cross: [
-      { a: 'a.md', b: 'b.md', ab: ['better', 'better'], ba: ['worse', 'worse'] },
-    ],
+    cross: [{ a: 'a.md', b: 'b.md', ab: ['better', 'better'], ba: ['worse', 'worse'] }],
   };
 
   it('carries the provenance stamps through unchanged', () => {
