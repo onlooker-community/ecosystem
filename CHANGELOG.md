@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.69.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.68.0...ecosystem-v0.69.0) (2026-10-04)
+
+
+### Features
+
+* **lint:** sweep for bash arithmetic that dies silently :mag: ([#413](https://github.com/onlooker-community/ecosystem/issues/413)) ([c387985](https://github.com/onlooker-community/ecosystem/commit/c387985c679195ef670aecaeaf21b88c51f0fb28))
+
 ## [0.68.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.67.0...ecosystem-v0.68.0) (2026-10-04)
 
 
