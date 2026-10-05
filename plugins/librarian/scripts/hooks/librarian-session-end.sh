@@ -178,8 +178,7 @@ DROPPED=$(printf '%s' "$FILTERED" | jq '.dropped')
 FAULT_DROPS=$(printf '%s' "$DROPPED" \
 	| jq '[.[] | select(.reason == "filter_markers_unavailable")] | length' 2>/dev/null) \
 	|| FAULT_DROPS=0
-MAX_FAULT_RETRY=$(librarian_config_get '.librarian.scan.max_fault_retry_artifacts')
-[[ -z "$MAX_FAULT_RETRY" || "$MAX_FAULT_RETRY" == "null" ]] && MAX_FAULT_RETRY=500
+MAX_FAULT_RETRY=$(librarian_config_int '.librarian.scan.max_fault_retry_artifacts' 500)
 
 # Bounded: load_since re-reads every artifact in the window each session, so an
 # unbounded hold degrades SessionEnd until the budget bail discards the backlog
@@ -231,8 +230,7 @@ done
 # ----------------------------------------------------------------------------
 
 ELAPSED_MS=$(( $(librarian_now_ms) - SCAN_START_TS_MS ))
-BUDGET_THRESHOLD_MS=$(librarian_config_get '.librarian.scan.budget_threshold_ms')
-[[ -z "$BUDGET_THRESHOLD_MS" || "$BUDGET_THRESHOLD_MS" == "null" ]] && BUDGET_THRESHOLD_MS=1000
+BUDGET_THRESHOLD_MS=$(librarian_config_int '.librarian.scan.budget_threshold_ms' 1000)
 if [[ "$ELAPSED_MS" -ge "$BUDGET_THRESHOLD_MS" ]]; then
 	# The hold is a property of THIS scan, so it has to be honored wherever the
 	# scan exits -- otherwise it leaks through the budget path at exactly the

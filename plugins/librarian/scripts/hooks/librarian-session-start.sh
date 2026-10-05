@@ -102,8 +102,7 @@ SWEPT_COUNT=${#SWEPT_IDS[@]}
 SKIP_WHEN_ZERO=$(librarian_config_get '.librarian.surfacer.skip_inject_when_zero')
 [[ -z "$SKIP_WHEN_ZERO" || "$SKIP_WHEN_ZERO" == "null" ]] && SKIP_WHEN_ZERO="true"
 
-MAX_PENDING=$(librarian_config_get '.librarian.surfacer.max_pending_for_inject')
-[[ -z "$MAX_PENDING" || "$MAX_PENDING" == "null" ]] && MAX_PENDING=20
+MAX_PENDING=$(librarian_config_int '.librarian.surfacer.max_pending_for_inject' 20)
 
 PENDING=$(librarian_storage_count_pending "$PROJECT_KEY")
 [[ -z "$PENDING" || "$PENDING" == "null" ]] && PENDING=0

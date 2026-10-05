@@ -144,6 +144,11 @@ inspector_run() {
 
 	local run_start
 	run_start=$(_inspector_now_ms)
+	# Every `(( x++ ))` below carries `|| true`, and it is load-bearing rather
+	# than decorative: the expression evaluates to the PRE-increment value, so
+	# the first bump from 0 returns exit status 1. Bash 4+ aborts on that under
+	# errexit (3.2 does not, which is why it stayed invisible on macOS). Same
+	# idiom run-audit.sh uses for its five counters (ONL-29).
 	local passed=0 failed=0 skipped=0 ran=0
 
 	# Buffer agent-facing output so we only print the file header when at least
@@ -167,7 +172,7 @@ inspector_run() {
 				r_name=$(jq -r --argjson j "$j" '.[$j].name // "check"' <<<"$rem")
 				r_kind=$(jq -r --argjson j "$j" '.[$j].kind // "lint"' <<<"$rem")
 				_inspector_emit_skipped "$r_name" "$r_kind" "total_budget_exhausted"
-				(( skipped++ ))
+				(( skipped++ )) || true
 			done
 			break
 		fi
@@ -191,7 +196,7 @@ inspector_run() {
 		if (( rc == 127 )); then
 			# Tool not on PATH.
 			_inspector_emit_skipped "$check_name" "$check_kind" "tool_missing"
-			(( skipped++ ))
+			(( skipped++ )) || true
 			continue
 		fi
 
@@ -199,20 +204,20 @@ inspector_run() {
 			# Timed out — emit skipped + a single agent-facing line.
 			_inspector_emit_skipped "$check_name" "$check_kind" "timeout"
 			agent_lines+=("  · $check_name timed out after ${timeout_per_check}s")
-			(( skipped++ ))
-			(( issues_seen++ ))
+			(( skipped++ )) || true
+			(( issues_seen++ )) || true
 			continue
 		fi
 
-		(( ran++ ))
+		(( ran++ )) || true
 		if (( rc == 0 )); then
-			(( passed++ ))
+			(( passed++ )) || true
 			_inspector_emit_passed "$check_name" "$check_kind" "$argv_expanded" "$dur"
 			if (( show_clean )); then
 				agent_lines+=("  ✓ $check_name (${dur}ms)")
 			fi
 		else
-			(( failed++ ))
+			(( failed++ )) || true
 			local issue_count
 			issue_count=$(_inspector_count_issues "$output")
 			_inspector_emit_failed "$check_name" "$check_kind" "$argv_expanded" "$dur" "$rc" "$issue_count" "$output"
@@ -230,7 +235,7 @@ inspector_run() {
 				[[ -z "$line" ]] && continue
 				agent_lines+=("      $line")
 			done <<<"$snippet"
-			(( issues_seen++ ))
+			(( issues_seen++ )) || true
 		fi
 	done
 

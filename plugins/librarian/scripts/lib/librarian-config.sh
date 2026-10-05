@@ -52,6 +52,15 @@ librarian_config_get() {
 	config_get "_LIBRARIAN_CONFIG" "${path}"
 }
 
+# A non-negative integer, falling back on anything else. Use this for any value
+# that reaches arithmetic: the plain getter returns whatever is configured, and
+# a non-numeric value then kills the caller at status 0 (ONL-132).
+librarian_config_int() {
+	local path="$1"
+	local default="$2"
+	config_get_int "_LIBRARIAN_CONFIG" "${path}" "${default}"
+}
+
 # Returns 0 if librarian.auto_promote is true, 1 otherwise.
 librarian_config_auto_promote() {
 	local v

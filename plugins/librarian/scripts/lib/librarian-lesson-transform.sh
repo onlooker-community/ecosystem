@@ -300,8 +300,7 @@ librarian_lesson_transform_one() {
 
 	if [[ "$mode" == "unscoped" ]]; then
 		local unscoped_cap
-		unscoped_cap=$(librarian_config_get '.librarian.lesson_transform.unscoped_per_scan' 2>/dev/null)
-		[[ -z "$unscoped_cap" || "$unscoped_cap" == "null" ]] && unscoped_cap=3
+		unscoped_cap=$(librarian_config_int '.librarian.lesson_transform.unscoped_per_scan' 3 2>/dev/null)
 		if [[ "$unscoped_so_far" -ge "$unscoped_cap" ]]; then
 			# Deliberately writes NO decline record. A decline is terminal
 			# (librarian_lesson_seen reads declined.jsonl), so recording one for

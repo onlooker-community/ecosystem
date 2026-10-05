@@ -73,11 +73,9 @@ if [[ -z "$PROJECT_KEY" ]]; then
 	hook_health_exit 0
 fi
 
-MAX_ITEMS=$(archivist_config_get '.archivist.injection.max_items')
-[[ -z "$MAX_ITEMS" || "$MAX_ITEMS" == "null" ]] && MAX_ITEMS=8
+MAX_ITEMS=$(archivist_config_int '.archivist.injection.max_items' 8)
 
-MAX_CHARS=$(archivist_config_get '.archivist.injection.max_chars')
-[[ -z "$MAX_CHARS" || "$MAX_CHARS" == "null" ]] && MAX_CHARS=2400
+MAX_CHARS=$(archivist_config_int '.archivist.injection.max_chars' 2400)
 
 INCLUDE_DEAD_ENDS=$(archivist_config_get '.archivist.injection.include_dead_ends')
 INCLUDE_OPEN_QUESTIONS=$(archivist_config_get '.archivist.injection.include_open_questions')
