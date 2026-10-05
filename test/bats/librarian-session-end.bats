@@ -424,3 +424,38 @@ _scan_complete() {
   # The gate sits upstream of classification, so no model call was ever made.
   [ ! -s "$CLAUDE_CALL_LOG" ]
 }
+
+# ONL-132. budget_threshold_ms is read at :233 and consumed at :234 in
+# `[[ "$ELAPSED_MS" -ge "$BUDGET_THRESHOLD_MS" ]]`, which sits on the path every
+# scan takes. The arithmetic comparison operators inside [[ ]] evaluate their
+# operands arithmetically, so a non-numeric value dies there exactly as it
+# would inside (( )) -- a hazard class ONL-132 did not mention and the sweep
+# only found after being taught to look for it.
+#
+# The fixture value must be NON-DIGIT-LEADING. "1500ms" looks like the more
+# plausible typo -- the surrounding docs all discuss SessionEnd's 1500ms
+# ceiling in that notation -- but it is the SURVIVING mode: bash reports "value
+# too great for base", the comparison merely returns non-zero, and the hook
+# runs on. That version of this test passed against the unfixed code. "none" is
+# read as a bare variable name instead, which is the mode that stops the shell.
+@test "a non-numeric budget_threshold_ms still terminates the scan" {
+  # An artifact is required, not decoration. The empty-store path emits its
+  # scan.complete at :146 and returns, BEFORE the budget read at :233 -- so
+  # without seeding, this test exercises none of the code it names. The first
+  # version of it passed against the unfixed hook for exactly that reason.
+  _seed_artifact "decisions" "01BUDGETGUARD0000000000000" \
+    "User prefers functional patterns prefer-functional-stub" \
+    "User explicitly said: always prefer plain functions over classes when adding new code in the api layer."
+
+  _settings <<'JSON'
+{"librarian":{"scan":{"budget_threshold_ms":"none"}}}
+JSON
+
+  _run_scan
+  [ "$status" -eq 0 ] || return 1
+
+  # The hook exits 0 either way, so the terminating event is the assertion that
+  # bites: the budget comparison runs between scan.started and scan.complete.
+  grep -q '"event_type":"librarian.scan.started"' "$ONLOOKER_EVENTS_LOG" || return 1
+  grep -q '"event_type":"librarian.scan.complete"' "$ONLOOKER_EVENTS_LOG"
+}

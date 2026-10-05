@@ -59,3 +59,25 @@ setup() {
   [ "$status" -eq 0 ]
   echo "$output" | jq -e '.hookSpecificOutput.additionalContext == ""' >/dev/null
 }
+
+# ONL-132. "2400 chars" is the kind of thing a person writes for a character
+# budget. The old idiom guarded empty and the literal "null" only, so the value
+# reached `(( RUNNING_CHARS + LINE_LEN > MAX_CHARS ))` at archivist-inject.sh:142,
+# bash read `chars` as a variable name, set -u stopped the shell, and -- with no
+# -e -- the status left behind was 0. The hook exits 0 either way, so the
+# assertion has to be on the injected context, not on status.
+@test "a non-numeric injection budget still injects the artifact" {
+  mkdir -p "${PROJECT_REPO}/.claude"
+  printf '%s\n' '{"archivist":{"injection":{"max_chars":"2400 chars","max_items":"8 items"}}}' \
+    > "${PROJECT_REPO}/.claude/settings.json"
+
+  local input
+  input=$(jq -n --arg cwd "$PROJECT_REPO" '{cwd: $cwd, source: "startup", session_id: "s"}')
+  run bash -c "printf '%s' '$input' | '${PLUGIN_ROOT}/scripts/hooks/archivist-inject.sh'"
+  [ "$status" -eq 0 ] || return 1
+
+  local ctx
+  ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
+  [[ "$ctx" == *"use git remote SHA256 as project key"* ]] || return 1
+  [[ "$ctx" == *"Archivist injected 1"* ]]
+}

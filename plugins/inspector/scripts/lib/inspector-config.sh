@@ -47,6 +47,15 @@ inspector_config_get() {
 	config_get "_inspector_CONFIG" "${path}"
 }
 
+# A non-negative integer, falling back on anything else. Use this for any value
+# that reaches arithmetic: the plain getter returns whatever is configured, and
+# a non-numeric value then kills the caller at status 0 (ONL-132).
+inspector_config_int() {
+	local path="$1"
+	local default="$2"
+	config_get_int "_inspector_CONFIG" "${path}" "${default}"
+}
+
 inspector_config_get_json() {
 	local path="$1"
 	config_get_json "_inspector_CONFIG" "${path}"
@@ -65,9 +74,9 @@ inspector_config_total_timeout() {
 }
 
 inspector_config_output_excerpt_max_bytes() {
-	local v
-	v=$(inspector_config_get '.inspector.output_excerpt_max_bytes')
-	printf '%s' "${v:-4096}"
+	# Read as an int: the result feeds (( bytes > max_bytes )) in
+	# inspector-run.sh, and the old ${v:-4096} caught empty only.
+	inspector_config_int '.inspector.output_excerpt_max_bytes' 4096
 }
 
 inspector_config_show_clean_runs() {

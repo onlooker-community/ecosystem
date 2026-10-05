@@ -480,8 +480,7 @@ LESSONS_SKIPPED=0
 LESSON_UNSCOPED=0
 LESSON_CAPPED=0
 
-LESSON_BUDGET_MS=$(librarian_config_get '.librarian.lesson_transform.total_budget_ms' 2>/dev/null)
-[[ -z "$LESSON_BUDGET_MS" || "$LESSON_BUDGET_MS" == "null" ]] && LESSON_BUDGET_MS=600000
+LESSON_BUDGET_MS=$(librarian_config_int '.librarian.lesson_transform.total_budget_ms' 600000 2>/dev/null)
 LESSON_START_MS=$(librarian_now_ms)
 
 for ((li = 0; li < KEPT_COUNT; li++)); do

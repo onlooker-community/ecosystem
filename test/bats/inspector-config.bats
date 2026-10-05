@@ -103,3 +103,33 @@ EOF
 	inspector_config_load "$REPO"
 	[ "$(inspector_config_checks_for_extension '')" = "[]" ]
 }
+
+# ONL-132. This accessor's old `${v:-4096}` caught EMPTY only -- not the
+# literal "null", and not a non-numeric value -- and its result goes straight
+# into `(( bytes > max_bytes ))` in inspector-run.sh. The sweep flagged it, and
+# ONL-132 had credited inspector-run.sh as already guarded on the strength of
+# four numeric checks that are all on timestamps.
+@test "output_excerpt_max_bytes falls back on a non-numeric value" {
+	local repo="${BATS_TEST_TMPDIR}/nonnum"
+	mkdir -p "${repo}/.claude"
+	printf '%s\n' '{"inspector":{"output_excerpt_max_bytes":"4096 bytes"}}' \
+		> "${repo}/.claude/settings.json"
+	inspector_config_load "$repo"
+
+	run inspector_config_output_excerpt_max_bytes
+	[ "$status" -eq 0 ] || return 1
+	[ "$output" = "4096" ]
+}
+
+@test "output_excerpt_max_bytes honors a valid override" {
+	# The other half: the fallback must not swallow a legitimate value.
+	local repo="${BATS_TEST_TMPDIR}/valid"
+	mkdir -p "${repo}/.claude"
+	printf '%s\n' '{"inspector":{"output_excerpt_max_bytes":2048}}' \
+		> "${repo}/.claude/settings.json"
+	inspector_config_load "$repo"
+
+	run inspector_config_output_excerpt_max_bytes
+	[ "$status" -eq 0 ] || return 1
+	[ "$output" = "2048" ]
+}

@@ -226,8 +226,9 @@ librarian_lesson_auto_stage() {
 	[[ "$enabled" != "true" ]] && return 0
 
 	local cap
-	cap=$(librarian_config_get '.librarian.lesson_auto.max_juries_per_scan' 2>/dev/null)
-	case "$cap" in ''|null) cap=1 ;; esac
+	# Was a `case ''|null)` fallback -- a fourth spelling of the same idiom,
+	# and just as blind to a non-numeric value (ONL-132).
+	cap=$(librarian_config_int '.librarian.lesson_auto.max_juries_per_scan' 1 2>/dev/null)
 
 	local id
 	while IFS= read -r id; do
