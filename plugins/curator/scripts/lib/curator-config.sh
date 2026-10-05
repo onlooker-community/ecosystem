@@ -51,3 +51,12 @@ curator_config_get_json() {
 	local path="$1"
 	config_get_json "_curator_CONFIG" "${path}"
 }
+
+# A non-negative integer, falling back on anything else. Use this for any value
+# that reaches arithmetic: the plain getter returns whatever is configured, and
+# a non-numeric value then kills the hook at status 0 (ONL-132).
+curator_config_int() {
+	local path="$1"
+	local default="$2"
+	config_get_int "_curator_CONFIG" "${path}" "${default}"
+}
