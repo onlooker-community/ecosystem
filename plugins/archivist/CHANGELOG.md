@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.8.0...archivist-v0.8.1) (2026-10-05)
+
+
+### Bug Fixes
+
+* **plugins:** read config ints as ints in inspector, librarian, archivist :shield: ([#419](https://github.com/onlooker-community/ecosystem/issues/419)) ([5ac710b](https://github.com/onlooker-community/ecosystem/commit/5ac710bc35b96ea0881fb1e4969378252a48ed43))
+
 ## [0.8.0](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.7.6...archivist-v0.8.0) (2026-10-04)
 
 

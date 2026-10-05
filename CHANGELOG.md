@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.70.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.70.0...ecosystem-v0.70.1) (2026-10-05)
+
+
+### Bug Fixes
+
+* **curator:** read the scan budget as an int, not a string :shield: ([#417](https://github.com/onlooker-community/ecosystem/issues/417)) ([4d04e3d](https://github.com/onlooker-community/ecosystem/commit/4d04e3dc36f914708ef3a015347488cd15c40bbc))
+* **plugins:** read config ints as ints in inspector, librarian, archivist :shield: ([#419](https://github.com/onlooker-community/ecosystem/issues/419)) ([5ac710b](https://github.com/onlooker-community/ecosystem/commit/5ac710bc35b96ea0881fb1e4969378252a48ed43))
+
 ## [0.70.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.69.0...ecosystem-v0.70.0) (2026-10-04)
 
 

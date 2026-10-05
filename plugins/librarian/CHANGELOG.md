@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.1](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.21.0...librarian-v0.21.1) (2026-10-05)
+
+
+### Bug Fixes
+
+* **plugins:** read config ints as ints in inspector, librarian, archivist :shield: ([#419](https://github.com/onlooker-community/ecosystem/issues/419)) ([5ac710b](https://github.com/onlooker-community/ecosystem/commit/5ac710bc35b96ea0881fb1e4969378252a48ed43))
+
 ## [0.21.0](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.20.1...librarian-v0.21.0) (2026-10-04)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/onlooker-community/ecosystem/compare/curator-v0.6.0...curator-v0.6.1) (2026-10-05)
+
+
+### Bug Fixes
+
+* **curator:** read the scan budget as an int, not a string :shield: ([#417](https://github.com/onlooker-community/ecosystem/issues/417)) ([4d04e3d](https://github.com/onlooker-community/ecosystem/commit/4d04e3dc36f914708ef3a015347488cd15c40bbc))
+
 ## [0.6.0](https://github.com/onlooker-community/ecosystem/compare/curator-v0.5.7...curator-v0.6.0) (2026-10-04)
 
 
