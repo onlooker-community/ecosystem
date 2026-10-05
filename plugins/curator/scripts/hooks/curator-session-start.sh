@@ -167,8 +167,12 @@ else
 	OUTCOME_FOR_SCAN_COMPLETE="ok"
 fi
 
-BUDGET_MS=$(curator_config_get '.curator.cheap_checks.wall_clock_budget_ms')
-[[ -z "$BUDGET_MS" || "$BUDGET_MS" == "null" ]] && BUDGET_MS=500
+# Read as an int, not a string. This is the wall-clock budget that bounds the
+# scan, so a non-numeric value here takes out the check that exists to bound it
+# -- either aborting the hook mid-scan ("unlimited" reads as a variable name
+# under set -u) or, for a digit-leading value like "600000ms", leaving
+# _curator_over_budget answering "not over budget" forever (ONL-132).
+BUDGET_MS=$(curator_config_int '.curator.cheap_checks.wall_clock_budget_ms' 500)
 
 _curator_now_ms() {
 	python3 -c 'import time; print(int(time.time() * 1000))' 2>/dev/null \
@@ -360,8 +364,7 @@ CONTEXT=$(printf 'Curator: %s open finding%s (%s). Review with `/curator review`
 
 # Cap the pointer length so a long per-kind summary never overflows the
 # user's SessionStart context.
-MAX_POINTER=$(curator_config_get '.curator.surfacer.max_pointer_chars')
-[[ -z "$MAX_POINTER" || "$MAX_POINTER" == "null" ]] && MAX_POINTER=200
+MAX_POINTER=$(curator_config_int '.curator.surfacer.max_pointer_chars' 200)
 if [[ "${#CONTEXT}" -gt "$MAX_POINTER" ]]; then
 	# Reserve room for the truncation ellipsis without exceeding the cap.
 	TRUNC=$((MAX_POINTER - 1))
