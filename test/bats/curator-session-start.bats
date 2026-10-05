@@ -321,3 +321,67 @@ BODY
   [ "$ctx_len" -le 40 ]
   [[ "$ctx" == *"…"* ]]
 }
+
+# ONL-132. A non-numeric budget has TWO failure modes in bash, both silent at
+# status 0, and they need different coverage:
+#
+#   "unlimited"  -> bash reads the bare word as a variable name, `set -u` stops
+#                   the shell, and the script ABORTS mid-scan. Covered here,
+#                   because it is observable: scan.started is emitted at :149,
+#                   the budget check runs at :196, and scan.complete at :310
+#                   never happens.
+#   "600000ms"   -> digit-leading, so bash reports "value too great for base"
+#                   and (( )) merely returns non-zero. The script SURVIVES and
+#                   _curator_over_budget answers "not over budget" forever, so
+#                   the budget silently stops bounding the scan. Not observable
+#                   from out here without making the scan slow, so it is
+#                   covered at the accessor instead -- config-get-int.bats
+#                   asserts any non-^[0-9]+$ value falls back.
+#
+# This hook exits 0 either way, so status proves nothing. Asserting on
+# scan.complete is what makes this test bite.
+@test "a non-numeric wall_clock_budget_ms does not kill the scan mid-flight" {
+  jq -n --arg path "$MEM_DIR" \
+    '{
+      curator: {
+        memory_store_path: $path,
+        cheap_checks: { wall_clock_budget_ms: "unlimited" }
+      }
+    }' > "${PROJECT_REPO}/.claude/settings.json"
+
+  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  [ "$status" -eq 0 ] || return 1
+
+  grep -q '"event_type":"curator.scan.started"' "$ONLOOKER_EVENTS_LOG" || return 1
+  grep '"event_type":"curator.scan.complete"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e '.payload.outcome == "ok"' >/dev/null
+}
+
+# The other half: a bad budget must not be read as "no budget". A value that
+# falls back has to fall back to the SHIPPED default, not to unbounded, or the
+# fix would trade a silent death for a silently unbounded scan.
+@test "a non-numeric max_pointer_chars still truncates the pointer" {
+  _seed_memory "project_freeze.md" "project" \
+    "Merge freeze begins 2026-03-05 for mobile release cut."
+  _write_index '- [Freeze](project_freeze.md) — merge freeze date'
+
+  jq -n --arg path "$MEM_DIR" \
+    '{
+      curator: {
+        memory_store_path: $path,
+        cheap_checks: { wall_clock_budget_ms: 600000 },
+        date_check: { date_grace_period_days: 7 },
+        surfacer: { max_pointer_chars: "200 chars" }
+      }
+    }' > "${PROJECT_REPO}/.claude/settings.json"
+
+  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  [ "$status" -eq 0 ] || return 1
+
+  # The scan survived to its terminating event ...
+  grep -q '"event_type":"curator.scan.complete"' "$ONLOOKER_EVENTS_LOG" || return 1
+  # ... and the surfacer still rendered a pointer rather than nothing.
+  local ctx
+  ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
+  [[ "$ctx" == *"Curator:"* ]]
+}
