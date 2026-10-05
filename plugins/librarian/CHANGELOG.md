@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.0](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.20.1...librarian-v0.21.0) (2026-10-04)
+
+
+### Features
+
+* **config:** add a validating integer accessor :shield: ([#415](https://github.com/onlooker-community/ecosystem/issues/415)) ([879969e](https://github.com/onlooker-community/ecosystem/commit/879969ecc01cf1e293135d52c77aab4985575221))
+
 ## [0.20.1](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.20.0...librarian-v0.20.1) (2026-10-03)
 
 

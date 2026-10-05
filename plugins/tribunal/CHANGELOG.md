@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.5.5...tribunal-v1.6.0) (2026-10-04)
+
+
+### Features
+
+* **config:** add a validating integer accessor :shield: ([#415](https://github.com/onlooker-community/ecosystem/issues/415)) ([879969e](https://github.com/onlooker-community/ecosystem/commit/879969ecc01cf1e293135d52c77aab4985575221))
+
 ## [1.5.5](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.5.4...tribunal-v1.5.5) (2026-09-22)
 
 

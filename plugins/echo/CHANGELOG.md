@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/onlooker-community/ecosystem/compare/echo-v0.11.0...echo-v0.12.0) (2026-10-04)
+
+
+### Features
+
+* **config:** add a validating integer accessor :shield: ([#415](https://github.com/onlooker-community/ecosystem/issues/415)) ([879969e](https://github.com/onlooker-community/ecosystem/commit/879969ecc01cf1e293135d52c77aab4985575221))
+
 ## [0.11.0](https://github.com/onlooker-community/ecosystem/compare/echo-v0.10.1...echo-v0.11.0) (2026-10-04)
 
 

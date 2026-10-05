@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/onlooker-community/ecosystem/compare/lineage-v0.6.6...lineage-v0.7.0) (2026-10-04)
+
+
+### Features
+
+* **config:** add a validating integer accessor :shield: ([#415](https://github.com/onlooker-community/ecosystem/issues/415)) ([879969e](https://github.com/onlooker-community/ecosystem/commit/879969ecc01cf1e293135d52c77aab4985575221))
+
 ## [0.6.6](https://github.com/onlooker-community/ecosystem/compare/lineage-v0.6.5...lineage-v0.6.6) (2026-09-22)
 
 
