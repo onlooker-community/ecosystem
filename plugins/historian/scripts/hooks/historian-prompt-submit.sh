@@ -123,8 +123,7 @@ _emit_complete_skipped() {
 		'{ outcome: $outcome, skip_reason: $skip_reason, duration_ms: $duration_ms }')"
 }
 
-MIN_PROMPT_CHARS=$(historian_config_get '.historian.retrieval.min_prompt_chars')
-[[ -z "$MIN_PROMPT_CHARS" || "$MIN_PROMPT_CHARS" == "null" ]] && MIN_PROMPT_CHARS=60
+MIN_PROMPT_CHARS=$(historian_config_int '.historian.retrieval.min_prompt_chars' 60)
 
 PROMPT_LEN=${#PROMPT}
 if (( PROMPT_LEN < MIN_PROMPT_CHARS )); then
@@ -133,10 +132,8 @@ if (( PROMPT_LEN < MIN_PROMPT_CHARS )); then
 	hook_health_exit 0
 fi
 
-COOLDOWN_SECONDS=$(historian_config_get '.historian.retrieval.cooldown_seconds')
-[[ -z "$COOLDOWN_SECONDS" || "$COOLDOWN_SECONDS" == "null" ]] && COOLDOWN_SECONDS=60
-MAX_RETRIEVALS=$(historian_config_get '.historian.retrieval.max_retrievals_per_session')
-[[ -z "$MAX_RETRIEVALS" || "$MAX_RETRIEVALS" == "null" ]] && MAX_RETRIEVALS=5
+COOLDOWN_SECONDS=$(historian_config_int '.historian.retrieval.cooldown_seconds' 60)
+MAX_RETRIEVALS=$(historian_config_int '.historian.retrieval.max_retrievals_per_session' 5)
 
 STATE=$(historian_retrieval_state_read "$PROJECT_KEY" "$SESSION_ID")
 PREV_COUNT=$(printf '%s' "$STATE" | jq -r '.count // 0')
@@ -260,8 +257,7 @@ fi
 # Surfacer.
 # ----------------------------------------------------------------------------
 
-EXCERPT_MAX=$(historian_config_get '.historian.surfacer.excerpt_chars_max')
-[[ -z "$EXCERPT_MAX" || "$EXCERPT_MAX" == "null" ]] && EXCERPT_MAX=400
+EXCERPT_MAX=$(historian_config_int '.historian.surfacer.excerpt_chars_max' 400)
 INCLUDE_AGE=$(historian_config_get '.historian.surfacer.include_age_hint')
 [[ -z "$INCLUDE_AGE" || "$INCLUDE_AGE" == "null" ]] && INCLUDE_AGE="true"
 

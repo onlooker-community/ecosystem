@@ -17,6 +17,7 @@
 # Exposes:
 #   historian_config_load <cwd>    # populates _HISTORIAN_CONFIG (JSON)
 #   historian_config_get <jq-path>       # echoes string value (empty if unset)
+#   historian_config_int <jq-path> <default>  # echoes a non-negative integer
 #
 # Settings overlay only touches the `historian.*` subtree of settings.json.
 
@@ -50,5 +51,19 @@ historian_config_get() {
 	local path="$1"
 	printf '%s' "$_HISTORIAN_CONFIG" \
 		| jq -r "${path} | if . == null then empty else . end" 2>/dev/null
+}
+
+# Read a value that is about to reach arithmetic. The null/empty-fallback idiom
+# this replaces caught "" and the literal "null" and nothing else, so any other
+# non-numeric value passed through to (( )), where bash reads the bare word as a
+# variable name and set -u stops the shell -- at status 0, because these scripts
+# run set -uo pipefail deliberately without -e (ONL-132).
+#
+# config_get_int always prints a non-negative integer, falling back to $2 for
+# anything failing ^[0-9]+$.
+historian_config_int() {
+	local path="$1"
+	local default="$2"
+	config_get_int "_HISTORIAN_CONFIG" "${path}" "${default}"
 }
 

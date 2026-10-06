@@ -101,10 +101,7 @@ _historian_embedder_ollama_keep_alive() {
 # for a raised chunk_target_chars or a model with a smaller window — without
 # it those come back as a bare HTTP 500 that reads like a server fault.
 _historian_embedder_max_chars() {
-	local v
-	v=$(historian_config_get '.historian.embedder.max_input_chars' 2>/dev/null)
-	[[ -z "$v" || "$v" == "null" ]] && v=6000
-	printf '%s' "$v"
+	historian_config_int '.historian.embedder.max_input_chars' 6000
 }
 
 # Public read of the same limit, for callers that must fit text to it *before*
