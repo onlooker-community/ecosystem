@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/onlooker-community/ecosystem/compare/counsel-v0.9.0...counsel-v0.9.1) (2026-10-08)
+
+
+### Bug Fixes
+
+* **plugins:** read config ints as ints in the user-scope five :shield: ([#422](https://github.com/onlooker-community/ecosystem/issues/422)) ([8689641](https://github.com/onlooker-community/ecosystem/commit/8689641c1d92fcaab67af25328104e0094fe5fd6))
+
 ## [0.9.0](https://github.com/onlooker-community/ecosystem/compare/counsel-v0.8.5...counsel-v0.9.0) (2026-10-04)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.70.3](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.70.2...ecosystem-v0.70.3) (2026-10-08)
+
+
+### Bug Fixes
+
+* **plugins:** read config ints as ints in the user-scope five :shield: ([#422](https://github.com/onlooker-community/ecosystem/issues/422)) ([8689641](https://github.com/onlooker-community/ecosystem/commit/8689641c1d92fcaab67af25328104e0094fe5fd6))
+
 ## [0.70.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.70.1...ecosystem-v0.70.2) (2026-10-08)
 
 

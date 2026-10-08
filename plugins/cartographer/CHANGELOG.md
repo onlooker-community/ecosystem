@@ -2,6 +2,13 @@
 
 All notable changes to the Cartographer plugin are documented here.
 
+## [0.11.1](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.11.0...cartographer-v0.11.1) (2026-10-08)
+
+
+### Bug Fixes
+
+* **plugins:** read config ints as ints in the user-scope five :shield: ([#422](https://github.com/onlooker-community/ecosystem/issues/422)) ([8689641](https://github.com/onlooker-community/ecosystem/commit/8689641c1d92fcaab67af25328104e0094fe5fd6))
+
 ## [0.11.0](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.10.8...cartographer-v0.11.0) (2026-10-04)
 
 
