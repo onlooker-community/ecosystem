@@ -141,16 +141,14 @@ warden_evaluate() {
 	local model n_samples temperature max_tokens timeout_secs min_valid
 	model=$(warden_config_get '.warden.escalation.model')
 	model="${model:-claude-haiku-4-5-20251001}"
-	n_samples=$(warden_config_get '.warden.escalation.n')
-	n_samples="${n_samples:-3}"
+	n_samples=$(warden_config_int '.warden.escalation.n' 3)
 	temperature=$(warden_config_get '.warden.escalation.temperature')
 	temperature="${temperature:-0.0}"
 	max_tokens=$(warden_config_get '.warden.escalation.max_output_tokens')
 	max_tokens="${max_tokens:-192}"
 	timeout_secs=$(warden_config_get '.warden.escalation.sample_timeout_seconds')
 	timeout_secs="${timeout_secs:-12}"
-	min_valid=$(warden_config_get '.warden.escalation.min_valid_samples')
-	min_valid="${min_valid:-2}"
+	min_valid=$(warden_config_int '.warden.escalation.min_valid_samples' 2)
 
 	# Bound each curl call by the configured per-sample timeout (not a hard-coded
 	# 15s). Visible to the subshells spawned below as a plain shell global.

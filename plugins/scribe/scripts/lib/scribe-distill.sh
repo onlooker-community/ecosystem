@@ -226,8 +226,7 @@ scribe_distill() {
 
 	# Count turns; skip trivial sessions.
 	local min_turns
-	min_turns=$(scribe_config_get '.scribe.capture.min_turns') || min_turns="3"
-	[[ -z "$min_turns" || "$min_turns" == "null" ]] && min_turns="3"
+	min_turns=$(scribe_config_int '.scribe.capture.min_turns' 3)
 
 	local turn_count
 	turn_count=$(scribe_count_turns "$transcript_path")
@@ -257,8 +256,7 @@ scribe_distill() {
 	# is worth another Haiku call, and 0 disables it for anyone who wants the
 	# old every-turn behavior back.
 	local redistill_min last_turns
-	redistill_min=$(scribe_config_get '.scribe.capture.redistill_min_new_turns')
-	[[ -z "$redistill_min" || "$redistill_min" == "null" ]] && redistill_min="5"
+	redistill_min=$(scribe_config_int '.scribe.capture.redistill_min_new_turns' 5)
 
 	local marker
 	marker=$(_scribe_distill_marker_path "$session_id")

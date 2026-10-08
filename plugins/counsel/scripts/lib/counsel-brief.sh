@@ -194,8 +194,7 @@ counsel_generate_brief() {
 
 	# Resolve config values.
 	local interval_days lookback_days model timeout_s max_tokens temperature chars_max min_events
-	interval_days=$(counsel_config_get '.counsel.synthesis_interval_days')
-	[[ -z "$interval_days" || "$interval_days" == "null" ]] && interval_days="7"
+	interval_days=$(counsel_config_int '.counsel.synthesis_interval_days' 7)
 	lookback_days=$(counsel_config_get '.counsel.lookback_days')
 	[[ -z "$lookback_days" || "$lookback_days" == "null" ]] && lookback_days="30"
 	model=$(counsel_config_get '.counsel.evaluator.model')
@@ -208,8 +207,7 @@ counsel_generate_brief() {
 	[[ -z "$temperature" || "$temperature" == "null" ]] && temperature="0.4"
 	chars_max=$(counsel_config_get '.counsel.capture.events_chars_max')
 	[[ -z "$chars_max" || "$chars_max" == "null" ]] && chars_max="60000"
-	min_events=$(counsel_config_get '.counsel.capture.min_events')
-	[[ -z "$min_events" || "$min_events" == "null" ]] && min_events="10"
+	min_events=$(counsel_config_int '.counsel.capture.min_events' 10)
 
 	local project_key
 	project_key=$(counsel_project_key "$cwd")

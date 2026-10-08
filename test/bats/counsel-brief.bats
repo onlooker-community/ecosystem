@@ -165,3 +165,86 @@ gen() {
   run grep -c '"event_type":"counsel.brief.generated"' "$ONLOOKER_EVENTS_LOG"
   [ "$output" -eq 0 ]
 }
+
+# ---------------------------------------------------------------------------
+# ONL-132 / ecosystem-ac8r8d.3. synthesis_interval_days and capture.min_events
+# used the [[ -z || == "null" ]] idiom, then reached arithmetic:
+#   interval_days -> [[ "$age_days"     -ge "$interval_days" ]]  (counsel-brief.sh:104)
+#   min_events    -> [[ "$event_count"  -lt "$min_events"    ]]  (counsel-brief.sh:229)
+# [[ -ge ]] / [[ -lt ]] evaluate their operands arithmetically and die on a bare
+# word under set -u, exactly as (( )) does.
+#
+# interval_days is the staleness gate this whole file exercises, so a dead read
+# there means counsel either never regenerates a brief or regenerates on every
+# single SessionStart -- and at status 0 either way.
+#
+# Fixtures use "unlimited" rather than a digit-leading value, which would hit
+# the milder surviving mode and pass against unfixed code.
+# ---------------------------------------------------------------------------
+
+@test "a non-numeric synthesis_interval_days falls back to the shipped default" {
+  mkdir -p "${WORK}/.claude"
+  printf '%s\n' '{"counsel":{"synthesis_interval_days":"unlimited"}}' > "${WORK}/.claude/settings.json"
+  counsel_config_load "$WORK"
+  [ "$(counsel_config_int '.counsel.synthesis_interval_days' 7)" = "7" ]
+}
+
+@test "a non-numeric capture.min_events falls back to the shipped default" {
+  mkdir -p "${WORK}/.claude"
+  printf '%s\n' '{"counsel":{"capture":{"min_events":"unlimited"}}}' > "${WORK}/.claude/settings.json"
+  counsel_config_load "$WORK"
+  [ "$(counsel_config_int '.counsel.capture.min_events' 10)" = "10" ]
+}
+
+@test "valid counsel int overrides still win" {
+  mkdir -p "${WORK}/.claude"
+  printf '%s\n' '{"counsel":{"synthesis_interval_days":14,"capture":{"min_events":25}}}' > "${WORK}/.claude/settings.json"
+  counsel_config_load "$WORK"
+  [ "$(counsel_config_int '.counsel.synthesis_interval_days' 7)" = "14" ] || return 1
+  [ "$(counsel_config_int '.counsel.capture.min_events' 10)" = "25" ]
+}
+
+# SCOPE of the three tests above, stated plainly so they are not mistaken for
+# coverage of the abort. They call counsel_config_int directly, so against
+# unmigrated code they fail only because the function does not exist -- a
+# tautology. What they genuinely guard is the config-var name: counsel populates
+# `_counsel_CONFIG` (lowercase), while cartographer and governor use the
+# uppercase spelling, and a wrapper pointed at the wrong one reads an unset
+# variable, silently returns the default for every value, and ignores config
+# entirely. Verified by mutation on the sibling plugin: renaming the var is
+# caught by the "valid override still wins" assertion and by NOTHING else --
+# the "falls back" assertions pass under it, because reading an unset variable
+# also yields the default.
+#
+# WHY THERE IS NO LIB-LEVEL ABORT TEST HERE. counsel-brief.sh carries no `set`
+# line of its own -- it is a sourced lib, and its callers
+# (counsel-session-start.sh, counsel-refresh.sh) are what run set -uo pipefail.
+# A bats file that sources the lib therefore runs it WITHOUT set -u, so the
+# unbound-variable abort cannot happen and any such test passes against
+# unguarded code. Measured: two consumer tests written that way both passed
+# before the fix. The mechanism is real -- `[[ "$x" -lt "$word" ]]` does abort
+# under set -u, confirmed in isolation -- but only in a process that set it.
+#
+# So the one abort test below drives counsel-refresh.sh, a real script with
+# set -uo pipefail at :21. It covers min_events only: refresh calls
+# counsel_generate_brief with `force`, which skips counsel_brief_is_stale, and
+# the interval_days comparison lives inside that function -- so interval_days
+# is read but never reaches arithmetic on this path. Its guard rests on the
+# wiring test above plus config-get-int.bats.
+@test "a non-numeric capture.min_events does not kill the refresh run" {
+  mkdir -p "${WORK}/.claude"
+  printf '%s\n' '{"counsel":{"capture":{"min_events":"unlimited"}}}' > "${WORK}/.claude/settings.json"
+
+  # "unlimited", not "10events": digit-leading would make [[ -lt ]] merely
+  # return non-zero, the script would survive, and the test would pass against
+  # unguarded code. config-get-int.bats covers that milder mode.
+  run bash -c "'${PLUGIN_ROOT}/scripts/counsel-refresh.sh' sess-refresh-badmin '$WORK' '$PROJECT_KEY'"
+  [ "$status" -eq 0 ] || return 1
+
+  # The setup seeds 12 events, clearing the shipped floor of 10, so a working
+  # fallback lets synthesis proceed and write a brief. Unguarded, the script
+  # dies at the comparison and the directory stays empty.
+  local written
+  written=$(find "$BRIEFS_DIR" -name '*.md' -type f | wc -l | tr -d ' ')
+  [ "$written" -ge 1 ]
+}
