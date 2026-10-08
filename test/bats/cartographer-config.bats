@@ -142,3 +142,65 @@ setup() {
   excl=$(cartographer_config_undocumented_exclude)
   [ "$(printf '%s' "$excl" | jq -r 'length')" = "0" ]
 }
+
+# ----------------------------------------------------------------------------
+# ONL-132 / ecosystem-ac8r8d.3. These three accessors used the ${v:-N} idiom,
+# which substitutes only when the value is EMPTY. A non-numeric value passed
+# straight through, and every consumer puts it in arithmetic:
+# cartographer-session-start.sh does THRESHOLD=$(( INTERVAL_HOURS * 3600 )) and
+# run-audit.sh does [[ "$_total_timeout" -lt $(( _phase_timeout * 3 )) ]]. Both
+# forms read a bare word as a VARIABLE NAME, set -u stops the shell, and these
+# scripts run set -uo pipefail deliberately without -e -- so the status left
+# behind is 0 and the hook dies silently.
+#
+# Migrating the ACCESSOR rather than each call site is deliberate: the accessor
+# is where the value is produced, and run-audit.sh alone reads _phase_timeout at
+# six call sites.
+#
+# Fixtures use "unlimited", never a digit-leading value like "180s". Digit-
+# leading hits the milder mode -- bash reports "value too great for base", the
+# comparison merely returns non-zero, the script survives with the comparison
+# silently wrong -- so such a fixture passes against unfixed code. That mode is
+# covered at the accessor in config-get-int.bats.
+# ----------------------------------------------------------------------------
+
+@test "a non-numeric phase_timeout_seconds falls back to the shipped default" {
+  mkdir -p "${HOME}/.claude"
+  printf '%s\n' '{"cartographer":{"phase_timeout_seconds":"unlimited"}}' > "${HOME}/.claude/settings.json"
+  cartographer_config_load ""
+  [ "$(cartographer_config_phase_timeout)" = "180" ]
+}
+
+@test "a non-numeric total_timeout_seconds falls back to the shipped default" {
+  mkdir -p "${HOME}/.claude"
+  printf '%s\n' '{"cartographer":{"total_timeout_seconds":"unlimited"}}' > "${HOME}/.claude/settings.json"
+  cartographer_config_load ""
+  [ "$(cartographer_config_total_timeout)" = "600" ]
+}
+
+@test "a non-numeric audit_interval_hours falls back to the shipped default" {
+  mkdir -p "${HOME}/.claude"
+  printf '%s\n' '{"cartographer":{"audit_interval_hours":"unlimited"}}' > "${HOME}/.claude/settings.json"
+  cartographer_config_load ""
+  [ "$(cartographer_config_audit_interval_hours)" = "24" ]
+}
+
+# A float is refused too. phase_timeout_seconds feeds `timeout <n>`, and the
+# accessor's contract is a non-negative INTEGER -- so 1.5 must not pass through
+# just because it happens to be numeric.
+@test "a float phase_timeout_seconds falls back rather than passing through" {
+  mkdir -p "${HOME}/.claude"
+  printf '%s\n' '{"cartographer":{"phase_timeout_seconds":1.5}}' > "${HOME}/.claude/settings.json"
+  cartographer_config_load ""
+  [ "$(cartographer_config_phase_timeout)" = "180" ]
+}
+
+# The guard must not swallow a VALID override -- otherwise it would trade a
+# silent death for a silently ignored config, which is the failure mode the
+# vendored-config-loader rule in CLAUDE.md exists to prevent.
+@test "a valid phase_timeout_seconds override still wins" {
+  mkdir -p "${HOME}/.claude"
+  printf '%s\n' '{"cartographer":{"phase_timeout_seconds":45}}' > "${HOME}/.claude/settings.json"
+  cartographer_config_load ""
+  [ "$(cartographer_config_phase_timeout)" = "45" ]
+}

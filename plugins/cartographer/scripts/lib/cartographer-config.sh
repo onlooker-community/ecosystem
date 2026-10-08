@@ -16,6 +16,7 @@
 # Usage:
 #   cartographer_config_load <cwd>
 #   cartographer_config_get_json ".cartographer.exclude_paths"
+#   cartographer_config_int <jq-path> <default>  # non-negative integer
 
 # Resolve the vendored loader from this file's own location. $PLUGIN_ROOT is
 # whatever the sourcing scope happened to set, so a sub-shell that inherits
@@ -50,6 +51,20 @@ cartographer_config_get_json() {
 	config_get_json "_CARTOGRAPHER_CONFIG" "${path}"
 }
 
+# Read a value that is about to reach arithmetic. The fallback idioms this
+# replaces catch an empty value and the literal "null" and nothing else, so any
+# other non-numeric value passed through to (( )), where bash reads the bare
+# word as a variable name and set -u stops the shell -- at status 0, because
+# these scripts run set -uo pipefail deliberately without -e (ONL-132).
+#
+# config_get_int always prints a non-negative integer, falling back to $2 for
+# anything failing ^[0-9]+$. Do not use it for floats (temperature, margins).
+cartographer_config_int() {
+	local path="$1"
+	local default="$2"
+	config_get_int "_CARTOGRAPHER_CONFIG" "${path}" "${default}"
+}
+
 cartographer_config_model_extraction() {
 	local v
 	v=$(cartographer_config_get '.cartographer.extraction.model')
@@ -63,25 +78,19 @@ cartographer_config_model_synthesis() {
 }
 
 cartographer_config_phase_timeout() {
-	local v
-	v=$(cartographer_config_get '.cartographer.phase_timeout_seconds')
 	# Keep in step with config.json. A config that fails to load falls back here
 	# SILENTLY (exit 0, accessors undefined), so a stale 60 would quietly restore
 	# ecosystem-449.64: every analyzer pass measured 67-131s, so 60 killed all of
 	# them, not just slow ones.
-	printf '%s' "${v:-180}"
+	cartographer_config_int '.cartographer.phase_timeout_seconds' 180
 }
 
 cartographer_config_total_timeout() {
-	local v
-	v=$(cartographer_config_get '.cartographer.total_timeout_seconds')
-	printf '%s' "${v:-600}"
+	cartographer_config_int '.cartographer.total_timeout_seconds' 600
 }
 
 cartographer_config_audit_interval_hours() {
-	local v
-	v=$(cartographer_config_get '.cartographer.audit_interval_hours')
-	printf '%s' "${v:-24}"
+	cartographer_config_int '.cartographer.audit_interval_hours' 24
 }
 
 cartographer_config_exclude_paths() {

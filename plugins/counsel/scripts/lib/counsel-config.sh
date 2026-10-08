@@ -18,6 +18,7 @@
 #   counsel_config_load <cwd>    # populates _counsel_CONFIG (JSON)
 #   counsel_config_get <jq-path>       # echoes string value (empty if unset)
 #   counsel_config_get_json <jq-path>  # echoes JSON value (null if unset)
+#   counsel_config_int <jq-path> <default>  # echoes a non-negative integer
 
 # Resolve the vendored loader from this file's own location. $PLUGIN_ROOT is
 # whatever the sourcing scope happened to set, so a sub-shell that inherits
@@ -50,4 +51,18 @@ counsel_config_get() {
 counsel_config_get_json() {
 	local path="$1"
 	config_get_json "_counsel_CONFIG" "${path}"
+}
+
+# Read a value that is about to reach arithmetic. The fallback idioms this
+# replaces catch an empty value and the literal "null" and nothing else, so any
+# other non-numeric value passed through to (( )), where bash reads the bare
+# word as a variable name and set -u stops the shell -- at status 0, because
+# these scripts run set -uo pipefail deliberately without -e (ONL-132).
+#
+# config_get_int always prints a non-negative integer, falling back to $2 for
+# anything failing ^[0-9]+$. Do not use it for floats (temperature, margins).
+counsel_config_int() {
+	local path="$1"
+	local default="$2"
+	config_get_int "_counsel_CONFIG" "${path}" "${default}"
 }

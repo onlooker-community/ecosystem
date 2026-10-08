@@ -84,16 +84,32 @@ governor_config_load "$CWD"
 # Read config.
 # -----------------------------------------------------------------------
 ENFORCEMENT=$(governor_config_enforcement)
-TOKENS_BUDGET=$(governor_config_get '.governor.session.tokens_default')
-TOKENS_BUDGET="${TOKENS_BUDGET:-100000}"
+TOKENS_BUDGET=$(governor_config_int '.governor.session.tokens_default' 100000)
 SAFETY_MARGIN=$(governor_config_get '.governor.estimation.safety_margin')
 SAFETY_MARGIN="${SAFETY_MARGIN:-1.3}"
 HARD_STOP_MARGIN=$(governor_config_get '.governor.estimation.hard_stop_margin')
 HARD_STOP_MARGIN="${HARD_STOP_MARGIN:-1.5}"
 
 # Respect env-var budget overrides set by orchestrating agents.
+#
+# Validated the same way the config read above is, and for the same reason: this
+# is the SECOND route to TOKENS_BUDGET, and the sweep cannot see it because the
+# value is not config-derived. Guarding only the config read would have left the
+# variable reachable as a non-integer, which is the whole defect -- TOKENS_BUDGET
+# reaches (( )) three times below (:141, :146, :180), and a bare word there is
+# read as a variable name, so set -u kills the hook at status 0. An orchestrating
+# agent exporting "unlimited" would have reintroduced exactly what ONL-132 fixes.
+#
+# A bad override is refused and reported rather than honored: the config-derived
+# budget is a safe value to keep, whereas failing open to "no budget" would turn
+# a typo into an ungoverned session.
 if [[ -n "${ONLOOKER_SESSION_BUDGET_TOKENS:-}" ]]; then
-	TOKENS_BUDGET="$ONLOOKER_SESSION_BUDGET_TOKENS"
+	if [[ "$ONLOOKER_SESSION_BUDGET_TOKENS" =~ ^[0-9]+$ ]]; then
+		TOKENS_BUDGET="$ONLOOKER_SESSION_BUDGET_TOKENS"
+	else
+		printf 'governor: ignoring non-integer ONLOOKER_SESSION_BUDGET_TOKENS=%s; keeping %s\n' \
+			"$ONLOOKER_SESSION_BUDGET_TOKENS" "$TOKENS_BUDGET" >&2
+	fi
 fi
 
 TOOL_INPUT=$(printf '%s' "$INPUT" | jq -c '.tool_input // {}' 2>/dev/null) || TOOL_INPUT="{}"

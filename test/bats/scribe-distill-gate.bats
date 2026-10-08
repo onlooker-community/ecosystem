@@ -96,7 +96,13 @@ _wait_for_event() {
 	local event_type="$1" want="${2:-1}" waited=0 seen=0
 	while [[ "$waited" -lt 25 ]]; do
 		if [[ -f "$ONLOOKER_EVENTS_LOG" ]]; then
-			seen=$(grep -c "\"event_type\":\"${event_type}\"" "$ONLOOKER_EVENTS_LOG" 2>/dev/null || printf '0')
+			# NB: `|| printf '0'` would APPEND to grep's own output, not replace
+			# it. grep -c prints "0" and exits 1 when there are no matches, so
+			# that form yielded "0\n0" and the [[ -ge ]] below died with
+			# "syntax error in expression" instead of waiting. It only showed up
+			# when the count was zero -- i.e. exactly when a hook had died, the
+			# case this helper exists to report.
+			seen=$(grep -c "\"event_type\":\"${event_type}\"" "$ONLOOKER_EVENTS_LOG" 2>/dev/null) || seen=0
 			[[ "$seen" -ge "$want" ]] && return 0
 		fi
 		sleep 1
@@ -408,4 +414,73 @@ STUB
 			return 1
 		}
 	fi
+}
+
+# ---------------------------------------------------------------------------
+# ONL-132 / ecosystem-ac8r8d.3
+#
+# Both gate thresholds reached arithmetic through the null/empty-fallback
+# idiom, which catches "" and the literal "null" and nothing else:
+#   min_turns      -> [[ "$turn_count" -lt "$min_turns" ]]       (:234)
+#   redistill_min  -> threshold=$((last_turns + redistill_min))  (:266)
+# [[ -lt ]] evaluates its operands arithmetically, so it dies exactly as (( ))
+# does. A bare word there is read as a VARIABLE NAME, set -u stops the shell,
+# and scribe-distill.sh runs set -uo pipefail deliberately without -e -- so the
+# status is 0 and the gate vanishes without a word.
+#
+# These are hook-level rather than accessor-level because the gate publishes the
+# threshold it used, which makes the fallback VALUE observable from outside.
+# That matters: asserting mere survival would not bite here.
+#
+# Fixtures use "unlimited", never a digit-leading value like "3turns". Digit-
+# leading hits the milder mode -- bash reports "value too great for base", the
+# comparison returns non-zero, the script survives with the gate silently
+# inverted -- and so passes against unfixed code. config-get-int.bats covers it.
+# ---------------------------------------------------------------------------
+
+@test "a non-numeric min_turns falls back to the shipped threshold, gate intact" {
+	mkdir -p "${BATS_TEST_TMPDIR}/.claude"
+	jq -n '{scribe: {capture: {min_turns: "unlimited"}}}' \
+		>"${BATS_TEST_TMPDIR}/.claude/settings.json"
+
+	local short="${BATS_TEST_TMPDIR}/short.jsonl"
+	jq -cn '{type:"user", message:{content:"just the one"}}' >"$short"
+
+	_run_hook sess-badmin "$short" >/dev/null
+	_wait_for_event "scribe.distill.skipped" 1 || {
+		echo "the gate died instead of falling back"
+		return 1
+	}
+
+	# threshold == 3 is the shipped default, and is what proves the fallback
+	# landed on it rather than on 0 -- a 0 threshold would admit every trivial
+	# session, trading a silent death for a silently disabled gate.
+	grep '"event_type":"scribe.distill.skipped"' "$ONLOOKER_EVENTS_LOG" \
+		| jq -e 'select(.payload.reason == "below_min_turns")
+		         | .payload.threshold == 3' >/dev/null
+}
+
+@test "a non-numeric redistill_min_new_turns leaves the gate engaged" {
+	mkdir -p "${BATS_TEST_TMPDIR}/.claude"
+	jq -n '{scribe: {capture: {redistill_min_new_turns: "unlimited"}}}' \
+		>"${BATS_TEST_TMPDIR}/.claude/settings.json"
+
+	_run_hook sess-badredistill >/dev/null
+	_wait_for_event "scribe.distill.complete" 1 || {
+		echo "the first pass never completed"
+		return 1
+	}
+
+	# Falls back to the shipped 5, so a second pass over the same transcript is
+	# still gated. Unguarded, $((last_turns + redistill_min)) kills the shell
+	# here and no second event of EITHER kind appears -- so asserting only
+	# "complete did not happen twice" would pass against broken code. The skip
+	# event is what distinguishes a working gate from a dead hook.
+	_run_hook sess-badredistill >/dev/null
+	_wait_for_event "scribe.distill.skipped" 1 || {
+		echo "second pass neither distilled nor reported a skip: gate died"
+		return 1
+	}
+
+	[ "$(_count_events scribe.distill.complete)" -eq 1 ]
 }

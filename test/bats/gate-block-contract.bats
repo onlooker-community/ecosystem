@@ -195,3 +195,63 @@ _assert_pretooluse_deny() {
 	# nothing — creates the file. Its absence here is the contract holding.
 	[ ! -f "${workspace}/canary.txt" ]
 }
+
+# ---------------------------------------------------------------------------
+# ONL-132 / ecosystem-ac8r8d.3 — the env-var route to TOKENS_BUDGET.
+#
+# The sweep that drove that work finds config-derived values only, so it could
+# not see this one: ONLOOKER_SESSION_BUDGET_TOKENS is read straight from the
+# environment, and before the fix it was assigned to TOKENS_BUDGET with no
+# validation at all. Guarding only the config read would have left the variable
+# reachable as a non-integer by a second route — which is the entire defect.
+#
+# TOKENS_BUDGET reaches arithmetic three times after that assignment (:141,
+# :146, :180). A bare word there is read as a VARIABLE NAME, set -u stops the
+# shell, and this hook runs set -uo pipefail deliberately without -e — so the
+# status is 0, the gate emits nothing, and a tool call sails through an
+# ungoverned session.
+#
+# This test lives here rather than in governor-config.bats because the env
+# override is not config: it is only reachable by driving the hook. The valid
+# side of the same route is already covered by the deny test above, which sets
+# ONLOOKER_SESSION_BUDGET_TOKENS=1.
+#
+# governor.gate.checked is the observable — it is emitted at :212, downstream of
+# all three arithmetic sites, so its presence proves the hook got past them.
+# Exit status proves nothing: the hook exits 0 either way.
+# ---------------------------------------------------------------------------
+@test "a non-integer ONLOOKER_SESSION_BUDGET_TOKENS is refused, not honored" {
+	local plugin_root="${REPO_ROOT}/plugins/governor"
+	export CLAUDE_PLUGIN_ROOT="$plugin_root"
+	mkdir -p "${ONLOOKER_DIR}/governance/ledgers"
+
+	# setup_test_env deliberately unsets this so a developer's shell value
+	# cannot outlive the temp home; the assertions below need it resolved.
+	local events_log="${ONLOOKER_DIR}/logs/onlooker-events.jsonl"
+
+	# "unlimited", not a digit-leading value like "100000tok": digit-leading hits
+	# the milder mode where (( )) merely returns non-zero and the hook survives,
+	# so it would pass against unguarded code.
+	export ONLOOKER_SESSION_BUDGET_TOKENS=unlimited
+
+	local input
+	input=$(jq -cn --arg cwd "$BATS_TEST_TMPDIR" \
+		'{session_id:"bats-governor-bad-budget-env", cwd:$cwd, tool_name:"Task",
+		  hook_event_name:"PreToolUse",
+		  tool_input:{description:"spawn", prompt:"do a large amount of work"}}')
+
+	run bash -c "printf '%s' '$input' | '${plugin_root}/scripts/hooks/governor-pre-tool-use.sh'"
+	[ "$status" -eq 0 ] || return 1
+
+	# Got past the arithmetic at all.
+	grep -q '"event_type":"governor.gate.checked"' "$events_log" || {
+		echo "no governor.gate.checked: the hook died on the bad override"
+		return 1
+	}
+
+	# And fell back to the shipped 100000 rather than to 0. A 0 budget would
+	# make every projection exceed the ceiling and block every spawn, so this
+	# distinguishes "refused the override" from "zeroed the budget".
+	grep '"event_type":"governor.gate.checked"' "$events_log" \
+		| jq -e '.payload.tokens_available == 100000' >/dev/null
+}
