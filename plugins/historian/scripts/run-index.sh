@@ -134,8 +134,7 @@ if [[ ! -f "$TRANSCRIPT_PATH" ]]; then
 	exit 0
 fi
 
-MIN_CHARS=$(historian_config_get '.historian.indexing.min_transcript_chars_to_index')
-[[ -z "$MIN_CHARS" || "$MIN_CHARS" == "null" ]] && MIN_CHARS=1200
+MIN_CHARS=$(historian_config_int '.historian.indexing.min_transcript_chars_to_index' 1200)
 
 TURNS=$(historian_transcript_load "$TRANSCRIPT_PATH")
 TRANSCRIPT_CHARS=$(historian_transcript_char_count "$TURNS")

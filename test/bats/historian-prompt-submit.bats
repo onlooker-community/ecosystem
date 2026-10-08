@@ -300,9 +300,20 @@ _index_session() {
 
 @test "a non-numeric max_input_chars does not break the prompt path" {
   # max_input_chars is user-editable config (ADR-004), so a typo is reachable.
-  # Unguarded, `(( PROMPT_LEN > abc ))` reads abc as 0 and the substring
-  # expansion ${PROMPT:0:abc} is then a bash arithmetic error inside the hook.
-  # The hook must still complete and report an outcome rather than die mid-path.
+  #
+  # NB the mechanism is NOT what this comment used to claim. `(( PROMPT_LEN > abc ))`
+  # does not read abc as 0 -- bash reads it as a VARIABLE NAME and `set -u` stops
+  # the shell. What saves the hook here is that the guard at
+  # historian-prompt-submit.sh:174 regex-checks the value before comparing, so
+  # the comparison never runs; the full prompt then reaches the embedder, whose
+  # own `(( ${#text} > max_chars ))` does abort -- but inside a command
+  # substitution, so only the subshell dies and the embedding comes back empty.
+  # Measured identically on bash 3.2.57 and 5.3.15.
+  #
+  # So this test asserts survival only, and survival is NOT evidence of the fix:
+  # it passed against unguarded code. The assertion that bites is in
+  # "a non-numeric embedder max_input_chars still fits the query to the shipped
+  # default" below, which pins the fallback VALUE rather than mere survival.
   printf '%s\n' \
     '{"historian":{"indexing":{"min_transcript_chars_to_index":50,"chunk_target_chars":400,"chunk_overlap_chars":50},"embedder":{"max_input_chars":"not-a-number"},"retrieval":{"cooldown_seconds":60,"max_retrievals_per_session":5,"min_prompt_chars":40,"min_similarity":0.55,"max_age_days":365}}}' \
     > "${PROJECT_REPO}/.claude/settings.json"
@@ -364,4 +375,112 @@ _index_session() {
   # ...and the outcome is what reports that nothing was embedded.
   grep '"event_type":"historian.retrieval.complete"' "$ONLOOKER_EVENTS_LOG" \
     | jq -e '.payload.outcome == "skipped" and .payload.skip_reason == "embedder_unavailable"' >/dev/null
+}
+
+# ----------------------------------------------------------------------------
+# ONL-132 / ecosystem-ac8r8d.3. Every config knob on this path reached bash
+# arithmetic through the house null/empty-fallback idiom, which catches the
+# empty string and the literal "null" and nothing else. A non-numeric value
+# passes through to (( )), where bash reads the bare word as a VARIABLE NAME,
+# `set -u` stops the shell, and -- because this hook runs set -uo pipefail
+# deliberately without -e -- the status left behind is 0.
+#
+# The fixtures below all use "unlimited", not a digit-leading value like
+# "6000ms". That choice is load-bearing and cost three vacuous tests to learn:
+#
+#   "unlimited"  -> bare word read as a variable name; set -u ABORTS the shell
+#                   mid-hook. Observable out here, because the events that
+#                   should follow the read never arrive.
+#   "6000ms"     -> digit-leading, so bash reports "value too great for base"
+#                   and (( )) merely returns non-zero. The hook SURVIVES with
+#                   the comparison silently wrong, which is invisible from a
+#                   test that only drives the hook. That mode is covered at the
+#                   accessor instead -- config-get-int.bats asserts any value
+#                   failing ^[0-9]+$ falls back.
+#
+# A digit-leading fixture therefore passes against UNFIXED code. These assert
+# on emitted events rather than exit status, because the hook exits 0 either
+# way and status proves nothing.
+# ----------------------------------------------------------------------------
+
+@test "a non-numeric min_prompt_chars does not kill the hook before the rate gate" {
+  printf '%s\n' \
+    '{"historian":{"retrieval":{"cooldown_seconds":60,"max_retrievals_per_session":5,"min_prompt_chars":"unlimited","min_similarity":0.55,"max_age_days":365}}}' \
+    > "${PROJECT_REPO}/.claude/settings.json"
+
+  run bash -c "printf '%s' '$(_retrieve_input "tiny")' | '$RETRIEVE_HOOK'"
+  [ "$status" -eq 0 ] || return 1
+
+  # Falling back to the SHIPPED default (60) rather than to 0 is the other half
+  # of the fix: a bad threshold must not be read as "no threshold". A 4-char
+  # prompt is below 60, so the gate must still fire.
+  grep '"event_type":"historian.retrieval.complete"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e '.payload.outcome == "skipped" and .payload.skip_reason == "short_prompt"' >/dev/null
+}
+
+@test "a non-numeric cooldown_seconds does not kill the hook mid-rate-gate" {
+  # COOLDOWN_SECONDS reaches `$(( COOLDOWN_SECONDS * 1000 ))` -- arithmetic
+  # EXPANSION rather than the (( )) command, but set -u stops the shell there
+  # just the same. Nothing at all is emitted when it does: retrieval.started
+  # is downstream of the rate gate.
+  printf '%s\n' \
+    '{"historian":{"retrieval":{"cooldown_seconds":"unlimited","max_retrievals_per_session":5,"min_prompt_chars":40,"min_similarity":0.55,"max_age_days":365}}}' \
+    > "${PROJECT_REPO}/.claude/settings.json"
+
+  local prompt="A prompt comfortably past the forty character minimum so the rate gate is actually reached."
+  run bash -c "printf '%s' '$(_retrieve_input "$prompt")' | '$RETRIEVE_HOOK'"
+  [ "$status" -eq 0 ] || return 1
+
+  grep -q '"event_type":"historian.retrieval.started"' "$ONLOOKER_EVENTS_LOG" || return 1
+  grep -q '"event_type":"historian.retrieval.complete"' "$ONLOOKER_EVENTS_LOG"
+}
+
+@test "a non-numeric max_retrievals_per_session does not kill the hook mid-rate-gate" {
+  printf '%s\n' \
+    '{"historian":{"retrieval":{"cooldown_seconds":60,"max_retrievals_per_session":"unlimited","min_prompt_chars":40,"min_similarity":0.55,"max_age_days":365}}}' \
+    > "${PROJECT_REPO}/.claude/settings.json"
+
+  local prompt="Another prompt past the forty character minimum so the budget check is reached."
+  run bash -c "printf '%s' '$(_retrieve_input "$prompt")' | '$RETRIEVE_HOOK'"
+  [ "$status" -eq 0 ] || return 1
+
+  grep -q '"event_type":"historian.retrieval.started"' "$ONLOOKER_EVENTS_LOG" || return 1
+  grep -q '"event_type":"historian.retrieval.complete"' "$ONLOOKER_EVENTS_LOG"
+}
+
+@test "a non-numeric embedder max_input_chars still fits the query to the shipped default" {
+  # The abort on this path is REAL but CONTAINED, which is why survival proves
+  # nothing here and the fallback value is the only honest assertion.
+  #
+  # Two hops. The guard at historian-prompt-submit.sh:174 is a regex pre-check
+  # -- `[[ "$MAX_EMBED_CHARS" =~ ^[0-9]+$ ]] && (( ... ))` -- a FIFTH fallback
+  # shape beyond the four ONL-132 catalogs. It correctly refuses to compare, so
+  # the truncation is SKIPPED and the full prompt is handed to the embedder,
+  # whose own `(( ${#text} > max_chars ))` at historian-embedder.sh:280 does hit
+  # the set -u abort. But it is called as
+  # `historian_embedder_parse "$(historian_embedder_embed_reported ...)"` -- a
+  # command substitution -- so only the subshell dies and the parent continues
+  # with an empty vector. Verified on bash 3.2.57 and 5.3.15: the parent
+  # survives and captures "".
+  #
+  # Net effect unguarded: not a dead hook, a silently EMPTY embedding. The hook
+  # still emits retrieval.complete, so neither exit status nor the presence of
+  # that event distinguishes fixed from broken. Only embed_chars does -- it is
+  # present solely when the query was actually truncated to the limit.
+  printf '%s\n' \
+    '{"historian":{"embedder":{"max_input_chars":"unlimited"},"retrieval":{"cooldown_seconds":60,"max_retrievals_per_session":5,"min_prompt_chars":40,"min_similarity":0.55,"max_age_days":365}}}' \
+    > "${PROJECT_REPO}/.claude/settings.json"
+
+  local long_prompt padding
+  padding=$(printf 'additional context line %s. ' $(seq 1 400))
+  long_prompt="Tracking down why the saved query parameters drift between runs. ${padding}"
+
+  run bash -c "printf '%s' '$(_retrieve_input "$long_prompt")' | '$RETRIEVE_HOOK'"
+  [ "$status" -eq 0 ] || return 1
+
+  # Falls back to the shipped 6000, so the query is fitted. Unguarded, the
+  # regex pre-check skips truncation, embed_chars equals prompt_chars and the
+  # field is therefore omitted entirely -- jq -e then fails on null.
+  grep '"event_type":"historian.retrieval.started"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e '.payload.embed_chars == 6000' >/dev/null
 }

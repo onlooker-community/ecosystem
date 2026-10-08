@@ -333,3 +333,40 @@ _chunk_count() {
   ! grep -q '"event_type":"historian.indexing.started"' "$ONLOOKER_EVENTS_LOG" || return 1
   grep -q '"event_type":"historian.indexing.complete"' "$ONLOOKER_EVENTS_LOG"
 }
+
+# ----------------------------------------------------------------------------
+# ONL-132 / ecosystem-ac8r8d.3. run-index.sh reads
+# min_transcript_chars_to_index through the house null/empty-fallback idiom and
+# feeds it straight to `(( TRANSCRIPT_CHARS < MIN_CHARS ))` at :148 under
+# set -uo pipefail. A non-numeric value is read as a variable name there, set -u
+# stops the shell, and the runner exits 0 having indexed nothing.
+#
+# This is observable precisely because indexing.started is emitted at :143,
+# BEFORE the comparison, and indexing.complete only after it. started-without-
+# complete is the signature of the abort -- the same shape curator's budget
+# regression has.
+#
+# The fixture is "unlimited", not "1200ms": a digit-leading value makes (( ))
+# return non-zero instead of killing the shell, the runner survives, and the
+# test passes against unfixed code. That surviving mode is covered at the
+# accessor in config-get-int.bats.
+# ----------------------------------------------------------------------------
+@test "a non-numeric min_transcript_chars_to_index does not kill indexing mid-run" {
+  printf '%s\n' \
+    '{"historian":{"indexing":{"min_transcript_chars_to_index":"unlimited","chunk_target_chars":400,"chunk_overlap_chars":50}}}' \
+    > "${PROJECT_REPO}/.claude/settings.json"
+
+  _append_text_turn "user" "A short exchange, well under the shipped 1200-char floor."
+  _append_text_turn "assistant" "Acknowledged."
+
+  _run_index
+  [ "$status" -eq 0 ] || return 1
+
+  grep -q '"event_type":"historian.indexing.started"' "$ONLOOKER_EVENTS_LOG" || return 1
+
+  # Falling back to the SHIPPED default (1200) rather than to 0 is the other
+  # half of the fix: a bad floor must not be read as "no floor", which would
+  # index every trivial session. This transcript is short, so it must skip.
+  grep '"event_type":"historian.indexing.complete"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e '.payload.skip_reason == "too_short"' >/dev/null
+}
