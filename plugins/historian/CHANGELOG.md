@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/onlooker-community/ecosystem/compare/historian-v0.9.0...historian-v0.9.1) (2026-10-08)
+
+
+### Bug Fixes
+
+* **historian:** read config ints as ints :shield: ([#420](https://github.com/onlooker-community/ecosystem/issues/420)) ([0ac35ea](https://github.com/onlooker-community/ecosystem/commit/0ac35eac5a564c212e5e95a4a68774f46ca0a016))
+
 ## [0.9.0](https://github.com/onlooker-community/ecosystem/compare/historian-v0.8.0...historian-v0.9.0) (2026-10-04)
 
 

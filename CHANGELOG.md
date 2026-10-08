@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.70.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.70.1...ecosystem-v0.70.2) (2026-10-08)
+
+
+### Bug Fixes
+
+* **historian:** read config ints as ints :shield: ([#420](https://github.com/onlooker-community/ecosystem/issues/420)) ([0ac35ea](https://github.com/onlooker-community/ecosystem/commit/0ac35eac5a564c212e5e95a4a68774f46ca0a016))
+
 ## [0.70.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.70.0...ecosystem-v0.70.1) (2026-10-05)
 
 
