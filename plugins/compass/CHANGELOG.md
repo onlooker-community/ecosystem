@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.2](https://github.com/onlooker-community/ecosystem/compare/compass-v0.9.1...compass-v0.9.2) (2026-10-09)
+
+
+### Bug Fixes
+
+* **compass:** validate the model's reply before awk sees it :detective: ([#427](https://github.com/onlooker-community/ecosystem/issues/427)) ([a18f87f](https://github.com/onlooker-community/ecosystem/commit/a18f87fcf84790897babb8cdadd8a479ee8c53e7))
+
 ## [0.9.1](https://github.com/onlooker-community/ecosystem/compare/compass-v0.9.0...compass-v0.9.1) (2026-10-09)
 
 
