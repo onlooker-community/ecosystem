@@ -18,6 +18,7 @@
 #   compass_config_load <cwd>    # populates _compass_CONFIG (JSON)
 #   compass_config_get <jq-path>       # echoes string value (empty if unset)
 #   compass_config_get_json <jq-path>  # echoes JSON value (null if unset)
+#   compass_config_int <jq-path> <default>  # echoes a non-negative integer
 
 # Resolve the vendored loader from this file's own location. $PLUGIN_ROOT is
 # whatever the sourcing scope happened to set, so a sub-shell that inherits
@@ -50,4 +51,21 @@ compass_config_get() {
 compass_config_get_json() {
 	local path="$1"
 	config_get_json "_compass_CONFIG" "${path}"
+}
+
+# Read a value that is about to reach arithmetic. The ${v:-N} idiom this
+# replaces substitutes only when the value is EMPTY, so any other non-numeric
+# value passed through to (( )) -- and to [[ -lt ]] / [[ -le ]], which evaluate
+# their operands arithmetically too. A bare word there is read as a variable
+# name and set -u stops the shell. Compass's own libs carry no `set` line; its
+# four hooks run set -uo pipefail deliberately without -e, so a config typo
+# killed the gate at status 0 (ONL-132).
+#
+# config_get_int always prints a non-negative integer, falling back to $2 for
+# anything failing ^[0-9]+$. Not for floats -- temperature stays on the string
+# accessor.
+compass_config_int() {
+	local path="$1"
+	local default="$2"
+	config_get_int "_compass_CONFIG" "${path}" "${default}"
 }

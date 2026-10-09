@@ -309,8 +309,7 @@ compass_run_gate() {
 
 	# ---- Rule 3: dir+stem cooldown ------------------------------------
 	local cooldown_seconds
-	cooldown_seconds=$(compass_config_get '.compass.cooldown.seconds')
-	cooldown_seconds="${cooldown_seconds:-120}"
+	cooldown_seconds=$(compass_config_int '.compass.cooldown.seconds' 120)
 	if [[ -n "$file_path" ]] && _compass_in_cooldown "$file_path" "$session_id" "$cooldown_seconds"; then
 		compass_emit_event "compass.check.skipped" \
 			"$(jq -n --arg r "dir_plus_stem_cooldown" --arg f "$file_path" \
@@ -372,8 +371,7 @@ compass_run_gate() {
 	fi
 
 	local max_checks
-	max_checks=$(compass_config_get '.compass.max_checks_per_turn')
-	max_checks="${max_checks:-3}"
+	max_checks=$(compass_config_int '.compass.max_checks_per_turn' 3)
 	local current_count
 	current_count=$(_compass_state_get "$session_id" '.turn_check_count') || current_count=0
 	current_count="${current_count:-0}"
@@ -386,8 +384,7 @@ compass_run_gate() {
 
 	# ---- Rule 5: context minimum -------------------------------------
 	local min_context_chars
-	min_context_chars=$(compass_config_get '.compass.min_context_chars')
-	min_context_chars="${min_context_chars:-80}"
+	min_context_chars=$(compass_config_int '.compass.min_context_chars' 80)
 	local context_len="${#context}"
 	if (( context_len < min_context_chars )); then
 		compass_emit_event "compass.check.skipped" \
@@ -404,8 +401,7 @@ compass_run_gate() {
 		cb_state=$(_compass_state_get "$session_id" '.circuit_breaker.state') || cb_state="closed"
 		cb_state="${cb_state:-closed}"
 		if [[ "$cb_state" == "open" ]]; then
-			cb_open_duration=$(compass_config_get '.compass.circuit_breaker.open_duration_seconds')
-			cb_open_duration="${cb_open_duration:-300}"
+			cb_open_duration=$(compass_config_int '.compass.circuit_breaker.open_duration_seconds' 300)
 			local opened_at
 			opened_at=$(_compass_state_get "$session_id" '.circuit_breaker.opened_at') || opened_at=0
 			opened_at="${opened_at:-0}"
@@ -492,8 +488,7 @@ compass_run_gate() {
 		cb_failures=$(_compass_state_get "$session_id" '.circuit_breaker.consecutive_failures') \
 			|| cb_failures=0
 		cb_failures="${cb_failures:-0}"
-		cb_threshold=$(compass_config_get '.compass.circuit_breaker.consecutive_failures_to_open')
-		cb_threshold="${cb_threshold:-3}"
+		cb_threshold=$(compass_config_int '.compass.circuit_breaker.consecutive_failures_to_open' 3)
 		local cb_opened="false"
 		if [[ "$cb_enabled" == "true" ]] && (( cb_failures >= cb_threshold )); then
 			_compass_open_circuit "$session_id" 2>/dev/null || true

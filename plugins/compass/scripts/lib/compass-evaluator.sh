@@ -208,12 +208,10 @@ compass_evaluate() {
 	local model n_samples timeout_secs min_valid
 	model=$(compass_config_get '.compass.evaluator.model')
 	model="${model:-claude-haiku-4-5-20251001}"
-	n_samples=$(compass_config_get '.compass.evaluator.n')
-	n_samples="${n_samples:-5}"
+	n_samples=$(compass_config_int '.compass.evaluator.n' 5)
 	timeout_secs=$(compass_config_get '.compass.evaluator.sample_timeout_seconds')
 	timeout_secs="${timeout_secs:-8}"
-	min_valid=$(compass_config_get '.compass.evaluator.min_valid_samples')
-	min_valid="${min_valid:-3}"
+	min_valid=$(compass_config_int '.compass.evaluator.min_valid_samples' 3)
 
 	local confidence_threshold stddev_threshold
 	confidence_threshold=$(compass_config_get '.compass.confidence_threshold')
