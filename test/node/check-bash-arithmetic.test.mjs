@@ -16,7 +16,7 @@
 
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { describe, it } from 'node:test';
@@ -355,5 +355,44 @@ describe('arithmetic comparison inside [[ ]]', () => {
 
     const r = run(root);
     assert.equal(r.status, 0, `string operand flagged as arithmetic:\n${r.stdout}`);
+  });
+});
+
+// ecosystem-ac8r8d.4. The bead's acceptance is "a deliberately planted
+// unguarded config value fails test:ci". The planting-and-detecting half is
+// covered above — a fixture with no numeric guard makes the linter exit 1. The
+// "fails test:ci" half is a WIRING claim, and nothing asserted it: the gate
+// could be dropped from the chain and every test here would still pass, which
+// is the one way a lint gate quietly stops being a gate.
+//
+// There is no precedent in test/ for asserting npm-script composition, so this
+// is deliberately two narrow assertions rather than a general scripts-shape
+// checker: the script must exist and point at this linter, and test:ci must
+// actually invoke it.
+describe('the sweep is wired into CI', () => {
+  it('exposes lint:bash-arithmetic pointing at this linter', () => {
+    const pkg = JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf8'));
+    assert.equal(
+      pkg.scripts['lint:bash-arithmetic'],
+      'node scripts/lint/check-bash-arithmetic.mjs',
+      'lint:bash-arithmetic must run check-bash-arithmetic.mjs',
+    );
+  });
+
+  it('runs that gate as part of test:ci', () => {
+    const pkg = JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf8'));
+    assert.match(
+      pkg.scripts['test:ci'],
+      /npm run lint:bash-arithmetic\b/,
+      'test:ci must invoke lint:bash-arithmetic, or the sweep is not a gate',
+    );
+  });
+
+  // The whole migration exists to make this true, and it is the precondition
+  // for the gate being safe to add with nothing tolerated: there is no
+  // baseline file, so a single finding anywhere fails CI.
+  it('reports a clean tree on this repo, so the gate needs no baseline', () => {
+    const r = spawnSync(process.execPath, [LINTER], { cwd: REPO_ROOT, encoding: 'utf8' });
+    assert.equal(r.status, 0, `the repo itself has findings, so the gate cannot land clean:\n${r.stdout}${r.stderr}`);
   });
 });
