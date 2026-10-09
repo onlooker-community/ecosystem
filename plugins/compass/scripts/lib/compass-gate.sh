@@ -233,8 +233,8 @@ _compass_intervention() {
 
 	local block_reason=""
 	local passed_conf passed_std
-	passed_conf=$(awk "BEGIN {exit !(${confidence:-0} >= ${confidence_threshold:-0.65})}" 2>/dev/null && echo true || echo false)
-	passed_std=$(awk "BEGIN {exit !(${stddev:-1} <= ${stddev_threshold:-0.20})}" 2>/dev/null && echo true || echo false)
+	passed_conf=$(awk -v c="${confidence:-0}" -v t="${confidence_threshold:-0.65}" 'BEGIN { exit !(c >= t) }' 2>/dev/null && echo true || echo false)
+	passed_std=$(awk -v sd="${stddev:-1}" -v t="${stddev_threshold:-0.20}" 'BEGIN { exit !(sd <= t) }' 2>/dev/null && echo true || echo false)
 
 	if [[ "$passed_conf" != "true" && "$passed_std" != "true" ]]; then
 		block_reason="low confidence and high evaluator disagreement"
