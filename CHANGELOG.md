@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.70.5](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.70.4...ecosystem-v0.70.5) (2026-10-09)
+
+
+### Bug Fixes
+
+* **compass:** validate the model's reply before awk sees it :detective: ([#427](https://github.com/onlooker-community/ecosystem/issues/427)) ([a18f87f](https://github.com/onlooker-community/ecosystem/commit/a18f87fcf84790897babb8cdadd8a479ee8c53e7))
+
 ## [0.70.4](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.70.3...ecosystem-v0.70.4) (2026-10-09)
 
 
