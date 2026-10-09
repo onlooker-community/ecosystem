@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/onlooker-community/ecosystem/compare/compass-v0.9.0...compass-v0.9.1) (2026-10-09)
+
+
+### Bug Fixes
+
+* **compass:** read config ints as ints :checkered_flag: ([#424](https://github.com/onlooker-community/ecosystem/issues/424)) ([4505b64](https://github.com/onlooker-community/ecosystem/commit/4505b645c7cf165e394e7da2f62b79fbb8d0ec84))
+
 ## [0.9.0](https://github.com/onlooker-community/ecosystem/compare/compass-v0.8.3...compass-v0.9.0) (2026-10-04)
 
 
