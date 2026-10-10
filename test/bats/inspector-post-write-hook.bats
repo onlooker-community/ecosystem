@@ -89,9 +89,12 @@ _run_hook() {
 		"$ONLOOKER_EVENTS_LOG" >/dev/null
 }
 
-@test "exits 0 when tool_name is not Write/Edit/MultiEdit" {
+# This used to pass "Bash" as its example of an unhandled tool. Bash IS handled
+# now (ONL-28), so the case needs a tool inspector genuinely ignores — otherwise
+# the test would quietly assert the opposite of the new behavior.
+@test "exits 0 when tool_name is a tool inspector does not watch" {
 	echo '{"inspector":{"checks":{".ts":[{"name":"t","kind":"lint","argv":["true"]}]}}}' | _settings
-	run _run_hook "$(_input "$REPO" "Bash")"
+	run _run_hook "$(_input "$REPO" "Read")"
 	[ "$status" -eq 0 ]
 	[ -z "$output" ]
 	[ "$(_event_count inspector.run.completed)" = "0" ]
@@ -326,4 +329,145 @@ EOF
 	# that is what proves the prefix strip found the root, rather than the
 	# header printing off a coincidentally-passing comparison.
 	[ "$(jq -r 'select(.event_type=="inspector.check.failed").payload.file_path_relative' "$ONLOOKER_EVENTS_LOG")" = "src/sample.ts" ]
+}
+
+
+# ---------------------------------------------------------------------------
+# ONL-28 / ecosystem-6dv — shell-shaped edits.
+#
+# inspector matched Write/Edit/MultiEdit: TOOL CALLS, not changes to the
+# filesystem. A file edited through a heredoc, sed -i or a short python script
+# produced no such call and was never linted, so the per-edit gate had a hole
+# exactly the width of the shell. Measured on the session that fixed it: 416
+# events, ~25 files modified across six merged PRs, and ZERO inspector events,
+# because every edit went through Bash.
+#
+# The Bash branch cannot read a path from tool_input, so git is the source of
+# truth — a rolling baseline of content hashes, with the "did anything change"
+# question asked BEFORE config load or project-key resolution. These tests pin
+# both halves: that shell edits are now seen, and that a shell call which
+# touched nothing still does no work.
+#
+# Fixtures are committed first so the tree starts clean. Without that, the very
+# first Bash call has no baseline, correctly reports every dirty file, and every
+# assertion below would be measuring the fixture rather than the edit.
+# ---------------------------------------------------------------------------
+
+_commit_fixture() {
+	git -C "$REPO" add -A >/dev/null 2>&1
+	git -C "$REPO" -c user.email=t@example.com -c user.name=test \
+		commit -qm fixture >/dev/null 2>&1
+}
+
+# A Bash payload carries a command, never a file_path — which is the whole
+# reason the old matcher could not see these edits.
+_bash_input() {
+	jq -n --arg cwd "$REPO" --arg sid "test-${BATS_TEST_NUMBER}" \
+		'{cwd:$cwd, session_id:$sid, tool_name:"Bash", tool_input:{command:"printf x >> f"}}'
+}
+
+@test "a file edited through the shell is linted" {
+	echo '{"inspector":{"checks":{".ts":[{"name":"t","kind":"lint","argv":["true"]}]}}}' | _settings
+	_commit_fixture
+
+	# Establish the baseline on a clean tree.
+	run _run_hook "$(_bash_input)"
+	[ "$status" -eq 0 ] || return 1
+	[ "$(_event_count inspector.run.completed)" = "0" ] || {
+		echo "a clean tree should have produced no check run"
+		return 1
+	}
+
+	# The edit. No Write/Edit/MultiEdit tool call exists anywhere in this test.
+	printf 'changed\n' >>"${REPO}/src/sample.ts"
+
+	run _run_hook "$(_bash_input)"
+	[ "$status" -eq 0 ] || return 1
+	[ "$(_event_count inspector.run.completed)" = "1" ]
+}
+
+@test "a shell call that changed nothing runs no checks" {
+	# The cheap path, and the one that has to stay cheap: Bash outruns Edit
+	# roughly 30:1, so this is the common case by a wide margin.
+	echo '{"inspector":{"checks":{".ts":[{"name":"t","kind":"lint","argv":["true"]}]}}}' | _settings
+	_commit_fixture
+
+	run _run_hook "$(_bash_input)"
+	[ "$status" -eq 0 ] || return 1
+	run _run_hook "$(_bash_input)"
+	[ "$status" -eq 0 ] || return 1
+
+	[ "$(_event_count inspector.run.completed)" = "0" ]
+}
+
+@test "the baseline advances, so one shell edit is not linted twice" {
+	# Without advancing, every later Bash call in the session re-lints the same
+	# file for as long as it stays dirty — which in a real session is dozens of
+	# redundant runs.
+	echo '{"inspector":{"checks":{".ts":[{"name":"t","kind":"lint","argv":["true"]}]}}}' | _settings
+	_commit_fixture
+	run _run_hook "$(_bash_input)"
+
+	printf 'changed\n' >>"${REPO}/src/sample.ts"
+	run _run_hook "$(_bash_input)"
+	[ "$(_event_count inspector.run.completed)" = "1" ] || return 1
+
+	run _run_hook "$(_bash_input)"
+	[ "$(_event_count inspector.run.completed)" = "1" ]
+}
+
+@test "every file a shell command changed is checked, not just one" {
+	echo '{"inspector":{"checks":{".ts":[{"name":"t","kind":"lint","argv":["true"]}]}}}' | _settings
+	printf 'sample\n' >"${REPO}/src/second.ts"
+	_commit_fixture
+	run _run_hook "$(_bash_input)"
+
+	printf 'a\n' >>"${REPO}/src/sample.ts"
+	printf 'b\n' >>"${REPO}/src/second.ts"
+
+	run _run_hook "$(_bash_input)"
+	[ "$status" -eq 0 ] || return 1
+	[ "$(_event_count inspector.run.completed)" = "2" ]
+}
+
+@test "a byte-identical rewrite is not reported as a change" {
+	# Content hashes, not mtime. A formatter that rewrites a file without
+	# changing it must not be reported as work — mtime moves, content does not.
+	echo '{"inspector":{"checks":{".ts":[{"name":"t","kind":"lint","argv":["true"]}]}}}' | _settings
+	_commit_fixture
+	run _run_hook "$(_bash_input)"
+
+	touch "${REPO}/src/sample.ts"
+
+	run _run_hook "$(_bash_input)"
+	[ "$status" -eq 0 ] || return 1
+	[ "$(_event_count inspector.run.completed)" = "0" ]
+}
+
+@test "a shell-edited file with no configured check reports no_extension_match" {
+	# The skip path has to work on this branch too, or an unconfigured extension
+	# would look identical to a file the gate never saw.
+	echo '{"inspector":{"checks":{".ts":[{"name":"t","kind":"lint","argv":["true"]}]}}}' | _settings
+	_commit_fixture
+	run _run_hook "$(_bash_input)"
+
+	printf 'changed\n' >>"${REPO}/src/sample.py"
+
+	run _run_hook "$(_bash_input)"
+	[ "$status" -eq 0 ] || return 1
+	[ "$(_event_count inspector.run.completed)" = "0" ] || return 1
+	grep '"event_type":"inspector.check.skipped"' "$ONLOOKER_EVENTS_LOG" \
+		| jq -e 'select(.payload.reason == "no_extension_match")' >/dev/null
+}
+
+@test "a shell-edited file under an excluded path is still excluded" {
+	echo '{"inspector":{"checks":{".ts":[{"name":"t","kind":"lint","argv":["true"]}]},"exclude_paths":["node_modules"]}}' | _settings
+	_commit_fixture
+	run _run_hook "$(_bash_input)"
+
+	printf 'changed\n' >>"${REPO}/node_modules/foo/index.ts"
+
+	run _run_hook "$(_bash_input)"
+	[ "$status" -eq 0 ] || return 1
+	[ "$(_event_count inspector.run.completed)" = "0" ]
 }
