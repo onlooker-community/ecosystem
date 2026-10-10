@@ -27,6 +27,15 @@
             "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hooks/inspector-post-write.sh"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hooks/inspector-post-write.sh"
+          }
+        ]
       }
     ]
   }
