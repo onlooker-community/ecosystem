@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.70.6](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.70.5...ecosystem-v0.70.6) (2026-10-10)
+
+
+### Bug Fixes
+
+* **inspector:** watch file changes, not tool names :eyes: ([#429](https://github.com/onlooker-community/ecosystem/issues/429)) ([9801770](https://github.com/onlooker-community/ecosystem/commit/98017701be5104ee078028e028258d4b3500dab4))
+
 ## [0.70.5](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.70.4...ecosystem-v0.70.5) (2026-10-09)
 
 
