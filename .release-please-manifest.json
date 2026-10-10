@@ -1,5 +1,5 @@
 {
-  ".": "0.70.5",
+  ".": "0.70.6",
   "plugins/archivist": "0.8.1",
   "plugins/tribunal": "1.6.0",
   "plugins/echo": "0.12.0",
@@ -15,5 +15,5 @@
   "plugins/assayer": "1.5.0",
   "plugins/bursar": "0.7.0",
   "plugins/lineage": "0.7.0",
-  "plugins/inspector": "0.8.1"
+  "plugins/inspector": "0.8.2"
 }

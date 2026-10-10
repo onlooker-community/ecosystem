@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.2](https://github.com/onlooker-community/ecosystem/compare/inspector-v0.8.1...inspector-v0.8.2) (2026-10-10)
+
+
+### Bug Fixes
+
+* **inspector:** watch file changes, not tool names :eyes: ([#429](https://github.com/onlooker-community/ecosystem/issues/429)) ([9801770](https://github.com/onlooker-community/ecosystem/commit/98017701be5104ee078028e028258d4b3500dab4))
+
 ## [0.8.1](https://github.com/onlooker-community/ecosystem/compare/inspector-v0.8.0...inspector-v0.8.1) (2026-10-05)
 
 
