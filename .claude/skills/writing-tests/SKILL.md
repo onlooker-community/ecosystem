@@ -236,6 +236,63 @@ When you add an assertion, break it on purpose once and confirm the test fails.
 A test that passes whether or not the code is correct is worse than no test,
 because it reports coverage that does not exist.
 
+## Testing errexit behavior: pin bash 4+ or the reproduction is vacuous
+
+An arithmetic command returns status 1 when its expression evaluates to 0, and
+`(( x++ ))` yields the **pre**-increment value — so the first increment from 0
+returns 1. Under `set -e` that aborts the script. Eight unguarded counters in
+`inspector-run.sh` were a live defect for exactly this reason (ONL-29).
+
+The status is 1 on every bash. What differs is whether `errexit` acts on it:
+
+```text
+bash 3.2.57   set -e; x=0; (( x++ ))   ->  SURVIVED, execution continues
+bash 5.3.15   same                     ->  aborted, exit 1
+```
+
+bash 3.2 is `/bin/bash` on macOS and therefore what `bats` resolves locally, so
+a test asserting that production code aborts — or no longer aborts — under
+errexit **passes whether or not the bug is fixed** when it runs on 3.2. This is
+the same local-vs-CI divergence as the `[[ ]]` hole above, with a worse failure
+mode: there the assertion is wrong, here the whole reproduction is vacuous.
+
+Resolve a bash 4+ interpreter explicitly and run the reproduction under it:
+
+```bash
+MODERN_BASH=""
+for candidate in /opt/homebrew/bin/bash /usr/local/bin/bash "$(command -v bash)"; do
+	[[ -x "$candidate" ]] || continue
+	if [[ "$("$candidate" -c 'printf %s "${BASH_VERSINFO[0]}"')" -ge 4 ]]; then
+		MODERN_BASH="$candidate"
+		break
+	fi
+done
+```
+
+**Pair the pin with a sibling test that proves the hazard still reproduces.**
+Otherwise the pin rots into a silent skip the day no bash 4+ is reachable, or a
+future bash stops failing zero-valued arithmetic:
+
+```bash
+@test "the arithmetic-command hazard is real on this machine's bash 4+" {
+	[[ -n "$MODERN_BASH" ]] || skip "no bash 4+ available"
+
+	run "$MODERN_BASH" -c 'set -e; x=0; (( x++ )); printf SURVIVED'
+	[ "$status" -eq 1 ] || return 1
+	[ -z "$output" ]
+}
+```
+
+In production code the remedy is `|| true`, which behaves the same on both
+versions: `(( x++ )) || true`. A config value read into arithmetic needs
+`config_get_int` instead. `npm run lint:bash-arithmetic` reports both kinds
+with different remedies and runs inside `test:ci`, so a new one fails CI.
+
+`test/bats/inspector-run-errexit.bats` is the worked example — read its header
+before writing an errexit test. It also records why such a fixture must use a
+check that **passes**: under errexit `inspector_run` aborts earlier for every
+other outcome, so only a passing check reaches a counter at all.
+
 ## Anti-patterns
 
 Don't hand-roll these — each has bitten the suite before:
