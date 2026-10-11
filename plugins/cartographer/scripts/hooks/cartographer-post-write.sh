@@ -48,7 +48,7 @@ fi
 TARGET_BASENAME=$(basename "$CANONICAL")
 [[ "$TARGET_BASENAME" != "CLAUDE.md" ]] && hook_health_exit 0
 
-REPO_ROOT=$(onlooker_project_repo_root "$CWD")
+REPO_ROOT=$(onlooker_worktree_root "$CWD")
 cartographer_config_load "$CWD"
 
 PROJECT_KEY=$(onlooker_project_key "$CWD")

@@ -50,7 +50,9 @@ lineage_now_iso() { date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || printf ''; }
 lineage_now_epoch() { date +%s 2>/dev/null || printf '0'; }
 
 lineage_sha256() {
-	# See onlooker-project-key.sh: openssl first, on measured cost.
+	# openssl first, then sha256sum, then shasum. onlooker-project-key.sh tries
+	# shasum first instead and calls no openssl at all — a different order for
+	# a different fallback chain, not a drift from this one.
 	if command -v openssl >/dev/null 2>&1; then
 		printf '%s' "$1" | openssl dgst -sha256 2>/dev/null | sed 's/^.*= *//'
 	elif command -v sha256sum >/dev/null 2>&1; then

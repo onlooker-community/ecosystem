@@ -95,6 +95,13 @@ onlooker_worktree_root() {
 #
 # Both variables are cleared first, so a second call for a non-repo directory
 # does not leave the previous repo's key standing.
+#
+# The export is visible only to a caller that invokes this function directly
+# in the current shell. A caller that wraps the call in command substitution —
+# `x=$(onlooker_project_resolve ...)` — runs it in a subshell, and the exports
+# die with that subshell; nothing escapes to the parent. A caller that needs
+# the basis, not just the key, must call this function directly (not through
+# onlooker_project_key) and not through command substitution.
 onlooker_project_resolve() {
 	local cwd="${1:-}"
 	[[ -z "$cwd" ]] && cwd="$(pwd)"
@@ -124,11 +131,13 @@ onlooker_project_resolve() {
 
 # Compute the project key for the given cwd. Prints the key, or empty string.
 #
-# A thin wrapper over onlooker_project_resolve, which means every caller also
-# populates ONLOOKER_PROJECT_KEY and ONLOOKER_PROJECT_BASIS. That is deliberate:
-# it is what lets the emitter pick the dimension up without touching any of the
-# call sites. Callers passing a directory other than the session's cwd should
-# know they are setting the session-visible value too.
+# A thin wrapper over onlooker_project_resolve. Every production call site uses
+# `PROJECT_KEY=$(onlooker_project_key "$CWD")`, and command substitution runs
+# the call in a subshell — so the ONLOOKER_PROJECT_KEY/ONLOOKER_PROJECT_BASIS
+# exports onlooker_project_resolve sets are made and then discarded with that
+# subshell on every one of them. This wrapper does NOT populate those variables
+# for the caller's shell; it only prints the key. A caller that needs the basis
+# must call onlooker_project_resolve directly, without command substitution.
 onlooker_project_key() {
 	onlooker_project_resolve "${1:-}"
 	printf '%s' "$ONLOOKER_PROJECT_KEY"

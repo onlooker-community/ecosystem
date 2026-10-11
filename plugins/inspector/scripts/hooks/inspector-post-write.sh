@@ -63,13 +63,23 @@ esac
 export INSPECTOR_TOOL_NAME="$TOOL_NAME"
 
 # Repo root is needed by both paths, and it is cheap (one git rev-parse).
-# onlooker_project_repo_root answers identity, not location, and returns
-# empty both outside a git repo and when git itself cannot be invoked. The
-# old inspector-local lib always fell back to the (canonicalized) cwd in
-# either case, which the containment check and relative-path strip below
-# still assume — so restore that fallback here rather than let an empty
-# REPO_ROOT turn every path into a filesystem-root-relative one.
-REPO_ROOT=$(onlooker_project_repo_root "$CWD")
+# Every consumer of REPO_ROOT in this file is about LOCATION, not identity:
+# the containment check below, the relative-path strip, inspector_changed_files,
+# the absolute targets rebuilt from the changed-file list, and
+# inspector_baseline_scope_id (per-checkout scratch, which should be
+# worktree-rooted, mirroring lineage-baseline.sh:49). onlooker_worktree_root is
+# the location function — it resolves the tree this session is actually in,
+# not a linked worktree's parent checkout. Identity comes separately, from the
+# onlooker_project_key call below: storage partitioning must still collapse a
+# worktree onto its parent, which is why that call is untouched.
+#
+# onlooker_worktree_root returns empty both outside a git repo and when git
+# itself cannot be invoked. The old inspector-local lib always fell back to
+# the (canonicalized) cwd in either case, which the containment check and
+# relative-path strip below still assume — so restore that fallback here
+# rather than let an empty REPO_ROOT turn every path into a
+# filesystem-root-relative one.
+REPO_ROOT=$(onlooker_worktree_root "$CWD")
 [[ -z "$REPO_ROOT" ]] && REPO_ROOT=$(inspector_canonical_path "$CWD")
 export INSPECTOR_REPO_ROOT="$REPO_ROOT"
 

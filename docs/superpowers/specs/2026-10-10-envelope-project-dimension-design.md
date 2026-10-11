@@ -222,10 +222,11 @@ written against 2.18.0 and a count of 126.
    dependency and can land before 2.28.0 publishes.**
 2. **Resolve once per hook:** new `onlooker_project_resolve` sets and exports
    `ONLOOKER_PROJECT_KEY` and `ONLOOKER_PROJECT_BASIS` in a single pass. `onlooker_project_key`
-   becomes a thin wrapper over it, which has a deliberate consequence: every existing caller
-   populates those variables as a side effect, so the emitter picks the dimension up without any
-   call site changing. Latency is ~free — hooks already derive the key,
-   so the basis folds into the same git pass.
+   becomes a thin wrapper over it, but that wrapper does not reach existing call sites: every
+   production caller invokes it as `PROJECT_KEY=$(onlooker_project_key "$CWD")`, and command
+   substitution runs the call in a subshell, so the exports die there. Each emit site will call
+   `onlooker_project_resolve` explicitly to populate the two variables. Latency is ~free — hooks
+   already derive the key, so the basis folds into the same git pass.
 3. **Emit:** `scripts/lib/onlooker-event.mjs` reads those two env vars in its envelope builder
    and omits both fields when either is empty.
 4. **librarian:** emit `librarian.lesson.promoted` from `librarian_lesson_promote`

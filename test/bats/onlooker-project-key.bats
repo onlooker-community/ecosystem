@@ -149,16 +149,34 @@ setup() {
 	[ "$ONLOOKER_PROJECT_KEY" = "$(onlooker_project_key "$REPO")" ]
 }
 
-@test "the wrapper populates the env vars as a side effect" {
+@test "the export survives a direct call but not command substitution" {
 	git -C "$REPO" remote add origin git@github.com:org/fixture.git
+
+	# Direct call, in the current shell: the export is visible afterward.
 	unset ONLOOKER_PROJECT_KEY ONLOOKER_PROJECT_BASIS
 	onlooker_project_key "$REPO" >/dev/null
-	[ "$ONLOOKER_PROJECT_BASIS" = "remote" ]
+	[ "$ONLOOKER_PROJECT_BASIS" = "remote" ] || return 1
 	[[ "$ONLOOKER_PROJECT_KEY" =~ ^[0-9a-f]{12}$ ]] || return 1
+
+	# Command substitution — the form every production call site uses — runs
+	# the call in a subshell, so the export dies there and never reaches this
+	# shell. This is the form that reaches zero callers' env.
+	unset ONLOOKER_PROJECT_KEY ONLOOKER_PROJECT_BASIS
+	local captured
+	captured=$(onlooker_project_key "$REPO")
+	[ -n "$captured" ] || return 1
+	[ -z "${ONLOOKER_PROJECT_BASIS:-}" ] || return 1
+	[ -z "${ONLOOKER_PROJECT_KEY:-}" ] || return 1
 }
 
 @test "key is stable across calls" {
 	git -C "$REPO" remote add origin https://example.com/foo/bar.git
+	a=$(onlooker_project_key "$REPO")
+	b=$(onlooker_project_key "$REPO")
+	[ "$a" = "$b" ]
+}
+
+@test "the root-derived key is stable across calls for a remote-less repo" {
 	a=$(onlooker_project_key "$REPO")
 	b=$(onlooker_project_key "$REPO")
 	[ "$a" = "$b" ]
