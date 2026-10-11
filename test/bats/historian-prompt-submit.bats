@@ -23,8 +23,8 @@ setup() {
   git -C "$PROJECT_REPO" remote add origin git@github.com:org/historian-retrieval-test.git
 
   # shellcheck disable=SC1091
-  source "${PLUGIN_ROOT}/scripts/lib/historian-project-key.sh"
-  PROJECT_KEY=$(historian_project_key "$PROJECT_REPO")
+  source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
+  PROJECT_KEY=$(onlooker_project_key "$PROJECT_REPO")
   [ -n "$PROJECT_KEY" ]
 
   HIST_DIR="${ONLOOKER_DIR}/historian/${PROJECT_KEY}"

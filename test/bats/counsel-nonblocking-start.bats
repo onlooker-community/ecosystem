@@ -36,9 +36,11 @@ setup() {
 	# shellcheck disable=SC1091
 	source "${PLUGIN_ROOT}/scripts/lib/counsel-config.sh"
 	# shellcheck disable=SC1091
-	source "${PLUGIN_ROOT}/scripts/lib/counsel-project-key.sh"
+	source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/counsel-project-dir.sh"
 	counsel_config_load "$WORK"
-	PROJECT_KEY=$(counsel_project_key "$WORK")
+	PROJECT_KEY=$(onlooker_project_key "$WORK")
 	BRIEFS_DIR=$(counsel_project_dir "$PROJECT_KEY")
 
 	# A slow claude stub. If the hook waits for synthesis, it waits 5s.

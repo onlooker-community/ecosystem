@@ -38,8 +38,8 @@ fi
 
 # shellcheck source=../lib/curator-config.sh
 source "${PLUGIN_ROOT}/scripts/lib/curator-config.sh"
-# shellcheck source=../lib/curator-project-key.sh
-source "${PLUGIN_ROOT}/scripts/lib/curator-project-key.sh"
+# shellcheck source=../lib/onlooker-project-key.sh
+source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
 # shellcheck source=../lib/curator-ulid.sh
 source "${PLUGIN_ROOT}/scripts/lib/curator-ulid.sh"
 # shellcheck source=../lib/curator-storage.sh
@@ -68,17 +68,17 @@ SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SE
 [[ -z "$CWD" ]] && CWD="$(pwd)"
 [[ -z "$SESSION_ID" ]] && SESSION_ID="unknown"
 
-REPO_ROOT=$(curator_project_repo_root "$CWD")
+REPO_ROOT=$(onlooker_project_repo_root "$CWD")
 curator_config_load "$CWD"
 
-PROJECT_KEY=$(curator_project_key "$CWD")
+PROJECT_KEY=$(onlooker_project_key "$CWD")
 if [[ -z "$PROJECT_KEY" ]]; then
 	_emit ""
 	hook_health_exit 0
 fi
 
 curator_storage_init "$PROJECT_KEY" || { _emit ""; hook_health_exit 0; }
-REMOTE_URL=$(curator_project_remote_url "$CWD")
+REMOTE_URL=$(onlooker_project_remote_url "$CWD")
 curator_storage_write_manifest "$PROJECT_KEY" "$REMOTE_URL" "$REPO_ROOT" || true
 
 # ----------------------------------------------------------------------------

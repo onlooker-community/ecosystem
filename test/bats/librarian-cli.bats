@@ -42,7 +42,7 @@ setup() {
   # shellcheck disable=SC1091
   source "${PLUGIN_ROOT}/scripts/lib/librarian-config.sh"
   # shellcheck disable=SC1091
-  source "${PLUGIN_ROOT}/scripts/lib/librarian-project-key.sh"
+  source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
   # shellcheck disable=SC1091
   source "${PLUGIN_ROOT}/scripts/lib/librarian-storage.sh"
   # shellcheck disable=SC1091
@@ -50,7 +50,7 @@ setup() {
   # shellcheck disable=SC1091
   source "${PLUGIN_ROOT}/scripts/lib/librarian-cli.sh"
 
-  PROJECT_KEY=$(librarian_project_key "$PROJECT_REPO")
+  PROJECT_KEY=$(onlooker_project_key "$PROJECT_REPO")
   [ -n "$PROJECT_KEY" ]
 
   LIBRARIAN_DIR="${ONLOOKER_DIR}/librarian/${PROJECT_KEY}"
@@ -343,7 +343,7 @@ _dotted_repo() {
   git -C "$repo" remote add origin git@github.com:org/dotted.git
 
   DOTTED_ABS=$(cd "$repo" && pwd -P)
-  PROJECT_KEY=$(librarian_project_key "$repo")
+  PROJECT_KEY=$(onlooker_project_key "$repo")
   [ -n "$PROJECT_KEY" ] || return 1
   librarian_storage_init "$PROJECT_KEY"
 }

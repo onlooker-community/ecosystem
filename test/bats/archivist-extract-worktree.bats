@@ -2,7 +2,7 @@
 
 # Archivist's path handling in a git worktree (ecosystem-449.37, tier 2).
 #
-# archivist_project_repo_root resolves a linked worktree to its parent checkout
+# onlooker_project_repo_root resolves a linked worktree to its parent checkout
 # so both share a project key. archivist-extract.sh then used that root for two
 # things that are about where the files actually are:
 #
@@ -40,7 +40,7 @@ setup() {
 	HOOK="${PLUGIN_ROOT}/scripts/hooks/archivist-extract.sh"
 
 	# shellcheck disable=SC1091
-	source "${PLUGIN_ROOT}/scripts/lib/archivist-project-key.sh"
+	source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
 
 	MAIN="${BATS_TEST_TMPDIR}/main"
 	mkdir -p "${MAIN}/src"
@@ -64,7 +64,7 @@ setup() {
 	# Exists ONLY in the parent, so a worktree session must NOT claim it.
 	printf 'other work\n' > "${MAIN}/src/main-only.ts"
 
-	KEY=$(archivist_project_key "$WT")
+	KEY=$(onlooker_project_key "$WT")
 	DECISIONS_DIR="${ONLOOKER_DIR}/archivist/${KEY}/decisions"
 
 	TRANSCRIPT="${BATS_TEST_TMPDIR}/transcript.jsonl"

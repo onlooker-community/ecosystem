@@ -49,7 +49,7 @@ fi
 # ---------------------------------------------------------------------------
 # Resolve project_key. Mirrors the SHA256-of-remote-URL + common-dir
 # fallback every memory plugin uses (see plugins/librarian/scripts/lib/
-# librarian-project-key.sh and friends): if there's no origin remote,
+# onlooker-project-key.sh and friends): if there's no origin remote,
 # anchor the key on git --git-common-dir rather than --show-toplevel so
 # two worktrees of the same local-only repo share a key.
 # ---------------------------------------------------------------------------

@@ -37,8 +37,8 @@ if [[ -n "$_ECOSYSTEM_ROOT" && -f "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.
 	CLAUDE_PLUGIN_ROOT="$_ECOSYSTEM_ROOT" source "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.sh"
 fi
 
-# shellcheck source=../lib/archivist-project-key.sh
-source "${PLUGIN_ROOT}/scripts/lib/archivist-project-key.sh"
+# shellcheck source=../lib/onlooker-project-key.sh
+source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
 # shellcheck source=../lib/archivist-storage.sh
 source "${PLUGIN_ROOT}/scripts/lib/archivist-storage.sh"
 # shellcheck source=../lib/archivist-config.sh
@@ -64,7 +64,7 @@ hook_health_context "$INPUT"
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 SOURCE=$(printf '%s' "$INPUT" | jq -r '.source // "startup"' 2>/dev/null) || SOURCE="startup"
 
-PROJECT_KEY=$(archivist_project_key "$CWD")
+PROJECT_KEY=$(onlooker_project_key "$CWD")
 
 archivist_config_load "$CWD"
 

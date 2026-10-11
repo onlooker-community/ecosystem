@@ -19,7 +19,7 @@ source "${PLUGIN_ROOT}/scripts/lib/hook-health.sh"
 hook_health_register "cartographer-post-write"
 
 source "$PLUGIN_ROOT/scripts/lib/cartographer-config.sh"
-source "$PLUGIN_ROOT/scripts/lib/cartographer-project-key.sh"
+source "$PLUGIN_ROOT/scripts/lib/onlooker-project-key.sh"
 source "$PLUGIN_ROOT/scripts/lib/cartographer-lock.sh"
 
 HOOK_INPUT=$(cat)
@@ -48,10 +48,10 @@ fi
 TARGET_BASENAME=$(basename "$CANONICAL")
 [[ "$TARGET_BASENAME" != "CLAUDE.md" ]] && hook_health_exit 0
 
-REPO_ROOT=$(cartographer_project_repo_root "$CWD")
+REPO_ROOT=$(onlooker_worktree_root "$CWD")
 cartographer_config_load "$CWD"
 
-PROJECT_KEY=$(cartographer_project_key "$CWD")
+PROJECT_KEY=$(onlooker_project_key "$CWD")
 [[ -z "$PROJECT_KEY" ]] && hook_health_exit 0
 
 ONLOOKER_DIR="${ONLOOKER_DIR:-$HOME/.onlooker}"

@@ -28,7 +28,7 @@ source "${PLUGIN_ROOT}/scripts/lib/hook-health.sh"
 hook_health_register "cartographer-session-start"
 
 source "$PLUGIN_ROOT/scripts/lib/cartographer-config.sh"
-source "$PLUGIN_ROOT/scripts/lib/cartographer-project-key.sh"
+source "$PLUGIN_ROOT/scripts/lib/onlooker-project-key.sh"
 source "$PLUGIN_ROOT/scripts/lib/cartographer-lock.sh"
 source "$PLUGIN_ROOT/scripts/lib/cartographer-events.sh"
 source "$PLUGIN_ROOT/scripts/lib/watch-unmatched.sh"
@@ -42,10 +42,10 @@ export _HOOK_SESSION_ID
 
 [[ -z "$CWD" ]] && hook_health_exit 0
 
-REPO_ROOT=$(cartographer_project_repo_root "$CWD")
+REPO_ROOT=$(onlooker_worktree_root "$CWD")
 cartographer_config_load "$CWD"
 
-PROJECT_KEY=$(cartographer_project_key "$CWD")
+PROJECT_KEY=$(onlooker_project_key "$CWD")
 [[ -z "$PROJECT_KEY" ]] && hook_health_exit 0
 
 ONLOOKER_DIR="${ONLOOKER_DIR:-$HOME/.onlooker}"
@@ -59,8 +59,9 @@ STATE_FILE="$CARTOGRAPHER_DIR/last_audit_at"
 # a property of repo plus config, and a throttled or lock-contended audit is
 # exactly when a dead config would otherwise stay invisible (ecosystem-449.21).
 #
-# REPO_ROOT, not a worktree root: this must mirror the root run-audit.sh hands
-# to the matcher, or the check disagrees with the thing it describes.
+# REPO_ROOT here is the worktree root (onlooker_worktree_root above), and it
+# must stay that way: this must mirror the root run-audit.sh hands to the
+# matcher, or the check disagrees with the thing it describes.
 #
 # Gated on undocumented_entity.enabled, mirroring run-audit.sh's own gate
 # (run-audit.sh:254). When the feature is off, these globs are inert by

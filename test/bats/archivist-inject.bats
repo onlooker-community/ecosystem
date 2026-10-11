@@ -18,8 +18,8 @@ setup() {
 
   # Compute the project key the hook will use.
   # shellcheck disable=SC1091
-  source "${PLUGIN_ROOT}/scripts/lib/archivist-project-key.sh"
-  PROJECT_KEY=$(archivist_project_key "$PROJECT_REPO")
+  source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
+  PROJECT_KEY=$(onlooker_project_key "$PROJECT_REPO")
   [ -n "$PROJECT_KEY" ]
 
   # Seed an artifact on disk for this project.

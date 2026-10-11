@@ -54,8 +54,8 @@ fi
 
 # shellcheck source=../lib/tribunal-config.sh
 source "${PLUGIN_ROOT}/scripts/lib/tribunal-config.sh"
-# shellcheck source=../lib/tribunal-project-key.sh
-source "${PLUGIN_ROOT}/scripts/lib/tribunal-project-key.sh"
+# shellcheck source=../lib/onlooker-project-key.sh
+source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
 # shellcheck source=../lib/tribunal-ulid.sh
 source "${PLUGIN_ROOT}/scripts/lib/tribunal-ulid.sh"
 # shellcheck source=../lib/tribunal-events.sh
@@ -76,7 +76,7 @@ _done() {
 	hook_health_exit 0
 }
 
-REPO_ROOT=$(tribunal_project_repo_root "$CWD")
+REPO_ROOT=$(onlooker_project_repo_root "$CWD")
 tribunal_config_load "$CWD"
 
 # The tree this session is in, which for a worktree is not REPO_ROOT
@@ -84,7 +84,7 @@ tribunal_config_load "$CWD"
 # Config still loads from REPO_ROOT above — that is the parent's config, and
 # whether it should be is the same question for every plugin, tracked on 449.37
 # rather than decided here.
-WORKTREE_ROOT=$(tribunal_worktree_root "$CWD")
+WORKTREE_ROOT=$(onlooker_worktree_root "$CWD")
 [[ -z "$WORKTREE_ROOT" ]] && WORKTREE_ROOT="$REPO_ROOT"
 
 # The off switch, consulted before anything else this hook could spend
@@ -98,7 +98,7 @@ WORKTREE_ROOT=$(tribunal_worktree_root "$CWD")
 # the gate silent rather than opting a repo in by omission.
 tribunal_config_stop_hook_enabled || _done
 
-PROJECT_KEY=$(tribunal_project_key "$CWD")
+PROJECT_KEY=$(onlooker_project_key "$CWD")
 if [[ -z "$PROJECT_KEY" || -z "$REPO_ROOT" ]]; then
 	_done
 fi

@@ -86,8 +86,8 @@ archivist_storage_write_manifest() {
 #
 # Worktrees: this function has no opinion about them. It validates against the
 # repo_root it is handed and nothing else, so the CALLER decides which tree
-# counts as "in repo". Pass the worktree's own toplevel (archivist_worktree_root)
-# rather than archivist_project_repo_root, which resolves a linked worktree to
+# counts as "in repo". Pass the worktree's own toplevel (onlooker_worktree_root)
+# rather than onlooker_project_repo_root, which resolves a linked worktree to
 # its parent checkout for project-key purposes — a worktree's files are not
 # under that root, so the containment test rejects every one of them, and a
 # relative path silently resolves against the parent's copy instead

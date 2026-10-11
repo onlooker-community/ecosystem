@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Project key derivation for the substrate.
 #
-# Mirrors the per-plugin schemes (see tribunal-project-key.sh) so substrate
-# artifacts partition identically to every plugin's. A project key is a stable
-# 12-char hex identifier that survives:
+# Mirrors the per-plugin schemes once carried separately by each plugin, so
+# substrate artifacts partition identically to every plugin's. A project key
+# is a stable 12-char hex identifier that survives:
 #   - local rename of the repo directory
 #   - cloning the same repo to a different path on the same machine
 #   - moving the repo between machines, as long as the git remote is preserved
@@ -67,24 +67,78 @@ onlooker_project_repo_root() {
 	printf '%s' "$toplevel"
 }
 
-# Compute the project key for the given cwd. Prints the key, or empty string.
-onlooker_project_key() {
+# Resolve the toplevel of the working tree the session is actually in.
+#
+# Distinct from onlooker_project_repo_root, which deliberately resolves a linked
+# worktree to its parent checkout so both share a project key. That is the right
+# answer for identity and the wrong one for git: a worktree's files sit beside
+# the parent, not beneath it, so anything that reads or diffs the tree wants
+# this root instead (ecosystem-449.37, mirroring lineage's ecosystem-449.33).
+onlooker_worktree_root() {
+	local cwd="${1:-}"
+	[[ -z "$cwd" || ! -d "$cwd" ]] && return 0
+
+	local toplevel
+	toplevel=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || return 0
+	[[ -z "$toplevel" ]] && return 0
+
+	(cd "$toplevel" 2>/dev/null && pwd -P) || printf '%s' "$toplevel"
+}
+
+# Resolve key and basis in ONE git pass, exporting both.
+#
+# The emitter reads these two variables rather than taking arguments or
+# deriving the key in JavaScript. A JS reimplementation that drifted from this
+# one would silently stop matching the on-disk directory names under
+# $ONLOOKER_DIR/<plugin>/<key>/, and that match is the entire point of the
+# envelope field.
+#
+# Both variables are cleared first, so a second call for a non-repo directory
+# does not leave the previous repo's key standing.
+#
+# The export is visible only to a caller that invokes this function directly
+# in the current shell. A caller that wraps the call in command substitution —
+# `x=$(onlooker_project_resolve ...)` — runs it in a subshell, and the exports
+# die with that subshell; nothing escapes to the parent. A caller that needs
+# the basis, not just the key, must call this function directly (not through
+# onlooker_project_key) and not through command substitution.
+onlooker_project_resolve() {
 	local cwd="${1:-}"
 	[[ -z "$cwd" ]] && cwd="$(pwd)"
+
+	ONLOOKER_PROJECT_KEY=""
+	ONLOOKER_PROJECT_BASIS=""
+	export ONLOOKER_PROJECT_KEY ONLOOKER_PROJECT_BASIS
 
 	local remote
 	remote=$(onlooker_project_remote_url "$cwd")
 	if [[ -n "$remote" ]]; then
-		_onlooker_sha256_first12 "remote:$remote"
+		ONLOOKER_PROJECT_KEY=$(_onlooker_sha256_first12 "remote:$remote")
+		ONLOOKER_PROJECT_BASIS="remote"
 		return 0
 	fi
 
 	local root
 	root=$(onlooker_project_repo_root "$cwd")
 	if [[ -n "$root" ]]; then
-		_onlooker_sha256_first12 "root:$root"
+		ONLOOKER_PROJECT_KEY=$(_onlooker_sha256_first12 "root:$root")
+		ONLOOKER_PROJECT_BASIS="root"
 		return 0
 	fi
 
 	return 0
+}
+
+# Compute the project key for the given cwd. Prints the key, or empty string.
+#
+# A thin wrapper over onlooker_project_resolve. Every production call site uses
+# `PROJECT_KEY=$(onlooker_project_key "$CWD")`, and command substitution runs
+# the call in a subshell — so the ONLOOKER_PROJECT_KEY/ONLOOKER_PROJECT_BASIS
+# exports onlooker_project_resolve sets are made and then discarded with that
+# subshell on every one of them. This wrapper does NOT populate those variables
+# for the caller's shell; it only prints the key. A caller that needs the basis
+# must call onlooker_project_resolve directly, without command substitution.
+onlooker_project_key() {
+	onlooker_project_resolve "${1:-}"
+	printf '%s' "$ONLOOKER_PROJECT_KEY"
 }

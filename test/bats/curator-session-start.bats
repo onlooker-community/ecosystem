@@ -23,8 +23,8 @@ setup() {
   printf 'live\n' > "${PROJECT_REPO}/scripts/live.py"
 
   # shellcheck disable=SC1091
-  source "${PLUGIN_ROOT}/scripts/lib/curator-project-key.sh"
-  PROJECT_KEY=$(curator_project_key "$PROJECT_REPO")
+  source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
+  PROJECT_KEY=$(onlooker_project_key "$PROJECT_REPO")
   [ -n "$PROJECT_KEY" ]
 
   CURATOR_DIR="${ONLOOKER_DIR}/curator/${PROJECT_KEY}"

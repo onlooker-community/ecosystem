@@ -29,8 +29,8 @@ setup() {
 	git -C "$FIXTURE_REPO" add -A
 	git -C "$FIXTURE_REPO" commit -qm init
 
-	source "${PLUGIN_ROOT}/scripts/lib/cartographer-project-key.sh"
-	PROJECT_KEY=$(cartographer_project_key "$FIXTURE_REPO")
+	source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
+	PROJECT_KEY=$(onlooker_project_key "$FIXTURE_REPO")
 	mkdir -p "${ONLOOKER_DIR}/cartographer/${PROJECT_KEY}"
 	# Interval gate returns: no audit is ever spawned by these tests.
 	date +%s >"${ONLOOKER_DIR}/cartographer/${PROJECT_KEY}/last_audit_at"

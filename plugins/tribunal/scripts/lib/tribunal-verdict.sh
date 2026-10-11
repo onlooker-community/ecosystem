@@ -13,7 +13,7 @@
 #
 # Plus task-level files at <task_id>/{manifest,session-start,session-complete}.json.
 #
-# Requires tribunal-project-key.sh to be sourced.
+# Requires onlooker-project-key.sh to be sourced.
 
 tribunal_storage_root() {
 	local base="${ONLOOKER_DIR:-$HOME/.onlooker}"

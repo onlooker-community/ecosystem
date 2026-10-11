@@ -36,8 +36,8 @@ PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 source "${PLUGIN_ROOT}/scripts/lib/hook-health.sh"
 hook_health_register "archivist-mine"
 
-# shellcheck source=../lib/archivist-project-key.sh
-source "${PLUGIN_ROOT}/scripts/lib/archivist-project-key.sh"
+# shellcheck source=../lib/onlooker-project-key.sh
+source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
 # shellcheck source=../lib/archivist-ulid.sh
 source "${PLUGIN_ROOT}/scripts/lib/archivist-ulid.sh"
 # shellcheck source=../lib/archivist-mine.sh
@@ -49,11 +49,11 @@ INPUT=$(cat 2>/dev/null || printf '')
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 [[ -z "$CWD" ]] && CWD="$(pwd)"
 
-PROJECT_KEY=$(archivist_project_key "$CWD")
+PROJECT_KEY=$(onlooker_project_key "$CWD")
 # No git context means no store to write into, and nothing to mine.
 [[ -z "$PROJECT_KEY" ]] && hook_health_exit 0
 
-REPO_ROOT=$(archivist_project_repo_root "$CWD")
+REPO_ROOT=$(onlooker_project_repo_root "$CWD")
 [[ -z "$REPO_ROOT" ]] && hook_health_exit 0
 
 # ---------------------------------------------------------------------------

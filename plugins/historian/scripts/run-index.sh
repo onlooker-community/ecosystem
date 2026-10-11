@@ -52,8 +52,8 @@ fi
 source "${PLUGIN_ROOT}/scripts/lib/portable-lock.sh"
 # shellcheck source=./lib/historian-config.sh
 source "${PLUGIN_ROOT}/scripts/lib/historian-config.sh"
-# shellcheck source=./lib/historian-project-key.sh
-source "${PLUGIN_ROOT}/scripts/lib/historian-project-key.sh"
+# shellcheck source=./lib/onlooker-project-key.sh
+source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
 # shellcheck source=./lib/historian-ulid.sh
 source "${PLUGIN_ROOT}/scripts/lib/historian-ulid.sh"
 # shellcheck source=./lib/historian-storage.sh
@@ -99,13 +99,13 @@ _emit_skip() {
 }
 
 historian_config_load "$CWD"
-REPO_ROOT=$(historian_project_repo_root "$CWD")
+REPO_ROOT=$(onlooker_project_repo_root "$CWD")
 
-PROJECT_KEY=$(historian_project_key "$CWD")
+PROJECT_KEY=$(onlooker_project_key "$CWD")
 [[ -z "$PROJECT_KEY" ]] && exit 0
 
 historian_storage_init "$PROJECT_KEY" || exit 0
-REMOTE_URL=$(historian_project_remote_url "$CWD")
+REMOTE_URL=$(onlooker_project_remote_url "$CWD")
 historian_storage_write_manifest "$PROJECT_KEY" "$REMOTE_URL" "$REPO_ROOT" || true
 
 # Keyed by session, not by project: two sessions indexing at once write

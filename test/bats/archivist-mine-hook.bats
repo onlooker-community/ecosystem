@@ -10,7 +10,7 @@ setup() {
 	export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 	export ONLOOKER_DIR="${BATS_TEST_TMPDIR}/onlooker"
 
-	source "${PLUGIN_ROOT}/scripts/lib/archivist-project-key.sh"
+	source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
 	source "${PLUGIN_ROOT}/scripts/lib/archivist-storage.sh"
 }
 
@@ -25,7 +25,7 @@ make_repo() {
 	printf 'x\n' > "$REPO/a.txt"
 	git -C "$REPO" add .
 	git -C "$REPO" commit -q -m "$1"
-	KEY=$(archivist_project_key "$REPO")
+	KEY=$(onlooker_project_key "$REPO")
 }
 
 run_hook() {

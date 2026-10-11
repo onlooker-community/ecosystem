@@ -19,7 +19,8 @@
 # shellcheck source=./counsel-reader.sh
 # shellcheck source=./counsel-synthesize.sh
 # shellcheck source=./counsel-events.sh
-# shellcheck source=./counsel-project-key.sh
+# shellcheck source=./onlooker-project-key.sh
+# shellcheck source=./counsel-project-dir.sh
 # (caller must source these before counsel-brief.sh)
 
 _counsel_latest_brief_path() {
@@ -210,7 +211,7 @@ counsel_generate_brief() {
 	min_events=$(counsel_config_int '.counsel.capture.min_events' 10)
 
 	local project_key
-	project_key=$(counsel_project_key "$cwd")
+	project_key=$(onlooker_project_key "$cwd")
 
 	# Stale check. On-demand invocations pass force to bypass it.
 	if [[ "$force" != "1" && "$force" != "force" ]]; then

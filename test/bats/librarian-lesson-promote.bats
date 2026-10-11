@@ -18,7 +18,7 @@ setup() {
 	git -C "$PROJECT_REPO" remote add origin git@github.com:org/fixture.git
 
 	source "${PLUGIN_ROOT}/scripts/lib/librarian-config.sh"
-	source "${PLUGIN_ROOT}/scripts/lib/librarian-project-key.sh"
+	source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
 	source "${PLUGIN_ROOT}/scripts/lib/librarian-storage.sh"
 	source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-storage.sh"
 	source "${PLUGIN_ROOT}/scripts/lib/librarian-author-key.sh"
@@ -29,7 +29,7 @@ setup() {
 	source "${PLUGIN_ROOT}/scripts/lib/librarian-cli.sh"
 	librarian_config_load "$PROJECT_REPO"
 
-	PROJECT_KEY=$(librarian_project_key "$PROJECT_REPO")
+	PROJECT_KEY=$(onlooker_project_key "$PROJECT_REPO")
 	librarian_lesson_storage_init "$PROJECT_KEY"
 
 	# Promotion must spend nothing. Any invocation of this stub is a failure.

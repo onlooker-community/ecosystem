@@ -24,7 +24,8 @@
 # scribe.distill.skipped before returning.
 
 # shellcheck source=./scribe-extract.sh
-# (caller must source scribe-extract.sh before scribe-distill.sh)
+# shellcheck source=./scribe-project-dir.sh
+# (caller must source these before scribe-distill.sh)
 
 # Report a decision not to distill.
 #
@@ -297,9 +298,9 @@ scribe_distill() {
 	# names, which for a worktree is the worktree itself — the parent is a tree
 	# this session never touched (ecosystem-449.37).
 	local project_key project_root output_dir
-	project_key=$(scribe_project_key "$cwd")
-	project_root=$(scribe_worktree_root "$cwd")
-	[[ -z "$project_root" ]] && project_root=$(scribe_project_repo_root "$cwd")
+	project_key=$(onlooker_project_key "$cwd")
+	project_root=$(onlooker_worktree_root "$cwd")
+	[[ -z "$project_root" ]] && project_root=$(onlooker_project_repo_root "$cwd")
 
 	if [[ -n "$project_key" ]]; then
 		output_dir=$(scribe_project_dir "$project_key")

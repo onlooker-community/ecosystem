@@ -29,8 +29,8 @@ setup() {
 	(cd "$REPO" && printf 'initial\n' >README.md && git add README.md && git commit -q -m init)
 
 	# shellcheck disable=SC1091
-	source "${PLUGIN_ROOT}/scripts/lib/assayer-project-key.sh"
-	PROJECT_KEY=$(assayer_project_key "$REPO")
+	source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
+	PROJECT_KEY=$(onlooker_project_key "$REPO")
 	ASSAYER_DIR="${ONLOOKER_DIR}/assayer/${PROJECT_KEY}"
 
 	STUB_BIN="${BATS_TEST_TMPDIR}/bin"

@@ -14,7 +14,7 @@ setup() {
 }
 
 _reconsider_setup() {
-  for lib in librarian-project-key librarian-ulid librarian-storage \
+  for lib in onlooker-project-key librarian-ulid librarian-storage \
     librarian-lesson-storage librarian-lesson-validate librarian-config \
     librarian-archivist-reader librarian-lesson-transform librarian-emit \
     librarian-cli; do
@@ -28,7 +28,7 @@ _reconsider_setup() {
   git -C "$PROJECT_REPO" config user.email t@example.com
   git -C "$PROJECT_REPO" config user.name "Test"
   git -C "$PROJECT_REPO" remote add origin git@github.com:org/lesson-reconsider.git
-  PROJECT_KEY=$(librarian_project_key "$PROJECT_REPO")
+  PROJECT_KEY=$(onlooker_project_key "$PROJECT_REPO")
   [ -n "$PROJECT_KEY" ]
   LESSONS_DIR="${ONLOOKER_DIR}/librarian/${PROJECT_KEY}/lessons"
   librarian_lesson_storage_init "$PROJECT_KEY"

@@ -71,11 +71,11 @@ created_at=$(relative_iso_days_ago 1)
 
 ### Resolve project keys through the plugin lib
 
-Artifacts are partitioned by a project key. Don't recompute the SHA — source the plugin's `*-project-key.sh` and call its function (`<plugin>_project_key <repo-root>`):
+Artifacts are partitioned by a project key. Don't recompute the SHA — source the vendored `onlooker-project-key.sh` and call its function (`onlooker_project_key <repo-root>`):
 
 ```bash
-source "${PLUGIN_ROOT}/scripts/lib/librarian-project-key.sh"
-PROJECT_KEY=$(librarian_project_key "$PROJECT_REPO")
+source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
+PROJECT_KEY=$(onlooker_project_key "$PROJECT_REPO")
 ARTIFACT_DIR="${ONLOOKER_DIR}/<plugin>/${PROJECT_KEY}"
 ```
 
@@ -299,7 +299,7 @@ Don't hand-roll these — each has bitten the suite before:
 
 - **Hardcoded dates in window-sensitive fixtures.** Use `relative_iso_days_ago`. A literal like `2026-06-01T12:00:00Z` aged out of librarian's lookback window and broke two tests the day wall-clock now crossed it.
 - **Literal `~/.onlooker` or `$HOME`.** Always `$ONLOOKER_DIR` and the `validate-path.sh` exports, so the isolated temp home is honored.
-- **Reimplementing the project key, ULID, or event envelope.** Source the plugin lib (`*-project-key.sh`, `*-ulid.sh`) and emit through `onlooker-event.mjs`.
+- **Reimplementing the project key, ULID, or event envelope.** Source the vendored `onlooker-project-key.sh` for the key and the plugin's own `*-ulid.sh` for IDs, then emit through `onlooker-event.mjs`.
 - **Concatenating JSON by hand.** Build payloads and hook input with `jq -n` / `jq -cn --arg`.
 - **Asserting on log lines with `grep` substring matches alone** when you mean "valid event" — validate the envelope with `onlooker-event.mjs validate`.
 - **Expecting a hook to exit non-zero.** Hooks fail soft and exit 0; assert on emitted events or absent side effects, not exit codes.

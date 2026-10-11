@@ -13,14 +13,14 @@ setup() {
 	mkdir -p "$(dirname "$ONLOOKER_EVENTS_LOG")"
 
 	# shellcheck disable=SC1091
-	source "${PLUGIN_ROOT}/scripts/lib/bursar-project-key.sh"
+	source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
 
 	# A real git repo so a project key resolves.
 	REPO="${BATS_TEST_TMPDIR}/proj"
 	mkdir -p "$REPO"
 	git init -q "$REPO" 2>/dev/null
 	git -C "$REPO" remote add origin https://example.com/onlooker/bursar-test.git 2>/dev/null
-	KEY=$(bursar_project_key "$REPO")
+	KEY=$(onlooker_project_key "$REPO")
 
 	SID="bats-start-001"
 }

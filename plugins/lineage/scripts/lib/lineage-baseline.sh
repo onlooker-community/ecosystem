@@ -48,7 +48,7 @@ lineage_baseline_path() {
 
 # Cheap identity for the baseline, derived from the worktree root.
 #
-# Deliberately NOT lineage_project_key: resolving that shells out for the remote
+# Deliberately NOT onlooker_project_key: resolving that shells out for the remote
 # URL and costs roughly 20ms, which is part of the setup the Bash pre-gate exists
 # to skip. The baseline is scratch and is never joined to the ledger, so it does
 # not need the ledger's identity — only stability for a given checkout. It keys

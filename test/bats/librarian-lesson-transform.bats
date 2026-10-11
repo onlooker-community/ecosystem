@@ -150,7 +150,7 @@ _candidate() {
 
 _storage_setup() {
   # shellcheck disable=SC1091
-  source "${PLUGIN_ROOT}/scripts/lib/librarian-project-key.sh"
+  source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
   # shellcheck disable=SC1091
   source "${PLUGIN_ROOT}/scripts/lib/librarian-ulid.sh"
   # shellcheck disable=SC1091
@@ -164,7 +164,7 @@ _storage_setup() {
   git -C "$PROJECT_REPO" config user.email t@example.com
   git -C "$PROJECT_REPO" config user.name "Test"
   git -C "$PROJECT_REPO" remote add origin git@github.com:org/lesson-fixture.git
-  PROJECT_KEY=$(librarian_project_key "$PROJECT_REPO")
+  PROJECT_KEY=$(onlooker_project_key "$PROJECT_REPO")
   [ -n "$PROJECT_KEY" ]
   LESSONS_DIR="${ONLOOKER_DIR}/librarian/${PROJECT_KEY}/lessons"
 }

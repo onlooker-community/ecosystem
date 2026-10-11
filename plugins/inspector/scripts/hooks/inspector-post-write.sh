@@ -20,7 +20,8 @@ source "${PLUGIN_ROOT}/scripts/lib/hook-health.sh"
 hook_health_register "inspector-post-write"
 
 source "$PLUGIN_ROOT/scripts/lib/inspector-config.sh"
-source "$PLUGIN_ROOT/scripts/lib/inspector-project-key.sh"
+source "$PLUGIN_ROOT/scripts/lib/inspector-canonical-path.sh"
+source "$PLUGIN_ROOT/scripts/lib/onlooker-project-key.sh"
 source "$PLUGIN_ROOT/scripts/lib/inspector-events.sh"
 source "$PLUGIN_ROOT/scripts/lib/inspector-run.sh"
 source "$PLUGIN_ROOT/scripts/lib/inspector-baseline.sh"
@@ -62,7 +63,24 @@ esac
 export INSPECTOR_TOOL_NAME="$TOOL_NAME"
 
 # Repo root is needed by both paths, and it is cheap (one git rev-parse).
-REPO_ROOT=$(inspector_project_repo_root "$CWD")
+# Every consumer of REPO_ROOT in this file is about LOCATION, not identity:
+# the containment check below, the relative-path strip, inspector_changed_files,
+# the absolute targets rebuilt from the changed-file list, and
+# inspector_baseline_scope_id (per-checkout scratch, which should be
+# worktree-rooted, mirroring lineage-baseline.sh:49). onlooker_worktree_root is
+# the location function — it resolves the tree this session is actually in,
+# not a linked worktree's parent checkout. Identity comes separately, from the
+# onlooker_project_key call below: storage partitioning must still collapse a
+# worktree onto its parent, which is why that call is untouched.
+#
+# onlooker_worktree_root returns empty both outside a git repo and when git
+# itself cannot be invoked. The old inspector-local lib always fell back to
+# the (canonicalized) cwd in either case, which the containment check and
+# relative-path strip below still assume — so restore that fallback here
+# rather than let an empty REPO_ROOT turn every path into a
+# filesystem-root-relative one.
+REPO_ROOT=$(onlooker_worktree_root "$CWD")
+[[ -z "$REPO_ROOT" ]] && REPO_ROOT=$(inspector_canonical_path "$CWD")
 export INSPECTOR_REPO_ROOT="$REPO_ROOT"
 
 # ---------------------------------------------------------------------------
@@ -194,7 +212,7 @@ fi
 # ---------------------------------------------------------------------------
 # Setup paid once, however many files came out of the step above.
 # ---------------------------------------------------------------------------
-PROJECT_KEY=$(inspector_project_key "$CWD")
+PROJECT_KEY=$(onlooker_project_key "$CWD")
 export INSPECTOR_PROJECT_KEY="$PROJECT_KEY"
 inspector_config_load "$CWD"
 

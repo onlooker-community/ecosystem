@@ -40,8 +40,10 @@ source "${PLUGIN_ROOT}/scripts/lib/portable-lock.sh"
 source "${PLUGIN_ROOT}/scripts/lib/counsel-config.sh"
 # shellcheck source=lib/counsel-events.sh
 source "${PLUGIN_ROOT}/scripts/lib/counsel-events.sh"
-# shellcheck source=lib/counsel-project-key.sh
-source "${PLUGIN_ROOT}/scripts/lib/counsel-project-key.sh"
+# shellcheck source=lib/onlooker-project-key.sh
+source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
+# shellcheck source=lib/counsel-project-dir.sh
+source "${PLUGIN_ROOT}/scripts/lib/counsel-project-dir.sh"
 # shellcheck source=lib/counsel-ulid.sh
 source "${PLUGIN_ROOT}/scripts/lib/counsel-ulid.sh"
 # shellcheck source=lib/counsel-reader.sh
@@ -51,7 +53,7 @@ source "${PLUGIN_ROOT}/scripts/lib/counsel-synthesize.sh"
 # shellcheck source=lib/counsel-brief.sh
 source "${PLUGIN_ROOT}/scripts/lib/counsel-brief.sh"
 
-REPO_ROOT=$(counsel_project_repo_root "$CWD")
+REPO_ROOT=$(onlooker_project_repo_root "$CWD")
 counsel_config_load "$REPO_ROOT"
 
 BRIEFS_DIR=$(counsel_project_dir "$PROJECT_KEY") || exit 0

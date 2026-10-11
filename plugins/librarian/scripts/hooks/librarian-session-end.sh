@@ -44,8 +44,8 @@ fi
 
 # shellcheck source=../lib/librarian-config.sh
 source "${PLUGIN_ROOT}/scripts/lib/librarian-config.sh"
-# shellcheck source=../lib/librarian-project-key.sh
-source "${PLUGIN_ROOT}/scripts/lib/librarian-project-key.sh"
+# shellcheck source=../lib/onlooker-project-key.sh
+source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
 # shellcheck source=../lib/librarian-ulid.sh
 source "${PLUGIN_ROOT}/scripts/lib/librarian-ulid.sh"
 # shellcheck source=../lib/librarian-storage.sh
@@ -87,13 +87,13 @@ SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SE
 
 librarian_config_load "$CWD"
 
-PROJECT_KEY=$(librarian_project_key "$CWD")
+PROJECT_KEY=$(onlooker_project_key "$CWD")
 [[ -z "$PROJECT_KEY" ]] && hook_health_exit 0
 
 # Storage init + manifest refresh.
 librarian_storage_init "$PROJECT_KEY" || hook_health_exit 0
-REMOTE_URL=$(librarian_project_remote_url "$CWD")
-REPO_ROOT=$(librarian_project_repo_root "$CWD")
+REMOTE_URL=$(onlooker_project_remote_url "$CWD")
+REPO_ROOT=$(onlooker_project_repo_root "$CWD")
 librarian_storage_write_manifest "$PROJECT_KEY" "$REMOTE_URL" "$REPO_ROOT" || true
 
 # ----------------------------------------------------------------------------

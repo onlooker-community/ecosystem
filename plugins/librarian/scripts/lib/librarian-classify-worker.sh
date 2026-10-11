@@ -64,8 +64,8 @@ fi
 
 # shellcheck source=librarian-config.sh
 source "${PLUGIN_ROOT}/scripts/lib/librarian-config.sh"
-# shellcheck source=librarian-project-key.sh
-source "${PLUGIN_ROOT}/scripts/lib/librarian-project-key.sh"
+# shellcheck source=onlooker-project-key.sh
+source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
 # shellcheck source=librarian-ulid.sh
 source "${PLUGIN_ROOT}/scripts/lib/librarian-ulid.sh"
 # shellcheck source=librarian-storage.sh
@@ -153,8 +153,8 @@ SCAN_START_TS_MS=$(jq -r '.queued_at_ms // 0' "$QUEUE_FILE" 2>/dev/null) || SCAN
 
 librarian_config_load "$CWD"
 librarian_storage_init "$PROJECT_KEY" || exit 0
-REMOTE_URL=$(librarian_project_remote_url "$CWD")
-REPO_ROOT=$(librarian_project_repo_root "$CWD")
+REMOTE_URL=$(onlooker_project_remote_url "$CWD")
+REPO_ROOT=$(onlooker_project_repo_root "$CWD")
 
 # ----------------------------------------------------------------------------
 # Classifier loop — one Haiku call per surviving candidate.

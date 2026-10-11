@@ -20,7 +20,7 @@ source "$CLAUDE_PLUGIN_ROOT/scripts/lib/tribunal-aggregate.sh"
 source "$CLAUDE_PLUGIN_ROOT/scripts/lib/tribunal-gate.sh"
 source "$CLAUDE_PLUGIN_ROOT/scripts/lib/tribunal-events.sh"
 source "$CLAUDE_PLUGIN_ROOT/scripts/lib/tribunal-verdict.sh"
-source "$CLAUDE_PLUGIN_ROOT/scripts/lib/tribunal-project-key.sh"
+source "$CLAUDE_PLUGIN_ROOT/scripts/lib/onlooker-project-key.sh"
 source "$CLAUDE_PLUGIN_ROOT/scripts/lib/tribunal-ulid.sh"
 
 tribunal_config_load "$(pwd)"
@@ -37,9 +37,9 @@ Generate identifiers and persist task-level state:
 
 ```bash
 task_id=$(tribunal_ulid)
-project_key=$(tribunal_project_key "$(pwd)")
-remote=$(tribunal_project_remote_url "$(pwd)")
-repo_root=$(tribunal_project_repo_root "$(pwd)")
+project_key=$(onlooker_project_key "$(pwd)")
+remote=$(onlooker_project_remote_url "$(pwd)")
+repo_root=$(onlooker_project_repo_root "$(pwd)")
 tribunal_write_project_manifest "$project_key" "$remote" "$repo_root"
 tribunal_write_task_manifest "$project_key" "$task_id" "$task_summary" "$rubric_id" "$rubric"
 ```

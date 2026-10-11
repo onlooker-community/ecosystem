@@ -36,7 +36,7 @@ set -uo pipefail
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-config.sh"
-source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-project-key.sh"
+source "$CLAUDE_PLUGIN_ROOT/scripts/lib/onlooker-project-key.sh"
 source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-storage.sh"
 source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-emit.sh"
 source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-lesson-storage.sh"

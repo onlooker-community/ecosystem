@@ -37,8 +37,10 @@ hook_health_register "counsel-session-start"
 source "${PLUGIN_ROOT}/scripts/lib/counsel-config.sh"
 # shellcheck source=../lib/counsel-events.sh
 source "${PLUGIN_ROOT}/scripts/lib/counsel-events.sh"
-# shellcheck source=../lib/counsel-project-key.sh
-source "${PLUGIN_ROOT}/scripts/lib/counsel-project-key.sh"
+# shellcheck source=../lib/onlooker-project-key.sh
+source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
+# shellcheck source=../lib/counsel-project-dir.sh
+source "${PLUGIN_ROOT}/scripts/lib/counsel-project-dir.sh"
 # shellcheck source=../lib/counsel-ulid.sh
 source "${PLUGIN_ROOT}/scripts/lib/counsel-ulid.sh"
 # shellcheck source=../lib/counsel-reader.sh
@@ -69,7 +71,7 @@ export _HOOK_SESSION_ID="$SESSION_ID"
 
 counsel_config_load "$CWD"
 
-PROJECT_KEY=$(counsel_project_key "$CWD")
+PROJECT_KEY=$(onlooker_project_key "$CWD")
 if [[ -z "$PROJECT_KEY" ]]; then
 	_emit ""
 	hook_health_exit 0
