@@ -64,7 +64,7 @@ setup() {
   # shellcheck disable=SC1091
   source "${PLUGIN_ROOT}/scripts/lib/scribe-events.sh"
   # shellcheck disable=SC1091
-  source "${PLUGIN_ROOT}/scripts/lib/scribe-project-key.sh"
+  source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
   # shellcheck disable=SC1091
   source "${PLUGIN_ROOT}/scripts/lib/scribe-project-dir.sh"
   # shellcheck disable=SC1091
@@ -88,7 +88,7 @@ setup() {
   # shellcheck disable=SC1091
   source "${PLUGIN_ROOT}/scripts/lib/scribe-events.sh"
   # shellcheck disable=SC1091
-  source "${PLUGIN_ROOT}/scripts/lib/scribe-project-key.sh"
+  source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
   # shellcheck disable=SC1091
   source "${PLUGIN_ROOT}/scripts/lib/scribe-project-dir.sh"
   # shellcheck disable=SC1091

@@ -16,7 +16,7 @@ setup() {
   # shellcheck disable=SC1091
   source "${PLUGIN_ROOT}/scripts/lib/counsel-events.sh"
   # shellcheck disable=SC1091
-  source "${PLUGIN_ROOT}/scripts/lib/counsel-project-key.sh"
+  source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
   # shellcheck disable=SC1091
   source "${PLUGIN_ROOT}/scripts/lib/counsel-project-dir.sh"
   # shellcheck disable=SC1091
@@ -28,7 +28,7 @@ setup() {
   # shellcheck disable=SC1091
   source "${PLUGIN_ROOT}/scripts/lib/counsel-brief.sh"
 
-  # A git work tree so counsel_project_key resolves to a stable root key.
+  # A git work tree so onlooker_project_key resolves to a stable root key.
   WORK="${BATS_TEST_TMPDIR}/repo"
   mkdir -p "$WORK"
   git -C "$WORK" init -q
@@ -63,7 +63,7 @@ STUB
       >> "$ONLOOKER_EVENTS_LOG"
   done
 
-  PROJECT_KEY=$(counsel_project_key "$WORK")
+  PROJECT_KEY=$(onlooker_project_key "$WORK")
   BRIEFS_DIR=$(counsel_project_dir "$PROJECT_KEY")
   mkdir -p "$BRIEFS_DIR"
 }

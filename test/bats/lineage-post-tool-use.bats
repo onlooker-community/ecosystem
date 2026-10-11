@@ -13,13 +13,13 @@ setup() {
 	mkdir -p "$(dirname "$ONLOOKER_EVENTS_LOG")" "${ONLOOKER_DIR}/session-trackers"
 
 	# shellcheck disable=SC1091
-	source "${PLUGIN_ROOT}/scripts/lib/lineage-project-key.sh"
+	source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
 
 	REPO="${BATS_TEST_TMPDIR}/proj"
 	mkdir -p "$REPO"
 	git init -q "$REPO" 2>/dev/null
 	git -C "$REPO" remote add origin https://example.com/onlooker/lineage-test.git 2>/dev/null
-	KEY=$(lineage_project_key "$REPO")
+	KEY=$(onlooker_project_key "$REPO")
 	SID="bats-lin-001"
 
 	# The spelling the ledger stores. The hook resolves every recorded path so

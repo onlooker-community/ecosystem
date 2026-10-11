@@ -96,7 +96,7 @@ function parseArgs(argv) {
   return args;
 }
 
-// Mirrors tribunal-project-key.sh: sha256("remote:<origin-url>") first 12 hex,
+// Mirrors onlooker-project-key.sh: sha256("remote:<origin-url>") first 12 hex,
 // falling back to sha256("root:<realpath of toplevel>").
 function projectKey(projectRoot) {
   const first12 = (s) => createHash('sha256').update(s).digest('hex').slice(0, 12);

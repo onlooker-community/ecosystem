@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Where scribe keeps a project's artifacts.
 #
-# Split out of scribe-project-key.sh when that file was replaced by the
+# Split out of onlooker-project-key.sh when that file was replaced by the
 # vendored canonical onlooker-project-key.sh: this embeds the plugin name, so it
 # is scribe's, not the substrate's.
 

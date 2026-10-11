@@ -10,7 +10,7 @@ setup() {
 	# shellcheck disable=SC1091
 	source "${PLUGIN_ROOT}/scripts/lib/inspector-canonical-path.sh"
 	# shellcheck disable=SC1091
-	source "${PLUGIN_ROOT}/scripts/lib/inspector-project-key.sh"
+	source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
 }
 
 @test "produces a 12-char hex key from origin remote" {
@@ -20,7 +20,7 @@ setup() {
 	git -C "$REPO" remote add origin "https://example.com/widgets.git"
 
 	local key
-	key=$(inspector_project_key "$REPO")
+	key=$(onlooker_project_key "$REPO")
 	[ "${#key}" = "12" ]
 	[[ "$key" =~ ^[0-9a-f]{12}$ ]]
 }
@@ -34,8 +34,8 @@ setup() {
 	git -C "$REPO_B" remote add origin "https://example.com/x.git"
 
 	local key_a key_b
-	key_a=$(inspector_project_key "$REPO_A")
-	key_b=$(inspector_project_key "$REPO_B")
+	key_a=$(onlooker_project_key "$REPO_A")
+	key_b=$(onlooker_project_key "$REPO_B")
 	[ "$key_a" = "$key_b" ]
 }
 
@@ -44,16 +44,16 @@ setup() {
 	mkdir -p "$REPO"
 	git -C "$REPO" init -q
 	local key
-	key=$(inspector_project_key "$REPO")
+	key=$(onlooker_project_key "$REPO")
 	[ "${#key}" = "12" ]
 }
 
-@test "falls back to cwd when not a git repo" {
+@test "non-git directory returns empty key" {
 	NOT_REPO="${BATS_TEST_TMPDIR}/not-git"
 	mkdir -p "$NOT_REPO"
 	local key
-	key=$(inspector_project_key "$NOT_REPO")
-	[ "${#key}" = "12" ]
+	key=$(onlooker_project_key "$NOT_REPO")
+	[ -z "$key" ]
 }
 
 @test "project_repo_root returns repo top-level for a git checkout" {
@@ -61,7 +61,7 @@ setup() {
 	mkdir -p "$REPO/sub"
 	git -C "$REPO" init -q
 	local root expected
-	root=$(inspector_project_repo_root "$REPO/sub")
+	root=$(onlooker_project_repo_root "$REPO/sub")
 	# Canonicalize both sides: macOS git resolves tmp paths through /private/,
 	# while $REPO retains the symlinked /var/folders/ prefix.
 	expected=$(cd "$REPO" && /bin/pwd -P 2>/dev/null || pwd)

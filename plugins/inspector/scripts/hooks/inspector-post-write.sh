@@ -21,7 +21,7 @@ hook_health_register "inspector-post-write"
 
 source "$PLUGIN_ROOT/scripts/lib/inspector-config.sh"
 source "$PLUGIN_ROOT/scripts/lib/inspector-canonical-path.sh"
-source "$PLUGIN_ROOT/scripts/lib/inspector-project-key.sh"
+source "$PLUGIN_ROOT/scripts/lib/onlooker-project-key.sh"
 source "$PLUGIN_ROOT/scripts/lib/inspector-events.sh"
 source "$PLUGIN_ROOT/scripts/lib/inspector-run.sh"
 source "$PLUGIN_ROOT/scripts/lib/inspector-baseline.sh"
@@ -63,7 +63,14 @@ esac
 export INSPECTOR_TOOL_NAME="$TOOL_NAME"
 
 # Repo root is needed by both paths, and it is cheap (one git rev-parse).
-REPO_ROOT=$(inspector_project_repo_root "$CWD")
+# onlooker_project_repo_root answers identity, not location, and returns
+# empty both outside a git repo and when git itself cannot be invoked. The
+# old inspector-local lib always fell back to the (canonicalized) cwd in
+# either case, which the containment check and relative-path strip below
+# still assume — so restore that fallback here rather than let an empty
+# REPO_ROOT turn every path into a filesystem-root-relative one.
+REPO_ROOT=$(onlooker_project_repo_root "$CWD")
+[[ -z "$REPO_ROOT" ]] && REPO_ROOT=$(inspector_canonical_path "$CWD")
 export INSPECTOR_REPO_ROOT="$REPO_ROOT"
 
 # ---------------------------------------------------------------------------
@@ -195,7 +202,7 @@ fi
 # ---------------------------------------------------------------------------
 # Setup paid once, however many files came out of the step above.
 # ---------------------------------------------------------------------------
-PROJECT_KEY=$(inspector_project_key "$CWD")
+PROJECT_KEY=$(onlooker_project_key "$CWD")
 export INSPECTOR_PROJECT_KEY="$PROJECT_KEY"
 inspector_config_load "$CWD"
 

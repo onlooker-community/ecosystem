@@ -2,7 +2,7 @@
 
 # Worktree provenance (ecosystem-449.33).
 #
-# lineage_project_repo_root resolves through --git-common-dir and returns the
+# onlooker_project_repo_root resolves through --git-common-dir and returns the
 # MAIN checkout's toplevel, deliberately, so a worktree shares its parent's
 # project key. The bug was every downstream use of that value as if it were the
 # tree the session is working in: the Edit path used it as a containment
@@ -27,7 +27,7 @@ setup() {
 	mkdir -p "$(dirname "$ONLOOKER_EVENTS_LOG")" "${ONLOOKER_DIR}/session-trackers"
 
 	# shellcheck disable=SC1091
-	source "${PLUGIN_ROOT}/scripts/lib/lineage-project-key.sh"
+	source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
 
 	MAIN="${BATS_TEST_TMPDIR}/main"
 	mkdir -p "$MAIN"
@@ -50,7 +50,7 @@ setup() {
 	MAIN_REAL=$(cd "$MAIN" && pwd -P)
 	WT_REAL=$(cd "$WT" && pwd -P)
 
-	KEY=$(lineage_project_key "$WT")
+	KEY=$(onlooker_project_key "$WT")
 	LEDGER="${ONLOOKER_DIR}/lineage/${KEY}/changes.jsonl"
 	SID="bats-wt-001"
 }
@@ -74,7 +74,7 @@ _bash() {
 @test "a worktree and its parent resolve to the same project key" {
 	# The fix must not change storage partitioning: worktree provenance belongs
 	# in the same ledger as the repo it branched from.
-	[ "$(lineage_project_key "$WT")" = "$(lineage_project_key "$MAIN")" ]
+	[ "$(onlooker_project_key "$WT")" = "$(onlooker_project_key "$MAIN")" ]
 }
 
 @test "records an Edit made inside a git worktree" {

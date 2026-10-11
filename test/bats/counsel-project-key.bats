@@ -8,13 +8,13 @@ setup() {
   PLUGIN_ROOT="${REPO_ROOT}/plugins/counsel"
   export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
   # shellcheck disable=SC1091
-  source "${PLUGIN_ROOT}/scripts/lib/counsel-project-key.sh"
+  source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
 }
 
 @test "non-git directory returns empty key" {
   local d="${BATS_TEST_TMPDIR}/non-git"
   mkdir -p "$d"
-  run counsel_project_key "$d"
+  run onlooker_project_key "$d"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
@@ -27,12 +27,12 @@ setup() {
   git -C "$d" config user.name "Test"
 
   local k1
-  k1=$(counsel_project_key "$d")
+  k1=$(onlooker_project_key "$d")
   [ -n "$k1" ]
   [ "${#k1}" -eq 12 ]
 
   local k2
-  k2=$(counsel_project_key "$d")
+  k2=$(onlooker_project_key "$d")
   [ "$k1" = "$k2" ]
 }
 
@@ -48,8 +48,8 @@ setup() {
   done
 
   local ka kb
-  ka=$(counsel_project_key "$a")
-  kb=$(counsel_project_key "$b")
+  ka=$(onlooker_project_key "$a")
+  kb=$(onlooker_project_key "$b")
   [ -n "$ka" ]
   [ "$ka" = "$kb" ]
 }
@@ -67,8 +67,8 @@ setup() {
   git -C "$b" remote add origin git@github.com:org/proj-b.git
 
   local ka kb
-  ka=$(counsel_project_key "$a")
-  kb=$(counsel_project_key "$b")
+  ka=$(onlooker_project_key "$a")
+  kb=$(onlooker_project_key "$b")
   [ -n "$ka" ]
   [ -n "$kb" ]
   [ "$ka" != "$kb" ]

@@ -2,7 +2,7 @@
 
 # The Stop gate in a git worktree (ecosystem-449.37).
 #
-# tribunal_project_repo_root resolves a linked worktree to its parent checkout
+# onlooker_project_repo_root resolves a linked worktree to its parent checkout
 # so both share a project key, which is right for identity and wrong for git.
 # The gate then ran `git -C "$REPO_ROOT" diff` twice against that root: once to
 # decide whether anything changed, and once to build the diff summary handed to
@@ -25,7 +25,7 @@ setup() {
 	HOOK="${PLUGIN_ROOT}/scripts/hooks/tribunal-stop-gate.sh"
 
 	# shellcheck disable=SC1091
-	source "${PLUGIN_ROOT}/scripts/lib/tribunal-project-key.sh"
+	source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
 
 	MAIN="${BATS_TEST_TMPDIR}/main"
 	mkdir -p "$MAIN"

@@ -29,8 +29,8 @@ source "${PLUGIN_ROOT}/scripts/lib/portable-lock.sh"
 source "${PLUGIN_ROOT}/scripts/lib/bursar-config.sh"
 # shellcheck source=../lib/bursar-events.sh
 source "${PLUGIN_ROOT}/scripts/lib/bursar-events.sh"
-# shellcheck source=../lib/bursar-project-key.sh
-source "${PLUGIN_ROOT}/scripts/lib/bursar-project-key.sh"
+# shellcheck source=../lib/onlooker-project-key.sh
+source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
 # shellcheck source=../lib/bursar-ledger.sh
 source "${PLUGIN_ROOT}/scripts/lib/bursar-ledger.sh"
 
@@ -44,7 +44,7 @@ _done() { hook_health_exit 0; }
 bursar_config_load "$CWD"
 
 [[ -z "$CWD" ]] && CWD="$(pwd)"
-PROJECT_KEY=$(bursar_project_key "$CWD")
+PROJECT_KEY=$(onlooker_project_key "$CWD")
 [[ -z "$PROJECT_KEY" ]] && _done   # not a recognizable project — nothing to attribute
 
 ONLOOKER_DIR="${ONLOOKER_DIR:-${HOME}/.onlooker}"

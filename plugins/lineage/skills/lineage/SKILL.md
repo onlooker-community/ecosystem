@@ -22,15 +22,15 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 source "$PLUGIN_ROOT/scripts/lib/portable-lock.sh"
 source "$PLUGIN_ROOT/scripts/lib/lineage-config.sh"
 source "$PLUGIN_ROOT/scripts/lib/lineage-events.sh"
-source "$PLUGIN_ROOT/scripts/lib/lineage-project-key.sh"
+source "$PLUGIN_ROOT/scripts/lib/onlooker-project-key.sh"
 source "$PLUGIN_ROOT/scripts/lib/lineage-redact.sh"
 source "$PLUGIN_ROOT/scripts/lib/lineage-record.sh"
 source "$PLUGIN_ROOT/scripts/lib/lineage-query.sh"
 
-REPO_ROOT=$(lineage_project_repo_root "$(pwd)")
+REPO_ROOT=$(onlooker_project_repo_root "$(pwd)")
 lineage_config_load "$REPO_ROOT"
 
-PROJECT_KEY=$(lineage_project_key "$(pwd)")
+PROJECT_KEY=$(onlooker_project_key "$(pwd)")
 if [[ -z "$PROJECT_KEY" ]]; then
   echo "No project key — lineage needs a git repository (remote or root) to scope its ledger."
   exit 0

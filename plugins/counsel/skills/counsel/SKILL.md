@@ -22,16 +22,16 @@ export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 
 source "$PLUGIN_ROOT/scripts/lib/counsel-config.sh"
 source "$PLUGIN_ROOT/scripts/lib/counsel-events.sh"
-source "$PLUGIN_ROOT/scripts/lib/counsel-project-key.sh"
+source "$PLUGIN_ROOT/scripts/lib/onlooker-project-key.sh"
 source "$PLUGIN_ROOT/scripts/lib/counsel-ulid.sh"
 source "$PLUGIN_ROOT/scripts/lib/counsel-reader.sh"
 source "$PLUGIN_ROOT/scripts/lib/counsel-synthesize.sh"
 source "$PLUGIN_ROOT/scripts/lib/counsel-brief.sh"
 
-REPO_ROOT=$(counsel_project_repo_root "$(pwd)")
+REPO_ROOT=$(onlooker_project_repo_root "$(pwd)")
 counsel_config_load "$REPO_ROOT"
 
-PROJECT_KEY=$(counsel_project_key "$(pwd)")
+PROJECT_KEY=$(onlooker_project_key "$(pwd)")
 if [[ -z "$PROJECT_KEY" ]]; then
   echo "No project key — Counsel needs a git repository (remote or root) to scope briefs. Skipping."
   exit 0

@@ -51,8 +51,8 @@ source "${PLUGIN_ROOT}/scripts/lib/portable-lock.sh"
 source "${PLUGIN_ROOT}/scripts/lib/lineage-config.sh"
 # shellcheck source=../lib/lineage-events.sh
 source "${PLUGIN_ROOT}/scripts/lib/lineage-events.sh"
-# shellcheck source=../lib/lineage-project-key.sh
-source "${PLUGIN_ROOT}/scripts/lib/lineage-project-key.sh"
+# shellcheck source=../lib/onlooker-project-key.sh
+source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
 # shellcheck source=../lib/lineage-ulid.sh
 source "${PLUGIN_ROOT}/scripts/lib/lineage-ulid.sh"
 # shellcheck source=../lib/lineage-redact.sh
@@ -153,8 +153,8 @@ _lineage_ignored() {
 # branch-scoped, settings.local.json from the parent because it is gitignored
 # and therefore machine-scoped. Settled for all sixteen plugins at once in
 # ecosystem-449.37 acceptance 5.
-REPO_ROOT=$(lineage_project_repo_root "$CWD")
-WORKTREE_ROOT=$(lineage_worktree_root "$CWD")
+REPO_ROOT=$(onlooker_project_repo_root "$CWD")
+WORKTREE_ROOT=$(onlooker_worktree_root "$CWD")
 
 # Outside a git repo both are empty; in a normal checkout they are equal. Fall
 # back so a resolution failure degrades to the old single-root behavior rather
@@ -166,7 +166,7 @@ WORKTREE_ROOT=$(lineage_worktree_root "$CWD")
 # read a path or content from, so compare the work tree against a rolling
 # per-session baseline and record whatever moved (ecosystem-449.13).
 #
-# This branch runs BEFORE lineage_config_load / lineage_project_key on
+# This branch runs BEFORE lineage_config_load / onlooker_project_key on
 # purpose (ecosystem-449.13 task 4.5): that setup costs roughly 25ms per call
 # (config load + several jq-backed accessors + the project-key remote-URL
 # lookup), and Bash outruns Edit roughly 30:1. Deciding whether anything
@@ -241,7 +241,7 @@ if [[ "$TOOL" == "Bash" ]]; then
 	fi
 
 	lineage_config_load "$CWD"
-	PROJECT_KEY=$(lineage_project_key "$CWD")
+	PROJECT_KEY=$(onlooker_project_key "$CWD")
 	[[ -n "${LINEAGE_TRACE_SETUP:-}" ]] && printf 'SETUP_DONE\n' >&2
 	[[ -z "$PROJECT_KEY" ]] && _done
 
@@ -299,7 +299,7 @@ fi
 
 lineage_config_load "$CWD"
 
-PROJECT_KEY=$(lineage_project_key "$CWD")
+PROJECT_KEY=$(onlooker_project_key "$CWD")
 [[ -z "$PROJECT_KEY" ]] && _done
 
 FILE_PATH=""

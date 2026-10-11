@@ -13,7 +13,7 @@ Cartographer audits the persistent instruction layer of the current project and 
 set -uo pipefail
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 source "$PLUGIN_ROOT/scripts/lib/cartographer-config.sh"
-source "$PLUGIN_ROOT/scripts/lib/cartographer-project-key.sh"
+source "$PLUGIN_ROOT/scripts/lib/onlooker-project-key.sh"
 source "$PLUGIN_ROOT/scripts/lib/cartographer-lock.sh"
 source "$PLUGIN_ROOT/scripts/lib/cartographer-events.sh"
 source "$PLUGIN_ROOT/scripts/lib/cartographer-collect.sh"
@@ -23,10 +23,10 @@ source "$PLUGIN_ROOT/scripts/lib/cartographer-analyze.sh"
 Load config and resolve project context:
 
 ```bash
-REPO_ROOT=$(cartographer_project_repo_root "$(pwd)")
+REPO_ROOT=$(onlooker_project_repo_root "$(pwd)")
 cartographer_config_load "$REPO_ROOT"
 
-PROJECT_KEY=$(cartographer_project_key "$(pwd)")
+PROJECT_KEY=$(onlooker_project_key "$(pwd)")
 CARTOGRAPHER_DIR="${ONLOOKER_DIR:-$HOME/.onlooker}/cartographer/$PROJECT_KEY"
 mkdir -p "$CARTOGRAPHER_DIR"
 ```

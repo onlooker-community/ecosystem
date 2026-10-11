@@ -52,8 +52,8 @@ fi
 
 # shellcheck source=../lib/historian-config.sh
 source "${PLUGIN_ROOT}/scripts/lib/historian-config.sh"
-# shellcheck source=../lib/historian-project-key.sh
-source "${PLUGIN_ROOT}/scripts/lib/historian-project-key.sh"
+# shellcheck source=../lib/onlooker-project-key.sh
+source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
 # shellcheck source=../lib/historian-storage.sh
 source "${PLUGIN_ROOT}/scripts/lib/historian-storage.sh"
 # shellcheck source=../lib/historian-emit.sh
@@ -94,7 +94,7 @@ if [[ "$RETRIEVAL_ENABLED" == "false" ]]; then
 	hook_health_exit 0
 fi
 
-PROJECT_KEY=$(historian_project_key "$CWD")
+PROJECT_KEY=$(onlooker_project_key "$CWD")
 if [[ -z "$PROJECT_KEY" ]]; then
 	_emit_context ""
 	hook_health_exit 0

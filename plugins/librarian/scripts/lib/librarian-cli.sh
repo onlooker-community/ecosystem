@@ -19,7 +19,7 @@
 # bullet line, and the file is created if it doesn't exist.
 #
 # Depends on (sourced by the caller): librarian-config.sh,
-# librarian-project-key.sh, librarian-storage.sh, librarian-emit.sh,
+# onlooker-project-key.sh, librarian-storage.sh, librarian-emit.sh,
 # librarian-lesson-storage.sh, librarian-lesson-validate.sh,
 # librarian-lesson-review.sh, librarian-lesson-judge.sh,
 # librarian-lesson-rubric.sh, librarian-author-key.sh,
@@ -32,7 +32,7 @@
 _librarian_cli_project_key() {
 	local cwd="${1:-}"
 	[[ -z "$cwd" ]] && cwd="$(pwd)"
-	librarian_project_key "$cwd"
+	onlooker_project_key "$cwd"
 }
 
 _librarian_cli_memory_dir() {

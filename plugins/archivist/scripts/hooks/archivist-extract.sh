@@ -52,8 +52,8 @@ if [[ -n "$_ECOSYSTEM_ROOT" && -f "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.
 	CLAUDE_PLUGIN_ROOT="$_ECOSYSTEM_ROOT" source "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.sh"
 fi
 
-# shellcheck source=../lib/archivist-project-key.sh
-source "${PLUGIN_ROOT}/scripts/lib/archivist-project-key.sh"
+# shellcheck source=../lib/onlooker-project-key.sh
+source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
 # shellcheck source=../lib/archivist-ulid.sh
 source "${PLUGIN_ROOT}/scripts/lib/archivist-ulid.sh"
 # shellcheck source=../lib/archivist-storage.sh
@@ -79,15 +79,15 @@ TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | jq -r '.transcript_path // ""' 2>/dev/n
 TRIGGER=$(printf '%s' "$INPUT" | jq -r '.trigger // "auto"' 2>/dev/null) || TRIGGER="auto"
 CUSTOM_INSTRUCTIONS=$(printf '%s' "$INPUT" | jq -r '.custom_instructions // ""' 2>/dev/null) || CUSTOM_INSTRUCTIONS=""
 
-REPO_ROOT=$(archivist_project_repo_root "$CWD")
-PROJECT_KEY=$(archivist_project_key "$CWD")
+REPO_ROOT=$(onlooker_project_repo_root "$CWD")
+PROJECT_KEY=$(onlooker_project_key "$CWD")
 
 # Where this session's files actually live, which for a worktree is not
 # REPO_ROOT (ecosystem-449.37). Used for the root named in the prompt and for
 # path validation — both are questions about the filesystem, not identity.
 # REPO_ROOT still keys storage and the manifest, so a worktree and its parent
 # keep one archive between them.
-WORKTREE_ROOT=$(archivist_worktree_root "$CWD")
+WORKTREE_ROOT=$(onlooker_worktree_root "$CWD")
 [[ -z "$WORKTREE_ROOT" ]] && WORKTREE_ROOT="$REPO_ROOT"
 
 # Config requires repo_root to scan settings.json overlay; load anyway with
@@ -205,7 +205,7 @@ fi
 # Persist artifacts.
 # ----------------------------------------------------------------------------
 
-REMOTE_URL=$(archivist_project_remote_url "$CWD")
+REMOTE_URL=$(onlooker_project_remote_url "$CWD")
 archivist_storage_write_manifest "$PROJECT_KEY" "$REMOTE_URL" "$REPO_ROOT" || true
 
 NOW_TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")

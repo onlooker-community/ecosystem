@@ -246,7 +246,7 @@ SHA256("remote:" + git remote get-url origin) → first 12 hex chars
   → fall back to SHA256("cwd:" + pwd)[:12]
 ```
 
-Implemented in `plugins/inspector/scripts/lib/inspector-project-key.sh`,
+Implemented in `plugins/inspector/scripts/lib/onlooker-project-key.sh`,
 mirroring the equivalent helper in cartographer.
 
 ## Failure modes and fail-soft behavior

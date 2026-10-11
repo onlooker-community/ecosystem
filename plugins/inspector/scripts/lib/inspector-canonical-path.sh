@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Path normalization for inspector.
 #
-# Split out of inspector-project-key.sh when that file was replaced by the
+# Split out of onlooker-project-key.sh when that file was replaced by the
 # vendored canonical onlooker-project-key.sh: this is a path helper, not
 # project-key derivation.
 

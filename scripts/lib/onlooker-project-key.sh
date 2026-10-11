@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Project key derivation for the substrate.
 #
-# Mirrors the per-plugin schemes (see tribunal-project-key.sh) so substrate
-# artifacts partition identically to every plugin's. A project key is a stable
-# 12-char hex identifier that survives:
+# Mirrors the per-plugin schemes once carried separately by each plugin, so
+# substrate artifacts partition identically to every plugin's. A project key
+# is a stable 12-char hex identifier that survives:
 #   - local rename of the repo directory
 #   - cloning the same repo to a different path on the same machine
 #   - moving the repo between machines, as long as the git remote is preserved

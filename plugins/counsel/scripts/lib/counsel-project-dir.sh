@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Where counsel keeps a project's briefs.
 #
-# Split out of counsel-project-key.sh when that file was replaced by the
+# Split out of onlooker-project-key.sh when that file was replaced by the
 # vendored canonical onlooker-project-key.sh: this embeds the plugin name and a
 # subpath, so it is counsel's, not the substrate's.
 

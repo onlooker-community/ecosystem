@@ -28,7 +28,7 @@ _candidate() {
 _indep() { printf '%s' '{"kind":"version_independent","justification":"git aborts checkout on a dirty tree regardless of version."}'; }
 
 _hold_setup() {
-	for lib in librarian-project-key librarian-ulid librarian-storage \
+	for lib in onlooker-project-key librarian-ulid librarian-storage \
 		librarian-lesson-storage librarian-lesson-validate librarian-config \
 		librarian-author-key librarian-lesson-promote; do
 		# shellcheck disable=SC1091
@@ -40,7 +40,7 @@ _hold_setup() {
 	git -C "$PROJECT_REPO" config user.email t@example.com
 	git -C "$PROJECT_REPO" config user.name "Test"
 	git -C "$PROJECT_REPO" remote add origin git@github.com:org/lesson-hold.git
-	PROJECT_KEY=$(librarian_project_key "$PROJECT_REPO")
+	PROJECT_KEY=$(onlooker_project_key "$PROJECT_REPO")
 	[ -n "$PROJECT_KEY" ]
 	LESSONS_DIR="${ONLOOKER_DIR}/librarian/${PROJECT_KEY}/lessons"
 	librarian_lesson_storage_init "$PROJECT_KEY"

@@ -10,7 +10,7 @@ setup() {
   export ONLOOKER_ECOSYSTEM_ROOT="$REPO_ROOT"
   HOOK="${PLUGIN_ROOT}/scripts/hooks/lineage-post-tool-use.sh"
 
-  source "${PLUGIN_ROOT}/scripts/lib/lineage-project-key.sh"
+  source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
   source "${PLUGIN_ROOT}/scripts/lib/lineage-record.sh"
   source "${PLUGIN_ROOT}/scripts/lib/lineage-baseline.sh"
 
@@ -28,14 +28,14 @@ setup() {
   git -C "$PROJECT_REPO" add tracked.txt
   git -C "$PROJECT_REPO" commit -qm "seed"
 
-  PROJECT_KEY=$(lineage_project_key "$PROJECT_REPO")
+  PROJECT_KEY=$(onlooker_project_key "$PROJECT_REPO")
   LEDGER="${ONLOOKER_DIR}/lineage/${PROJECT_KEY}/changes.jsonl"
   # The baseline is keyed by a cheap scope id (a hash of the repo root), not
   # the project key — resolving the project key is part of the setup the
   # Bash pre-gate is built to skip (ecosystem-449.13 task 4.5). Hash the
   # realpath-resolved root the hook itself derives, since PROJECT_REPO can
   # differ from it under a symlinked tmpdir (e.g. macOS /var -> /private/var).
-  SCOPE_ID=$(lineage_baseline_scope_id "$(lineage_project_repo_root "$PROJECT_REPO")")
+  SCOPE_ID=$(lineage_baseline_scope_id "$(onlooker_project_repo_root "$PROJECT_REPO")")
 }
 
 _bash_input() {

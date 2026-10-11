@@ -45,8 +45,8 @@ fi
 
 # shellcheck source=../lib/assayer-config.sh
 source "${PLUGIN_ROOT}/scripts/lib/assayer-config.sh"
-# shellcheck source=../lib/assayer-project-key.sh
-source "${PLUGIN_ROOT}/scripts/lib/assayer-project-key.sh"
+# shellcheck source=../lib/onlooker-project-key.sh
+source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
 # shellcheck source=../lib/assayer-ulid.sh
 source "${PLUGIN_ROOT}/scripts/lib/assayer-ulid.sh"
 # shellcheck source=../lib/assayer-transcript.sh
@@ -73,12 +73,12 @@ _done() { hook_health_exit 0; }
 # Config + prerequisites
 # ---------------------------------------------------------------------------
 
-REPO_ROOT=$(assayer_project_repo_root "$CWD")
+REPO_ROOT=$(onlooker_project_repo_root "$CWD")
 [[ -z "$REPO_ROOT" ]] && _done
 
 CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" assayer_config_load "$CWD"
 
-PROJECT_KEY=$(assayer_project_key "$CWD")
+PROJECT_KEY=$(onlooker_project_key "$CWD")
 [[ -z "$PROJECT_KEY" ]] && _done
 
 command -v claude >/dev/null 2>&1 || _done

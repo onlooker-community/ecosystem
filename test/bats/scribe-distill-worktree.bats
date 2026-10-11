@@ -2,7 +2,7 @@
 
 # Scribe's distillation output in a git worktree (ecosystem-449.37).
 #
-# scribe_project_repo_root resolves a linked worktree to its parent checkout so
+# onlooker_project_repo_root resolves a linked worktree to its parent checkout so
 # both share a project key. scribe_distill then used that root for two things
 # that are not identity:
 #
@@ -32,7 +32,7 @@ setup() {
 	# shellcheck disable=SC1091
 	source "${PLUGIN_ROOT}/scripts/lib/scribe-config.sh"
 	# shellcheck disable=SC1091
-	source "${PLUGIN_ROOT}/scripts/lib/scribe-project-key.sh"
+	source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
 	# shellcheck disable=SC1091
 	source "${PLUGIN_ROOT}/scripts/lib/scribe-project-dir.sh"
 	# shellcheck disable=SC1091

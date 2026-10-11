@@ -7,13 +7,13 @@ setup() {
 
   PLUGIN_ROOT="${REPO_ROOT}/plugins/archivist"
   # shellcheck disable=SC1091
-  source "${PLUGIN_ROOT}/scripts/lib/archivist-project-key.sh"
+  source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
 }
 
 @test "non-git directory returns empty key" {
   local d="${BATS_TEST_TMPDIR}/non-git"
   mkdir -p "$d"
-  run archivist_project_key "$d"
+  run onlooker_project_key "$d"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
@@ -26,13 +26,13 @@ setup() {
   git -C "$d" config user.name "Test"
 
   local k1
-  k1=$(archivist_project_key "$d")
+  k1=$(onlooker_project_key "$d")
   [ -n "$k1" ]
   [ "${#k1}" -eq 12 ]
 
   # Stability: a second call returns the same key.
   local k2
-  k2=$(archivist_project_key "$d")
+  k2=$(onlooker_project_key "$d")
   [ "$k1" = "$k2" ]
 }
 
@@ -48,8 +48,8 @@ setup() {
   done
 
   local ka kb
-  ka=$(archivist_project_key "$a")
-  kb=$(archivist_project_key "$b")
+  ka=$(onlooker_project_key "$a")
+  kb=$(onlooker_project_key "$b")
   [ -n "$ka" ]
   [ "$ka" = "$kb" ]
 }
@@ -67,50 +67,50 @@ setup() {
   git -C "$b" remote add origin git@github.com:org/proj-b.git
 
   local ka kb
-  ka=$(archivist_project_key "$a")
-  kb=$(archivist_project_key "$b")
+  ka=$(onlooker_project_key "$a")
+  kb=$(onlooker_project_key "$b")
   [ -n "$ka" ]
   [ -n "$kb" ]
   [ "$ka" != "$kb" ]
 }
 
-@test "archivist_project_remote_url prints origin url when set" {
+@test "onlooker_project_remote_url prints origin url when set" {
   local d="${BATS_TEST_TMPDIR}/remote-set"
   mkdir -p "$d"
   git -C "$d" init -q
   git -C "$d" remote add origin https://example.com/x.git
 
-  run archivist_project_remote_url "$d"
+  run onlooker_project_remote_url "$d"
   [ "$status" -eq 0 ]
   [ "$output" = "https://example.com/x.git" ]
 }
 
-@test "archivist_project_remote_url returns empty when repo has no remote" {
+@test "onlooker_project_remote_url returns empty when repo has no remote" {
   local d="${BATS_TEST_TMPDIR}/remote-none"
   mkdir -p "$d"
   git -C "$d" init -q
 
-  run archivist_project_remote_url "$d"
+  run onlooker_project_remote_url "$d"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
 
-@test "archivist_project_remote_url returns empty for a non-git directory" {
+@test "onlooker_project_remote_url returns empty for a non-git directory" {
   local d="${BATS_TEST_TMPDIR}/remote-non-git"
   mkdir -p "$d"
 
-  run archivist_project_remote_url "$d"
+  run onlooker_project_remote_url "$d"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
 
-@test "archivist_project_remote_url returns empty for a nonexistent path" {
-  run archivist_project_remote_url "${BATS_TEST_TMPDIR}/does-not-exist"
+@test "onlooker_project_remote_url returns empty for a nonexistent path" {
+  run onlooker_project_remote_url "${BATS_TEST_TMPDIR}/does-not-exist"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
 
-@test "archivist_project_repo_root prints the repo toplevel realpath" {
+@test "onlooker_project_repo_root prints the repo toplevel realpath" {
   local d="${BATS_TEST_TMPDIR}/root-repo"
   mkdir -p "$d"
   git -C "$d" init -q
@@ -120,12 +120,12 @@ setup() {
   local expected
   expected="$(cd "$d" && pwd -P)"
 
-  run archivist_project_repo_root "$d"
+  run onlooker_project_repo_root "$d"
   [ "$status" -eq 0 ]
   [ "$output" = "$expected" ]
 }
 
-@test "archivist_project_repo_root resolves toplevel from a subdirectory" {
+@test "onlooker_project_repo_root resolves toplevel from a subdirectory" {
   local d="${BATS_TEST_TMPDIR}/root-repo-sub"
   mkdir -p "$d/nested/deep"
   git -C "$d" init -q
@@ -133,22 +133,22 @@ setup() {
   local expected
   expected="$(cd "$d" && pwd -P)"
 
-  run archivist_project_repo_root "$d/nested/deep"
+  run onlooker_project_repo_root "$d/nested/deep"
   [ "$status" -eq 0 ]
   [ "$output" = "$expected" ]
 }
 
-@test "archivist_project_repo_root returns empty for a non-git directory" {
+@test "onlooker_project_repo_root returns empty for a non-git directory" {
   local d="${BATS_TEST_TMPDIR}/root-non-git"
   mkdir -p "$d"
 
-  run archivist_project_repo_root "$d"
+  run onlooker_project_repo_root "$d"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
 
-@test "archivist_project_repo_root returns empty for a nonexistent path" {
-  run archivist_project_repo_root "${BATS_TEST_TMPDIR}/root-missing"
+@test "onlooker_project_repo_root returns empty for a nonexistent path" {
+  run onlooker_project_repo_root "${BATS_TEST_TMPDIR}/root-missing"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }

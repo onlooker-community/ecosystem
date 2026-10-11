@@ -26,12 +26,12 @@ Derive the paths rather than pasting them; both are keyed to your checkout:
 
 ```bash
 source plugins/lineage/scripts/lib/lineage-record.sh       # lineage_sha256
-source plugins/lineage/scripts/lib/lineage-project-key.sh
+source plugins/lineage/scripts/lib/onlooker-project-key.sh
 source plugins/lineage/scripts/lib/lineage-baseline.sh
 
 REPO_ROOT=$(git rev-parse --show-toplevel)
 ONLOOKER="${ONLOOKER_DIR:-$HOME/.onlooker}"
-LEDGER="$ONLOOKER/lineage/$(lineage_project_key "$REPO_ROOT")/changes.jsonl"
+LEDGER="$ONLOOKER/lineage/$(onlooker_project_key "$REPO_ROOT")/changes.jsonl"
 BASELINES="$ONLOOKER/lineage-baselines/$(lineage_baseline_scope_id "$REPO_ROOT")"
 ```
 

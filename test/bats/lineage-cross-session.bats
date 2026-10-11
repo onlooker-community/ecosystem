@@ -40,7 +40,7 @@ setup() {
 	HOOK="${PLUGIN_ROOT}/scripts/hooks/lineage-post-tool-use.sh"
 
 	# shellcheck disable=SC1091
-	source "${PLUGIN_ROOT}/scripts/lib/lineage-project-key.sh"
+	source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
 	# shellcheck disable=SC1091
 	source "${PLUGIN_ROOT}/scripts/lib/lineage-record.sh"
 	# shellcheck disable=SC1091
@@ -59,10 +59,10 @@ setup() {
 	git -C "$REPO" add tracked.txt
 	git -C "$REPO" commit -qm seed
 
-	KEY=$(lineage_project_key "$REPO")
+	KEY=$(onlooker_project_key "$REPO")
 	LEDGER="${ONLOOKER_DIR}/lineage/${KEY}/changes.jsonl"
 	REPO_REAL=$(cd "$REPO" && pwd -P)
-	SCOPE_ID=$(lineage_baseline_scope_id "$(lineage_project_repo_root "$REPO")")
+	SCOPE_ID=$(lineage_baseline_scope_id "$(onlooker_project_repo_root "$REPO")")
 	BASELINE_DIR=$(lineage_baseline_dir "$SCOPE_ID")
 
 	AUTHOR="sess-author"

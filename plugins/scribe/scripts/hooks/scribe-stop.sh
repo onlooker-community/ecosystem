@@ -42,8 +42,8 @@ hook_health_register "scribe-stop"
 source "${PLUGIN_ROOT}/scripts/lib/scribe-config.sh"
 # shellcheck source=../lib/scribe-events.sh
 source "${PLUGIN_ROOT}/scripts/lib/scribe-events.sh"
-# shellcheck source=../lib/scribe-project-key.sh
-source "${PLUGIN_ROOT}/scripts/lib/scribe-project-key.sh"
+# shellcheck source=../lib/onlooker-project-key.sh
+source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
 # shellcheck source=../lib/scribe-project-dir.sh
 source "${PLUGIN_ROOT}/scripts/lib/scribe-project-dir.sh"
 # shellcheck source=../lib/scribe-extract.sh

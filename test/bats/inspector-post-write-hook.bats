@@ -269,7 +269,7 @@ EOF
 }
 
 @test "the repo-root fallback still finds a file inside the repo when git fails" {
-	# git rev-parse failing sends inspector_project_repo_root to its $cwd
+	# git rev-parse failing sends onlooker_project_repo_root to its $cwd
 	# fallback, which is the caller-supplied (unresolved) path.
 	_failing_check_settings
 	local stub

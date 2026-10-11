@@ -17,7 +17,7 @@ Bursar is a sibling plugin to [`ecosystem`](../../) and assumes the Onlooker obs
 
 ### Attributing a session to a project
 
-`SessionEnd`'s hook payload only reliably carries `session_id`, so bursar cannot derive a project key from a `cwd` at that point. Instead, `SessionStart` — which *does* receive `cwd` — derives the [project key](../tribunal/scripts/lib/tribunal-project-key.sh) (SHA256 of the git origin URL, or the repo root for remote-less repos) and stashes a breadcrumb at `$ONLOOKER_DIR/bursar/sessions/<session-id>.json`. `SessionEnd` reads it back, falling back to the substrate session tracker's recorded `cwd`, then to the live `cwd`.
+`SessionEnd`'s hook payload only reliably carries `session_id`, so bursar cannot derive a project key from a `cwd` at that point. Instead, `SessionStart` — which *does* receive `cwd` — derives the [project key](../tribunal/scripts/lib/onlooker-project-key.sh) (SHA256 of the git origin URL, or the repo root for remote-less repos) and stashes a breadcrumb at `$ONLOOKER_DIR/bursar/sessions/<session-id>.json`. `SessionEnd` reads it back, falling back to the substrate session tracker's recorded `cwd`, then to the live `cwd`.
 
 Records are keyed by `session_id`: re-recording a session replaces its line rather than appending, so a `SessionEnd` that fires more than once is idempotent.
 

@@ -10,7 +10,7 @@ const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SCRIPT = join(REPO, 'scripts', 'lint', 'check-plugin-liveness.mjs');
 
 // A fixture project with a git origin, so the script derives a real project key
-// the same way tribunal-project-key.sh does. Without a remote the key is empty
+// the same way onlooker-project-key.sh does. Without a remote the key is empty
 // and every event counts as local, which would hide the no_local_events case.
 function fixture({ enabled = { 'demo@m': true }, hooks = ['demo-stop'], remote = true } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'liveness-'));

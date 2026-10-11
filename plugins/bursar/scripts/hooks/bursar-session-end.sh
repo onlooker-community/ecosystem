@@ -29,8 +29,8 @@ source "${PLUGIN_ROOT}/scripts/lib/portable-lock.sh"
 source "${PLUGIN_ROOT}/scripts/lib/bursar-config.sh"
 # shellcheck source=../lib/bursar-events.sh
 source "${PLUGIN_ROOT}/scripts/lib/bursar-events.sh"
-# shellcheck source=../lib/bursar-project-key.sh
-source "${PLUGIN_ROOT}/scripts/lib/bursar-project-key.sh"
+# shellcheck source=../lib/onlooker-project-key.sh
+source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
 # shellcheck source=../lib/bursar-ledger.sh
 source "${PLUGIN_ROOT}/scripts/lib/bursar-ledger.sh"
 
@@ -71,7 +71,7 @@ fi
 
 bursar_config_load "$CWD"
 
-[[ -z "$PROJECT_KEY" ]] && PROJECT_KEY=$(bursar_project_key "$CWD")
+[[ -z "$PROJECT_KEY" ]] && PROJECT_KEY=$(onlooker_project_key "$CWD")
 [[ -z "$PROJECT_KEY" ]] && _done
 
 # -----------------------------------------------------------------------

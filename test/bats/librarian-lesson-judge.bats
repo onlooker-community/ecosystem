@@ -19,11 +19,11 @@ setup() {
 	git -C "$PROJECT_REPO" remote add origin git@github.com:org/fixture.git
 
 	source "${PLUGIN_ROOT}/scripts/lib/librarian-config.sh"
-	source "${PLUGIN_ROOT}/scripts/lib/librarian-project-key.sh"
+	source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
 	source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-rubric.sh"
 	librarian_config_load "$PROJECT_REPO"
 
-	PROJECT_KEY=$(librarian_project_key "$PROJECT_REPO")
+	PROJECT_KEY=$(onlooker_project_key "$PROJECT_REPO")
 
 	source "${PLUGIN_ROOT}/scripts/lib/librarian-storage.sh"
 	source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-storage.sh"

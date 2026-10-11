@@ -37,8 +37,8 @@ setup() {
 	git -C "$PROJECT_REPO" remote add origin git@github.com:org/librarian-detached.git
 
 	# shellcheck disable=SC1091
-	source "${PLUGIN_ROOT}/scripts/lib/librarian-project-key.sh"
-	PROJECT_KEY=$(librarian_project_key "$PROJECT_REPO")
+	source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
+	PROJECT_KEY=$(onlooker_project_key "$PROJECT_REPO")
 	[ -n "$PROJECT_KEY" ]
 
 	ARCHIVIST_DIR="${ONLOOKER_DIR}/archivist/${PROJECT_KEY}"
