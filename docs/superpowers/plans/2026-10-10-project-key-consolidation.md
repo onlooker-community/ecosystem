@@ -47,8 +47,12 @@ shellcheck, `scripts/sync-shared-libs.sh`.
   on a shared report path and every run appends to the same `emissions.jsonl`; two concurrent runs
   clobber each other and the coverage gate then reports a wall of "expected type never emitted"
   that reads exactly like a real regression (see the script's header and ecosystem-0bh).
-- **Never use `git -C <path>`** in committed scripts or commands — run git from the working
-  directory.
+- **`git -C <path>`** — scope matters, and the loose wording of this rule already produced one
+  near-miss finding. Do not use it in shell commands *you* run: the flag defeats the
+  allowed-tools patterns and forces a needless approval prompt. It is correct and expected
+  *inside* library code and bats bodies that must act on a caller-supplied directory.
+  `onlooker-project-key.sh`'s three pre-existing functions all use `git -C "$cwd"`, and so does
+  every plugin lib Task 4 touches. Reviewers: `git -C` in those files is not a finding.
 - **American English** in all comments, commit messages, and docs.
 - **Commits route through `/git-workflow:commit`.** Do not craft `git commit -m` ad hoc.
 - Event types follow `<plugin>.<noun>.<verb>`; ULIDs not UUIDs; config defaults in `config.json`.
