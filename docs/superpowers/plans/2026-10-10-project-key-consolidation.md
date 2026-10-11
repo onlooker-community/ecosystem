@@ -777,6 +777,40 @@ already covers: 12-hex shape, stability across two clones, different remotes dif
 fallback, remote-vs-rootless differ, worktree shares parent key, remoteless worktree shares parent
 key, empty outside a repo, plus Tasks 1–2's `worktree_root` and `resolve` cases.
 
+**Compare behavior, not test titles.** Seven suites remain and almost every title differs from the
+canonical wording while asserting the same thing — "non-git directory returns empty key" is
+`returns empty outside a git repo`, "key is 12 hex chars for a repo with a remote" is `derives a
+12-char hex key from the origin remote`. Deleting on a title match would be wrong in both
+directions.
+
+**Measured result: `test/bats/archivist-project-key.bats` holds eight cases that are NOT duplicates
+and must be ported, or real coverage is lost.** The canonical suite exercises
+`onlooker_project_remote_url` and `onlooker_project_repo_root` only *indirectly*, through
+`onlooker_project_key`. Archivist tests them directly:
+
+| case | why it is not a duplicate |
+|---|---|
+| `remote_url` prints origin url when set | asserts the exact URL, not just that a key appeared |
+| `remote_url` returns empty when repo has no remote | the branch that triggers the root fallback |
+| `remote_url` returns empty for a non-git directory | — |
+| `remote_url` returns empty for a nonexistent path | exercises the `[[ ! -d "$cwd" ]]` guard |
+| `repo_root` prints the repo toplevel realpath | asserts the resolved path, incl. `pwd -P` on macOS symlinked temp dirs |
+| `repo_root` resolves toplevel from a subdirectory | nothing else tests upward resolution |
+| `repo_root` returns empty for a non-git directory | — |
+| `repo_root` returns empty for a nonexistent path | exercises the same guard on the other helper |
+
+Port all eight into the canonical suite verbatim — they already use the `onlooker_*` names after
+Task 4, so they need no rewriting. The two nonexistent-path cases are the most valuable: they are
+the only direct coverage of the absent-or-not-a-directory guard in either helper.
+
+Also port one idempotence case (assayer's "key is stable across calls", or the identical "same cwd
+yields a stable key" in bursar and lineage — they are the same test three times). The canonical
+suite asserts stability *across two clones* but never that one directory yields the same key twice.
+
+Everything else across the seven suites is a reworded duplicate. `inspector-project-key.bats`'s
+`project_repo_root returns repo top-level for a git checkout` is covered by archivist's stronger
+version above, so port archivist's and drop inspector's.
+
 - [ ] **Step 2: Port any case the canonical suite lacks**
 
 Add it to `test/bats/onlooker-project-key.bats` using `onlooker_*` names. Do not port a case that
