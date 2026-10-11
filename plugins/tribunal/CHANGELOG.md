@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.1](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.6.0...tribunal-v1.6.1) (2026-10-11)
+
+
+### Bug Fixes
+
+* **plugins:** one project-key lib, not thirteen :detective: ([#432](https://github.com/onlooker-community/ecosystem/issues/432)) ([598b670](https://github.com/onlooker-community/ecosystem/commit/598b670195bc6e717f3172bd06c240a70b39ee73))
+
 ## [1.6.0](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.5.5...tribunal-v1.6.0) (2026-10-04)
 
 

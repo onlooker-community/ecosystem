@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/onlooker-community/ecosystem/compare/bursar-v0.7.0...bursar-v0.7.1) (2026-10-11)
+
+
+### Bug Fixes
+
+* **plugins:** one project-key lib, not thirteen :detective: ([#432](https://github.com/onlooker-community/ecosystem/issues/432)) ([598b670](https://github.com/onlooker-community/ecosystem/commit/598b670195bc6e717f3172bd06c240a70b39ee73))
+
 ## [0.7.0](https://github.com/onlooker-community/ecosystem/compare/bursar-v0.6.6...bursar-v0.7.0) (2026-10-04)
 
 
