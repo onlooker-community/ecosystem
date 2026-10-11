@@ -370,16 +370,46 @@ own plugin-local libs *before* Task 4 deletes the files, or their callers break.
   - `inspector_canonical_path <path>` → prints the realpath, falling back through `readlink -f`,
     `cd && pwd -P`, then the input unchanged; empty input prints nothing.
 
-- [ ] **Step 1: Find every caller**
+- [ ] **Step 1: Find every caller, including the transitive ones**
 
-Run:
+Start with the literal grep:
 
 ```bash
 grep -rn "counsel_project_dir\|scribe_project_dir\|inspector_canonical_path" \
   plugins/ test/ --include="*.sh" --include="*.bats"
 ```
 
-Record the list. Every file that calls one of these must source its new lib.
+**That grep alone is insufficient and will cause a runtime break.** Plugins use flat sourcing, so a
+file often calls a *wrapper* that calls the helper internally, never naming the helper. Measured
+cases: `counsel-session-start.sh` calls `counsel_brief_*`, all of which call `counsel_project_dir`;
+`inspector-project-key.bats` calls `inspector_project_repo_root`, which calls
+`inspector_canonical_path`. Neither appears in the grep above.
+
+So widen to every file that sources the old lib, then keep only those that need the helper directly
+or transitively:
+
+```bash
+for p in counsel scribe inspector; do
+  echo "--- $p"
+  grep -rln "source .*${p}-project-key\.sh" --include="*.sh" --include="*.bats" plugins/ test/
+done
+```
+
+The measured answer — add the new sibling to exactly these, and no others:
+
+| plugin | files needing the new lib |
+|---|---|
+| counsel | `counsel-refresh.sh`, `counsel-session-start.sh`, `counsel-project-key.bats`, `counsel-nonblocking-start.bats`, `counsel-brief.bats` |
+| scribe | `run-distill.sh`, `scribe-stop.sh`, `scribe-distill-worktree.bats`, `scribe-extract.bats` (**two** source sites) |
+| inspector | `inspector-post-write.sh`, `inspector-project-key.bats` |
+
+`test/bats/scribe-project-key.bats` sources the old lib but needs **nothing** — it neither calls
+`scribe_project_dir` nor sources `scribe-distill.sh`. Do not add a line there; an unused dependency
+is a defect, not thoroughness.
+
+For `counsel-brief.sh` and `scribe-distill.sh`, which declare their dependencies in a
+"caller must source these" comment manifest, add a `# shellcheck source=` directive to that manifest
+rather than a real `source` statement — a `source` inside a flat-sourced lib breaks the convention.
 
 - [ ] **Step 2: Create the three libs**
 
@@ -477,14 +507,19 @@ genuine defect rather than a staged move.
 The old `<plugin>-project-key.sh` files stay for now — they still define the project-key functions
 until Task 4 deletes them. Only the moved helper leaves.
 
-Verify each old file no longer defines it:
+Verify each old file no longer **defines** it — grep for the definition, not the bare name:
 
 ```bash
-grep -c "counsel_project_dir" plugins/counsel/scripts/lib/counsel-project-key.sh
-grep -c "scribe_project_dir" plugins/scribe/scripts/lib/scribe-project-key.sh
-grep -c "inspector_canonical_path" plugins/inspector/scripts/lib/inspector-project-key.sh
+grep -c "^counsel_project_dir()" plugins/counsel/scripts/lib/counsel-project-key.sh
+grep -c "^scribe_project_dir()" plugins/scribe/scripts/lib/scribe-project-key.sh
+grep -c "^inspector_canonical_path()" plugins/inspector/scripts/lib/inspector-project-key.sh
 ```
 Expected: `0` from all three.
+
+A bare-name grep is the wrong check for inspector and will read as a failure when nothing is wrong:
+`inspector_project_repo_root` still *calls* `inspector_canonical_path` at two sites, so the name
+legitimately appears twice. The definition arriving from the sourced sibling is the intended
+arrangement, and it disappears entirely in Task 4 when this host file is deleted.
 
 - [ ] **Step 4: Add a source line in every caller found in Step 1**
 
@@ -666,6 +701,13 @@ key, empty outside a repo, plus Tasks 1–2's `worktree_root` and `resolve` case
 Add it to `test/bats/onlooker-project-key.bats` using `onlooker_*` names. Do not port a case that
 only re-asserts an already-covered behavior under a different function name — that is the
 duplication this task removes.
+
+**Do not assume every per-plugin case is such a duplicate.** A case covering a *moved* helper
+belongs with that helper, not in the project-key suite. One instance was found and already handled:
+Task 3 moved `@test "counsel_project_dir includes project key in path"` out of
+`test/bats/counsel-project-key.bats` into `test/bats/counsel-project-dir.bats` before this task
+deletes its old home. Before deleting any file here, confirm every case in it is either a duplicate
+of the canonical suite or covers a function that no longer exists.
 
 - [ ] **Step 3: Delete the per-plugin files**
 
