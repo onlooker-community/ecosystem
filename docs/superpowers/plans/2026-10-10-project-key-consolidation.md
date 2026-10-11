@@ -37,8 +37,16 @@ shellcheck, `scripts/sync-shared-libs.sh`.
 - **Vendored libs must self-locate from `${BASH_SOURCE[0]}`**, never from a caller-supplied
   `$PLUGIN_ROOT` and never via a path that climbs to the repo root. This lib defines functions and
   sources nothing, so there is nothing to resolve — but do not add a `source` line to it.
-- **Run `npm run test:bats`, never bare `bats`.** Bare `bats` skips schema validation, so negative
-  schema assertions pass locally and fail in CI.
+- **Never run bare `bats`.** It skips schema validation, so negative schema assertions pass
+  locally and fail in CI. Use `npm run test:bats` for the whole suite, and
+  `scripts/test/run-bats.sh test/bats/<file>.bats` for one file. Do **not** use
+  `npm run test:bats -- <file>`: the npm script already passes `test/bats`, so the file is
+  appended as a *second* target and bats runs the entire suite plus that file. The wrapper is what
+  sets `ONLOOKER_VALIDATE=1`, which is the reason bare `bats` is forbidden.
+- **Never run two bats suites concurrently in this checkout.** `run-bats.sh` opens with `rm -rf`
+  on a shared report path and every run appends to the same `emissions.jsonl`; two concurrent runs
+  clobber each other and the coverage gate then reports a wall of "expected type never emitted"
+  that reads exactly like a real regression (see the script's header and ecosystem-0bh).
 - **Never use `git -C <path>`** in committed scripts or commands — run git from the working
   directory.
 - **American English** in all comments, commit messages, and docs.
@@ -129,7 +137,7 @@ Append to `test/bats/onlooker-project-key.bats`:
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `npm run test:bats -- test/bats/onlooker-project-key.bats`
+Run: `scripts/test/run-bats.sh test/bats/onlooker-project-key.bats`
 Expected: FAIL — `onlooker_worktree_root: command not found`.
 
 - [ ] **Step 3: Add the function**
@@ -158,7 +166,7 @@ onlooker_worktree_root() {
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `npm run test:bats -- test/bats/onlooker-project-key.bats`
+Run: `scripts/test/run-bats.sh test/bats/onlooker-project-key.bats`
 Expected: PASS, all tests including the eight pre-existing ones.
 
 - [ ] **Step 5: Shellcheck the lib**
@@ -262,7 +270,7 @@ Append to `test/bats/onlooker-project-key.bats`:
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `npm run test:bats -- test/bats/onlooker-project-key.bats`
+Run: `scripts/test/run-bats.sh test/bats/onlooker-project-key.bats`
 Expected: FAIL — `onlooker_project_resolve: command not found`.
 
 - [ ] **Step 3: Add the resolver and rewrite the wrapper**
@@ -323,7 +331,7 @@ onlooker_project_key() {
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `npm run test:bats -- test/bats/onlooker-project-key.bats`
+Run: `scripts/test/run-bats.sh test/bats/onlooker-project-key.bats`
 Expected: PASS. The eight original tests must still pass unchanged — the wrapper's printed
 contract is identical.
 
@@ -491,7 +499,7 @@ plugin-local libs sourced from the plugin's own tree, which is the pattern
 
 - [ ] **Step 5: Verify the helpers still resolve**
 
-Run: `npm run test:bats -- test/bats/counsel-brief.bats`
+Run: `scripts/test/run-bats.sh test/bats/counsel-brief.bats`
 Run: `npm run test:shellcheck`
 Expected: PASS, exit 0. If any plugin has no test covering a moved helper, confirm by hand:
 
@@ -604,8 +612,8 @@ Expected: `clean` from both.
 - [ ] **Step 6: Run shellcheck and the vendoring guards**
 
 Run: `npm run test:shellcheck`
-Run: `npm run test:bats -- test/bats/shared-lib-vendoring.bats`
-Run: `npm run test:bats -- test/bats/config-lib-self-locating.bats`
+Run: `scripts/test/run-bats.sh test/bats/shared-lib-vendoring.bats`
+Run: `scripts/test/run-bats.sh test/bats/config-lib-self-locating.bats`
 Expected: all exit 0. The on-demand tests now cover `onlooker-project-key.sh`; the catch-all
 "every plugin vendors every lib it sources from its own tree" must stay green.
 
@@ -615,7 +623,7 @@ Deliberately break one copy and confirm the suite catches it:
 
 ```bash
 echo "# drift" >> plugins/lineage/scripts/lib/onlooker-project-key.sh
-npm run test:bats -- test/bats/shared-lib-vendoring.bats; echo "exit=$?"
+scripts/test/run-bats.sh test/bats/shared-lib-vendoring.bats; echo "exit=$?"
 git checkout plugins/lineage/scripts/lib/onlooker-project-key.sh
 ```
 Expected: non-zero exit naming `lineage/onlooker-project-key.sh` as drifted, then clean after the
