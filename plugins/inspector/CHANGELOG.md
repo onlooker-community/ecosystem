@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.3](https://github.com/onlooker-community/ecosystem/compare/inspector-v0.8.2...inspector-v0.8.3) (2026-10-11)
+
+
+### Bug Fixes
+
+* **plugins:** one project-key lib, not thirteen :detective: ([#432](https://github.com/onlooker-community/ecosystem/issues/432)) ([598b670](https://github.com/onlooker-community/ecosystem/commit/598b670195bc6e717f3172bd06c240a70b39ee73))
+
 ## [0.8.2](https://github.com/onlooker-community/ecosystem/compare/inspector-v0.8.1...inspector-v0.8.2) (2026-10-10)
 
 

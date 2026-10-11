@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.70.7](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.70.6...ecosystem-v0.70.7) (2026-10-11)
+
+
+### Bug Fixes
+
+* **plugins:** one project-key lib, not thirteen :detective: ([#432](https://github.com/onlooker-community/ecosystem/issues/432)) ([598b670](https://github.com/onlooker-community/ecosystem/commit/598b670195bc6e717f3172bd06c240a70b39ee73))
+
 ## [0.70.6](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.70.5...ecosystem-v0.70.6) (2026-10-10)
 
 
