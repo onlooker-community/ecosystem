@@ -156,3 +156,89 @@ setup() {
 	[ "$ONLOOKER_PROJECT_BASIS" = "remote" ]
 	[[ "$ONLOOKER_PROJECT_KEY" =~ ^[0-9a-f]{12}$ ]] || return 1
 }
+
+@test "key is stable across calls" {
+	git -C "$REPO" remote add origin https://example.com/foo/bar.git
+	a=$(onlooker_project_key "$REPO")
+	b=$(onlooker_project_key "$REPO")
+	[ "$a" = "$b" ]
+}
+
+@test "onlooker_project_remote_url prints origin url when set" {
+	local d="${BATS_TEST_TMPDIR}/remote-set"
+	mkdir -p "$d"
+	git -C "$d" init -q
+	git -C "$d" remote add origin https://example.com/x.git
+
+	run onlooker_project_remote_url "$d"
+	[ "$status" -eq 0 ]
+	[ "$output" = "https://example.com/x.git" ]
+}
+
+@test "onlooker_project_remote_url returns empty when repo has no remote" {
+	local d="${BATS_TEST_TMPDIR}/remote-none"
+	mkdir -p "$d"
+	git -C "$d" init -q
+
+	run onlooker_project_remote_url "$d"
+	[ "$status" -eq 0 ]
+	[ -z "$output" ]
+}
+
+@test "onlooker_project_remote_url returns empty for a non-git directory" {
+	local d="${BATS_TEST_TMPDIR}/remote-non-git"
+	mkdir -p "$d"
+
+	run onlooker_project_remote_url "$d"
+	[ "$status" -eq 0 ]
+	[ -z "$output" ]
+}
+
+@test "onlooker_project_remote_url returns empty for a nonexistent path" {
+	run onlooker_project_remote_url "${BATS_TEST_TMPDIR}/does-not-exist"
+	[ "$status" -eq 0 ]
+	[ -z "$output" ]
+}
+
+@test "onlooker_project_repo_root prints the repo toplevel realpath" {
+	local d="${BATS_TEST_TMPDIR}/root-repo"
+	mkdir -p "$d"
+	git -C "$d" init -q
+
+	# Physical path: matches the function's pwd -P resolution on platforms
+	# (e.g. macOS) where the temp dir is reached through a symlink.
+	local expected
+	expected="$(cd "$d" && pwd -P)"
+
+	run onlooker_project_repo_root "$d"
+	[ "$status" -eq 0 ]
+	[ "$output" = "$expected" ]
+}
+
+@test "onlooker_project_repo_root resolves toplevel from a subdirectory" {
+	local d="${BATS_TEST_TMPDIR}/root-repo-sub"
+	mkdir -p "$d/nested/deep"
+	git -C "$d" init -q
+
+	local expected
+	expected="$(cd "$d" && pwd -P)"
+
+	run onlooker_project_repo_root "$d/nested/deep"
+	[ "$status" -eq 0 ]
+	[ "$output" = "$expected" ]
+}
+
+@test "onlooker_project_repo_root returns empty for a non-git directory" {
+	local d="${BATS_TEST_TMPDIR}/root-non-git"
+	mkdir -p "$d"
+
+	run onlooker_project_repo_root "$d"
+	[ "$status" -eq 0 ]
+	[ -z "$output" ]
+}
+
+@test "onlooker_project_repo_root returns empty for a nonexistent path" {
+	run onlooker_project_repo_root "${BATS_TEST_TMPDIR}/root-missing"
+	[ "$status" -eq 0 ]
+	[ -z "$output" ]
+}
