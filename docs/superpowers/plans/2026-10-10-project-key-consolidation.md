@@ -629,6 +629,42 @@ done
 
 `\Q...\E` quotes the filename so its dot is literal, not a wildcard.
 
+**One test asserts the bug and will fail the moment it is renamed.** `test/bats/inspector-project-key.bats:51`:
+
+```bash
+@test "falls back to cwd when not a git repo" {
+	NOT_REPO="${BATS_TEST_TMPDIR}/not-git"
+	mkdir -p "$NOT_REPO"
+	local key
+	key=$(inspector_project_key "$NOT_REPO")
+	[ "${#key}" = "12" ]
+}
+```
+
+That 12-character key is `715b9b271e0a` — the phantom project key for a directory that is not a
+repo, which is precisely the defect this consolidation deletes. The canonical lib returns empty
+there. So once the rename points this at `onlooker_project_key`, the assertion fails.
+
+Invert it in this task, matching the wording its five sibling suites already use (archivist,
+bursar, counsel, lineage, and scribe all assert an empty key for a non-git directory):
+
+```bash
+@test "non-git directory returns empty key" {
+	NOT_REPO="${BATS_TEST_TMPDIR}/not-git"
+	mkdir -p "$NOT_REPO"
+	local key
+	key=$(onlooker_project_key "$NOT_REPO")
+	[ -z "$key" ]
+}
+```
+
+Do not simply delete it — keeping every intermediate commit green matters here, since this task
+lands atomically. Task 5 removes the file afterward as a duplicate of the canonical suite, which
+already covers this case. Say in the commit message that a test asserted the phantom key: it is the
+clearest evidence the behavior was real rather than theoretical.
+
+Inspector is the only suite affected. Cartographer shared the same defect but ships no bats file.
+
 - [ ] **Step 4: Delete the 12 old libs**
 
 ```bash
