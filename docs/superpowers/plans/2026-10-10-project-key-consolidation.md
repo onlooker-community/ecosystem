@@ -454,7 +454,28 @@ inspector_canonical_path() {
 }
 ```
 
-- [ ] **Step 3: Add a source line in every caller found in Step 1**
+- [ ] **Step 3: Remove each moved function from its old host file**
+
+Delete the function body from `plugins/counsel/scripts/lib/counsel-project-key.sh`,
+`plugins/scribe/scripts/lib/scribe-project-key.sh`, and
+`plugins/inspector/scripts/lib/inspector-project-key.sh` in the same commit that creates the new
+libs. Do not leave it defined in two places even briefly: both files are sourced together, so the
+duplicate would be a real redefinition, and a reviewer seeing two identical bodies is seeing a
+genuine defect rather than a staged move.
+
+The old `<plugin>-project-key.sh` files stay for now — they still define the project-key functions
+until Task 4 deletes them. Only the moved helper leaves.
+
+Verify each old file no longer defines it:
+
+```bash
+grep -c "counsel_project_dir" plugins/counsel/scripts/lib/counsel-project-key.sh
+grep -c "scribe_project_dir" plugins/scribe/scripts/lib/scribe-project-key.sh
+grep -c "inspector_canonical_path" plugins/inspector/scripts/lib/inspector-project-key.sh
+```
+Expected: `0` from all three.
+
+- [ ] **Step 4: Add a source line in every caller found in Step 1**
 
 For each caller, add alongside its existing project-key source line, matching that file's existing
 brace style:
@@ -468,7 +489,7 @@ Use the plugin's own lib name. `PLUGIN_ROOT` is the correct variable here — th
 plugin-local libs sourced from the plugin's own tree, which is the pattern
 `shared-lib-vendoring.bats`'s catch-all test greps for, and it will require the file to exist.
 
-- [ ] **Step 4: Verify the helpers still resolve**
+- [ ] **Step 5: Verify the helpers still resolve**
 
 Run: `npm run test:bats -- test/bats/counsel-brief.bats`
 Run: `npm run test:shellcheck`
@@ -479,10 +500,11 @@ bash -c 'PLUGIN_ROOT=plugins/counsel; source "$PLUGIN_ROOT/scripts/lib/counsel-p
 ```
 Expected output: `<ONLOOKER_DIR>/counsel/abc123def456/briefs`
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
-Use `/git-workflow:commit`, staging the three new libs and their callers. Body: these are not
-project-key logic and had to move before the consolidation could delete their host files.
+Use `/git-workflow:commit`, staging the three new libs, the three trimmed old libs, and their
+callers. Body: these are not project-key logic and had to move before the consolidation could
+delete their host files.
 
 ---
 
@@ -530,11 +552,17 @@ Rename only these exact identifiers, per plugin prefix. Do **not** sed on the ba
 `scribe_project_dir` and `inspector_canonical_path` must survive untouched, and a prefix-level
 substitution would rewrite them.
 
+**Use `perl`, not `sed`.** Measured on this machine: BSD `sed` (macOS `/usr/bin/sed`) does not
+support `\b`, and it fails by **matching nothing at all** — no error, exit 0, file unchanged.
+`[[:<:]]`/`[[:>:]]` works on BSD but not GNU. `perl -pi` with `\b` is correct on both, and `-i`
+needs no empty-string argument. Verified it renames `scribe_project_key` while leaving
+`scribe_project_dir` untouched, which is exactly the distinction this rename depends on.
+
 ```bash
 set -euo pipefail
 for p in archivist assayer bursar cartographer counsel curator historian \
          inspector librarian lineage scribe tribunal; do
-  # Files that mention this plugin's project-key identifiers or lib path.
+  # Files that mention this plugin's project-key identifiers or its lib path.
   files=$(grep -rl -e "${p}_project_key" -e "${p}_project_remote_url" \
                    -e "${p}_project_repo_root" -e "${p}_worktree_root" \
                    -e "_${p}_sha256_first12" -e "${p}-project-key.sh" \
@@ -542,18 +570,18 @@ for p in archivist assayer bursar cartographer counsel curator historian \
           | grep -v "plugins/${p}/scripts/lib/${p}-project-key.sh" || true)
   [ -z "$files" ] && continue
   # shellcheck disable=SC2086
-  sed -i '' \
-    -e "s/\b${p}_project_key\b/onlooker_project_key/g" \
-    -e "s/\b${p}_project_remote_url\b/onlooker_project_remote_url/g" \
-    -e "s/\b${p}_project_repo_root\b/onlooker_project_repo_root/g" \
-    -e "s/\b${p}_worktree_root\b/onlooker_worktree_root/g" \
-    -e "s/_${p}_sha256_first12/_onlooker_sha256_first12/g" \
-    -e "s|${p}-project-key\.sh|onlooker-project-key.sh|g" \
+  perl -pi \
+    -e "s/\\b${p}_project_key\\b/onlooker_project_key/g;" \
+    -e "s/\\b${p}_project_remote_url\\b/onlooker_project_remote_url/g;" \
+    -e "s/\\b${p}_project_repo_root\\b/onlooker_project_repo_root/g;" \
+    -e "s/\\b${p}_worktree_root\\b/onlooker_worktree_root/g;" \
+    -e "s/_${p}_sha256_first12/_onlooker_sha256_first12/g;" \
+    -e "s/\\Q${p}-project-key.sh\\E/onlooker-project-key.sh/g;" \
     $files
 done
 ```
 
-Note `sed -i ''` is BSD/macOS. On GNU sed use `sed -i` with no argument.
+`\Q...\E` quotes the filename so its dot is literal, not a wildcard.
 
 - [ ] **Step 4: Delete the 12 old libs**
 
