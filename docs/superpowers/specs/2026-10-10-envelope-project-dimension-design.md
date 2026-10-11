@@ -143,12 +143,31 @@ would emit a `project` with basis `root` for `$HOME` or a scratch directory, see
 projects into the per-repo view, and they violate the contract in §2 that absence means "not a
 git repo".
 
-**Decision:** add `project-key.sh` to `SHARED_LIBS`, promote `scripts/lib/onlooker-project-key.sh`
-to canonical, delete the 12 per-plugin copies, and migrate the call sites. This deletes the
-cartographer/inspector bug rather than patching it, since the canonical already returns empty for
-a non-repo. `test/bats/shared-lib-vendoring.bats` reads `SHARED_LIBS` directly, so the new lib is
-guarded automatically; the vendored copy must self-locate from its own `${BASH_SOURCE[0]}` so
-`test/bats/config-lib-self-locating.bats` passes.
+**Decision:** register `onlooker-project-key.sh` in **`ON_DEMAND_LIBS`**, promote
+`scripts/lib/onlooker-project-key.sh` to canonical, delete the 12 per-plugin copies, and migrate
+the call sites. This deletes the cartographer/inspector bug rather than patching it, since the
+canonical already returns empty for a non-repo. No rename is needed: `sync-shared-libs.sh` derives
+the canonical path from the bare entry name, so an entry of `onlooker-project-key.sh` resolves to
+the file that already exists.
+
+**On-demand, not shared** — corrected during planning, against this repo's own stated policy.
+`sync-shared-libs.sh`'s header reserves `SHARED_LIBS` for libs vendored into *every* plugin
+"because every hook uses them", and puts the rest in `ON_DEMAND_LIBS` because "a copy nobody
+sources is noise that still has to be kept in sync". Twelve of sixteen plugins derive a project
+key; compass, echo, governor, and warden never do. The requirement this design actually needs —
+one implementation, guarded against drift — holds on either list: `shared-lib-vendoring.bats`
+byte-compares every vendored on-demand copy, and its catch-all test, "every plugin vendors every
+lib it sources from its own tree", covers this lib whichever list it is on, because all 12 source
+it as `"${PLUGIN_ROOT}/scripts/lib/..."`. `SHARED_LIBS` would only add a never-sourced file to four
+plugins. The cost of the on-demand list is that the first copy into each plugin is manual — the
+sync script refreshes on-demand libs but never creates them.
+
+**Three helpers have to move first.** The per-plugin files are not pure duplicates. Deleting them
+blind would drop `worktree_root` (archivist, lineage, scribe, tribunal), `project_dir` (counsel,
+scribe), and `canonical_path` (inspector). `worktree_root` becomes canonical as
+`onlooker_worktree_root` — it is the documented counterpart to `onlooker_project_repo_root`, which
+resolves a worktree to its parent for identity while this resolves the tree the session is in.
+The other two embed a plugin name or are a plain path helper, so they move to plugin-local libs.
 
 Cost, measured: **129 call sites** across production and tests, concentrated — `librarian-cli.sh`
 alone has 19 — plus nine per-plugin `*-project-key.bats` files that each test a copy. Twelve
@@ -195,13 +214,18 @@ written against 2.18.0 and a count of 126.
 
 ### ecosystem
 
-1. **Consolidate** (prerequisite): `SHARED_LIBS` gains `project-key.sh`; `sync-shared-libs.sh`
-   propagates it; 12 per-plugin libs and their bats files are removed; ~129 call sites move to
-   `onlooker_project_key`.
+1. **Consolidate** (prerequisite): `ON_DEMAND_LIBS` gains `onlooker-project-key.sh`;
+   `sync-shared-libs.sh` keeps the copies identical; the canonical gains `onlooker_worktree_root`;
+   the three plugin-specific helpers move to plugin-local libs; 12 per-plugin libs and their bats
+   files are removed; ~129 call sites move to the `onlooker_*` names. Planned in
+   `docs/superpowers/plans/2026-10-10-project-key-consolidation.md`. **This unit has no schema
+   dependency and can land before 2.28.0 publishes.**
 2. **Resolve once per hook:** new `onlooker_project_resolve` sets and exports
    `ONLOOKER_PROJECT_KEY` and `ONLOOKER_PROJECT_BASIS` in a single pass. `onlooker_project_key`
-   remains as a thin wrapper. Latency is ~free: hooks already derive the key, so the basis folds
-   into the same git pass.
+   becomes a thin wrapper over it, which has a deliberate consequence: every one of the ~129
+   existing call sites populates those variables as a side effect, so the emitter picks the
+   dimension up without any call site changing. Latency is ~free — hooks already derive the key,
+   so the basis folds into the same git pass.
 3. **Emit:** `scripts/lib/onlooker-event.mjs` reads those two env vars in its envelope builder
    and omits both fields when either is empty.
 4. **librarian:** emit `librarian.lesson.promoted` from `librarian_lesson_promote`
@@ -299,5 +323,5 @@ planning from it, which is why every `file:line` in this spec was checked rather
   still exits 0. The vendored copy must resolve from its own `${BASH_SOURCE[0]}`.
 - **The field is only as good as the basis.** If a future plugin derives a key by any path other
   than the canonical lib, the envelope and the on-disk directories diverge again, and the failure
-  is invisible — a per-repo view that quietly double-counts. The `SHARED_LIBS` guard is what keeps
+  is invisible — a per-repo view that quietly double-counts. The vendoring guards are what keep
   this closed.
