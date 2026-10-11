@@ -24,7 +24,8 @@
 # scribe.distill.skipped before returning.
 
 # shellcheck source=./scribe-extract.sh
-# (caller must source scribe-extract.sh before scribe-distill.sh)
+# shellcheck source=./scribe-project-dir.sh
+# (caller must source these before scribe-distill.sh)
 
 # Report a decision not to distill.
 #

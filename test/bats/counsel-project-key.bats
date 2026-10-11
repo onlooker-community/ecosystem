@@ -9,6 +9,8 @@ setup() {
   export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
   # shellcheck disable=SC1091
   source "${PLUGIN_ROOT}/scripts/lib/counsel-project-key.sh"
+  # shellcheck disable=SC1091
+  source "${PLUGIN_ROOT}/scripts/lib/counsel-project-dir.sh"
 }
 
 @test "non-git directory returns empty key" {
@@ -72,11 +74,4 @@ setup() {
   [ -n "$ka" ]
   [ -n "$kb" ]
   [ "$ka" != "$kb" ]
-}
-
-@test "counsel_project_dir includes project key in path" {
-  local key="abc123def456"
-  run counsel_project_dir "$key"
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"counsel/${key}/briefs" ]]
 }

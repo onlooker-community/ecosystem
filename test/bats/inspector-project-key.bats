@@ -8,6 +8,8 @@ setup() {
 	PLUGIN_ROOT="${REPO_ROOT}/plugins/inspector"
 	export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/inspector-canonical-path.sh"
+	# shellcheck disable=SC1091
 	source "${PLUGIN_ROOT}/scripts/lib/inspector-project-key.sh"
 }
 

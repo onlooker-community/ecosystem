@@ -66,6 +66,8 @@ setup() {
   # shellcheck disable=SC1091
   source "${PLUGIN_ROOT}/scripts/lib/scribe-project-key.sh"
   # shellcheck disable=SC1091
+  source "${PLUGIN_ROOT}/scripts/lib/scribe-project-dir.sh"
+  # shellcheck disable=SC1091
   source "${PLUGIN_ROOT}/scripts/lib/scribe-distill.sh"
 
   # Load config so min_turns is available (default: 3).
@@ -87,6 +89,8 @@ setup() {
   source "${PLUGIN_ROOT}/scripts/lib/scribe-events.sh"
   # shellcheck disable=SC1091
   source "${PLUGIN_ROOT}/scripts/lib/scribe-project-key.sh"
+  # shellcheck disable=SC1091
+  source "${PLUGIN_ROOT}/scripts/lib/scribe-project-dir.sh"
   # shellcheck disable=SC1091
   source "${PLUGIN_ROOT}/scripts/lib/scribe-distill.sh"
 

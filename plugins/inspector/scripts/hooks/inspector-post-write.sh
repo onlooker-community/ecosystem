@@ -20,6 +20,7 @@ source "${PLUGIN_ROOT}/scripts/lib/hook-health.sh"
 hook_health_register "inspector-post-write"
 
 source "$PLUGIN_ROOT/scripts/lib/inspector-config.sh"
+source "$PLUGIN_ROOT/scripts/lib/inspector-canonical-path.sh"
 source "$PLUGIN_ROOT/scripts/lib/inspector-project-key.sh"
 source "$PLUGIN_ROOT/scripts/lib/inspector-events.sh"
 source "$PLUGIN_ROOT/scripts/lib/inspector-run.sh"

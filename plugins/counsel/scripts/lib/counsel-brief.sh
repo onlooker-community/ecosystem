@@ -20,6 +20,7 @@
 # shellcheck source=./counsel-synthesize.sh
 # shellcheck source=./counsel-events.sh
 # shellcheck source=./counsel-project-key.sh
+# shellcheck source=./counsel-project-dir.sh
 # (caller must source these before counsel-brief.sh)
 
 _counsel_latest_brief_path() {

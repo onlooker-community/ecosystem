@@ -37,6 +37,8 @@ setup() {
 	source "${PLUGIN_ROOT}/scripts/lib/counsel-config.sh"
 	# shellcheck disable=SC1091
 	source "${PLUGIN_ROOT}/scripts/lib/counsel-project-key.sh"
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/counsel-project-dir.sh"
 	counsel_config_load "$WORK"
 	PROJECT_KEY=$(counsel_project_key "$WORK")
 	BRIEFS_DIR=$(counsel_project_dir "$PROJECT_KEY")

@@ -18,6 +18,8 @@ setup() {
   # shellcheck disable=SC1091
   source "${PLUGIN_ROOT}/scripts/lib/counsel-project-key.sh"
   # shellcheck disable=SC1091
+  source "${PLUGIN_ROOT}/scripts/lib/counsel-project-dir.sh"
+  # shellcheck disable=SC1091
   source "${PLUGIN_ROOT}/scripts/lib/counsel-ulid.sh"
   # shellcheck disable=SC1091
   source "${PLUGIN_ROOT}/scripts/lib/counsel-reader.sh"

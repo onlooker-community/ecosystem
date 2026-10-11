@@ -99,10 +99,3 @@ scribe_project_key() {
 
 	return 0
 }
-
-scribe_project_dir() {
-	local project_key="${1:-}"
-	[[ -z "$project_key" ]] && return 1
-	local onlooker_dir="${ONLOOKER_DIR:-${HOME}/.onlooker}"
-	printf '%s' "${onlooker_dir}/scribe/${project_key}"
-}

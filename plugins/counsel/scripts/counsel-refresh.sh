@@ -42,6 +42,8 @@ source "${PLUGIN_ROOT}/scripts/lib/counsel-config.sh"
 source "${PLUGIN_ROOT}/scripts/lib/counsel-events.sh"
 # shellcheck source=lib/counsel-project-key.sh
 source "${PLUGIN_ROOT}/scripts/lib/counsel-project-key.sh"
+# shellcheck source=lib/counsel-project-dir.sh
+source "${PLUGIN_ROOT}/scripts/lib/counsel-project-dir.sh"
 # shellcheck source=lib/counsel-ulid.sh
 source "${PLUGIN_ROOT}/scripts/lib/counsel-ulid.sh"
 # shellcheck source=lib/counsel-reader.sh
