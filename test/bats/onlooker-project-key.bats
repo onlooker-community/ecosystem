@@ -101,3 +101,58 @@ setup() {
 	[ -z "$(onlooker_worktree_root "")" ]
 	[ -z "$(onlooker_worktree_root "${BATS_TEST_TMPDIR}/does-not-exist")" ]
 }
+
+@test "resolve exports basis=remote for a repo with an origin" {
+	git -C "$REPO" remote add origin git@github.com:org/fixture.git
+	onlooker_project_resolve "$REPO"
+	[ "$ONLOOKER_PROJECT_BASIS" = "remote" ]
+	[[ "$ONLOOKER_PROJECT_KEY" =~ ^[0-9a-f]{12}$ ]] || return 1
+}
+
+@test "resolve exports basis=root for a repo with no origin" {
+	onlooker_project_resolve "$REPO"
+	[ "$ONLOOKER_PROJECT_BASIS" = "root" ]
+	[[ "$ONLOOKER_PROJECT_KEY" =~ ^[0-9a-f]{12}$ ]] || return 1
+}
+
+@test "resolve exports both empty outside a git repo" {
+	local plain="${BATS_TEST_TMPDIR}/plain-resolve"
+	mkdir -p "$plain"
+	onlooker_project_resolve "$plain"
+	[ -z "$ONLOOKER_PROJECT_KEY" ]
+	[ -z "$ONLOOKER_PROJECT_BASIS" ]
+}
+
+@test "resolve clears a stale value rather than leaving the previous one" {
+	git -C "$REPO" remote add origin git@github.com:org/fixture.git
+	onlooker_project_resolve "$REPO"
+	[ -n "$ONLOOKER_PROJECT_KEY" ]
+
+	local plain="${BATS_TEST_TMPDIR}/plain-clear"
+	mkdir -p "$plain"
+	onlooker_project_resolve "$plain"
+	[ -z "$ONLOOKER_PROJECT_KEY" ]
+	[ -z "$ONLOOKER_PROJECT_BASIS" ]
+}
+
+@test "resolve exports the variables to a child process" {
+	git -C "$REPO" remote add origin git@github.com:org/fixture.git
+	onlooker_project_resolve "$REPO"
+	run env
+	[ "$status" -eq 0 ]
+	echo "$output" | grep -q "^ONLOOKER_PROJECT_BASIS=remote$"
+}
+
+@test "the key from resolve matches the key from the wrapper" {
+	git -C "$REPO" remote add origin git@github.com:org/fixture.git
+	onlooker_project_resolve "$REPO"
+	[ "$ONLOOKER_PROJECT_KEY" = "$(onlooker_project_key "$REPO")" ]
+}
+
+@test "the wrapper populates the env vars as a side effect" {
+	git -C "$REPO" remote add origin git@github.com:org/fixture.git
+	unset ONLOOKER_PROJECT_KEY ONLOOKER_PROJECT_BASIS
+	onlooker_project_key "$REPO" >/dev/null
+	[ "$ONLOOKER_PROJECT_BASIS" = "remote" ]
+	[[ "$ONLOOKER_PROJECT_KEY" =~ ^[0-9a-f]{12}$ ]] || return 1
+}

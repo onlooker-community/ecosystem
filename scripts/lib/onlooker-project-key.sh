@@ -85,24 +85,51 @@ onlooker_worktree_root() {
 	(cd "$toplevel" 2>/dev/null && pwd -P) || printf '%s' "$toplevel"
 }
 
-# Compute the project key for the given cwd. Prints the key, or empty string.
-onlooker_project_key() {
+# Resolve key and basis in ONE git pass, exporting both.
+#
+# The emitter reads these two variables rather than taking arguments or
+# deriving the key in JavaScript. A JS reimplementation that drifted from this
+# one would silently stop matching the on-disk directory names under
+# $ONLOOKER_DIR/<plugin>/<key>/, and that match is the entire point of the
+# envelope field.
+#
+# Both variables are cleared first, so a second call for a non-repo directory
+# does not leave the previous repo's key standing.
+onlooker_project_resolve() {
 	local cwd="${1:-}"
 	[[ -z "$cwd" ]] && cwd="$(pwd)"
+
+	ONLOOKER_PROJECT_KEY=""
+	ONLOOKER_PROJECT_BASIS=""
+	export ONLOOKER_PROJECT_KEY ONLOOKER_PROJECT_BASIS
 
 	local remote
 	remote=$(onlooker_project_remote_url "$cwd")
 	if [[ -n "$remote" ]]; then
-		_onlooker_sha256_first12 "remote:$remote"
+		ONLOOKER_PROJECT_KEY=$(_onlooker_sha256_first12 "remote:$remote")
+		ONLOOKER_PROJECT_BASIS="remote"
 		return 0
 	fi
 
 	local root
 	root=$(onlooker_project_repo_root "$cwd")
 	if [[ -n "$root" ]]; then
-		_onlooker_sha256_first12 "root:$root"
+		ONLOOKER_PROJECT_KEY=$(_onlooker_sha256_first12 "root:$root")
+		ONLOOKER_PROJECT_BASIS="root"
 		return 0
 	fi
 
 	return 0
+}
+
+# Compute the project key for the given cwd. Prints the key, or empty string.
+#
+# A thin wrapper over onlooker_project_resolve, which means every caller also
+# populates ONLOOKER_PROJECT_KEY and ONLOOKER_PROJECT_BASIS. That is deliberate:
+# it is what lets the emitter pick the dimension up without touching any of the
+# call sites. Callers passing a directory other than the session's cwd should
+# know they are setting the session-visible value too.
+onlooker_project_key() {
+	onlooker_project_resolve "${1:-}"
+	printf '%s' "$ONLOOKER_PROJECT_KEY"
 }
