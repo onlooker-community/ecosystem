@@ -9,8 +9,6 @@ setup() {
   export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
   # shellcheck disable=SC1091
   source "${PLUGIN_ROOT}/scripts/lib/counsel-project-key.sh"
-  # shellcheck disable=SC1091
-  source "${PLUGIN_ROOT}/scripts/lib/counsel-project-dir.sh"
 }
 
 @test "non-git directory returns empty key" {
