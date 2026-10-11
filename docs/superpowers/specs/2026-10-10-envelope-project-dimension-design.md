@@ -169,9 +169,9 @@ scribe), and `canonical_path` (inspector). `worktree_root` becomes canonical as
 resolves a worktree to its parent for identity while this resolves the tree the session is in.
 The other two embed a plugin name or are a plain path helper, so they move to plugin-local libs.
 
-Cost, measured: **129 call sites** across production and tests, concentrated — `librarian-cli.sh`
-alone has 19 — plus nine per-plugin `*-project-key.bats` files that each test a copy. Twelve
-plugins change, so twelve version bumps land in one release.
+Cost, measured across all six renamed identifiers: **231 lines in 12 plugins and the test
+suite**, plus nine per-plugin `*-project-key.bats` files that each test a copy. Twelve plugins
+change, so twelve version bumps land in one release.
 
 ### 4. Per-project counts, because 17% of sessions span repos
 
@@ -217,14 +217,14 @@ written against 2.18.0 and a count of 126.
 1. **Consolidate** (prerequisite): `ON_DEMAND_LIBS` gains `onlooker-project-key.sh`;
    `sync-shared-libs.sh` keeps the copies identical; the canonical gains `onlooker_worktree_root`;
    the three plugin-specific helpers move to plugin-local libs; 12 per-plugin libs and their bats
-   files are removed; ~129 call sites move to the `onlooker_*` names. Planned in
+   files are removed; 231 lines move to the `onlooker_*` names. Planned in
    `docs/superpowers/plans/2026-10-10-project-key-consolidation.md`. **This unit has no schema
    dependency and can land before 2.28.0 publishes.**
 2. **Resolve once per hook:** new `onlooker_project_resolve` sets and exports
    `ONLOOKER_PROJECT_KEY` and `ONLOOKER_PROJECT_BASIS` in a single pass. `onlooker_project_key`
-   becomes a thin wrapper over it, which has a deliberate consequence: every one of the ~129
-   existing call sites populates those variables as a side effect, so the emitter picks the
-   dimension up without any call site changing. Latency is ~free — hooks already derive the key,
+   becomes a thin wrapper over it, which has a deliberate consequence: every existing caller
+   populates those variables as a side effect, so the emitter picks the dimension up without any
+   call site changing. Latency is ~free — hooks already derive the key,
    so the basis folds into the same git pass.
 3. **Emit:** `scripts/lib/onlooker-event.mjs` reads those two env vars in its envelope builder
    and omits both fields when either is empty.

@@ -9,7 +9,7 @@ that also exports the project key and its derivation basis for the event emitter
 `onlooker_worktree_root` (needed by four plugins) and `onlooker_project_resolve` (sets and exports
 `ONLOOKER_PROJECT_KEY` / `ONLOOKER_PROJECT_BASIS`), and is registered in `ON_DEMAND_LIBS` so
 `sync-shared-libs.sh` keeps every vendored copy byte-identical. `onlooker_project_key` becomes a
-thin wrapper over `onlooker_project_resolve`, so all ~129 existing call sites populate the
+thin wrapper over `onlooker_project_resolve`, so every existing call site populates the
 emitter's env vars with no further change. The three genuinely plugin-specific helpers currently
 living in those files move to plugin-local libs first, so the deletions are safe.
 
@@ -193,10 +193,9 @@ The emitter needs both the key and its basis without reimplementing derivation i
 JS copy that drifted from the bash one would silently stop matching the on-disk directory names,
 which is the whole point of the field.
 
-Making `onlooker_project_key` a wrapper over the resolver has a deliberate consequence: **every one
-of the ~129 existing call sites begins exporting `ONLOOKER_PROJECT_KEY` and
-`ONLOOKER_PROJECT_BASIS` as a side effect**, so the emitter gets populated in Unit 3 with no
-further call-site changes.
+Making `onlooker_project_key` a wrapper over the resolver has a deliberate consequence: **every
+existing caller begins exporting `ONLOOKER_PROJECT_KEY` and `ONLOOKER_PROJECT_BASIS` as a side
+effect**, so the emitter gets populated in Unit 3 with no further call-site changes.
 
 **Files:**
 - Modify: `scripts/lib/onlooker-project-key.sh`
@@ -529,7 +528,7 @@ twelve in one commit.
 - Modify: `scripts/sync-shared-libs.sh:30`
 - Create: 12 × `plugins/<p>/scripts/lib/onlooker-project-key.sh`
 - Delete: 12 × `plugins/<p>/scripts/lib/<p>-project-key.sh`
-- Modify: the 22 source lines and ~129 call sites across `plugins/` and `test/`
+- Modify: 231 lines across 12 plugins and the test suite (measured; see Step 3)
 
 **Interfaces:**
 - Consumes: `onlooker_project_key`, `onlooker_project_resolve`, `onlooker_project_remote_url`,
