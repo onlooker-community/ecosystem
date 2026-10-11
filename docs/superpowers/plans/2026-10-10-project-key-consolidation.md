@@ -604,6 +604,20 @@ support `\b`, and it fails by **matching nothing at all** — no error, exit 0, 
 needs no empty-string argument. Verified it renames `scribe_project_key` while leaving
 `scribe_project_dir` untouched, which is exactly the distinction this rename depends on.
 
+**Run this through `bash` explicitly.** The Bash tool on this machine does not default to bash, and
+zsh does **not** word-split unquoted variables, so `$files` arrives as one newline-joined argument
+and `perl` silently edits nothing — exit 0, no error, no files changed. Wrap the whole block:
+
+```bash
+bash <<'SCRIPT'
+set -euo pipefail
+... the loop ...
+SCRIPT
+```
+
+A dry run does not catch this unless it exercises a plugin matching **two or more** files; with one
+match there is nothing to split and the bug stays hidden.
+
 ```bash
 set -euo pipefail
 for p in archivist assayer bursar cartographer counsel curator historian \
@@ -613,7 +627,8 @@ for p in archivist assayer bursar cartographer counsel curator historian \
                    -e "${p}_project_repo_root" -e "${p}_worktree_root" \
                    -e "_${p}_sha256_first12" -e "${p}-project-key.sh" \
             plugins/ test/ scripts/ 2>/dev/null \
-          | grep -v "plugins/${p}/scripts/lib/${p}-project-key.sh" || true)
+          | grep -v "plugins/${p}/scripts/lib/${p}-project-key.sh" \
+          | grep -v "^scripts/lib/onlooker-project-key.sh$" || true)
   [ -z "$files" ] && continue
   # shellcheck disable=SC2086
   perl -pi \
@@ -628,6 +643,36 @@ done
 ```
 
 `\Q...\E` quotes the filename so its dot is literal, not a wildcard.
+
+**Why the canonical lib is excluded.** Its own header comment reads "Mirrors the per-plugin schemes
+(see tribunal-project-key.sh)". Without the exclusion the tribunal pass rewrites that into a
+reference to itself. Reword that comment in Task 1 instead, so it stops naming files this task
+deletes.
+
+**One sourcing pattern no literal rename can reach.** Three librarian test files
+(`librarian-lesson-auto.bats`, `librarian-lesson-hold.bats`, `librarian-lesson-reconsider.bats`)
+source libs through a loop variable:
+
+```bash
+for lib in librarian-project-key librarian-storage ...; do
+  source "${PLUGIN_ROOT}/scripts/lib/${lib}.sh"
+done
+```
+
+The filename is split across the loop variable and a runtime-appended `.sh`, so neither the
+identifier nor the `<plugin>-project-key.sh` pattern matches. Rename the bare word separately:
+
+```bash
+bash <<'SCRIPT'
+perl -pi -e 's/\blibrarian-project-key\b/onlooker-project-key/g;' \
+  test/bats/librarian-lesson-auto.bats \
+  test/bats/librarian-lesson-hold.bats \
+  test/bats/librarian-lesson-reconsider.bats
+SCRIPT
+```
+
+Check for the same shape elsewhere before assuming these three are the only ones:
+`grep -rn 'for lib in' --include="*.bats" --include="*.sh" plugins/ test/`
 
 **One test asserts the bug and will fail the moment it is renamed.** `test/bats/inspector-project-key.bats:51`:
 
