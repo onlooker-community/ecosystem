@@ -238,16 +238,18 @@ per-tool detail subscribe to `inspector.check.*`.
 
 ## Project-key derivation
 
-Same algorithm as the rest of the ecosystem:
+Same algorithm as the rest of the ecosystem — literally the same file, not
+just the same logic:
 
 ```
 SHA256("remote:" + git remote get-url origin) → first 12 hex chars
   → fall back to SHA256("root:" + git rev-parse --show-toplevel)[:12]
-  → fall back to SHA256("cwd:" + pwd)[:12]
+  → unresolvable (no remote, no repo root) → empty key
 ```
 
-Implemented in `plugins/inspector/scripts/lib/onlooker-project-key.sh`,
-mirroring the equivalent helper in cartographer.
+Implemented in `plugins/inspector/scripts/lib/onlooker-project-key.sh`, the
+vendored canonical lib — identical in every plugin and kept that way by
+`test/bats/shared-lib-vendoring.bats`.
 
 ## Failure modes and fail-soft behavior
 
