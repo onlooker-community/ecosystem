@@ -67,6 +67,24 @@ onlooker_project_repo_root() {
 	printf '%s' "$toplevel"
 }
 
+# Resolve the toplevel of the working tree the session is actually in.
+#
+# Distinct from onlooker_project_repo_root, which deliberately resolves a linked
+# worktree to its parent checkout so both share a project key. That is the right
+# answer for identity and the wrong one for git: a worktree's files sit beside
+# the parent, not beneath it, so anything that reads or diffs the tree wants
+# this root instead (ecosystem-449.37, mirroring lineage's ecosystem-449.33).
+onlooker_worktree_root() {
+	local cwd="${1:-}"
+	[[ -z "$cwd" || ! -d "$cwd" ]] && return 0
+
+	local toplevel
+	toplevel=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || return 0
+	[[ -z "$toplevel" ]] && return 0
+
+	(cd "$toplevel" 2>/dev/null && pwd -P) || printf '%s' "$toplevel"
+}
+
 # Compute the project key for the given cwd. Prints the key, or empty string.
 onlooker_project_key() {
 	local cwd="${1:-}"

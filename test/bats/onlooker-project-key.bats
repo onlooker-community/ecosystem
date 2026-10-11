@@ -74,3 +74,30 @@ setup() {
 	mkdir -p "$plain"
 	[ -z "$(onlooker_project_key "$plain")" ]
 }
+
+@test "worktree_root resolves a linked worktree to ITSELF, not its parent" {
+	git -C "$REPO" remote add origin git@github.com:org/fixture.git
+	git -C "$REPO" commit -q --allow-empty -m "base"
+	local wt="${BATS_TEST_TMPDIR}/wt-self"
+	git -C "$REPO" worktree add -q -b wt-self-branch "$wt" >/dev/null 2>&1
+
+	# Identity collapses the two; location must not.
+	[ "$(onlooker_project_key "$REPO")" = "$(onlooker_project_key "$wt")" ]
+	[ "$(onlooker_worktree_root "$wt")" != "$(onlooker_worktree_root "$REPO")" ]
+	[ "$(onlooker_worktree_root "$wt")" = "$(cd "$wt" && pwd -P)" ]
+}
+
+@test "worktree_root returns the toplevel for an ordinary checkout" {
+	[ "$(onlooker_worktree_root "$REPO")" = "$(cd "$REPO" && pwd -P)" ]
+}
+
+@test "worktree_root returns empty outside a git repo" {
+	local plain="${BATS_TEST_TMPDIR}/plain-wt"
+	mkdir -p "$plain"
+	[ -z "$(onlooker_worktree_root "$plain")" ]
+}
+
+@test "worktree_root returns empty for an absent or non-directory argument" {
+	[ -z "$(onlooker_worktree_root "")" ]
+	[ -z "$(onlooker_worktree_root "${BATS_TEST_TMPDIR}/does-not-exist")" ]
+}
