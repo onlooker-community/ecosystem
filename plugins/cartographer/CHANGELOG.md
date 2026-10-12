@@ -2,6 +2,13 @@
 
 All notable changes to the Cartographer plugin are documented here.
 
+## [0.12.0](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.11.2...cartographer-v0.12.0) (2026-10-12)
+
+
+### Features
+
+* **envelope:** attribute every event to a repository :world_map: ([#435](https://github.com/onlooker-community/ecosystem/issues/435)) ([ab3fe4d](https://github.com/onlooker-community/ecosystem/commit/ab3fe4d1fd2c6f11d1284a8515efed732ef2aafb))
+
 ## [0.11.2](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.11.1...cartographer-v0.11.2) (2026-10-11)
 
 
