@@ -207,6 +207,13 @@ for file in "$MEMORY_DIR"/*.md; do
 		--argjson payload "$payload" \
 		'{ plugin: $plugin, session_id: $sid, event_type: $type, payload: $payload }')
 
+	# The envelope dimension, alongside the payload project_key this hook has
+	# always carried. Both are derived from the same CWD and were verified to
+	# agree on all three cases (remote, root, non-repo) — this hook predates the
+	# canonical lib and still hand-rolls the derivation above, which is a
+	# maintenance risk tracked separately, not a divergence today.
+	onlooker_project_resolve_cached "$CWD"
+
 	event_json=$(printf '%s' "$params" \
 		| ONLOOKER_DIR="$ONLOOKER_DIR" ONLOOKER_PLUGIN_NAME="$local_plugin" \
 		  node "$_ONLOOKER_EVENT_JS" emit 2>/dev/null) || event_json=""

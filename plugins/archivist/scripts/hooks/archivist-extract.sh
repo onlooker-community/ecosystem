@@ -80,7 +80,8 @@ TRIGGER=$(printf '%s' "$INPUT" | jq -r '.trigger // "auto"' 2>/dev/null) || TRIG
 CUSTOM_INSTRUCTIONS=$(printf '%s' "$INPUT" | jq -r '.custom_instructions // ""' 2>/dev/null) || CUSTOM_INSTRUCTIONS=""
 
 REPO_ROOT=$(onlooker_project_repo_root "$CWD")
-PROJECT_KEY=$(onlooker_project_key "$CWD")
+onlooker_project_resolve "$CWD"
+PROJECT_KEY="$ONLOOKER_PROJECT_KEY"
 
 # Where this session's files actually live, which for a worktree is not
 # REPO_ROOT (ecosystem-449.37). Used for the root named in the prompt and for

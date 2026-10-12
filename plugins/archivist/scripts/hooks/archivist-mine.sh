@@ -49,7 +49,8 @@ INPUT=$(cat 2>/dev/null || printf '')
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 [[ -z "$CWD" ]] && CWD="$(pwd)"
 
-PROJECT_KEY=$(onlooker_project_key "$CWD")
+onlooker_project_resolve "$CWD"
+PROJECT_KEY="$ONLOOKER_PROJECT_KEY"
 # No git context means no store to write into, and nothing to mine.
 [[ -z "$PROJECT_KEY" ]] && hook_health_exit 0
 

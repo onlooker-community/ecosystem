@@ -71,7 +71,8 @@ SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SE
 REPO_ROOT=$(onlooker_project_repo_root "$CWD")
 curator_config_load "$CWD"
 
-PROJECT_KEY=$(onlooker_project_key "$CWD")
+onlooker_project_resolve "$CWD"
+PROJECT_KEY="$ONLOOKER_PROJECT_KEY"
 if [[ -z "$PROJECT_KEY" ]]; then
 	_emit ""
 	hook_health_exit 0

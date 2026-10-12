@@ -71,7 +71,8 @@ export _HOOK_SESSION_ID="$SESSION_ID"
 
 counsel_config_load "$CWD"
 
-PROJECT_KEY=$(onlooker_project_key "$CWD")
+onlooker_project_resolve "$CWD"
+PROJECT_KEY="$ONLOOKER_PROJECT_KEY"
 if [[ -z "$PROJECT_KEY" ]]; then
 	_emit ""
 	hook_health_exit 0

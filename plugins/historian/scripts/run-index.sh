@@ -101,7 +101,8 @@ _emit_skip() {
 historian_config_load "$CWD"
 REPO_ROOT=$(onlooker_project_repo_root "$CWD")
 
-PROJECT_KEY=$(onlooker_project_key "$CWD")
+onlooker_project_resolve "$CWD"
+PROJECT_KEY="$ONLOOKER_PROJECT_KEY"
 [[ -z "$PROJECT_KEY" ]] && exit 0
 
 historian_storage_init "$PROJECT_KEY" || exit 0

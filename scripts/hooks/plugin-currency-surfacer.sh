@@ -78,7 +78,8 @@ plugin_currency_config_load "$REPO_ROOT"
 	_finish ""
 }
 
-PROJECT_KEY=$(onlooker_project_key "$CWD")
+onlooker_project_resolve "$CWD"
+PROJECT_KEY="$ONLOOKER_PROJECT_KEY"
 [[ -z "$PROJECT_KEY" ]] && {
 	_emit "onlooker.currency.skipped" '{"skip_reason":"no_git_context"}'
 	_finish ""

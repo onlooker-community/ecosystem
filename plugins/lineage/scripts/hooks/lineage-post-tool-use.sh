@@ -241,7 +241,8 @@ if [[ "$TOOL" == "Bash" ]]; then
 	fi
 
 	lineage_config_load "$CWD"
-	PROJECT_KEY=$(onlooker_project_key "$CWD")
+	onlooker_project_resolve "$CWD"
+	PROJECT_KEY="$ONLOOKER_PROJECT_KEY"
 	[[ -n "${LINEAGE_TRACE_SETUP:-}" ]] && printf 'SETUP_DONE\n' >&2
 	[[ -z "$PROJECT_KEY" ]] && _done
 
@@ -299,7 +300,8 @@ fi
 
 lineage_config_load "$CWD"
 
-PROJECT_KEY=$(onlooker_project_key "$CWD")
+onlooker_project_resolve "$CWD"
+PROJECT_KEY="$ONLOOKER_PROJECT_KEY"
 [[ -z "$PROJECT_KEY" ]] && _done
 
 FILE_PATH=""

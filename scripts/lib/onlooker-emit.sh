@@ -23,6 +23,11 @@ if [[ -z "$SESSION_ID" ]]; then
 	SESSION_ID=$(echo "$PAYLOAD_JSON" | jq -r '.session_id // "unknown"' 2>/dev/null) || SESSION_ID="unknown"
 fi
 
+# This shim has no hook payload to read a cwd from — it is invoked as
+# `onlooker-emit.sh <type> <payload>` — so the resolve falls back to the
+# process's own directory, which for a hook is the session's.
+onlooker_project_resolve_cached ""
+
 PARAMS=$(jq -n \
 	--arg plugin "${ONLOOKER_PLUGIN_NAME:-onlooker}" \
 	--arg sid "$SESSION_ID" \

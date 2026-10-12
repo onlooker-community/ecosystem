@@ -25,7 +25,7 @@ SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // "unknown"')
 
 PAYLOAD=$(session_tracker_build_end_payload "$SESSION_ID" "$INPUT")
 if [[ -n "$PAYLOAD" ]]; then
-	session_tracker_emit "$SESSION_ID" "session.end" "$PAYLOAD" \
+	session_tracker_emit "$SESSION_ID" "session.end" "$PAYLOAD" "$INPUT" \
 		|| hook_failure "Failed to emit session.end"
 fi
 
