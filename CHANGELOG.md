@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.71.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.70.7...ecosystem-v0.71.0) (2026-10-12)
+
+
+### Features
+
+* **envelope:** attribute every event to a repository :world_map: ([#435](https://github.com/onlooker-community/ecosystem/issues/435)) ([ab3fe4d](https://github.com/onlooker-community/ecosystem/commit/ab3fe4d1fd2c6f11d1284a8515efed732ef2aafb))
+
 ## [0.70.7](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.70.6...ecosystem-v0.70.7) (2026-10-11)
 
 
