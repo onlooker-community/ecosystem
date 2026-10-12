@@ -45,6 +45,7 @@
     "inspector.run.completed",
     "librarian.candidate.dropped",
     "librarian.candidate.proposed",
+    "librarian.lesson.promoted",
     "librarian.proposal.accepted",
     "librarian.proposal.rejected",
     "librarian.scan.complete",

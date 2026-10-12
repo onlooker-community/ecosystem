@@ -94,7 +94,8 @@ if [[ "$RETRIEVAL_ENABLED" == "false" ]]; then
 	hook_health_exit 0
 fi
 
-PROJECT_KEY=$(onlooker_project_key "$CWD")
+onlooker_project_resolve "$CWD"
+PROJECT_KEY="$ONLOOKER_PROJECT_KEY"
 if [[ -z "$PROJECT_KEY" ]]; then
 	_emit_context ""
 	hook_health_exit 0

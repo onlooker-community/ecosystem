@@ -29,7 +29,7 @@ compact_tracker_record_post "$SESSION_ID" "$INPUT" || hook_failure "Failed to fi
 
 PAYLOAD=$(compact_tracker_build_compact_payload "$SESSION_ID" "$INPUT")
 if [[ -n "$PAYLOAD" ]]; then
-	session_tracker_emit "$SESSION_ID" "session.compact" "$PAYLOAD" \
+	session_tracker_emit "$SESSION_ID" "session.compact" "$PAYLOAD" "$INPUT" \
 		|| hook_failure "Failed to emit session.compact"
 fi
 

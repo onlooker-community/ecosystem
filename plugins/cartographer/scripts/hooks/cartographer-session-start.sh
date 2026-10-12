@@ -45,7 +45,8 @@ export _HOOK_SESSION_ID
 REPO_ROOT=$(onlooker_worktree_root "$CWD")
 cartographer_config_load "$CWD"
 
-PROJECT_KEY=$(onlooker_project_key "$CWD")
+onlooker_project_resolve "$CWD"
+PROJECT_KEY="$ONLOOKER_PROJECT_KEY"
 [[ -z "$PROJECT_KEY" ]] && hook_health_exit 0
 
 ONLOOKER_DIR="${ONLOOKER_DIR:-$HOME/.onlooker}"

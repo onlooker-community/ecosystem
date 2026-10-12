@@ -64,7 +64,8 @@ hook_health_context "$INPUT"
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 SOURCE=$(printf '%s' "$INPUT" | jq -r '.source // "startup"' 2>/dev/null) || SOURCE="startup"
 
-PROJECT_KEY=$(onlooker_project_key "$CWD")
+onlooker_project_resolve "$CWD"
+PROJECT_KEY="$ONLOOKER_PROJECT_KEY"
 
 archivist_config_load "$CWD"
 

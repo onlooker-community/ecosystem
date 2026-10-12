@@ -6,9 +6,34 @@
 # service that drains the pool does not exist yet.
 #
 # Requires librarian-lesson-storage.sh and librarian-author-key.sh.
+# librarian-emit.sh is OPTIONAL — see the emit note at the end of
+# librarian_lesson_promote for why it is guarded rather than required.
 #
 # Exposes:
 #   librarian_lesson_promote <key> <lesson_id>
+
+# Milliseconds since the epoch, for duration_ms on librarian.lesson.promoted.
+#
+# Prefers a clock the caller already defined: librarian_now_ms when a hook or
+# the classify worker has one, then hook-health's, which carries the full
+# EPOCHREALTIME/jq/perl/python3 chain. librarian-ulid.sh reaches for that same
+# function behind the same `declare -F` guard, so this adds no new mechanism —
+# only the last-resort tier, which is second-resolution and can legitimately
+# make a fast promotion read 0.
+_librarian_lesson_now_ms() {
+	if declare -F librarian_now_ms >/dev/null 2>&1; then
+		librarian_now_ms
+		return 0
+	fi
+	if declare -F _hook_health_now_ms >/dev/null 2>&1; then
+		_hook_health_now_ms
+		return 0
+	fi
+	local now_ms
+	now_ms=$(python3 -c 'import time; print(int(time.time() * 1000))' 2>/dev/null) || now_ms=""
+	[[ -z "$now_ms" ]] && now_ms=$(( $(date +%s) * 1000 ))
+	printf '%s' "$now_ms"
+}
 
 # Map a lesson's visibility to the contract's `source` enum.
 #
@@ -45,6 +70,9 @@ librarian_lesson_promote() {
 	local key="$1"
 	local lesson_id="$2"
 	[[ -z "$key" || -z "$lesson_id" ]] && return 1
+
+	local started_ms
+	started_ms=$(_librarian_lesson_now_ms)
 
 	local dir path
 	dir="$(librarian_lessons_dir "$key")"
@@ -277,4 +305,34 @@ librarian_lesson_promote() {
 		printf '%s\n' "$stamp_fail_msg" >&2
 		return 1
 	}
+
+	# Announce the terminal record. Keyed to the STAMP, not to the record, and
+	# that is what makes the event exactly-once: a run that wrote the record and
+	# failed to stamp is the state `lessons promote <id>` exists to reconcile,
+	# and its re-run skips the write (the pool_path / already_declined guards)
+	# but does reach here. Emitting on the record would count that twice; the
+	# already-promoted early return above means an already-stamped lesson never
+	# re-announces.
+	#
+	# Guarded on both sides. librarian_emit is not in this lib's dependency
+	# contract — librarian-lesson-promote.bats sources storage and author-key
+	# only, and a bare call there would be a "command not found" where the
+	# promotion used to succeed. And librarian_emit's own last statement is the
+	# log append, so a read-only log would otherwise turn a completed promotion
+	# into a reported failure.
+	if declare -F librarian_emit >/dev/null 2>&1; then
+		local duration_ms
+		duration_ms=$(( $(_librarian_lesson_now_ms) - started_ms ))
+		# The payload floor is 0, and the fallback clock tiers do not share a
+		# resolution, so a tier change mid-call could read backwards.
+		[[ "$duration_ms" -ge 0 ]] || duration_ms=0
+		librarian_emit "librarian.lesson.promoted" "${CLAUDE_SESSION_ID:-cli}" \
+			"$(jq -cn \
+				--arg lesson_id "$lesson_id" \
+				--arg outcome "$current_status" \
+				--argjson duration_ms "$duration_ms" \
+				'{lesson_id: $lesson_id, outcome: $outcome, duration_ms: $duration_ms}')" \
+			|| true
+	fi
+	return 0
 }

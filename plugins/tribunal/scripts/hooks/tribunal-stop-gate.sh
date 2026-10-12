@@ -98,7 +98,8 @@ WORKTREE_ROOT=$(onlooker_worktree_root "$CWD")
 # the gate silent rather than opting a repo in by omission.
 tribunal_config_stop_hook_enabled || _done
 
-PROJECT_KEY=$(onlooker_project_key "$CWD")
+onlooker_project_resolve "$CWD"
+PROJECT_KEY="$ONLOOKER_PROJECT_KEY"
 if [[ -z "$PROJECT_KEY" || -z "$REPO_ROOT" ]]; then
 	_done
 fi

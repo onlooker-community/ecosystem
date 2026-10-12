@@ -58,6 +58,8 @@ export function buildCanonicalEvent({
   payload,
   cost_usd,
   token_count,
+  project,
+  project_basis,
 }) {
   // Envelope assembly inlined from @onlooker-community/schema's createEvent so
   // emission needs no external package. The schema is the source of truth for
@@ -78,6 +80,21 @@ export function buildCanonicalEvent({
   if (adapter_id !== undefined) event.adapter_id = adapter_id;
   if (cost_usd !== undefined) event.cost_usd = cost_usd;
   if (token_count !== undefined) event.token_count = token_count;
+  // Both or neither, and the conjunction is what enforces it. An empty string
+  // is what onlooker_project_resolve exports when it cannot derive a key, and
+  // the envelope pattern is ^[0-9a-f]{12}$ — so emitting "" would fail
+  // validation. Absent is the documented value for "not attributable", which
+  // covers a non-git directory and a hook that never called the resolver alike.
+  //
+  // A key WITHOUT its basis would validate (project_basis is optional), which
+  // is exactly why it has to be refused here: the hosted view could not tell a
+  // portable remote-derived key from a machine-local root-derived one, so it
+  // would split one repo into two rows with nothing on the wire revealing it.
+  // That is the failure the design rejected rather than a cosmetic concern.
+  if (project && project_basis) {
+    event.project = project;
+    event.project_basis = project_basis;
+  }
   return event;
 }
 
@@ -264,7 +281,14 @@ function parseTurnNumber() {
  * Returns null when the hook input is not a skill invocation.
  */
 export function mapSkillHookInput(hookInput, options) {
-  const { onlookerDir, plugin, runtime = 'claude-code', adapter_id = 'ecosystem.hooks' } = options;
+  const {
+    onlookerDir,
+    plugin,
+    runtime = 'claude-code',
+    adapter_id = 'ecosystem.hooks',
+    project,
+    project_basis,
+  } = options;
   const hookEvent = hookInput?.hook_event_name;
   const sessionId = hookInput?.session_id ?? 'unknown';
 
@@ -302,6 +326,8 @@ export function mapSkillHookInput(hookInput, options) {
     runtime,
     adapter_id,
     plugin,
+    project,
+    project_basis,
     session_id: sessionId,
     event_type: SKILL_INVOKED,
     payload,
@@ -315,7 +341,14 @@ export function mapSkillHookInput(hookInput, options) {
  * Returns null when the hook input is not a task lifecycle event.
  */
 export function mapTaskHookInput(hookInput, options) {
-  const { onlookerDir, plugin, runtime = 'claude-code', adapter_id = 'ecosystem.hooks' } = options;
+  const {
+    onlookerDir,
+    plugin,
+    runtime = 'claude-code',
+    adapter_id = 'ecosystem.hooks',
+    project,
+    project_basis,
+  } = options;
   const hookEvent = hookInput?.hook_event_name;
   const sessionId = hookInput?.session_id ?? 'unknown';
   const taskSubject = hookInput?.task_subject;
@@ -348,6 +381,8 @@ export function mapTaskHookInput(hookInput, options) {
     runtime,
     adapter_id,
     plugin,
+    project,
+    project_basis,
     session_id: sessionId,
     event_type: eventType,
     payload,
@@ -361,7 +396,14 @@ export function mapTaskHookInput(hookInput, options) {
  * worktree.* event types exist in @onlooker-community/schema).
  */
 export function mapWorktreeHookInput(hookInput, options) {
-  const { onlookerDir, plugin, runtime = 'claude-code', adapter_id = 'ecosystem.hooks' } = options;
+  const {
+    onlookerDir,
+    plugin,
+    runtime = 'claude-code',
+    adapter_id = 'ecosystem.hooks',
+    project,
+    project_basis,
+  } = options;
   const hookEvent = hookInput?.hook_event_name;
   const sessionId = hookInput?.session_id ?? 'unknown';
   const cwd = hookInput?.cwd;
@@ -397,6 +439,8 @@ export function mapWorktreeHookInput(hookInput, options) {
     runtime,
     adapter_id,
     plugin,
+    project,
+    project_basis,
     session_id: sessionId,
     event_type: TOOL_SHELL_EXEC,
     payload,
@@ -419,7 +463,14 @@ export function mapHookInputToCanonical(hookInput, options) {
   const worktreeMapped = mapWorktreeHookInput(hookInput, options);
   if (worktreeMapped) return worktreeMapped;
 
-  const { onlookerDir, plugin, runtime = 'claude-code', adapter_id = 'ecosystem.hooks' } = options;
+  const {
+    onlookerDir,
+    plugin,
+    runtime = 'claude-code',
+    adapter_id = 'ecosystem.hooks',
+    project,
+    project_basis,
+  } = options;
 
   const toolName = hookInput?.tool_name;
   const hookEvent = hookInput?.hook_event_name ?? 'PostToolUse';
@@ -515,6 +566,8 @@ export function mapHookInputToCanonical(hookInput, options) {
     runtime,
     adapter_id,
     plugin,
+    project,
+    project_basis,
     session_id: sessionId,
     event_type: eventType,
     payload,
@@ -536,6 +589,11 @@ async function main() {
   const [command, ...args] = process.argv.slice(2);
   const onlookerDir = process.env.ONLOOKER_DIR ?? join(process.env.HOME ?? '/tmp', '.onlooker');
   const plugin = process.env.ONLOOKER_PLUGIN_NAME ?? 'onlooker';
+  // Set by onlooker_project_resolve, which a hook calls DIRECTLY — not through
+  // command substitution, which runs in a subshell and discards the exports.
+  // This process is a child of that shell, so an exported value does reach it.
+  const project = process.env.ONLOOKER_PROJECT_KEY || undefined;
+  const project_basis = process.env.ONLOOKER_PROJECT_BASIS || undefined;
 
   if (command === 'validate') {
     const raw = await readStdin();
@@ -556,7 +614,12 @@ async function main() {
   if (command === 'emit-from-hook') {
     const raw = await readStdin();
     const hookInput = JSON.parse(raw || '{}');
-    const mapped = mapHookInputToCanonical(hookInput, { onlookerDir, plugin });
+    const mapped = mapHookInputToCanonical(hookInput, {
+      onlookerDir,
+      plugin,
+      project,
+      project_basis,
+    });
     if (!mapped) {
       process.exit(0);
     }
@@ -585,6 +648,8 @@ async function main() {
       plugin: params.plugin ?? plugin,
       runtime: params.runtime ?? 'claude-code',
       adapter_id: params.adapter_id,
+      project: params.project ?? project,
+      project_basis: params.project_basis ?? project_basis,
       session_id: params.session_id,
       event_type: params.event_type,
       payload: params.payload,

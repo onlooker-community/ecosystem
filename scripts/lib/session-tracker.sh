@@ -252,7 +252,15 @@ session_tracker_emit() {
 	local session_id="${1:-}"
 	local event_type="${2:-}"
 	local payload_json="${3:-}"
+	local hook_input="${4:-}"
 	[[ -z "$session_id" || -z "$event_type" || -z "$payload_json" ]] && return 0
+
+	# The project dimension for session.* — the namespace a per-repo view needs
+	# most, since it is what carries a session's identity. The hook input is
+	# optional so the three-argument calls in session-tracker.bats keep working;
+	# without it the resolve falls back to $(pwd), which for these hooks is the
+	# session directory anyway.
+	_onlooker_resolve_project_for_hook "$hook_input"
 
 	local params event
 	params=$(jq -n \

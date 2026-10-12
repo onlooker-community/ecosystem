@@ -78,7 +78,8 @@ REPO_ROOT=$(onlooker_project_repo_root "$CWD")
 
 CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" assayer_config_load "$CWD"
 
-PROJECT_KEY=$(onlooker_project_key "$CWD")
+onlooker_project_resolve "$CWD"
+PROJECT_KEY="$ONLOOKER_PROJECT_KEY"
 [[ -z "$PROJECT_KEY" ]] && _done
 
 command -v claude >/dev/null 2>&1 || _done

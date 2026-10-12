@@ -30,7 +30,7 @@ session_tracker_record_start "$SESSION_ID" "$INPUT" || hook_failure "Failed to r
 if [[ "$SOURCE" != "compact" ]]; then
 	PAYLOAD=$(session_tracker_build_start_payload "$INPUT")
 	if [[ -n "$PAYLOAD" ]]; then
-		session_tracker_emit "$SESSION_ID" "session.start" "$PAYLOAD" \
+		session_tracker_emit "$SESSION_ID" "session.start" "$PAYLOAD" "$INPUT" \
 			|| hook_failure "Failed to emit session.start"
 	fi
 fi

@@ -211,7 +211,8 @@ counsel_generate_brief() {
 	min_events=$(counsel_config_int '.counsel.capture.min_events' 10)
 
 	local project_key
-	project_key=$(onlooker_project_key "$cwd")
+	onlooker_project_resolve "$cwd"
+	project_key="$ONLOOKER_PROJECT_KEY"
 
 	# Stale check. On-demand invocations pass force to bypass it.
 	if [[ "$force" != "1" && "$force" != "force" ]]; then

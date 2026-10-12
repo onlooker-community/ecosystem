@@ -212,7 +212,8 @@ fi
 # ---------------------------------------------------------------------------
 # Setup paid once, however many files came out of the step above.
 # ---------------------------------------------------------------------------
-PROJECT_KEY=$(onlooker_project_key "$CWD")
+onlooker_project_resolve "$CWD"
+PROJECT_KEY="$ONLOOKER_PROJECT_KEY"
 export INSPECTOR_PROJECT_KEY="$PROJECT_KEY"
 inspector_config_load "$CWD"
 

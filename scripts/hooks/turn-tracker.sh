@@ -30,7 +30,7 @@ turn_state_export "$SESSION_ID"
 
 PAYLOAD=$(turn_tracker_build_prompt_payload "$SESSION_ID" "$PROMPT")
 if [[ -n "$PAYLOAD" ]]; then
-	session_tracker_emit "$SESSION_ID" "session.prompt" "$PAYLOAD" \
+	session_tracker_emit "$SESSION_ID" "session.prompt" "$PAYLOAD" "$INPUT" \
 		|| hook_failure "Failed to emit session.prompt"
 fi
 

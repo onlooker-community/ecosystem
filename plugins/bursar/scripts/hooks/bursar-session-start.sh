@@ -44,7 +44,8 @@ _done() { hook_health_exit 0; }
 bursar_config_load "$CWD"
 
 [[ -z "$CWD" ]] && CWD="$(pwd)"
-PROJECT_KEY=$(onlooker_project_key "$CWD")
+onlooker_project_resolve "$CWD"
+PROJECT_KEY="$ONLOOKER_PROJECT_KEY"
 [[ -z "$PROJECT_KEY" ]] && _done   # not a recognizable project — nothing to attribute
 
 ONLOOKER_DIR="${ONLOOKER_DIR:-${HOME}/.onlooker}"
