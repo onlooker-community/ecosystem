@@ -205,8 +205,19 @@ session-level fields like `prompts` and `compactions` with no non-arbitrary way 
 - `schemas/event.v1.json`: add optional `project` and `project_basis`; add
   `librarian.lesson.promoted` to the `event_type` enum.
 - `schemas/payload/plugins-memory.json`: add the `librarian.lesson.promoted` payload —
-  `lesson_id`, `outcome: approved | declined`, `duration_ms` (ONL-7).
-- Regenerate `src/types.ts` and `src/event-types.ts`.
+  `lesson_id`, `outcome: approved | rejected`, `duration_ms` (ONL-7). **`rejected`, not
+  `declined`** — `librarian_lesson_promote` branches on the status vocabulary `approved|rejected`
+  (`librarian-lesson-promote.sh:26,40`); `declined.jsonl` is only the file a rejected lesson lands
+  in. Publishing `declined` in the enum would not match what Unit 3 emits.
+- Hand-edit `src/event-types.ts` (the const plus its `ALL_EVENT_TYPES` entry) and `src/types.ts`
+  (the two optional envelope fields). **Neither is generated** — the spec previously said
+  "regenerate", which is wrong. `npm run generate-types` writes `dist/generated-types.d.ts` from
+  `schemas/payload/*.json` only, and that file is gitignored.
+- Bump the hard-coded count in `src/validate.test.ts` (`expect(ALL_EVENT_TYPES.length).toBe(132)`)
+  to 133. It is a deliberate tripwire, so it fails loudly rather than drifting.
+- `scripts/validate-schemas.js` enforces three hard rules: every payload `$defs` key must appear in
+  the envelope enum, no type may be defined in two payload files, and every payload needs
+  `additionalProperties: false`. An enum value with no payload is only a warning, but add one.
 
 The schema registers 132 event types today, nine of them `librarian.*`, and none means "a lesson
 was written" — re-verified against the installed 2.27.0, correcting ONL-7's note, which was
