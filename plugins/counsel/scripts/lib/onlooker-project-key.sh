@@ -22,12 +22,47 @@
 # beneath it. Conflating the two is ecosystem-449.37, mirroring lineage's
 # ecosystem-449.33.
 
+# Ordered by MEASURED cost, not by availability. Measured on an M-series mac,
+# 200 calls each, through the exact pipelines below rather than the bare
+# binaries:
+#
+#   sha256sum   2.10 ms      openssl   2.34 ms
+#   shasum     14.51 ms      python3  21.70 ms
+#
+# shasum is a Perl script, which is the whole story. It used to be FIRST, so
+# every derivation on every platform paid 14.51 ms - and lineage derives a key
+# on every PostToolUse (lineage-post-tool-use.sh:244 and :302), in a repo that
+# treats per-edit hook latency as a budget. This ordering returns ~12 ms per
+# derivation (ONL-150).
+#
+# Availability, not the 0.24 ms, decides the order of the fast two. sha256sum
+# is coreutils: present on Linux and CI, absent from a stock macOS. openssl is
+# /usr/bin/openssl and ships with macOS. So sha256sum first takes the fastest
+# path where it exists, openssl catches a stock Mac, and shasum stays last as
+# the tier macOS can always reach - which is why the chain can still never fail
+# on a Mac.
+#
+# The `cut` pipeline stays. Replacing it with a command substitution plus
+# `${var:0:12}` looks like one fewer process and measures SLOWER (2.35 ms vs
+# 2.06 ms): `$( )` forks a subshell, while `cut` in a pipeline runs
+# concurrently with the hash tool.
+#
+# The sed on the openssl path handles both output formats. LibreSSL on macOS
+# prints bare hex, where the substitution is a no-op; other builds print
+# `SHA2-256(stdin)= <hex>`, where it strips the prefix. A digest is hex, so it
+# can never contain the `=` the pattern keys on.
+#
+# All tiers must agree, and onlooker-project-key.bats asserts it: a tier that
+# disagreed would silently repartition every $ONLOOKER_DIR/<plugin>/<key>/
+# directory on the machine the moment it was reordered ahead of another.
 _onlooker_sha256_first12() {
 	local input="$1"
-	if command -v shasum >/dev/null 2>&1; then
-		printf '%s' "$input" | shasum -a 256 2>/dev/null | cut -c1-12
-	elif command -v sha256sum >/dev/null 2>&1; then
+	if command -v sha256sum >/dev/null 2>&1; then
 		printf '%s' "$input" | sha256sum 2>/dev/null | cut -c1-12
+	elif command -v openssl >/dev/null 2>&1; then
+		printf '%s' "$input" | openssl dgst -sha256 2>/dev/null | sed 's/^.*= *//' | cut -c1-12
+	elif command -v shasum >/dev/null 2>&1; then
+		printf '%s' "$input" | shasum -a 256 2>/dev/null | cut -c1-12
 	else
 		return 1
 	fi
