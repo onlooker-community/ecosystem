@@ -55,6 +55,36 @@
 # All tiers must agree, and onlooker-project-key.bats asserts it: a tier that
 # disagreed would silently repartition every $ONLOOKER_DIR/<plugin>/<key>/
 # directory on the machine the moment it was reordered ahead of another.
+#
+# THE SUPPORTED-PLATFORM FLOOR, written down rather than implied (ONL-153).
+#
+# Three tiers is the whole list, and a machine with none of them gets an empty
+# key - the documented "not attributable" value, which every consumer already
+# handles. That is a deliberate floor, not a gap someone forgot to fill:
+#
+#   - macOS ships /usr/bin/shasum and /usr/bin/openssl. Both are present on a
+#     stock install, so the chain cannot fail there.
+#   - Mainstream Linux ships sha256sum (coreutils) and openssl.
+#
+# The deleted cartographer-project-key.sh and inspector-project-key.sh had a
+# fourth tier, python3, and it is deliberately NOT restored. Two reasons, both
+# measured rather than assumed:
+#
+#   1. It is the slowest option by a wide margin - 21.70 ms against shasum's
+#      14.51 ms and sha256sum's 2.10 ms - so it would be slower than the tier
+#      it was meant to back up.
+#   2. It is not a more reliable floor than the tiers above it. `command -v
+#      python3` is satisfied by whatever a version manager has put on PATH -
+#      on the machine these numbers come from it resolves to a mise shim, not
+#      a system path - so its presence tracks developer tooling rather than
+#      the OS, where /usr/bin/openssl tracks the OS. A tier whose `command -v`
+#      succeeds and whose interpreter then does not run would fail on exactly
+#      the bare machine it was added to rescue.
+#
+# If a platform without any of the three ever matters, the honest fix is a
+# plugin-visible error rather than a fourth hashing tier: today the failure is
+# silent, which is the shape ONL-153 rightly objected to, and an empty key is
+# indistinguishable from "not a git repo" at every call site.
 _onlooker_sha256_first12() {
 	local input="$1"
 	if command -v sha256sum >/dev/null 2>&1; then
