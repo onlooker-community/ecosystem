@@ -260,3 +260,109 @@ setup() {
 	[ "$status" -eq 0 ]
 	[ -z "$output" ]
 }
+
+# Hash-tier preference (ONL-150).
+#
+# The tiers are ordered by MEASURED cost, so the order is a behavior worth
+# pinning rather than an implementation detail. Measured on an M-series mac,
+# 200 calls each, through the exact production pipeline:
+#
+#   sha256sum   2.10 ms     openssl   2.34 ms
+#   shasum     14.51 ms     python3  21.70 ms
+#
+# shasum is a Perl script, which is the whole story - and it was first, so
+# every derivation on every platform took the 14.51 ms path. lineage derives a
+# key on EVERY PostToolUse (lineage-post-tool-use.sh:244 and :302), and this
+# repo treats per-edit hook latency as a budget.
+#
+# Availability decides the order among the fast two, not the 0.24 ms between
+# them: sha256sum is coreutils and absent from a stock macOS, while openssl is
+# /usr/bin/openssl and ships with it. So sha256sum first wins on Linux and CI,
+# openssl catches a stock Mac, and shasum stays last as the tier macOS can
+# always reach.
+
+# A PATH containing ONLY the named hash stubs, plus the real `cut` and `sed`
+# the pipelines need. Each stub prints a distinguishable digest, so the key the
+# function returns names the tier it chose.
+_stub_path() {
+	local dir="${BATS_TEST_TMPDIR}/hashstubs"
+	rm -rf "$dir"
+	mkdir -p "$dir"
+	ln -s "$(command -v cut)" "${dir}/cut"
+	ln -s "$(command -v sed)" "${dir}/sed"
+
+	# `#!/bin/sh`, NOT `#!/usr/bin/env bash`: PATH here holds only this stub
+	# directory, and `env bash` resolves `bash` through PATH - so an env-shebang
+	# stub is simply not executable under the very condition these tests create,
+	# and the function then reports the NEXT tier as if the stub tier were
+	# missing. That reads exactly like an ordering bug in the code under test.
+	local tool
+	for tool in "$@"; do
+		case "$tool" in
+			sha256sum) printf '#!/bin/sh\nprintf "%%s  -\\n" "aaaaaaaaaaaaaaaa"\n' >"${dir}/sha256sum" ;;
+			# Bare hex, which is what LibreSSL on macOS actually prints - the
+			# `SHA2-256(stdin)= ` prefix the sed strips is another build's
+			# format, so the sed must be a no-op here and is.
+			openssl)   printf '#!/bin/sh\nprintf "%%s\\n" "bbbbbbbbbbbbbbbb"\n' >"${dir}/openssl" ;;
+			shasum)    printf '#!/bin/sh\nprintf "%%s  -\\n" "cccccccccccccccc"\n' >"${dir}/shasum" ;;
+		esac
+		chmod +x "${dir}/${tool}"
+	done
+	printf '%s' "$dir"
+}
+
+# Derive with ONLY the named tiers reachable.
+#
+# The PATH override is scoped to a subshell rather than assigned in the test
+# body: the stub directory holds no `rm`, and bats' own per-test teardown runs
+# in the test's shell, so clobbering PATH there breaks the harness itself
+# ("rm: command not found") and the failure looks like the code under test.
+_derive_with_tiers() {
+	local dir
+	dir=$(_stub_path "$@")
+	( PATH="$dir"; _onlooker_sha256_first12 "remote:x" )
+}
+
+@test "prefers sha256sum when every tier is available" {
+	[ "$(_derive_with_tiers sha256sum openssl shasum)" = "aaaaaaaaaaaa" ]
+}
+
+@test "falls to openssl when sha256sum is absent, not to shasum" {
+	# The stock-macOS case: no coreutils, so this is the tier that keeps a Mac
+	# off the 14.51 ms Perl path.
+	[ "$(_derive_with_tiers openssl shasum)" = "bbbbbbbbbbbb" ]
+}
+
+@test "falls to shasum only when both faster tiers are absent" {
+	[ "$(_derive_with_tiers shasum)" = "cccccccccccc" ]
+}
+
+@test "fails rather than inventing a key when no hash tool exists" {
+	run _derive_with_tiers
+	[ "$status" -ne 0 ] || return 1
+	[ -z "$output" ]
+}
+
+@test "every tier derives the same key as the others" {
+	# The reordering is safe only because the tiers agree. If they ever did
+	# not, moving one ahead of another would silently repartition every
+	# $ONLOOKER_DIR/<plugin>/<key>/ directory on the machine.
+	local input="remote:git@github.com:org/fixture.git"
+	local by_sum by_ssl by_sha
+	command -v sha256sum >/dev/null 2>&1 \
+		&& by_sum=$(printf '%s' "$input" | sha256sum | cut -c1-12)
+	command -v openssl >/dev/null 2>&1 \
+		&& by_ssl=$(printf '%s' "$input" | openssl dgst -sha256 | sed 's/^.*= *//' | cut -c1-12)
+	command -v shasum >/dev/null 2>&1 \
+		&& by_sha=$(printf '%s' "$input" | shasum -a 256 | cut -c1-12)
+
+	# Whichever tiers this machine has must agree with the function's answer.
+	local actual
+	actual=$(_onlooker_sha256_first12 "$input")
+	[[ "$actual" =~ ^[0-9a-f]{12}$ ]] || return 1
+	[[ -z "$by_sum" || "$by_sum" == "$actual" ]] || return 1
+	[[ -z "$by_ssl" || "$by_ssl" == "$actual" ]] || return 1
+	[[ -z "$by_sha" || "$by_sha" == "$actual" ]] || return 1
+	# At least one tier had to be present for this to have proved anything.
+	[ -n "${by_sum}${by_ssl}${by_sha}" ]
+}
