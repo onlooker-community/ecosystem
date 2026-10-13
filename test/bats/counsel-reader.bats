@@ -33,25 +33,108 @@ setup() {
 # counsel_sources_from_events
 # ---------------------------------------------------------------------------
 
-@test "sources_from_events returns onlooker_events for unknown types" {
-  local text='{"type":"scribe.distill.complete"}'
+@test "sources_from_events buckets a substrate type generically" {
+  # session/tool/skill/task are the substrate's own, not a plugin's, and
+  # onlooker_events is the honest bucket for them.
+  local text='{"type":"session.start"}'
   run counsel_sources_from_events "$text"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"onlooker_events"* ]]
+  [ "$output" = '["onlooker_events"]' ]
 }
 
-@test "sources_from_events detects tribunal events" {
+@test "sources_from_events buckets a gate" {
   local text='{"type":"tribunal.gate.blocked"}'
   run counsel_sources_from_events "$text"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"tribunal_verdicts"* ]]
+  [ "$output" = '["gate_blocks"]' ]
 }
 
-@test "sources_from_events detects echo events" {
+@test "sources_from_events buckets compass with the other gates" {
+  # The motivating case. compass is the most behaviorally aggressive gate in
+  # the set and used to fall through to onlooker_events, so a brief could not
+  # tell a compass block from an inspector failure.
+  local text='{"type":"compass.check.failed"}'
+  run counsel_sources_from_events "$text"
+  [ "$status" -eq 0 ]
+  [ "$output" = '["gate_blocks"]' ]
+}
+
+@test "sources_from_events buckets echo as verification, not its own source" {
   local text='{"type":"echo.regression.detected"}'
   run counsel_sources_from_events "$text"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"echo_regressions"* ]]
+  [ "$output" = '["verification"]' ]
+}
+
+@test "sources_from_events emits no retired value" {
+  # The six values schema 3.0.0 removed. Emitting one now fails validation and
+  # drops the event, which is how the old mapping broke under that release.
+  local text
+  text=$(printf '%s\n' \
+    '{"type":"tribunal.gate.blocked"}' \
+    '{"type":"echo.regression.detected"}' \
+    '{"type":"warden.threat.detected"}' \
+    '{"type":"compass.check.failed"}')
+  run counsel_sources_from_events "$text"
+  [ "$status" -eq 0 ]
+  local retired
+  for retired in tribunal_verdicts echo_regressions warden_audit \
+                 sentinel_audit oracle_calibrations meridian_reliance; do
+    [[ "$output" != *"$retired"* ]] || return 1
+  done
+  [ "$output" = '["gate_blocks","verification"]' ]
+}
+
+@test "sources_from_events dedupes and sorts across a mixed batch" {
+  local text
+  text=$(printf '%s\n' \
+    '{"type":"compass.check.failed"}' \
+    '{"type":"warden.gate.blocked"}' \
+    '{"type":"bursar.session.recorded"}' \
+    '{"type":"inspector.check.failed"}' \
+    '{"type":"tool.file.edit"}')
+  run counsel_sources_from_events "$text"
+  [ "$status" -eq 0 ]
+  # compass+warden collapse to one gate_blocks entry.
+  [ "$output" = '["cost","gate_blocks","onlooker_events","verification"]' ]
+}
+
+@test "sources_from_events survives a line truncated mid-JSON" {
+  # counsel_read_events cuts its summary at chars_max, so the final line is
+  # routinely partial. One unparsable line must not empty the whole array.
+  local text
+  text=$(printf '%s\n%s' \
+    '{"type":"compass.check.failed"}' \
+    '{"type":"inspector.check')
+  run counsel_sources_from_events "$text"
+  [ "$status" -eq 0 ]
+  [ "$output" = '["gate_blocks"]' ]
+}
+
+# THE DONE-WHEN GUARD. Every shipped plugin that puts events on the bus must
+# map to a named bucket, so adding a plugin and forgetting counsel is a test
+# failure rather than a brief that silently cannot see it.
+@test "no shipped plugin's prefix falls through to onlooker_events" {
+  # Deliberately generic, with reasons:
+  #   counsel  - its own brief events are not a signal the brief consults
+  #              ABOUT the agent; a brief reasoning over its own prior briefs
+  #              is not a source class.
+  local -r deliberately_generic=" counsel "
+
+  local plugin missing=""
+  for plugin in "${REPO_ROOT}"/plugins/*/; do
+    plugin=$(basename "$plugin")
+    [[ "$deliberately_generic" == *" $plugin "* ]] && continue
+
+    local got
+    got=$(counsel_sources_from_events "{\"type\":\"${plugin}.some.event\"}")
+    [[ "$got" == '["onlooker_events"]' ]] && missing="${missing}${plugin} "
+  done
+
+  [ -z "$missing" ] || {
+    printf 'plugins falling through to the generic bucket: %s\n' "$missing" >&2
+    return 1
+  }
 }
 
 @test "sources_from_events returns onlooker_events for empty input" {
@@ -156,5 +239,5 @@ setup() {
 
   run counsel_sources_from_events "$events"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"tribunal_verdicts"* ]]
+  [[ "$output" == *"gate_blocks"* ]]
 }
