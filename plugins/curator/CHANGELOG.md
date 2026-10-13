@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/onlooker-community/ecosystem/compare/curator-v0.7.0...curator-v0.7.1) (2026-10-13)
+
+
+### Performance Improvements
+
+* **project-key:** try the fast hash tiers first :zap: ([#437](https://github.com/onlooker-community/ecosystem/issues/437)) ([9a5a3ab](https://github.com/onlooker-community/ecosystem/commit/9a5a3ab2eaeb2e00a4d16c50f39eb070ebf62e78))
+
 ## [0.7.0](https://github.com/onlooker-community/ecosystem/compare/curator-v0.6.2...curator-v0.7.0) (2026-10-12)
 
 

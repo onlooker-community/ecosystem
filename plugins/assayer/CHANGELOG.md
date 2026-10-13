@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.1](https://github.com/onlooker-community/ecosystem/compare/assayer-v1.6.0...assayer-v1.6.1) (2026-10-13)
+
+
+### Performance Improvements
+
+* **project-key:** try the fast hash tiers first :zap: ([#437](https://github.com/onlooker-community/ecosystem/issues/437)) ([9a5a3ab](https://github.com/onlooker-community/ecosystem/commit/9a5a3ab2eaeb2e00a4d16c50f39eb070ebf62e78))
+
 ## [1.6.0](https://github.com/onlooker-community/ecosystem/compare/assayer-v1.5.1...assayer-v1.6.0) (2026-10-12)
 
 
