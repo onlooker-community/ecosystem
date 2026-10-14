@@ -11,19 +11,38 @@
 #   counsel_sources_from_events <events_json>
 #     Echoes a JSON array of CounselSource strings present in the event batch.
 
-# Maps event_type prefixes to CounselSource values.
-_counsel_source_for_type() {
-	local event_type="${1:-}"
-	case "$event_type" in
-		tribunal.*)     printf 'tribunal_verdicts' ;;
-		echo.*)         printf 'echo_regressions' ;;
-		sentinel.*)     printf 'sentinel_audit' ;;
-		warden.*)       printf 'warden_audit' ;;
-		oracle.*)       printf 'oracle_calibrations' ;;
-		meridian.*)     printf 'meridian_reliance' ;;
-		*)              printf 'onlooker_events' ;;
-	esac
-}
+# Event-type prefix -> CounselSource, as DATA rather than control flow.
+#
+# One definition, read by both counsel_sources_from_events and the test that
+# asserts no shipped plugin falls through to the generic bucket. The previous
+# version had the same mapping written twice - once in a `case` nobody called
+# and once inline in the loop below - so correcting the dead one changed
+# nothing while the tests stayed green (ONL-157).
+#
+# A jq object, not a bash associative array: this repo runs on macOS system
+# bash 3.2, which has no `declare -A`.
+#
+# Buckets name what the brief CONSULTED, not who emitted - see the
+# CounselSource docstring in @onlooker-community/schema. The six values are
+# published and closed, so a prefix absent from this map is a prefix the brief
+# reports generically.
+_COUNSEL_SOURCE_MAP='{
+  "compass":      "gate_blocks",
+  "warden":       "gate_blocks",
+  "tribunal":     "gate_blocks",
+  "inspector":    "verification",
+  "assayer":      "verification",
+  "echo":         "verification",
+  "librarian":    "memory",
+  "curator":      "memory",
+  "historian":    "memory",
+  "scribe":       "memory",
+  "archivist":    "memory",
+  "governor":     "cost",
+  "bursar":       "cost",
+  "lineage":      "provenance",
+  "cartographer": "provenance"
+}'
 
 counsel_read_events() {
 	local lookback_days="${1:-30}"
@@ -73,40 +92,30 @@ counsel_sources_from_events() {
 	local events_text="${1:-}"
 	[[ -z "$events_text" ]] && { printf '["onlooker_events"]'; return 0; }
 
-	local sources=()
-	local seen_tribunal=0 seen_echo=0 seen_sentinel=0 seen_warden=0 seen_oracle=0 seen_meridian=0 seen_other=0
+	# ONE jq pass over the whole batch. The previous version forked a jq PER
+	# LINE to read `.type`, against a batch bounded at chars_max (60,000 by
+	# default) - hundreds of processes to produce a handful of strings.
+	#
+	# `fromjson?` rather than plain fromjson: counsel_read_events can truncate
+	# its summary at chars_max mid-line, so the last line is routinely partial,
+	# and one unparsable line must not empty the whole array.
+	local sources
+	sources=$(printf '%s' "$events_text" | jq -sRc --argjson map "$_COUNSEL_SOURCE_MAP" '
+		[ split("\n")[]
+		  | select(length > 0)
+		  | (fromjson? // empty)
+		  | (.type // "")
+		  | split(".")[0]
+		  | $map[.] // "onlooker_events"
+		]
+		| unique
+	' 2>/dev/null) || sources=""
 
-	while IFS= read -r line; do
-		[[ -z "$line" ]] && continue
-		local etype
-		etype=$(printf '%s' "$line" | jq -r '.type // ""' 2>/dev/null) || continue
-		case "$etype" in
-			tribunal.*)  seen_tribunal=1 ;;
-			echo.*)      seen_echo=1 ;;
-			sentinel.*)  seen_sentinel=1 ;;
-			warden.*)    seen_warden=1 ;;
-			oracle.*)    seen_oracle=1 ;;
-			meridian.*)  seen_meridian=1 ;;
-			*)           seen_other=1 ;;
-		esac
-	done <<< "$events_text"
-
-	[[ "$seen_other" -eq 1 ]]    && sources+=("\"onlooker_events\"")
-	[[ "$seen_tribunal" -eq 1 ]] && sources+=("\"tribunal_verdicts\"")
-	[[ "$seen_echo" -eq 1 ]]     && sources+=("\"echo_regressions\"")
-	[[ "$seen_sentinel" -eq 1 ]] && sources+=("\"sentinel_audit\"")
-	[[ "$seen_warden" -eq 1 ]]   && sources+=("\"warden_audit\"")
-	[[ "$seen_oracle" -eq 1 ]]   && sources+=("\"oracle_calibrations\"")
-	[[ "$seen_meridian" -eq 1 ]] && sources+=("\"meridian_reliance\"")
-
-	if [[ "${#sources[@]}" -eq 0 ]]; then
-		printf '["onlooker_events"]'
-		return 0
-	fi
-
-	local joined
-	joined=$(IFS=,; printf '%s' "${sources[*]}")
-	printf '[%s]' "$joined"
+	# Empty batch, all-unparsable batch, or a jq that failed: the field is
+	# optional in the schema but counsel has always sent something, and
+	# "onlooker_events" is the honest answer for "read the log generically".
+	[[ -z "$sources" || "$sources" == "[]" ]] && sources='["onlooker_events"]'
+	printf '%s' "$sources"
 }
 
 counsel_count_events() {

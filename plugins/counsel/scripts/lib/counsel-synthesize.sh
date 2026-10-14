@@ -19,11 +19,20 @@
 _COUNSEL_SYNTHESIS_PROMPT='You are an engineering coach analyzing an AI agent observability log. You have been given a structured dump of plugin events from the onlooker ecosystem over the past several weeks. Your job is to synthesize patterns, surface improvement opportunities, and highlight what is working well.
 
 Focus on:
-- Recurring failure modes or blocked gates (tribunal, sentinel, warden)
-- Prompt regression trends (echo plugin)
-- Budget or resource pressure patterns (governor plugin)
+- Blocked gates and whether they were overridden (compass, warden, tribunal)
+- Failed verification: per-edit lint and typecheck (inspector), unverified or
+  contradicted final-message claims (assayer), prompt regressions (echo)
+- Memory that was produced or lost (librarian, curator, historian, scribe,
+  archivist)
+- Budget and resource pressure (governor per session, bursar across sessions)
+- Provenance gaps (lineage, cartographer)
+- Substrate volume and shape (session, tool, skill, task events)
 - Quality trends over time
 - What the team is consistently doing well
+
+Name the plugin you are drawing from when you cite something. The events carry
+their plugin in the event type, so "compass blocked 41 writes" is available to
+you and "a gate blocked 41 writes" is not useful.
 
 Return a JSON object with exactly these keys:
 {
