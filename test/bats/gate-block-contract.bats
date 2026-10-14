@@ -179,10 +179,15 @@ _assert_pretooluse_deny() {
 	# cd rather than `env -C`: BSD env (macOS) has no -C, and a failed
 	# invocation would leave canary.txt absent for the wrong reason, passing
 	# the assertions below vacuously.
+	# `< /dev/null` is not decoration: without it the CLI waits 3s for stdin it
+	# will never get, then warns "no stdin data received in 3s" into the
+	# captured output - noise that reads like a failure in a test whose whole
+	# job is distinguishing a real block from a broken invocation.
 	run bash -c "cd '${workspace}' && HOME='${REAL_HOME}' claude -p \
 		--settings '${workspace}/.claude/settings.json' \
 		--permission-mode acceptEdits \
-		'Use the Write tool to create a file named canary.txt containing the word hello. Do not use Bash.'"
+		'Use the Write tool to create a file named canary.txt containing the word hello. Do not use Bash.' \
+		< /dev/null"
 
 	# A denied tool call is still a normal turn, so Claude Code exits 0. These
 	# two assertions are what keep the test honest: without them, a CLI that
@@ -254,4 +259,106 @@ _assert_pretooluse_deny() {
 	# distinguishes "refused the override" from "zeroed the budget".
 	grep '"event_type":"governor.gate.checked"' "$events_log" \
 		| jq -e '.payload.tokens_available == 100000' >/dev/null
+}
+
+# ---------------------------------------------------------------------------
+# Two gates on one event (ONL-160)
+#
+# compass and warden both hook PreToolUse for Write/Edit/MultiEdit/Bash, and
+# governor hooks Task on the same event. hook-rollup.mjs shows hooks on one
+# event starting within ~12ms of each other, so they run concurrently. The
+# contract above pins what ONE gate must emit; it said nothing about two.
+#
+# Established empirically against Claude Code 2.1.267, three arms plus a
+# sampling run (recorded in full on ONL-160):
+#
+#   1. ANY DENY WINS. One denying hook among two blocks the call.
+#   2. NO SHORT-CIRCUIT. Every hook runs even when another has already denied -
+#      both markers appear, which is what "concurrently" means in practice.
+#   3. EXACTLY ONE REASON reaches the model. Never merged, never both:
+#      6/6 sampled denials carried one reason.
+#   4. WHICH ONE IS A RACE. Same config, same prompt: 5 of 6 trials surfaced
+#      the second-declared hook's reason and 1 surfaced the first's, and a
+#      single session produced both across two attempts. Declaration order
+#      does NOT decide it.
+#
+# (3) and (4) together are the design consequence, and why the test below
+# asserts the COUNT of reasons rather than their identity: asserting a winner
+# would encode a coin flip as a contract and fail intermittently for the wrong
+# reason. The safety property is intact - a block is never lost - but the
+# message the user sees is not predictable, so two gates must not rely on
+# their own reason being the one that surfaces.
+# ---------------------------------------------------------------------------
+@test "two denying hooks block once and surface exactly one reason (live canary)" {
+	[ -n "${ONLOOKER_GATE_E2E:-}" ] \
+		|| skip "set ONLOOKER_GATE_E2E=1 to run the live Claude Code contract canary"
+	command -v claude >/dev/null 2>&1 \
+		|| skip "claude CLI not on PATH"
+
+	local workspace="${BATS_TEST_TMPDIR}/two-deny"
+	mkdir -p "${workspace}/.claude"
+
+	# Two hooks, two distinct reasons, two markers - the shape compass and
+	# warden have: separate plugins, same event, same tool.
+	local which
+	for which in alpha bravo; do
+		cat > "${workspace}/hook-${which}.sh" <<-HOOK
+			#!/usr/bin/env bash
+			touch "${workspace}/fired-${which}"
+			printf '%s' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"GATE_CANARY_${which}"}}'
+			exit 0
+		HOOK
+		chmod +x "${workspace}/hook-${which}.sh"
+	done
+
+	jq -n --arg a "${workspace}/hook-alpha.sh" --arg b "${workspace}/hook-bravo.sh" '{
+		hooks: { PreToolUse: [
+			{matcher: "Write", hooks: [{type: "command", command: $a}]},
+			{matcher: "Write", hooks: [{type: "command", command: $b}]}
+		]}
+	}' > "${workspace}/.claude/settings.json"
+
+	# stream-json so the assertion reads the tool_result the HARNESS produced.
+	# Grepping the model's prose instead conflates what it was handed with what
+	# it chose to repeat, and that conflation produced a contradictory result
+	# the first time this was measured.
+	run bash -c "cd '${workspace}' && HOME='${REAL_HOME}' claude -p \
+		--settings '${workspace}/.claude/settings.json' \
+		--permission-mode acceptEdits \
+		--output-format stream-json --verbose \
+		'Write the file canary.txt with content hello. One attempt only. Do not retry, do not use Bash, do not Read anything.' \
+		< /dev/null > '${workspace}/stream.jsonl'"
+
+	# A nonzero status here is usually the environment, not the contract: an
+	# expired OAuth session fails exactly this way ("Failed to authenticate"),
+	# and the markers below would then be absent for a reason that has nothing
+	# to do with gating. Skip rather than fail, so a credential problem cannot
+	# masquerade as a broken deny contract.
+	if [ "$status" -ne 0 ]; then
+		[ -f "${workspace}/fired-alpha" ] \
+			|| skip "claude CLI could not complete a turn (status ${status}); not a gate result"
+	fi
+
+	[ "$status" -eq 0 ] || return 1
+	# (2) no short-circuit: both ran.
+	[ -f "${workspace}/fired-alpha" ] || return 1
+	[ -f "${workspace}/fired-bravo" ] || return 1
+	# (1) any deny wins.
+	[ ! -f "${workspace}/canary.txt" ] || return 1
+
+	# (3) exactly one reason in the denial, not two.
+	local reasons
+	reasons=$(jq -r 'select(.type=="user")
+		| .message.content[]?
+		| select(.type=="tool_result")
+		| (.content // "" | tostring)' "${workspace}/stream.jsonl" 2>/dev/null \
+		| grep -oE 'GATE_CANARY_(alpha|bravo)' | head -1 | wc -l | tr -d ' ')
+	[ "$reasons" = "1" ] || return 1
+
+	# And the one that surfaced is one of ours, so this did not pass because
+	# the write failed for some unrelated reason.
+	jq -r 'select(.type=="user") | .message.content[]?
+		| select(.type=="tool_result") | (.content // "" | tostring)' \
+		"${workspace}/stream.jsonl" 2>/dev/null \
+		| grep -qE 'GATE_CANARY_(alpha|bravo)'
 }
