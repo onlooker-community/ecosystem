@@ -44,6 +44,87 @@ _COUNSEL_SOURCE_MAP='{
   "cartographer": "provenance"
 }'
 
+# The lookback cutoff as an ISO 8601 UTC string, or empty when `date` cannot
+# produce one. ISO 8601 is lexicographically sortable, so callers compare it as
+# a string. Empty means "no lower bound" to every caller, deliberately: a
+# broken date subsystem should widen the window, not empty it.
+#
+# -v is BSD (macOS), -d is GNU. Order matters: BSD date accepts -d as an
+# entirely different flag, so GNU must be the fallback.
+_counsel_cutoff_ts() {
+	local lookback_days="${1:-30}"
+	if [[ "$(uname)" == "Darwin" ]]; then
+		date -v "-${lookback_days}d" -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || printf ''
+	else
+		date -d "-${lookback_days} days" -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || printf ''
+	fi
+}
+
+# The shape of the WHOLE window, in a few KB regardless of its size.
+#
+# This exists because a per-event dump cannot describe a month. Measured on a
+# real log: 92,822 events over 30 days is 12.1 MB once payloads are dropped -
+# 202x the 60,000-char budget - so any per-event view is a sample, and before
+# ONL-165 it was a 0.132% sample of the OLDEST events. This summary is bounded
+# by the number of distinct types and days instead, which made the same window
+# 2,859 bytes.
+#
+# Slurped (-s) rather than streamed so group_by does the aggregation. Measured
+# at ~1.3 s against a 259k-line log, the same as a streaming projection, so the
+# clearer form costs nothing. Both passes together run inside counsel's
+# background refresh, behind a synthesis call with a 90 s timeout.
+counsel_window_summary() {
+	local lookback_days="${1:-30}"
+	local log_path="${ONLOOKER_EVENTS_LOG:-${ONLOOKER_DIR:-$HOME/.onlooker}/logs/onlooker-events.jsonl}"
+	local empty='{"window":{"from":"","to":"","events":0,"sessions":0},"by_type":{},"by_day":{}}'
+
+	[[ -f "$log_path" ]] || { printf '%s' "$empty"; return 0; }
+
+	local cutoff_ts summary
+	cutoff_ts=$(_counsel_cutoff_ts "$lookback_days")
+
+	# `add` on an empty array yields null, hence the `// {}` on both maps.
+	summary=$(jq -sc --arg cutoff "$cutoff_ts" '
+		[ .[]
+		  | select(.timestamp != null)
+		  | select($cutoff == "" or .timestamp >= $cutoff)
+		] as $ev
+		| { window: {
+		      from:     $cutoff,
+		      to:       (if ($ev | length) > 0
+		                 then ($ev | max_by(.timestamp) | .timestamp) else "" end),
+		      events:   ($ev | length),
+		      sessions: ([ $ev[].session_id ] | map(select(. != null)) | unique | length)
+		    },
+		    by_type: ($ev | group_by(.event_type)
+		                  | map({ (.[0].event_type // "unknown"): length }) | add // {}),
+		    by_day:  ($ev | group_by(.timestamp[0:10])
+		                  | map({ (.[0].timestamp[0:10]): length }) | add // {})
+		  }
+	' "$log_path" 2>/dev/null) || summary=""
+
+	[[ -z "$summary" || "$summary" == "null" ]] && summary="$empty"
+	printf '%s' "$summary"
+}
+
+# Sources for the WHOLE window, derived from the summary's type census.
+#
+# Deliberately not computed from the event sample: a bounded sample can miss a
+# whole plugin the window contains, and the brief would then under-report what
+# it drew on. by_type sees every type in the period.
+counsel_sources_from_summary() {
+	local summary="${1:-}"
+	local sources
+
+	sources=$(printf '%s' "$summary" | jq -c --argjson map "$_COUNSEL_SOURCE_MAP" '
+		[ (.by_type // {}) | keys[] | split(".")[0] | $map[.] // "onlooker_events" ]
+		| unique
+	' 2>/dev/null) || sources=""
+
+	[[ -z "$sources" || "$sources" == "[]" ]] && sources='["onlooker_events"]'
+	printf '%s' "$sources"
+}
+
 counsel_read_events() {
 	local lookback_days="${1:-30}"
 	local chars_max="${2:-60000}"
@@ -51,39 +132,49 @@ counsel_read_events() {
 	local log_path="${ONLOOKER_EVENTS_LOG:-${ONLOOKER_DIR:-$HOME/.onlooker}/logs/onlooker-events.jsonl}"
 	[[ -f "$log_path" ]] || { printf ''; return 0; }
 
-	# Compute cutoff as an ISO 8601 date string. ISO 8601 strings are
-	# lexicographically sortable, so string comparison is safe for filtering.
 	local cutoff_ts
-	if [[ "$(uname)" == "Darwin" ]]; then
-		cutoff_ts=$(date -v "-${lookback_days}d" -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null) \
-			|| cutoff_ts=""
-	else
-		cutoff_ts=$(date -d "-${lookback_days} days" -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null) \
-			|| cutoff_ts=""
-	fi
+	cutoff_ts=$(_counsel_cutoff_ts "$lookback_days")
 
-	# Filter to events within the lookback window. If cutoff_ts is empty (date
-	# command unavailable) fall through and include all events.
+	# The RECENT end of the window, not the oldest. `tail -c` where this used
+	# `head -c`, which is the whole of ONL-165: a weekly coaching brief that
+	# structurally cannot see the last few days is describing the wrong period.
+	#
+	# `payload` is gone from the projection. It averaged ~480 bytes an event,
+	# which is why 60,000 chars held only 124 of them - dropping it fits
+	# hundreds of envelopes in the same budget. It also keeps payloads out of
+	# an LLM prompt, which is the posture the hosted summarizer takes
+	# deliberately (see apps/cli/src/sessions.ts: "payload is absent from
+	# EventEnvelope deliberately, and that absence is the feature's entire
+	# safety story"). Counsel is local, so this is not the same guarantee, but
+	# there is no reason to send more than the brief reasons over.
+	#
+	# The cost: `tail` cannot emit until jq finishes, so jq no longer exits
+	# early on SIGPIPE and the pass is ~1533 ms against ~760 ms before, on a
+	# 259k-line log. That is paid in counsel's background refresh, behind a
+	# synthesis call with a 90 s timeout.
+	#
+	# pipefail stays disabled for the same reason it was before: a failure
+	# anywhere in the pipeline must degrade to truncated output rather than
+	# discard every event. The hook and the /counsel skill both set pipefail.
+	#
+	# The trailing jq re-reads the bytes as raw lines and drops whatever does
+	# not parse, which removes the partial first line `tail -c` leaves behind
+	# and guarantees the result is valid JSONL for counsel_count_events.
 	local summary
-	# Run inside a subshell with pipefail disabled. head -c closes the pipe once
-	# chars_max bytes have arrived, which sends jq SIGPIPE; under the caller's
-	# `set -o pipefail` (the SessionStart hook and the /counsel skill both set it)
-	# that marks the whole pipeline failed, and the `|| summary=""` fallback would
-	# then discard *every* event on any log large enough to exceed chars_max.
-	# Disabling pipefail locally keeps the truncated output.
-	# -rc: compact output keeps each object on one line (JSONL-shaped), which
-	# downstream counsel_count_events and counsel_sources_from_events require.
-	summary=$(set +o pipefail; jq -rc --arg cutoff "$cutoff_ts" '
-		select(.timestamp != null) |
-		select($cutoff == "" or .timestamp >= $cutoff) |
-		{
-			type:      .event_type,
-			plugin:    (.plugin // "unknown"),
-			ts:        .timestamp,
-			session:   (.session_id // ""),
-			payload:   (.payload // {})
-		}
-	' "$log_path" 2>/dev/null | head -c "$chars_max") || summary=""
+	summary=$(set +o pipefail
+		jq -rc --arg cutoff "$cutoff_ts" '
+			select(.timestamp != null) |
+			select($cutoff == "" or .timestamp >= $cutoff) |
+			{
+				type:    .event_type,
+				plugin:  (.plugin // "unknown"),
+				ts:      .timestamp,
+				session: (.session_id // "")
+			}
+		' "$log_path" 2>/dev/null \
+			| tail -c "$chars_max" \
+			| jq -Rc 'fromjson? // empty' 2>/dev/null
+	) || summary=""
 
 	printf '%s' "$summary"
 }
