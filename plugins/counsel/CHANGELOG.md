@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.2](https://github.com/onlooker-community/ecosystem/compare/counsel-v0.10.1...counsel-v0.10.2) (2026-10-14)
+
+
+### Bug Fixes
+
+* **counsel:** map every shipped plugin to a signal class :telescope: ([#441](https://github.com/onlooker-community/ecosystem/issues/441)) ([1967ad1](https://github.com/onlooker-community/ecosystem/commit/1967ad109abfd5d06efa4a9a6cc31c594679d80f))
+
 ## [0.10.1](https://github.com/onlooker-community/ecosystem/compare/counsel-v0.10.0...counsel-v0.10.1) (2026-10-13)
 
 
