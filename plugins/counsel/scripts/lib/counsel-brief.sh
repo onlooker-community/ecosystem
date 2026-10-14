@@ -221,20 +221,38 @@ counsel_generate_brief() {
 		fi
 	fi
 
-	# Read events.
-	local events_text
+	# Read the window two ways (ONL-165). The summary is a census of the WHOLE
+	# period in a few KB; the sample is the recent end of it, event by event. A
+	# per-event dump cannot describe a month - 92,822 events measured at 12.1 MB
+	# with payloads already dropped - so the sample is necessarily partial and
+	# the summary is what keeps the brief honest about the period it covers.
+	local window_summary events_text
+	window_summary=$(counsel_window_summary "$lookback_days")
 	events_text=$(counsel_read_events "$lookback_days" "$chars_max")
 
+	# The TRUE window count, not the sample's. The floor asks whether enough
+	# happened this period to be worth a brief, and the sample is bounded by
+	# chars_max - counting it would gate on the budget instead of on activity,
+	# and would have read 124 for a 93,731-event window.
 	local event_count
-	event_count=$(counsel_count_events "$events_text")
+	event_count=$(printf '%s' "$window_summary" | jq -r '.window.events // 0' 2>/dev/null) \
+		|| event_count=0
+	[[ "$event_count" =~ ^[0-9]+$ ]] || event_count=0
 
 	if [[ "$event_count" -lt "$min_events" ]]; then
 		return 2
 	fi
 
+	# Synthesis sees both sections, labeled, so the model can tell a census of
+	# the period from a sample of its last few days and not mistake one for the
+	# other.
+	local synthesis_input
+	synthesis_input=$(printf '<window_summary>\n%s\n</window_summary>\n\n<recent_events>\n%s\n</recent_events>\n' \
+		"$window_summary" "$events_text")
+
 	# Run synthesis.
 	local brief_json
-	brief_json=$(counsel_synthesize "$events_text" "$model" "$timeout_s" "$max_tokens" "$temperature") || {
+	brief_json=$(counsel_synthesize "$synthesis_input" "$model" "$timeout_s" "$max_tokens" "$temperature") || {
 		printf 'counsel_generate_brief: synthesis failed for session %s\n' "$session_id" >&2
 		return 1
 	}
@@ -264,7 +282,10 @@ counsel_generate_brief() {
 
 	# Determine sources consulted.
 	local sources_json
-	sources_json=$(counsel_sources_from_events "$events_text")
+	# From the summary, not the sample: a bounded sample can miss a whole plugin
+	# the window contains, and the brief would then under-report what it drew
+	# on. by_type sees every type in the period.
+	sources_json=$(counsel_sources_from_summary "$window_summary")
 
 	# Write brief.
 	local briefs_dir output_path
