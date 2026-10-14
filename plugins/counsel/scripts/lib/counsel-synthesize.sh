@@ -16,7 +16,14 @@
 #         "watch":           [string]
 #       }
 
-_COUNSEL_SYNTHESIS_PROMPT='You are an engineering coach analyzing an AI agent observability log. You have been given a structured dump of plugin events from the onlooker ecosystem over the past several weeks. Your job is to synthesize patterns, surface improvement opportunities, and highlight what is working well.
+_COUNSEL_SYNTHESIS_PROMPT='You are an engineering coach analyzing an AI agent observability log from the onlooker ecosystem. Your job is to synthesize patterns, surface improvement opportunities, and highlight what is working well.
+
+You are given two sections, and they are not interchangeable:
+
+- <window_summary> is a complete census of the whole period: total events, distinct sessions, a count per event type, and a count per day. Every number in it covers the entire window. Use it for anything about volume, proportion, or trend over time.
+- <recent_events> is a sample of individual events from the END of the period only, with payloads omitted. It is bounded by a character budget and is NOT the whole period. Use it for concrete recent specifics, never for totals.
+
+So: counts and trends come from the summary; examples come from the sample. Do not infer that something did not happen in the period because it is absent from <recent_events> — check the summary first, which lists every type that occurred. And do not describe the sample as if it were the period.
 
 Focus on:
 - Blocked gates and whether they were overridden (compass, warden, tribunal)
