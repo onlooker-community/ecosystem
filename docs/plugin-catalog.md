@@ -38,7 +38,7 @@ Post-hoc judgment of agent output.
 Resource and policy enforcement.
 
 - **governor** — shipped — SessionStart, PreToolUse(Task), PostToolUse(Task), Stop. Per-session token and cost spend tracking; gates Task spawns against a configurable budget ceiling.
-- **bursar** — planned — SessionEnd. Per-project, multi-session budget accounting; surfaces "this project burned $X this week" at SessionStart. Governor is per-session; bursar is the rollup.
+- **bursar** — shipped — SessionStart, SessionEnd. Per-project, multi-session budget accounting; surfaces "this project burned $X this week" at SessionStart. Governor is per-session; bursar is the rollup.
 - **arbiter** — planned — PreToolUse. Resolves cross-plugin conflicts (e.g., warden gate is closed but tribunal wants to spawn an Actor) using a declared precedence policy.
 
 ## Testing
@@ -86,8 +86,8 @@ Help the agent and the user find the right affordance for the moment.
 Run the agent's output. Report what actually happened.
 
 - **proctor** — planned — Stop, PostToolUse(Edit, Write). Runs the project's verification command (configurable: `npm test`, `mise run check`, `cargo test`, …) after writes or at Stop; emits `proctor.verify.passed` or `.failed`.
-- **assayer** — planned — Stop. Parses the agent's final message for testable claims ("I ran the tests", "the build passes") and verifies them against actual exit codes in the session log. Catches lying-without-malice.
-- **inspector** — planned — PostToolUse(Edit, Write). Runs lint and typecheck on just the touched files. Cheaper than proctor; fires far more often.
+- **assayer** — shipped — Stop. Parses the agent's final message for testable claims ("I ran the tests", "the build passes") and verifies them against actual exit codes in the session log. Catches lying-without-malice.
+- **inspector** — shipped — PostToolUse(Edit, Write). Runs lint and typecheck on just the touched files. Cheaper than proctor; fires far more often.
 
 ## Feedback / Adaptation
 
@@ -101,7 +101,7 @@ Detect user signals and feed them back into the system.
 
 Link artifacts back to the prompts and agents that produced them.
 
-- **lineage** — planned — PostToolUse(Edit, Write, MultiEdit). Records the prompt + agent + session that produced each file change; builds a queryable graph by joining historian transcripts with tool-use events. Answers "why does this line exist?"
+- **lineage** — shipped — PostToolUse(Edit, Write, MultiEdit). Records the prompt + agent + session that produced each file change; builds a queryable graph by joining historian transcripts with tool-use events. Answers "why does this line exist?"
 - **ledger** — planned — PostToolUse(*) write-class. Append-only audit record of every write-class tool call with the prompt and agent context attached. `/ledger` queries by file, prompt substring, or time range.
 - **witness** — planned — Stop. Captures the deciding assistant turn — the moment the agent committed to a course of action — and stores it as a discrete artifact. Distinct from scribe (which writes a narrative) — witness preserves the pivot itself.
 
@@ -122,4 +122,4 @@ Link artifacts back to the prompts and agents that produced them.
 | feedback / adaptation | attendant, interpreter, adept |
 | provenance | lineage, ledger, witness |
 
-Every layer holds at least two plugins; most hold three. Total: 12 shipped, 0 design, 17 planned.
+Every layer holds at least two plugins; most hold three. Total: 16 shipped, 0 design, 14 planned.
