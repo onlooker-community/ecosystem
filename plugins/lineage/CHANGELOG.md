@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.2](https://github.com/onlooker-community/ecosystem/compare/lineage-v0.8.1...lineage-v0.8.2) (2026-10-15)
+
+
+### Bug Fixes
+
+* **secrets:** close historian's two leaked shapes :relieved: ([#447](https://github.com/onlooker-community/ecosystem/issues/447)) ([1ea3ac5](https://github.com/onlooker-community/ecosystem/commit/1ea3ac5d9a99aa185e2446b080b4ffe8eb70fb2d))
+
 ## [0.8.1](https://github.com/onlooker-community/ecosystem/compare/lineage-v0.8.0...lineage-v0.8.1) (2026-10-13)
 
 
