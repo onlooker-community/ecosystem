@@ -158,9 +158,15 @@ _chunk_count() {
   fake_aws="A${KIA_PREFIX:-KIA}ABCDEFGHIJKLMNOP"
   fake_gh="g""hp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
   fake_anthropic="s""k-ant-veryverylongtokenvalue1234"
+  # The two shapes historian wrote verbatim before ONL-167: a bare sk- key (it
+  # carried sk-ant- only) and a JSON-style pair (its KV pattern accepted `=`
+  # only). lineage redacted both. The fixture above covered exactly the four
+  # shapes historian already handled, which is why the gap was invisible.
+  fake_openai="s""k-plainopenaistyletokenvalue99"
+  fake_json_secret="j""sonsecretvalue1234567890"
   local turn_body
-  turn_body=$(printf "Here's an AWS key: %s. And a GitHub PAT %s. And API_TOKEN=%s. And Bearer abcdefghijklmnopqrstuvwxyz." \
-    "$fake_aws" "$fake_gh" "$fake_anthropic")
+  turn_body=$(printf "Here's an AWS key: %s. And a GitHub PAT %s. And API_TOKEN=%s. And Bearer abcdefghijklmnopqrstuvwxyz. And %s. And \"api_key\": \"%s\"." \
+    "$fake_aws" "$fake_gh" "$fake_anthropic" "$fake_openai" "$fake_json_secret")
   _append_text_turn "user" "$turn_body"
 
   _run_index
@@ -174,6 +180,8 @@ _chunk_count() {
   ! grep -F -q "$fake_aws" "$jsonl" || return 1
   ! grep -F -q "$fake_gh" "$jsonl" || return 1
   ! grep -F -q "$fake_anthropic" "$jsonl" || return 1
+  ! grep -F -q "$fake_openai" "$jsonl" || return 1
+  ! grep -F -q "$fake_json_secret" "$jsonl" || return 1
   grep -q 'REDACTED:secret' "$jsonl"
   jq -e '.redaction_count > 0' "$jsonl" >/dev/null
   grep -q '"event_type":"historian.chunk.sanitized"' "$ONLOOKER_EVENTS_LOG"
