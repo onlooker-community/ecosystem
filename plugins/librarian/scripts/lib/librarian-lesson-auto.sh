@@ -111,6 +111,26 @@ librarian_lesson_auto_confirm_one() {
 	printf 'confirmed:%s' "$lesson_id"
 }
 
+# Turns allowed to a dispatched judge (ONL-168).
+#
+# NOT 1. tribunal-judge-standard holds Read/Grep/Glob and the adversarial judge
+# also holds Bash, so a judge handed a candidate that cites artifact_ids and a
+# project_key spends its turns hunting that evidence on disk and never reaches a
+# final message. Measured on a real 1708-byte candidate against
+# claude-haiku-4-5-20251001: `--max-turns 1` answered `Reached max turns (1)`
+# and `--max-turns 8` answered `Reached max turns (8)` — raising the ceiling
+# alone does not fix it, because an exploring judge will spend whatever it is
+# given. What fixes it is telling the judge the candidate is self-contained
+# (librarian_lesson_auto_judge_prompt does), after which 2 turns returned a
+# full four-criterion verdict in 40s.
+#
+# 4 is that working value plus headroom for one stray tool call, not a tuning
+# knob: a higher number cannot rescue a judge that has decided to go reading,
+# and the instruction is what keeps it from deciding that. A trivial prompt
+# needing no tools DOES answer in one turn, which is why this dispatch looked
+# correct in isolation and failed on every real candidate.
+_LIBRARIAN_LESSON_JUDGE_MAX_TURNS=4
+
 # Dispatch one judge by NAME and print its raw verdict JSON.
 #
 # `claude -p --agent <name>` resolves a plugin-provided agent, which is what
@@ -119,12 +139,16 @@ librarian_lesson_auto_confirm_one() {
 # plugins/tribunal/ — dispatching by name is explicitly allowed, and this is
 # the bash equivalent of the Task-tool dispatch the skill walk performs.
 #
+# NOT equivalent in one respect that matters: the attended walk's judges have
+# the repo, these do not. See ONL-168 before assuming a verdict from here
+# matches one from there.
+#
 # Usage: _librarian_lesson_auto_judge <agent_name> <prompt> [model]
 _librarian_lesson_auto_judge() {
 	local agent="$1" prompt="$2" model="${3:-}"
 	command -v claude >/dev/null 2>&1 || return 0
 
-	local args=(-p --max-turns 1 --agent "$agent")
+	local args=(-p --max-turns "$_LIBRARIAN_LESSON_JUDGE_MAX_TURNS" --agent "$agent")
 	[[ -n "$model" ]] && args+=(--model "$model")
 
 	local timeout_seconds response=""
@@ -144,6 +168,42 @@ _librarian_lesson_auto_judge() {
 	_librarian_lesson_extract_json_object "$response" 2>/dev/null
 }
 
+# Build the judge prompt for one candidate against one rubric.
+#
+# Extracted from librarian_lesson_auto_judge_one so the measurement harness
+# (scripts/measure-lesson-transform.sh) scores candidates against the SAME text
+# production dispatches. A harness carrying its own copy would measure a prompt
+# nobody runs, and would keep reporting the old pass rates after this one is
+# changed — which is precisely what ONL-110's children set out to change.
+# test/bats/librarian-lesson-auto.bats pins the two together by diffing the
+# dispatched stdin against this function's output.
+#
+# Every floored criterion must be scored by SOME judge or the panel is
+# UNJUDGED, so the prompt names them all and says why omitting one is worse
+# than scoring it badly.
+#
+# Usage: librarian_lesson_auto_judge_prompt <candidate_json> <rubric_json>
+librarian_lesson_auto_judge_prompt() {
+	local candidate="${1:-}" rubric="${2:-}"
+	[[ -z "$candidate" || -z "$rubric" ]] && return 0
+
+	local criteria
+	criteria=$(printf '%s' "$rubric" | jq -r \
+		'[.criteria[] | "- \(.name) (weight \(.weight), min_pass \(.min_pass))"] | join("\n")' \
+		2>/dev/null) || return 0
+
+	printf '%s\n%s\n\n%s\n%s\n\n%s\n\n%s\n%s\n\n%s\n%s\n' \
+		'Score this lesson candidate for promotion to the shared lesson pool.' \
+		'A MODEL asserted that this lesson holds regardless of version; judge that assertion.' \
+		'CANDIDATE' \
+		"$(printf '%s' "$candidate" | jq -r '"claim: \(.claim)\nrationale: \(.rationale)\nresolution: \(.evidence.resolution)\napplies_to: \(.applies_to | tojson)"')" \
+		'The candidate above is self-contained. Do NOT use any tools; do not read files or search a repository. Score from the candidate text alone. The evidence ids it cites name artifacts that are not on this machine, and every criterion below is decidable from the text you have been given — a claim that contradicts its own stated resolution, a remedy framed as the only one, or an implementation specific restated as a general rule are all visible here.' \
+		'RUBRIC — you MUST return a score in [0,1] for EVERY criterion listed. Omitting one makes the whole panel UNJUDGED and the candidate is re-judged at full cost, so an omission prevents a verdict rather than softening it. If you cannot assess one, say so and score your honest worst case.' \
+		"$criteria" \
+		'Return EXACTLY one JSON object as your final message, no prose around it:' \
+		'{"score": <0..1>, "passed": <true|false>, "judge_type": "standard|adversarial", "feedback_summary": "<why>", "criterion_scores": {<each criterion>: <0..1>}}'
+}
+
 # Judge one confirmed candidate with both judges and record the verdict.
 # Prints judged:<id>, skipped:unjudged, or unavailable.
 #
@@ -161,24 +221,11 @@ librarian_lesson_auto_judge_one() {
 	[[ -z "$rubric_id" ]] && { printf 'unavailable'; return 0; }
 	rubric=$(librarian_lesson_rubric_get "$rubric_id") || { printf 'unavailable'; return 0; }
 
-	# Every floored criterion must be scored by SOME judge or the panel is
-	# UNJUDGED, so the prompt names them all and says why omitting one is worse
-	# than scoring it badly.
-	local criteria prompt model
-	criteria=$(printf '%s' "$rubric" | jq -r \
-		'[.criteria[] | "- \(.name) (weight \(.weight), min_pass \(.min_pass))"] | join("\n")')
+	local prompt model
+	prompt=$(librarian_lesson_auto_judge_prompt "$candidate" "$rubric")
+	[[ -z "$prompt" ]] && { printf 'unavailable'; return 0; }
 	model=$(librarian_config_get '.librarian.lesson_auto.judge_model' 2>/dev/null)
 	case "$model" in ''|null) model="claude-haiku-4-5-20251001" ;; esac
-
-	prompt=$(printf '%s\n%s\n\n%s\n%s\n\n%s\n%s\n\n%s\n%s\n' \
-		'Score this lesson candidate for promotion to the shared lesson pool.' \
-		'A MODEL asserted that this lesson holds regardless of version; judge that assertion.' \
-		'CANDIDATE' \
-		"$(printf '%s' "$candidate" | jq -r '"claim: \(.claim)\nrationale: \(.rationale)\nresolution: \(.evidence.resolution)\napplies_to: \(.applies_to | tojson)"')" \
-		'RUBRIC — you MUST return a score in [0,1] for EVERY criterion listed. Omitting one makes the whole panel UNJUDGED and the candidate is re-judged at full cost, so an omission prevents a verdict rather than softening it. If you cannot assess one, say so and score your honest worst case.' \
-		"$criteria" \
-		'Return EXACTLY one JSON object as your final message, no prose around it:' \
-		'{"score": <0..1>, "passed": <true|false>, "judge_type": "standard|adversarial", "feedback_summary": "<why>", "criterion_scores": {<each criterion>: <0..1>}}')
 
 	local std adv verdicts
 	std=$(_librarian_lesson_auto_judge tribunal-judge-standard "$prompt" "$model")

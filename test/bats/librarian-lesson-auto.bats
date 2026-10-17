@@ -377,3 +377,130 @@ STUB
 	[ ! -f "${LESSONS_DIR}/approved/${id}.json" ]
 	[ ! -f "${LESSONS_DIR}/approved_held/${id}.json" ]
 }
+
+# --- judge prompt builder (ONL-110) -----------------------------------------
+#
+# The prompt is extracted so the measurement harness
+# (plugins/librarian/scripts/measure-lesson-transform.sh) scores candidates
+# against the SAME text production dispatches. A harness carrying its own copy
+# measures a prompt nobody runs, which is the failure mode these tests exist to
+# prevent -- see the last test in this block.
+
+@test "the judge prompt names every rubric criterion with its weight and floor" {
+	_auto_setup
+	rubric=$(librarian_lesson_rubric_get lesson-promotion-public)
+	run librarian_lesson_auto_judge_prompt "$(_candidate "$(_versioned)")" "$rubric"
+	[ "$status" -eq 0 ] || return 1
+	# disclosure is the strictest floor and the one the issue body omitted.
+	[[ "$output" == *"disclosure"* ]] || return 1
+	[[ "$output" == *"min_pass 0.9"* ]] || return 1
+	[[ "$output" == *"grounding"* ]] || return 1
+	[[ "$output" == *"scope_accuracy"* ]] || return 1
+	[[ "$output" == *"generality"* ]] || return 1
+}
+
+@test "the judge prompt carries the candidate's claim, resolution and scope" {
+	_auto_setup
+	rubric=$(librarian_lesson_rubric_get lesson-promotion-public)
+	candidate=$(_candidate "$(_versioned)" | jq -c '.claim = "CLAIM-MARKER"')
+	run librarian_lesson_auto_judge_prompt "$candidate" "$rubric"
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" == *"CLAIM-MARKER"* ]] || return 1
+	[[ "$output" == *"Pin vitest to 3.x."* ]] || return 1
+	[[ "$output" == *"versioned"* ]] || return 1
+}
+
+@test "the judge prompt builder refuses missing arguments" {
+	_auto_setup
+	run librarian_lesson_auto_judge_prompt "" ""
+	[ -z "$output" ]
+}
+
+@test "auto_judge_one dispatches exactly the prompt the builder returns" {
+	_auto_setup
+	id=$(_seed_pending_unscoped)
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" public "holds regardless" model
+
+	# Capture what the judge actually received on stdin.
+	STUB_BIN="${BATS_TEST_TMPDIR}/bin"
+	mkdir -p "$STUB_BIN"
+	cat > "${STUB_BIN}/claude" <<'STUB'
+#!/usr/bin/env bash
+cat > "${BATS_TEST_TMPDIR}/dispatched-prompt.txt"
+printf '%s' '{"score":0.9,"passed":true,"judge_type":"standard","feedback_summary":"f","criterion_scores":{"grounding":0.9,"scope_accuracy":0.9,"generality":0.9,"disclosure":0.95}}'
+STUB
+	chmod +x "${STUB_BIN}/claude"
+	export PATH="${STUB_BIN}:${PATH}"
+
+	librarian_lesson_auto_judge_one "$PROJECT_KEY" "$id" >/dev/null
+
+	candidate=$(jq -c '.candidate' "${LESSONS_DIR}/proposals/${id}.json")
+	rubric=$(librarian_lesson_rubric_get \
+		"$(librarian_lesson_rubric_id_for_visibility public model)")
+	expected=$(librarian_lesson_auto_judge_prompt "$candidate" "$rubric")
+
+	[ -f "${BATS_TEST_TMPDIR}/dispatched-prompt.txt" ] || return 1
+	diff <(printf '%s' "$expected") "${BATS_TEST_TMPDIR}/dispatched-prompt.txt"
+}
+
+# --- judge dispatch must be able to answer (ONL-168) ------------------------
+#
+# tribunal-judge-standard holds Read/Grep/Glob and the adversarial judge also
+# holds Bash. Handed a candidate that cites artifact_ids and a project_key, a
+# judge spends its turns hunting that evidence on disk and never reaches a
+# final message. Measured on a real 1708-byte candidate: --max-turns 1 and
+# --max-turns 8 both returned "Reached max turns"; --max-turns 2 plus an
+# instruction that the candidate is self-contained returned a full verdict in
+# 40s. Both halves are load-bearing, so both are pinned here.
+
+@test "the judge prompt says the candidate is self-contained" {
+	_auto_setup
+	rubric=$(librarian_lesson_rubric_get lesson-promotion-public)
+	run librarian_lesson_auto_judge_prompt "$(_candidate "$(_versioned)")" "$rubric"
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" == *"Do NOT use any tools"* ]] || return 1
+	[[ "$output" == *"self-contained"* ]]
+}
+
+@test "the judge is dispatched with more than one turn" {
+	_auto_setup
+	STUB_BIN="${BATS_TEST_TMPDIR}/bin"
+	mkdir -p "$STUB_BIN"
+	cat > "${STUB_BIN}/claude" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "${BATS_TEST_TMPDIR}/dispatch-args.txt"
+cat > /dev/null
+printf '%s' '{"score":0.9,"passed":true,"judge_type":"standard","feedback_summary":"f","criterion_scores":{"grounding":0.9}}'
+STUB
+	chmod +x "${STUB_BIN}/claude"
+	export PATH="${STUB_BIN}:${PATH}"
+
+	run _librarian_lesson_auto_judge tribunal-judge-standard "a prompt" "a-model"
+	[ "$status" -eq 0 ] || return 1
+
+	args=$(cat "${BATS_TEST_TMPDIR}/dispatch-args.txt")
+	[[ "$args" == *"--agent tribunal-judge-standard"* ]] || return 1
+	# The defect, pinned: one turn cannot survive a single tool call.
+	[[ "$args" != *"--max-turns 1"* ]] || return 1
+	turns=$(printf '%s' "$args" | sed -n 's/.*--max-turns \([0-9]*\).*/\1/p')
+	[ -n "$turns" ] || return 1
+	[ "$turns" -gt 1 ]
+}
+
+@test "the judge dispatch still passes the model through" {
+	_auto_setup
+	STUB_BIN="${BATS_TEST_TMPDIR}/bin"
+	mkdir -p "$STUB_BIN"
+	cat > "${STUB_BIN}/claude" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "${BATS_TEST_TMPDIR}/dispatch-args.txt"
+cat > /dev/null
+printf '%s' '{"score":0.9,"passed":true,"judge_type":"standard","feedback_summary":"f","criterion_scores":{"grounding":0.9}}'
+STUB
+	chmod +x "${STUB_BIN}/claude"
+	export PATH="${STUB_BIN}:${PATH}"
+
+	run _librarian_lesson_auto_judge tribunal-judge-adversarial "a prompt" "pinned-model"
+	[ "$status" -eq 0 ] || return 1
+	grep -q -- "--model pinned-model" "${BATS_TEST_TMPDIR}/dispatch-args.txt"
+}
