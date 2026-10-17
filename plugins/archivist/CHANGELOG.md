@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.2](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.9.1...archivist-v0.9.2) (2026-10-17)
+
+
+### Bug Fixes
+
+* **archivist:** make a re-mine overwrite, the way its id promised :recycle: ([#455](https://github.com/onlooker-community/ecosystem/issues/455)) ([23c7e65](https://github.com/onlooker-community/ecosystem/commit/23c7e65d2193b0e785b0e1731db7fa6a2eb04da2))
+
 ## [0.9.1](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.9.0...archivist-v0.9.1) (2026-10-13)
 
 
