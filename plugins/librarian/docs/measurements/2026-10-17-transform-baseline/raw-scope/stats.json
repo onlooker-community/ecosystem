@@ -1,0 +1,134 @@
+{
+  "transform_model": "claude-haiku-4-5-20251001",
+  "judge_model": "claude-haiku-4-5-20251001",
+  "transform_sha256": "0bce5c6f74ea458eb051b3072a7daf3c84618eef2589853514c3bc85646b2c64",
+  "judge_prompt_sha256": "ab787b23eea00d6e1ef0e56652b3a602366e015557487a3392780a41c17c5b5f",
+  "measured_at": "2026-10-17T20:03:21Z",
+  "corpus": "$ONLOOKER_DIR/archivist/ee2cfbe428c7",
+  "corpus_size": 1035,
+  "sample_mode": "spread",
+  "project_key": "ee2cfbe428c7",
+  "rubric_id": "lesson-promotion-public",
+  "score_threshold": 0.75,
+  "gate_policy": "majority",
+  "n": 14,
+  "transform": {
+    "attempted": 36,
+    "proposed": 14,
+    "declined": 22,
+    "skipped": 0,
+    "unavailable": 0
+  },
+  "gate": {
+    "passed": 0,
+    "failed": 14,
+    "pass_rate": 0,
+    "reasons": {
+      "jury_not_majority": 14
+    },
+    "failed_criterion": {
+      "grounding": 13,
+      "disclosure": 1
+    }
+  },
+  "judges": {
+    "standard": {
+      "n": 14,
+      "passed": 0,
+      "pass_rate": 0,
+      "mean_score": 0.593
+    },
+    "adversarial": {
+      "n": 14,
+      "passed": 0,
+      "pass_rate": 0,
+      "mean_score": 0.5104
+    }
+  },
+  "criteria": {
+    "grounding": {
+      "min_pass": 0.7,
+      "weight": 0.32,
+      "floor_pass": 1,
+      "floor_fail": 13,
+      "unscored": 0,
+      "pass_rate": 0.0714,
+      "min_mean": 0.5507,
+      "by_judge": {
+        "standard": {
+          "n": 13,
+          "pass_rate": 0.6923,
+          "mean": 0.6846
+        },
+        "adversarial": {
+          "n": 14,
+          "pass_rate": 0.0714,
+          "mean": 0.565
+        }
+      }
+    },
+    "scope_accuracy": {
+      "min_pass": 0.7,
+      "weight": 0.24,
+      "floor_pass": 1,
+      "floor_fail": 13,
+      "unscored": 0,
+      "pass_rate": 0.0714,
+      "min_mean": 0.5,
+      "by_judge": {
+        "standard": {
+          "n": 13,
+          "pass_rate": 0.3846,
+          "mean": 0.5992
+        },
+        "adversarial": {
+          "n": 14,
+          "pass_rate": 0.0714,
+          "mean": 0.52
+        }
+      }
+    },
+    "generality": {
+      "min_pass": 0.6,
+      "weight": 0.14,
+      "floor_pass": 6,
+      "floor_fail": 8,
+      "unscored": 0,
+      "pass_rate": 0.4286,
+      "min_mean": 0.5679,
+      "by_judge": {
+        "standard": {
+          "n": 13,
+          "pass_rate": 0.6923,
+          "mean": 0.64
+        },
+        "adversarial": {
+          "n": 14,
+          "pass_rate": 0.6429,
+          "mean": 0.6057
+        }
+      }
+    },
+    "disclosure": {
+      "min_pass": 0.9,
+      "weight": 0.3,
+      "floor_pass": 0,
+      "floor_fail": 14,
+      "unscored": 0,
+      "pass_rate": 0,
+      "min_mean": 0.3579,
+      "by_judge": {
+        "standard": {
+          "n": 13,
+          "pass_rate": 0,
+          "mean": 0.4646
+        },
+        "adversarial": {
+          "n": 14,
+          "pass_rate": 0,
+          "mean": 0.3886
+        }
+      }
+    }
+  }
+}

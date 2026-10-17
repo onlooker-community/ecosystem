@@ -1,0 +1,136 @@
+{
+  "transform_model": "claude-haiku-4-5-20251001",
+  "judge_model": "claude-haiku-4-5-20251001",
+  "transform_sha256": "0bce5c6f74ea458eb051b3072a7daf3c84618eef2589853514c3bc85646b2c64",
+  "judge_prompt_sha256": "ab787b23eea00d6e1ef0e56652b3a602366e015557487a3392780a41c17c5b5f",
+  "measured_at": "2026-10-17T20:37:52Z",
+  "corpus": "$ONLOOKER_DIR/archivist/ee2cfbe428c7",
+  "corpus_size": 1035,
+  "sample_mode": "spread",
+  "project_key": "ee2cfbe428c7",
+  "confirm_shape": true,
+  "rubric_id": "lesson-promotion-public",
+  "score_threshold": 0.75,
+  "gate_policy": "majority",
+  "n": 10,
+  "transform": {
+    "attempted": 36,
+    "proposed": 11,
+    "declined": 25,
+    "skipped": 0,
+    "unavailable": 0
+  },
+  "gate": {
+    "passed": 0,
+    "failed": 10,
+    "pass_rate": 0,
+    "reasons": {
+      "jury_not_majority": 10
+    },
+    "failed_criterion": {
+      "grounding": 8,
+      "scope_accuracy": 1,
+      "disclosure": 1
+    }
+  },
+  "judges": {
+    "standard": {
+      "n": 10,
+      "passed": 0,
+      "pass_rate": 0,
+      "mean_score": 0.6421
+    },
+    "adversarial": {
+      "n": 10,
+      "passed": 0,
+      "pass_rate": 0,
+      "mean_score": 0.5563
+    }
+  },
+  "criteria": {
+    "grounding": {
+      "min_pass": 0.7,
+      "weight": 0.32,
+      "floor_pass": 2,
+      "floor_fail": 8,
+      "unscored": 0,
+      "pass_rate": 0.2,
+      "min_mean": 0.605,
+      "by_judge": {
+        "standard": {
+          "n": 10,
+          "pass_rate": 0.8,
+          "mean": 0.717
+        },
+        "adversarial": {
+          "n": 10,
+          "pass_rate": 0.2,
+          "mean": 0.62
+        }
+      }
+    },
+    "scope_accuracy": {
+      "min_pass": 0.7,
+      "weight": 0.24,
+      "floor_pass": 2,
+      "floor_fail": 8,
+      "unscored": 0,
+      "pass_rate": 0.2,
+      "min_mean": 0.551,
+      "by_judge": {
+        "standard": {
+          "n": 10,
+          "pass_rate": 0.7,
+          "mean": 0.679
+        },
+        "adversarial": {
+          "n": 10,
+          "pass_rate": 0.2,
+          "mean": 0.556
+        }
+      }
+    },
+    "generality": {
+      "min_pass": 0.6,
+      "weight": 0.14,
+      "floor_pass": 7,
+      "floor_fail": 3,
+      "unscored": 0,
+      "pass_rate": 0.7,
+      "min_mean": 0.596,
+      "by_judge": {
+        "standard": {
+          "n": 10,
+          "pass_rate": 0.9,
+          "mean": 0.662
+        },
+        "adversarial": {
+          "n": 10,
+          "pass_rate": 0.7,
+          "mean": 0.6
+        }
+      }
+    },
+    "disclosure": {
+      "min_pass": 0.9,
+      "weight": 0.3,
+      "floor_pass": 0,
+      "floor_fail": 10,
+      "unscored": 0,
+      "pass_rate": 0,
+      "min_mean": 0.417,
+      "by_judge": {
+        "standard": {
+          "n": 10,
+          "pass_rate": 0,
+          "mean": 0.527
+        },
+        "adversarial": {
+          "n": 10,
+          "pass_rate": 0,
+          "mean": 0.47
+        }
+      }
+    }
+  }
+}
