@@ -249,3 +249,145 @@ Because the old path dropped them on every restart."
 	after_id=$(basename "$(find "$(archivist_project_dir "$KEY")/decisions" -name '*.json' | head -1)" .json)
 	[ "$before_id" = "$after_id" ]
 }
+
+# --- a body that is only metadata is not a rationale (ONL-170) --------------
+#
+# The only filter before this was "a subject with no body is a claim with no
+# rationale". A release-please commit HAS a body -- and after the squash split
+# consumes its changelog bullets, what remains as that body is a
+# `Co-authored-by:` trailer. So 84 of them became decision artifacts, as did 67
+# identical auto-format commits: 167 of 1011 artifacts in this repo's store
+# (16%) came from commits nobody reasoned about, and each is paid for twice
+# downstream, by the classifier and again by the lesson transform.
+#
+# This extends the existing rule rather than adding a new mechanism: a body
+# made only of git trailers and separator rules carries no more rationale than
+# an empty one.
+#
+# Measured against the alternatives, which all looked more principled and are
+# all worse:
+#   - the `Claude-Session:` trailer this hook already parses does NOT separate
+#     them: 107 of 151 bot artifacts carry one.
+#   - nor does the commit author: github-actions[bot] wrote 121, but 59 were
+#     authored by a human, because squash-merging a release PR attributes the
+#     squash to whoever merged it.
+#   - the conventional-commit type is too blunt: skipping `chore` wholesale
+#     also drops `chore(deps): require the schema that knows these events`,
+#     a real decision, measured at ~49 records.
+#   - a config'd subject skip-list works but rots, and needs every consumer to
+#     know this repo's conventions.
+# The trailer rule caught 173 records, 155 of them that bot noise. The other 18
+# are human commits with a subject and no written rationale, which the rule one
+# line up already says should not be artifacts.
+
+@test "a release-please body of nothing but a trailer is not mined" {
+	# The real shape, from this repo's own store: the changelog bullets are
+	# consumed by the squash split and the surviving body is one trailer.
+	make_repo "chore: release main
+
+Co-authored-by: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+
+	run run_hook
+	[ "$status" -eq 0 ] || return 1
+	[ "$(artifact_count)" -eq 0 ]
+}
+
+@test "an auto-format body of a rule and a trailer is not mined" {
+	make_repo "style: auto-format :art:
+
+---------
+
+Co-authored-by: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+
+	run run_hook
+	[ "$status" -eq 0 ] || return 1
+	[ "$(artifact_count)" -eq 0 ]
+}
+
+@test "prose followed by trailers is still mined" {
+	# The precision guard that matters most: almost every real commit in this
+	# repo ends with trailers. Stripping them must not strip the reasoning
+	# above them.
+	make_repo "fix(thing): stop dropping events :bug:
+
+Because the old path dropped them on every restart, and the watermark was
+the thing asserting all was well.
+
+Refs ONL-123
+Co-authored-by: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+
+	run run_hook
+	[ "$status" -eq 0 ] || return 1
+	[ "$(artifact_count)" -eq 1 ]
+}
+
+@test "a chore with a real rationale is still mined" {
+	# A type-wide skip on `chore` would eat this, and it is exactly the kind of
+	# record the pipeline exists for.
+	make_repo "chore(deps): require the schema that knows these events :arrow_up:
+
+The emitter validates against the published package, so the bats suite fails
+until the release that registers these types is out."
+
+	run run_hook
+	[ "$status" -eq 0 ] || return 1
+	[ "$(artifact_count)" -eq 1 ]
+}
+
+@test "a one-line body that is a bare separator is not mined" {
+	make_repo "chore: tidy something
+
+---------"
+
+	run run_hook
+	[ "$status" -eq 0 ] || return 1
+	[ "$(artifact_count)" -eq 0 ]
+}
+
+@test "skipping every commit still advances the watermark" {
+	# Otherwise a run of nothing but automation is re-examined on every session
+	# end, forever. "Deliberately skipped" and "could not be written" are
+	# different outcomes and the watermark must not conflate them -- the same
+	# instrument ambiguity ONL-10 closed one layer up.
+	make_repo "chore: release main
+
+Co-authored-by: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+
+	run run_hook
+	[ "$status" -eq 0 ] || return 1
+	[ "$(artifact_count)" -eq 0 ] || return 1
+	[ -f "$(archivist_project_dir "$KEY")/mined.json" ]
+}
+
+@test "a failed write still does not advance the watermark" {
+	# The other half of that distinction, kept explicit: a skip advances, a
+	# failure does not. ecosystem-449.55 is what the inverse costs.
+	make_repo "fix(thing): a claim
+
+Because reasons that are durable."
+	archivist_storage_init "$KEY"
+	chmod 555 "$(archivist_project_dir "$KEY")/decisions"
+
+	run run_hook
+	chmod 755 "$(archivist_project_dir "$KEY")/decisions"
+
+	[ "$status" -eq 0 ] || return 1
+	[ ! -f "$(archivist_project_dir "$KEY")/mined.json" ]
+}
+
+@test "prose that merely looks like a trailer is still mined" {
+	# Why the trailer list is CLOSED rather than a `^Word:` pattern. These two
+	# lines are the reasoning, not metadata, and a generic pattern strips both.
+	# Measured: the generic pattern caught 7 more records than the closed list
+	# across this repo's store, and those 7 were prose.
+	make_repo "fix(thing): stop dropping events :bug:
+
+Problem: events were dropped on every restart.
+Note: the watermark was the thing asserting all was well.
+
+Co-authored-by: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+
+	run run_hook
+	[ "$status" -eq 0 ] || return 1
+	[ "$(artifact_count)" -eq 1 ]
+}

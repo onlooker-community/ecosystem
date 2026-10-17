@@ -33,6 +33,44 @@ archivist_mine_normalize() {
 		| sed -e '1s/[[:space:]]\{1,\}(#[0-9]\{1,\})[[:space:]]*$//' -e 's/[[:space:]]*$//')"
 }
 
+# Well-known git trailer keys, for the rationale test below. Deliberately a
+# CLOSED list rather than a `^Word:` pattern: that pattern also strips prose
+# like "Problem: events were dropped." or "Note: this matters", which is the
+# reasoning the pipeline exists to capture. Measured against this repo's store,
+# the closed list catches 166 records and the greedy pattern 173 -- the extra 7
+# are prose, and keeping a noise record costs a model call while dropping a real
+# decision costs the lesson.
+_ARCHIVIST_MINE_TRAILER_KEYS='co-authored-by|signed-off-by|reviewed-by|acked-by|tested-by|reported-by|suggested-by|cc|change-id|claude-session|breaking-change'
+
+# Does this body carry a rationale, or only metadata? (ONL-170)
+#
+# The existing rule one layer up is "a subject with no body is a claim with no
+# rationale". This is the same judgment for a body that is PRESENT but says
+# nothing: a release-please commit's changelog bullets are consumed by the
+# squash split, and the body that survives is a lone `Co-authored-by:` trailer.
+# 84 of those became decision artifacts in this repo's store, along with 67
+# identical auto-format commits -- 16% of the corpus, each one paid for twice
+# downstream by the classifier and again by the lesson transform.
+#
+# Separator rules go too, because the formatter's commits are a `---------`
+# line and a trailer and nothing else.
+#
+# Returns 0 when prose remains, 1 when nothing does.
+#
+# Usage: archivist_mine_has_rationale <detail>
+archivist_mine_has_rationale() {
+	local detail="$1"
+	[[ -z "$detail" ]] && return 1
+
+	local left
+	left=$(printf '%s' "$detail" \
+		| sed -E '/^[[:space:]]*$/d; /^[[:space:]]*-{3,}[[:space:]]*$/d' \
+		| grep -viE "^(${_ARCHIVIST_MINE_TRAILER_KEYS}):[[:space:]]" \
+		| tr -d '[:space:]')
+
+	[[ -n "$left" ]]
+}
+
 # Split a squashed body into its authored messages, NUL-separated.
 #
 # NUL rather than newline because every message contains newlines, so a

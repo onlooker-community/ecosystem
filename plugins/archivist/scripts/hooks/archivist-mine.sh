@@ -90,6 +90,7 @@ COMMITS=$(git -C "$REPO_ROOT" log --first-parent --format='%H %ct' "$RANGE" 2>/d
 HEAD_SHA=$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null) || hook_health_exit 0
 
 wrote_any=0
+write_failed=0
 while IFS=' ' read -r sha epoch; do
 	[[ -z "$sha" ]] && continue
 
@@ -105,10 +106,19 @@ while IFS=' ' read -r sha epoch; do
 
 		summary=$(printf '%s' "$record" | head -1)
 		detail=$(printf '%s' "$record" | tail -n +2 | sed '/./,$!d')
-		# A subject with no body is a claim with no rationale. The durability
-		# filter downstream would drop it anyway; skipping here keeps the store
-		# free of records nothing will ever promote.
-		[[ -z "$detail" ]] && { record=""; continue; }
+		# A claim with no rationale. The durability filter downstream would
+		# drop it anyway; skipping here keeps the store free of records nothing
+		# will ever promote -- and keeps the classifier and the lesson transform
+		# from paying a model call each to distill a generated changelog.
+		#
+		# Covers an absent body AND a body that is only git trailers or
+		# separator rules, which is what a release-please or auto-format commit
+		# leaves behind once the squash split has consumed its bullets
+		# (ONL-170).
+		if ! archivist_mine_has_rationale "$detail"; then
+			record=""
+			continue
+		fi
 
 		id=$(archivist_mine_id "$record")
 		json=$(jq -n \
@@ -135,6 +145,8 @@ while IFS=' ' read -r sha epoch; do
 
 		if archivist_storage_write_artifact "$PROJECT_KEY" "decisions" "$id" "$json" >/dev/null 2>&1; then
 			wrote_any=1
+		else
+			write_failed=1
 		fi
 		record=""
 	done < <(archivist_mine_split "$body")
@@ -143,7 +155,21 @@ done <<< "$COMMITS"
 # Only now. The watermark never moves ahead of the artifacts it claims to
 # describe - ecosystem-449.55 is what the inverse costs, and its failure is
 # invisible because the watermark is the thing asserting all is well.
-if [[ $wrote_any -eq 1 ]]; then
+#
+# The condition is "nothing FAILED", not "something was written". Those came
+# apart once a body of pure metadata became a legitimate skip: a session whose
+# whole range is release and auto-format commits writes nothing and has still
+# examined everything, and gating on wrote_any would re-walk that range on
+# every session end forever. A failed write still holds the watermark back.
+# $wrote_any stays because it reads as the intent at a glance.
+if [[ $write_failed -eq 0 ]]; then
+	# The directory has to be ensured here now. It used to be a side effect of
+	# having written an artifact into it, which was guaranteed because the
+	# watermark only moved when something had been written. A skip-only run
+	# writes no artifact, so without this the redirect below fails into `|| true`
+	# and the watermark silently never advances -- which is the bug this
+	# condition was widened to fix, reappearing one line later.
+	mkdir -p "$(dirname "$MINED_PATH")" 2>/dev/null || true
 	printf '{"last_sha":"%s","at":"%s"}\n' \
 		"$HEAD_SHA" "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "$MINED_PATH" 2>/dev/null || true
 fi
