@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.23.0](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.22.2...librarian-v0.23.0) (2026-10-17)
+
+
+### Features
+
+* **librarian:** measure the lesson transform against a batch :microscope: ([#452](https://github.com/onlooker-community/ecosystem/issues/452)) ([a0445f6](https://github.com/onlooker-community/ecosystem/commit/a0445f6810e7c5353463fbe28d65b2ae8a15b598))
+
 ## [0.22.2](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.22.1...librarian-v0.22.2) (2026-10-17)
 
 
