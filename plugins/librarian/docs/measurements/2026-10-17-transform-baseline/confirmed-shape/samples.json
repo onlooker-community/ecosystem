@@ -1,0 +1,976 @@
+{
+  "transform_model": "claude-haiku-4-5-20251001",
+  "judge_model": "claude-haiku-4-5-20251001",
+  "transform_sha256": "0bce5c6f74ea458eb051b3072a7daf3c84618eef2589853514c3bc85646b2c64",
+  "judge_prompt_sha256": "ab787b23eea00d6e1ef0e56652b3a602366e015557487a3392780a41c17c5b5f",
+  "measured_at": "2026-10-17T20:37:52Z",
+  "corpus": "$ONLOOKER_DIR/archivist/ee2cfbe428c7",
+  "corpus_size": 1035,
+  "sample_mode": "spread",
+  "project_key": "ee2cfbe428c7",
+  "confirm_shape": true,
+  "rubric": {
+    "id": "lesson-promotion-public",
+    "criteria": [
+      {
+        "name": "grounding",
+        "weight": 0.32,
+        "min_pass": 0.7
+      },
+      {
+        "name": "scope_accuracy",
+        "weight": 0.24,
+        "min_pass": 0.7
+      },
+      {
+        "name": "generality",
+        "weight": 0.14,
+        "min_pass": 0.6
+      },
+      {
+        "name": "disclosure",
+        "weight": 0.3,
+        "min_pass": 0.9
+      }
+    ],
+    "score_threshold": 0.75,
+    "judge_types": ["standard", "adversarial"],
+    "gate_policy": "majority"
+  },
+  "candidates": [
+    {
+      "artifact_id": "01KT9KVJS8BWFB4QWS9082YG3T",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_resolution",
+      "parked": false,
+      "detail_length": 3281,
+      "judged_scope_kind": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01KT9H73N8TYTYGGS3BRK2Y15J",
+      "lesson_id": "01M55QMMAS70X8GZN01MNEGG4Q",
+      "transform_outcome": "proposed:01M55QMMAS70X8GZN01MNEGG4Q:unscoped",
+      "parked": true,
+      "detail_length": 2455,
+      "judged_scope_kind": "version_independent",
+      "candidate": {
+        "claim": "Tests for secret-pattern redaction must construct patterns at runtime to avoid check-secrets hooks in the repository",
+        "rationale": "When a repository enforces pre-commit secret scanning via check-secrets hooks, literal secret patterns in test source files trigger blocking failures; runtime pattern construction bypasses this conflict while preserving the ability to test redaction logic",
+        "evidence": {
+          "resolution": "In historian-session-end.bats, the 9 test cases construct all secret-shaped strings (AWS keys, GitHub PATs, Anthropic API keys, Bearer tokens) at test execution time rather than hard-coding them in the source, allowing the tests to pass while validating secret redaction",
+          "artifact_ids": ["01KT9H73N8TYTYGGS3BRK2Y15J"],
+          "session_ids": ["unknown"],
+          "project_key": "ee2cfbe428c7",
+          "observed_at": "2026-06-04T14:39:53Z"
+        },
+        "applies_to": {
+          "stack": ["bash", "bats"],
+          "scope": {
+            "kind": "version_independent"
+          },
+          "file_patterns": ["test/bats/**/*.bats"],
+          "task_kinds": ["testing", "security"]
+        }
+      },
+      "verdicts": [
+        {
+          "score": 0.57,
+          "passed": false,
+          "judge_type": "standard",
+          "feedback_summary": "Lesson solves a real problem (secret patterns blocking tests) but overstates necessity with 'must' when alternatives exist (disable hook, exclude tests, mock). Scope declaration (ecosystem bats files) overshoots the evidence (historian-session-end.bats only). Critical disclosure gap: no limitations acknowledged (approach only works if hooks don't scan runtime artifacts), no alternative solutions mentioned, no prerequisites stated, no justification for version-independence claim.",
+          "criterion_scores": {
+            "grounding": 0.68,
+            "scope_accuracy": 0.65,
+            "generality": 0.62,
+            "disclosure": 0.38
+          }
+        },
+        {
+          "score": 0.45,
+          "passed": false,
+          "judge_type": "adversarial",
+          "feedback_summary": "Three substantive falsifications: (1) Version-independence claim unsupported—the candidate asserts 'scope:kind:version_independent' but provides zero analysis of whether the pattern holds in bash 3 vs 5 or bats 1.x vs 3.x; a strong version-independence claim requires cross-version evidence, not just a description of one bats file. (2) Scope overbroad—file_patterns claims 'test/bats/**/*.bats' but the lesson only applies to bats tests that actually test secret redaction; a non-redaction test doesn't need this pattern, so the scope is inaccurately stated. (3) Grounding weak—the claim uses 'MUST construct patterns at runtime' as prescriptive, but grounds it only on one implementation (historian-session-end.bats); the candidate shows that one file does this but not that it is necessary or that hard-coding fails. No alternatives disclosed (e.g., excluding test files from hooks via .pre-commit-config.yaml, loading patterns from external files, or conditional hook disabling for tests). The lesson presents runtime construction as THE approach but doesn't acknowledge that hard-coded patterns might be acceptable in repos without secret-scanning enforcement.",
+          "criterion_scores": {
+            "grounding": 0.5,
+            "scope_accuracy": 0.52,
+            "generality": 0.42,
+            "disclosure": 0.35
+          }
+        }
+      ],
+      "aggregate": 0.5115000000000001,
+      "gate": {
+        "passed": false,
+        "reason": "jury_not_majority",
+        "failed_criterion": "grounding"
+      }
+    },
+    {
+      "artifact_id": "01M1J9JVK0BWPH4RQD8K8H3E9D",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_versions",
+      "parked": false,
+      "detail_length": 2083,
+      "judged_scope_kind": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M4YSXNDGW8D4KSKXTRVEQF7C",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_versions",
+      "parked": false,
+      "detail_length": 1896,
+      "judged_scope_kind": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M3AX0YM8GY9TXKV045NK8V7G",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_versions",
+      "parked": false,
+      "detail_length": 1775,
+      "judged_scope_kind": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M1D7K0S03X63K3GQTSFR8517",
+      "lesson_id": "01M55QS9HG2YY10HEF7ZY7N6YW",
+      "transform_outcome": "proposed:01M55QS9HG2YY10HEF7ZY7N6YW:unscoped",
+      "parked": true,
+      "detail_length": 1653,
+      "judged_scope_kind": "version_independent",
+      "candidate": {
+        "claim": "Concurrent Bash hooks race on whether to record a change; file-level baseline locking prevents duplicate records, and hunk-position-aware diff parsing avoids dropping lines starting with diff markers or blank content.",
+        "rationale": "The lineage plugin's four post-tool-use hooks independently read, decide, and write to the same baseline file; without locking, all four can independently conclude a change is new and append records before reading each other's writes. Additionally, diff parsing that keys off the marker glyph itself (sed -n 's/^+([^+].*)/\\1/p') requires a second non-marker character, dropping both added lines whose content starts with '+' and added blank lines entirely; hunk-position parsing (everything before the first @@ is header) strips exactly one marker per line and avoids this loss.",
+        "evidence": {
+          "resolution": "I3: Hold a file-level lock on the baseline throughout the read-decide-rebuild cycle; move baseline writes to temp-file-plus-rename instead of truncating redirect (>) to prevent zero-byte corruption from build failures. I4: Replace glyph-keyed diff parsing with hunk-position-based parsing that treats all content before the first @@ as header and strips exactly one leading marker character from each marker line.",
+          "artifact_ids": ["01M1D7K0S03X63K3GQTSFR8517"],
+          "session_ids": ["unknown"],
+          "project_key": "ee2cfbe428c7",
+          "observed_at": "2026-09-01T00:58:28Z"
+        },
+        "applies_to": {
+          "stack": ["bash", "lineage"],
+          "scope": {
+            "kind": "version_independent"
+          },
+          "file_patterns": [],
+          "task_kinds": []
+        }
+      },
+      "verdicts": [
+        {
+          "score": 0.64,
+          "passed": false,
+          "judge_type": "standard",
+          "feedback_summary": "Lesson assumes 'four post-tool-use hooks' without grounding in provided text; this implementation detail contradicts the version_independent scope claim. Disclosure lacks acknowledgment of whether this assumption holds across versions, and provides no discussion of alternatives or crash-recovery edge cases. Scope and disclosure both fail min_pass thresholds.",
+          "criterion_scores": {
+            "grounding": 0.75,
+            "scope_accuracy": 0.65,
+            "generality": 0.68,
+            "disclosure": 0.5
+          }
+        },
+        {
+          "score": 0.66,
+          "passed": false,
+          "judge_type": "adversarial",
+          "feedback_summary": "The candidate's technical claims about diff parsing edge cases are sound — the sed pattern `^+([^+].*)` would correctly drop blank lines and lines starting with '+' — but the scope claim of 'version_independent' is overstated. This lesson applies specifically to bash hook implementations in the lineage plugin; if lineage's architecture changes (different language, different hook structure, added locking in a version), the lesson stops applying. The word 'regardless of version' in the model's assertion is stronger than the actual scope. Disclosure is also under the min_pass floor: the candidate does not explain lock stale-recovery strategy, whether the race condition manifests in practice vs. remaining theoretical, alternative solutions (e.g., atomic append, database-backed records), or performance trade-offs. The lesson teaches general principles (locking, atomic writes, diff-parsing care) but frames them narrowly as lineage-specific remedies rather than generalizable heuristics.",
+          "criterion_scores": {
+            "grounding": 0.75,
+            "scope_accuracy": 0.55,
+            "generality": 0.65,
+            "disclosure": 0.65
+          }
+        }
+      ],
+      "aggregate": 0.6496,
+      "gate": {
+        "passed": false,
+        "reason": "jury_not_majority",
+        "failed_criterion": "scope_accuracy"
+      }
+    },
+    {
+      "artifact_id": "01M1W2Z0YRNXWN6VJCRR8NNBM3",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_versions",
+      "parked": false,
+      "detail_length": 1594,
+      "judged_scope_kind": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M1W212YGNY5Z4V44BC52QB46",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_versions",
+      "parked": false,
+      "detail_length": 1488,
+      "judged_scope_kind": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M3075VV8QFMDFGFFDF73J979",
+      "lesson_id": "",
+      "transform_outcome": "declined:schema_invalid",
+      "parked": false,
+      "detail_length": 1392,
+      "judged_scope_kind": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01KZXP7PJ89X6BYV7TWY1RH7CA",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_versions",
+      "parked": false,
+      "detail_length": 1325,
+      "judged_scope_kind": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M43TNRJGHH0C3DN6NZJJGJZW",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_versions",
+      "parked": false,
+      "detail_length": 1258,
+      "judged_scope_kind": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M4M8S500EYJF9B3DSYX48FQQ",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_versions",
+      "parked": false,
+      "detail_length": 1203,
+      "judged_scope_kind": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M1D7K0S01FXA1B47DRG1MDGG",
+      "lesson_id": "01M55R1DVA76P3DW4F4B15TK7V",
+      "transform_outcome": "proposed:01M55R1DVA76P3DW4F4B15TK7V:unscoped",
+      "parked": true,
+      "detail_length": 1128,
+      "judged_scope_kind": "version_independent",
+      "candidate": {
+        "claim": "Edit/Write/MultiEdit must update the Bash rolling baseline after recording lineage to prevent duplicate shell_edit records.",
+        "rationale": "Edit/Write/MultiEdit recorded changes but did not advance the Bash baseline. The next Bash call saw the newly-edited file's content SHA as different from the stale baseline, treated it as shell-caused work, and recorded a duplicate entry with tool=\"Bash\", causing /lineage queries to report incorrect provenance from non-existent Bash calls.",
+        "evidence": {
+          "resolution": "After successful lineage_append on the Edit/Write/MultiEdit path, update that file's entry in the baseline JSON to its new content SHA—but only when a baseline file already exists for the session. When none exists, the Bash branch's seed-and-stop step builds one from current disk state on its first call.",
+          "artifact_ids": ["01M1D7K0S01FXA1B47DRG1MDGG"],
+          "session_ids": ["unknown"],
+          "project_key": "ee2cfbe428c7",
+          "observed_at": "2026-09-01T00:58:28Z"
+        },
+        "applies_to": {
+          "stack": ["lineage", "Edit", "Write", "MultiEdit", "Bash"],
+          "scope": {
+            "kind": "version_independent"
+          },
+          "file_patterns": ["plugins/lineage/**"],
+          "task_kinds": ["provenance-tracking", "baseline-management", "tool-integration"]
+        }
+      },
+      "verdicts": [
+        {
+          "score": 0.657,
+          "passed": false,
+          "judge_type": "standard",
+          "feedback_summary": "The lesson correctly diagnoses a stale-baseline bug and proposes a logically sound fix with careful conditional logic. However, it discloses only one boundary condition while omitting critical caveats: no test status, no edge case analysis, no alternatives, no version-specific detail, and no side-effect discussion. Disclosure is well below the 0.9 threshold.",
+          "criterion_scores": {
+            "grounding": 0.72,
+            "scope_accuracy": 0.7,
+            "generality": 0.67,
+            "disclosure": 0.55
+          }
+        },
+        {
+          "score": 0.51,
+          "passed": false,
+          "judge_type": "adversarial",
+          "criteria_evaluated": [
+            "version_drift",
+            "atomicity_assumptions",
+            "scope_boundary_justification",
+            "disclosure_gaps",
+            "test_case_absence"
+          ],
+          "criterion_scores": {
+            "grounding": 0.62,
+            "scope_accuracy": 0.5,
+            "generality": 0.65,
+            "disclosure": 0.35
+          },
+          "strengths_count": 3,
+          "weaknesses_count": 6,
+          "confidence": 0.82,
+          "feedback_summary": "Concrete falsifications block promotion: (1) Version-independence unjustified—candidate asserts kind=version_independent but omits version range, baseline JSON structural stability explanation, or tested versions. This is a direct contradiction: the claim cannot be verified from the text. scope_accuracy=0.50 fails min_pass 0.70. (2) Atomicity unstated—resolution prescribes 'after lineage_append, update baseline' but does not specify whether this is atomic, what happens if update fails, or file-locking semantics. Weakens grounding to 0.62. (3) Conditional behavior unexplained—'only when baseline file exists' creates a state machine with undocumented initialization, branching on first-vs-subsequent calls, and error handling. disclosure=0.35 fails min_pass 0.90 for lack of these assumptions and limits. (4) No test case provided—the duplicate shell_edit problem is described but not demonstrated; the fix cannot be verified. (5) Scope boundary unjustified—why exactly Edit, Write, MultiEdit, Bash and not other file-modifying tools? applies_to omits rationale. (6) No version-tested evidence: scope claim is maximally strong (version-independent) but minimally supported (no versions mentioned). Two floored criteria block this lesson from promotion."
+        }
+      ],
+      "aggregate": 0.5858,
+      "gate": {
+        "passed": false,
+        "reason": "jury_not_majority",
+        "failed_criterion": "grounding"
+      }
+    },
+    {
+      "artifact_id": "01M00E8P40C2MP244WN9Y8S9JH",
+      "lesson_id": "01M55R60GX1850PG4M7CWMNB44",
+      "transform_outcome": "proposed:01M55R60GX1850PG4M7CWMNB44:unscoped",
+      "parked": true,
+      "detail_length": 1062,
+      "judged_scope_kind": "version_independent",
+      "candidate": {
+        "claim": "Use atomic write helpers for proposal files touched by multiple review verbs; truncating writes can leave unrecoverable zero-byte files.",
+        "rationale": "librarian_lesson_judge's truncating write pattern (`printf '%s\\n' \"$updated\" > \"$path\"`) could leave a zero-byte proposal file during interruption, becoming unrecoverable even with the unconfirm verb. The same bug had already been fixed in three other locations (librarian_lesson_confirm, librarian_lesson_unconfirm, librarian_lesson_pass) using librarian_lesson_write_atomic, a helper already sourced in all locations.",
+        "evidence": {
+          "resolution": "Route the final write through librarian_lesson_write_atomic instead of the truncating printf pattern; add a regression test spying on mv to catch reintroduction.",
+          "artifact_ids": ["01M00E8P40C2MP244WN9Y8S9JH"],
+          "session_ids": ["unknown"],
+          "project_key": "ee2cfbe428c7",
+          "observed_at": "2026-08-14T15:29:20Z"
+        },
+        "applies_to": {
+          "stack": ["librarian"],
+          "scope": {
+            "kind": "version_independent"
+          },
+          "file_patterns": [],
+          "task_kinds": []
+        }
+      },
+      "verdicts": [
+        {
+          "score": 0.768,
+          "passed": false,
+          "judge_type": "standard",
+          "feedback_summary": "Grounded and specific claim backed by evidence of prior fixes in three sibling functions, but disclosure does not meet the 0.9 bar. The lesson lacks explicit enumeration of affected functions, discussion of what happens if the atomic helper is unavailable, and detailed specification of the regression test ('spying on mv'). Version-independence is asserted but not fully justified.",
+          "criterion_scores": {
+            "grounding": 0.8,
+            "scope_accuracy": 0.75,
+            "generality": 0.7,
+            "disclosure": 0.78
+          }
+        },
+        {
+          "score": 0.58,
+          "passed": false,
+          "judge_type": "adversarial",
+          "feedback_summary": "Grounding failure: cites fixes elsewhere but presents no evidence the bug manifests in librarian_lesson_judge. Scope_accuracy failure: claims version_independent but justification missing; if fixes were recent, this may be version-dependent. Empty file_patterns is unusual. Generality failure: claim generalizes to 'proposal files' but resolution fixes only one function; mismatch suggests incompleteness. Disclosure failure: does not explain atomic write mechanism, does not justify version-independence, does not explain why zero-byte files are unrecoverable with unconfirm, regression test approach is vague.",
+          "criterion_scores": {
+            "grounding": 0.65,
+            "scope_accuracy": 0.62,
+            "generality": 0.65,
+            "disclosure": 0.45
+          }
+        }
+      ],
+      "aggregate": 0.6754000000000001,
+      "gate": {
+        "passed": false,
+        "reason": "jury_not_majority",
+        "failed_criterion": "grounding"
+      }
+    },
+    {
+      "artifact_id": "01KVY10PWRPKW46N4QBCPDXDTM",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_resolution",
+      "parked": false,
+      "detail_length": 997,
+      "judged_scope_kind": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01KSC28GR00KHTPQ7THH4R88CJ",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_versions",
+      "parked": false,
+      "detail_length": 929,
+      "judged_scope_kind": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M3GAVHJ0BQB5BSVM3N6ZS64R",
+      "lesson_id": "",
+      "transform_outcome": "declined:schema_invalid",
+      "parked": false,
+      "detail_length": 871,
+      "judged_scope_kind": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01KSGBXRGR2C5ZZTPE1V3VA2GX",
+      "lesson_id": "01M55RCZHN6DJCCKM112BE5Y2X",
+      "transform_outcome": "proposed:01M55RCZHN6DJCCKM112BE5Y2X:unscoped",
+      "parked": true,
+      "detail_length": 841,
+      "judged_scope_kind": "version_independent",
+      "candidate": {
+        "claim": "Skill instructions with vague shorthand cause inconsistent artifact persistence in multi-iteration workflows; explicit function signatures and initialization calls resolve it.",
+        "rationale": "LLMs interpret incomplete function signatures and ellipsis inconsistently under the cognitive load of managing retry loops, producing missing directories and incomplete outputs. Full signatures, explicit initialization, and end-of-iteration checklists enforce consistent behavior across iterations.",
+        "evidence": {
+          "resolution": "Add explicit tribunal_init_iteration call at iteration start to guarantee verdicts/ directory exists; show full 5-argument signatures for tribunal_write_actor_output, tribunal_write_judge_verdict, and tribunal_write_iteration_artifact; emphasize actor output must be verbatim agent text; add end-of-iteration artifact checklist before aggregation.",
+          "artifact_ids": ["01KSGBXRGR2C5ZZTPE1V3VA2GX"],
+          "session_ids": ["unknown"],
+          "project_key": "ee2cfbe428c7",
+          "observed_at": "2026-05-25T20:06:23Z"
+        },
+        "applies_to": {
+          "stack": ["tribunal"],
+          "scope": {
+            "kind": "version_independent"
+          },
+          "file_patterns": [],
+          "task_kinds": []
+        }
+      },
+      "verdicts": [
+        {
+          "score": 0.34,
+          "passed": false,
+          "judge_type": "standard",
+          "feedback_summary": "Candidate lacks grounding: no concrete examples or evidence in the text. Scope claim (version_independent) contradicts the resolution, which hardcodes tribunal-specific function names and the verdicts/ directory. Generality is limited: framed as a general principle about skill instructions but resolved entirely via tribunal functions, making it non-generalizable as stated. Disclosure fails: candidate presents strong causal claims without caveats, uncertainties, or acknowledgment that the cited evidence is absent. The model's assertion that this holds regardless of version is unsupported; the specific function signatures and directory names would need to be present across all tribunal versions for that to be true.",
+          "criterion_scores": {
+            "grounding": 0.4,
+            "scope_accuracy": 0.3,
+            "generality": 0.45,
+            "disclosure": 0.25
+          }
+        },
+        {
+          "score": 0.43,
+          "passed": false,
+          "judge_type": "adversarial",
+          "feedback_summary": "SCOPE-RESOLUTION CONTRADICTION: Candidate claims 'version_independent' scope but prescribes tribunal-specific function calls (`tribunal_init_iteration`, `tribunal_write_actor_output`, etc.). A version-independent lesson must describe a general pattern applicable across versions/contexts; this resolves to tribunal maintenance. UNGROUNDED CAUSATION: Claims vague shorthand causes inconsistent LLM behavior in 'retry loops' but presents no concrete failures, measurements, or reproducible cases—causation is assumed. UNDEFINED TERMS: 'Multi-iteration workflows' is never defined (jury rounds? retries? multiple runs?). GENERALITY GAP: Rationale hints at a universal LLM pattern (incomplete signatures under cognitive load), but resolution narrows to one plugin's functions, creating a mismatch: if the pattern is truly universal, why only tribunal? If tribunal-only, why claim version-independence? DISCLOSURE: No acknowledgment of scope-resolution tension, no disclosure of when pattern applies/doesn't, and no version constraints despite 'version_independent' label. Reads as tribunal-specific bug fix relabeled as a generalizable lesson.",
+          "criterion_scores": {
+            "grounding": 0.55,
+            "scope_accuracy": 0.35,
+            "generality": 0.45,
+            "disclosure": 0.35
+          }
+        }
+      ],
+      "aggregate": 0.383,
+      "gate": {
+        "passed": false,
+        "reason": "jury_not_majority",
+        "failed_criterion": "grounding"
+      }
+    },
+    {
+      "artifact_id": "01KZYBHVNGBXN8B3PC1YE9T5WH",
+      "lesson_id": "01M55RF7XF6XSKFZAR1FQ5MAF0",
+      "transform_outcome": "proposed:01M55RF7XF6XSKFZAR1FQ5MAF0:unscoped",
+      "parked": true,
+      "detail_length": 793,
+      "judged_scope_kind": "version_independent",
+      "candidate": {
+        "claim": "Dead code paths in dedup logic should be explicitly documented when they silently depend on other systems never pruning their dependencies—otherwise future refactors will silently break the coupling.",
+        "rationale": "The approved-branch scan in librarian_lesson_seen can never match ZLesson objects because they lack artifact_id; the dedup only works because proposals is never pruned. A future pruner reading this loop might safely remove proposals, breaking dedup, unless the dead-code dependency is documented.",
+        "evidence": {
+          "resolution": "Added a comment documenting that the approved-branch scan is dead code that silently depends on proposals never being pruned, with the architectural decision for which coupling to keep tracked separately in ecosystem-d0m.",
+          "artifact_ids": ["01KZYBHVNGBXN8B3PC1YE9T5WH"],
+          "session_ids": ["unknown"],
+          "project_key": "ee2cfbe428c7",
+          "observed_at": "2026-08-13T20:03:26Z"
+        },
+        "applies_to": {
+          "stack": ["librarian"],
+          "scope": {
+            "kind": "version_independent"
+          },
+          "file_patterns": [],
+          "task_kinds": ["documentation", "maintenance"]
+        }
+      },
+      "verdicts": [
+        {
+          "score": 0.696,
+          "passed": false,
+          "judge_type": "standard",
+          "feedback_summary": "The lesson extracts a reasonable principle from librarian_lesson_seen, with solid grounding and scope. However, disclosure is insufficient. The candidate should explicitly state whether 'proposals never pruned' is architecturally guaranteed or a fragile assumption, discuss whether documentation alone is adequate (runtime assertions might be needed), and disclose what happens if the code is refactored in future versions.",
+          "criterion_scores": {
+            "grounding": 0.72,
+            "scope_accuracy": 0.72,
+            "generality": 0.68,
+            "disclosure": 0.68
+          }
+        },
+        {
+          "score": 0.42,
+          "passed": false,
+          "judge_type": "adversarial",
+          "criteria_evaluated": ["grounding", "scope_accuracy", "generality", "disclosure"],
+          "criterion_scores": {
+            "grounding": 0.5,
+            "scope_accuracy": 0.45,
+            "generality": 0.4,
+            "disclosure": 0.35
+          },
+          "strengths_count": 1,
+          "weaknesses_count": 4,
+          "confidence": 0.8,
+          "feedback_summary": "Grounding (0.50): The claim that 'approved-branch scan in librarian_lesson_seen can never match ZLesson objects because they lack artifact_id' is asserted but not verified. The logical connection is incomplete—if the scan cannot match, how does removing proposals break the dedup? The explanation suggests the dedup works through proposals, but this is not clearly stated. Scope accuracy (0.45): The version_independent claim contradicts the specifics. It depends on ZLesson lacking artifact_id (a structural detail that could change between versions) and proposals never being pruned (a behavioral detail that could change). If either assumption shifts, the dead-code analysis is invalidated. Generality (0.40): The lesson is framed around librarian_lesson_seen, approved-branch scan, ZLesson, and artifact_id—highly specific technical names and functions. A developer working on a different system would not recognize the pattern. The general principle ('document dead-code couplings') is buried in the specifics. Disclosure (0.35): Critical gaps—no comment text provided, no file path specified, no evidence that ecosystem-d0m actually exists or captures the architectural decision. The resolution claims something was 'added' but is not reproducible from the candidate text. The version-independence assertion is not reconciled with the version-dependent technical details the lesson depends on."
+        }
+      ],
+      "aggregate": 0.5657,
+      "gate": {
+        "passed": false,
+        "reason": "jury_not_majority",
+        "failed_criterion": "grounding"
+      }
+    },
+    {
+      "artifact_id": "01KZRVRPS84F66RXD9KWZX2PT8",
+      "lesson_id": "01M55RKQX57MBM9JK42HAMZA7T",
+      "transform_outcome": "proposed:01M55RKQX57MBM9JK42HAMZA7T:unscoped",
+      "parked": true,
+      "detail_length": 735,
+      "judged_scope_kind": "version_independent",
+      "candidate": {
+        "claim": "A test must exercise the actual code path it claims to test; a test can pass vacuously if it skips that path.",
+        "rationale": "The test named 'after unconfirm a fresh confirm at a different visibility succeeds' was only performing a plain confirm, never invoking the snapshot restoration mechanism that is required when visibility changes. The test passed with the snapshot entirely disabled, revealing it never exercised the path it claimed to test. The fix forced the full sequence that triggers the mechanism.",
+        "evidence": {
+          "resolution": "Rewrote the test to use the full composite sequence (confirm public with justification, unconfirm, confirm private) instead of plain confirm, which forces the snapshot restoration path and makes the mechanism testable.",
+          "artifact_ids": ["01KZRVRPS84F66RXD9KWZX2PT8"],
+          "session_ids": ["unknown"],
+          "project_key": "ee2cfbe428c7",
+          "observed_at": "2026-08-11T16:51:21Z"
+        },
+        "applies_to": {
+          "stack": ["librarian"],
+          "scope": {
+            "kind": "version_independent"
+          },
+          "file_patterns": [],
+          "task_kinds": ["test-design"]
+        }
+      },
+      "verdicts": [
+        {
+          "score": 0.71,
+          "passed": false,
+          "judge_type": "standard",
+          "feedback_summary": "Lesson principle is sound—tests must exercise claimed paths, not pass vacuously. Grounding and scope are adequate. However, disclosure fails the 0.9 floor: lesson doesn't disclose that it generalizes from a librarian snapshot-restoration incident, doesn't explain the jump to version-independence, and omits limitations. For shared pool, rewrite to explicitly acknowledge the librarian origin and explain how that specific mechanism motivates a general testing principle.",
+          "criterion_scores": {
+            "grounding": 0.74,
+            "scope_accuracy": 0.76,
+            "generality": 0.71,
+            "disclosure": 0.63
+          }
+        },
+        {
+          "score": 0.63,
+          "passed": false,
+          "judge_type": "adversarial",
+          "criterion_scores": {
+            "grounding": 0.65,
+            "scope_accuracy": 0.65,
+            "generality": 0.7,
+            "disclosure": 0.55
+          },
+          "feedback_summary": "Grounding: Candidate names a specific test ('after unconfirm a fresh confirm at a different visibility succeeds') and a failure mode ('passed with snapshot entirely disabled'), but provides no actual test code, snapshot configuration, or reproduction steps. The claim that the snapshot restoration mechanism was skipped rests entirely on the assertion that disabling snapshot did not cause failure — a statement, not evidence. The mechanism itself is mentioned but not explained (when is snapshot restoration required? what does it do? why does visibility trigger it?). Score: 0.65 < min_pass 0.7. Scope accuracy: The claim is stated in general terms ('A test must exercise the actual code path it claims to test'), which is version-independent and broadly applicable. But applies_to scopes it exclusively to the librarian plugin, with no file_patterns and no indication whether this lesson applies to other plugins' test suites. Either the claim should be narrowed to librarian-specific visibility/snapshot patterns, or the scope should reflect its stated generality. This mismatch is a falsification. Score: 0.65 < min_pass 0.7. Generality: The principle itself (tests must exercise claimed paths) is sound and generalizes across any codebase. One case provides thin evidence, but the principle is not overfitted — anyone writing tests can apply it. Score: 0.7 >= min_pass 0.6. Disclosure: High min_pass (0.9) requires transparency about limits. The candidate does not disclose that (a) the evidence is a single test in one plugin, (b) the mechanism (snapshot restoration on visibility change) is librarian-specific, (c) no code inspection or test run output is provided, (d) the diagnosis rests on an untested assumption (that disabling snapshot proves the path was skipped), or (e) alternative explanations (test isolation bugs, unrelated mechanism changes) are ruled out. These are material constraints on applicability that a version-independent lesson should surface. Score: 0.55 << min_pass 0.9."
+        }
+      ],
+      "aggregate": 0.6673000000000001,
+      "gate": {
+        "passed": false,
+        "reason": "jury_not_majority",
+        "failed_criterion": "grounding"
+      }
+    },
+    {
+      "artifact_id": "01KSASC4JRKFZYVZMD0TDH93Z5",
+      "lesson_id": "01M55RPW760Z94A22R435WBVBH",
+      "transform_outcome": "proposed:01M55RPW760Z94A22R435WBVBH:unscoped",
+      "parked": true,
+      "detail_length": 667,
+      "judged_scope_kind": "version_independent",
+      "candidate": {
+        "claim": "XDG_CONFIG_HOME leaks developer's global git config into bats test environments despite HOME reassignment; explicitly unsetting it and redirecting GIT_CONFIG_GLOBAL and GIT_CONFIG_SYSTEM to /dev/null isolates the test environment while preserving per-test git configs.",
+        "rationale": "setup_test_env() reassigns HOME to block config leaks, but XDG_CONFIG_HOME is exported at the parent shell level and persists through HOME reassignment. Once SSH commit signing shipped to global git config, tests that drive git failed because signing tried to resolve key paths against empty $TEST_HOME. The fix explicitly severs this channel.",
+        "evidence": {
+          "resolution": "Unset XDG_CONFIG_HOME and point GIT_CONFIG_GLOBAL and GIT_CONFIG_SYSTEM to /dev/null in test/helpers/setup.bash so git in the test environment has no access to developer's global or system config.",
+          "artifact_ids": ["01KSASC4JRKFZYVZMD0TDH93Z5"],
+          "session_ids": ["unknown"],
+          "project_key": "ee2cfbe428c7",
+          "observed_at": "2026-05-23T16:05:59Z"
+        },
+        "applies_to": {
+          "stack": ["bats", "git"],
+          "scope": {
+            "kind": "version_independent"
+          },
+          "file_patterns": ["test/helpers/setup.bash"],
+          "task_kinds": ["test-isolation"]
+        }
+      },
+      "verdicts": [
+        {
+          "score": 0.681,
+          "passed": false,
+          "judge_type": "standard",
+          "feedback_summary": "Candidate is well-grounded (concrete mechanism: XDG_CONFIG_HOME persists through HOME reassignment; concrete failure: SSH signing in global config breaks tests). Scope is accurate (test-isolation in bats with git, version-independent shell behavior). Generality is acceptable—the principle (unsetting inherited env vars to isolate test environments) applies broadly, though the lesson frames it narrowly. Disclosure fails floor (0.55 vs. 0.9 min_pass): no acknowledgment of when this applies vs. doesn't, no explanation of how 'per-test git configs are preserved' works given /dev/null redirection, no mention of edge cases (subshells, nested invocations, other XDG-aware tools), and no alternative approaches considered. For a lesson to enter the shared pool, it must disclose limitations and caveats that affect applicability.",
+          "criterion_scores": {
+            "grounding": 0.76,
+            "scope_accuracy": 0.74,
+            "generality": 0.68,
+            "disclosure": 0.55
+          }
+        },
+        {
+          "score": 0.52,
+          "passed": false,
+          "judge_type": "adversarial",
+          "feedback_summary": "Direct version-dependency contradiction: claims 'version_independent' scope but rationale cites SSH commit signing (git 2.34.0+ feature). No grounding evidence—the test failures and setup_test_env() reassignment are asserted without commit hash, error message, or reproduction steps. Scope accuracy fails: SSH signing is version-dependent, not independent. Generality acceptable but brittle—blanket isolation in setup.bash breaks tests that intentionally verify config access or inheritance. Disclosure fails critically: (1) claims to 'preserve per-test git configs' while redirecting GIT_CONFIG_GLOBAL/SYSTEM to /dev/null without explaining how per-test configs are provided afterward; (2) ignores other config leak vectors (GIT_CONFIG, GIT_CONFIG_NOSYSTEM, ~/.gitconfig); (3) no platform-specific guidance; (4) no evidence existing tests still pass; (5) no mention of minimum git version for environment variable redirection semantics.",
+          "criterion_scores": {
+            "grounding": 0.55,
+            "scope_accuracy": 0.5,
+            "generality": 0.68,
+            "disclosure": 0.42
+          }
+        }
+      ],
+      "aggregate": 0.5991,
+      "gate": {
+        "passed": false,
+        "reason": "jury_not_majority",
+        "failed_criterion": "grounding"
+      }
+    },
+    {
+      "artifact_id": "01KT34HKNRPJ0SK6KS2F9A0HM8",
+      "lesson_id": "01M55RSV4T2VA4Q16M5MQ0RDDR",
+      "transform_outcome": "proposed:01M55RSV4T2VA4Q16M5MQ0RDDR:unscoped",
+      "parked": true,
+      "detail_length": 610,
+      "judged_scope_kind": "version_independent",
+      "candidate": {
+        "claim": "Using jq -r without -c produces multi-line pretty-printed JSONL, breaking line-by-line parsers that expect single-line objects",
+        "rationale": "jq -r emits raw output but still pretty-prints without -c; multi-line objects cause JSONL consumers like counsel_count_events to misparse object boundaries and field matching. The flag combination -r alone is insufficient for consuming code that iterates stdin line-by-line.",
+        "evidence": {
+          "resolution": "Change jq -r to jq -rc (both raw and compact output) to guarantee single-line JSONL. Two new end-to-end bats tests verify the output shape invariant by piping counsel_read_events directly into downstream consumers.",
+          "artifact_ids": ["01KT34HKNRPJ0SK6KS2F9A0HM8"],
+          "session_ids": ["unknown"],
+          "project_key": "ee2cfbe428c7",
+          "observed_at": "2026-06-02T03:02:59Z"
+        },
+        "applies_to": {
+          "stack": ["jq", "counsel"],
+          "scope": {
+            "kind": "version_independent"
+          },
+          "file_patterns": [],
+          "task_kinds": []
+        }
+      },
+      "verdicts": [
+        {
+          "score": 0.749,
+          "passed": false,
+          "judge_type": "standard",
+          "feedback_summary": "Technically sound claim: jq -r without -c does break JSONL parsers, and -rc is the correct fix. Version scope is accurate. However, disclosure falls far short of the 0.9 floor. The candidate does not explain whether other jq calls in counsel were affected, does not disclose alternative flag combinations, does not bound when -r alone is acceptable, and cites test evidence it does not substantiate. A resubmission must scope the counsel audit fully and disclose what was checked and what wasn't.",
+          "criterion_scores": {
+            "grounding": 0.85,
+            "scope_accuracy": 0.8,
+            "generality": 0.75,
+            "disclosure": 0.6
+          }
+        },
+        {
+          "score": 0.698,
+          "passed": false,
+          "judge_type": "adversarial",
+          "feedback_summary": "Disclosure insufficient (0.65 < 0.9 min_pass): The lesson conflates -r (raw string output) and -c (compact formatting) as a single problem. A shared lesson must clearly distinguish these flags and explain that -c is the critical fix for JSONL, while -r is incidental. Missing: when this problem occurs (complex objects/arrays only), examples of parsing failure, and clear applicability scope. The core claim is correct and version-independent, but the explanation would mislead readers about how these flags work.",
+          "criterion_scores": {
+            "grounding": 0.75,
+            "scope_accuracy": 0.7,
+            "generality": 0.68,
+            "disclosure": 0.65
+          }
+        }
+      ],
+      "aggregate": 0.7236,
+      "gate": {
+        "passed": false,
+        "reason": "jury_not_majority",
+        "failed_criterion": "disclosure"
+      }
+    },
+    {
+      "artifact_id": "01KZYBHVNGG2XW731BN5ZTX32E",
+      "lesson_id": "01M55RYYP9381WAW673WQD17QE",
+      "transform_outcome": "proposed:01M55RYYP9381WAW673WQD17QE:unscoped",
+      "parked": true,
+      "detail_length": 554,
+      "judged_scope_kind": "version_independent",
+      "candidate": {
+        "claim": "Separate decision recording from downstream promotion to prevent data loss when promotion fails.",
+        "rationale": "Recording a decision is independently valuable. By separating recording from promotion, a failure in promotion doesn't cause data loss. Automatic promotion in the happy path minimizes user steps, while the standalone verb enables recovery.",
+        "evidence": {
+          "resolution": "Implemented librarian_lesson_promote with both automatic promotion (from `judge` rc=0) and a standalone CLI verb, so promotion failure preserves the recorded verdict for retry.",
+          "artifact_ids": ["01KZYBHVNGG2XW731BN5ZTX32E"],
+          "session_ids": ["unknown"],
+          "project_key": "ee2cfbe428c7",
+          "observed_at": "2026-08-13T20:03:26Z"
+        },
+        "applies_to": {
+          "stack": ["librarian"],
+          "scope": {
+            "kind": "version_independent"
+          },
+          "file_patterns": [],
+          "task_kinds": []
+        }
+      },
+      "verdicts": [
+        {
+          "score": 0.61,
+          "passed": false,
+          "judge_type": "standard",
+          "feedback_summary": "Lesson is well-grounded in the separation-of-concerns principle and reasonably scoped for librarian across versions. But it fails the disclosure floor (0.35 vs 0.9 minimum): the candidate presents the pattern without acknowledging assumptions (recording success, retry safety, verdict validity) or edge cases (concurrent promotions, when this pattern might not be optimal). For a shared lesson, this omission is disqualifying.",
+          "criterion_scores": {
+            "grounding": 0.75,
+            "scope_accuracy": 0.72,
+            "generality": 0.68,
+            "disclosure": 0.35
+          }
+        },
+        {
+          "score": 0.665,
+          "passed": false,
+          "judge_type": "adversarial",
+          "feedback_summary": "The lesson pattern (separate recording from promotion) is logically sound as a separation-of-concerns principle. However, three criteria fail or weaken the candidacy: (1) grounding is incomplete—the implementation is named but no evidence demonstrates that the separation actually prevents data loss or that the pattern matches the real codebase; (2) scope_accuracy claims version_independence without justification—the lesson references specific implementation details (`judge` rc=0, function names) that might change across versions, and the candidate does not explain why the pattern would survive architectural evolution; (3) disclosure is sparse—critical edge cases and failure modes are undisclosed: what if the standalone verb itself fails, leaving the decision recorded but unpromoted? Are concurrent promotions race-safe? Is this approach idempotent? What assumptions does it make about record persistence and eventual execution? The candidate also does not disclose that this pattern shifts risk rather than eliminating it—data is preserved only if someone remembers to call the standalone verb.",
+          "criterion_scores": {
+            "grounding": 0.68,
+            "scope_accuracy": 0.72,
+            "generality": 0.72,
+            "disclosure": 0.58
+          }
+        }
+      ],
+      "aggregate": 0.6391,
+      "gate": {
+        "passed": false,
+        "reason": "jury_not_majority",
+        "failed_criterion": "grounding"
+      }
+    },
+    {
+      "artifact_id": "01KSASCK7GR8A8019XA6QAYF8M",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_resolution",
+      "parked": false,
+      "detail_length": 488,
+      "judged_scope_kind": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M2M29J2GBWN0X5W9VC3MZK1E",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_resolution",
+      "parked": false,
+      "detail_length": 406,
+      "judged_scope_kind": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01KSG4XGQRT2YBC86D5P0GNM5V",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_resolution",
+      "parked": false,
+      "detail_length": 364,
+      "judged_scope_kind": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M2XTB91A5FXZSJNK74220NG0",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_versions",
+      "parked": false,
+      "detail_length": 294,
+      "judged_scope_kind": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M08MNN802S2092FYPMP76PMW",
+      "lesson_id": "01M55S4A8G24ZCNH5A1AXD40NE",
+      "transform_outcome": "proposed:01M55S4A8G24ZCNH5A1AXD40NE:unscoped",
+      "parked": true,
+      "detail_length": 253,
+      "judged_scope_kind": "version_independent",
+      "candidate": {
+        "claim": "Use GITHUB_TOKEN with id-token:write for release workflows instead of configuring git credentials globally.",
+        "rationale": "OIDC-based authentication via id-token is more secure and avoids persisting credentials through git config, eliminating the security risk of leaked or improperly-scoped credentials in the workflow context.",
+        "evidence": {
+          "resolution": "Switched the release workflow from using git config --global to setting up GITHUB_TOKEN with id-token:write permission for OIDC-based authentication in .github/workflows/release.yml.",
+          "artifact_ids": ["01M08MNN802S2092FYPMP76PMW"],
+          "session_ids": ["unknown"],
+          "project_key": "ee2cfbe428c7",
+          "observed_at": "2026-08-17T19:55:12Z"
+        },
+        "applies_to": {
+          "stack": ["GitHub Actions", "release-please"],
+          "scope": {
+            "kind": "version_independent"
+          },
+          "file_patterns": [".github/workflows/release.yml"],
+          "task_kinds": ["release automation", "CI/CD security"]
+        }
+      },
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01KS83XHR0B278A7BW1FHZ2S7J",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_resolution",
+      "parked": false,
+      "detail_length": 207,
+      "judged_scope_kind": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M1J6T7N09E47FVQZNMCD2MER",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_resolution",
+      "parked": false,
+      "detail_length": 158,
+      "judged_scope_kind": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M1SM368GJ3A9FQ0SRAE91WJK",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_resolution",
+      "parked": false,
+      "detail_length": 102,
+      "judged_scope_kind": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M0376RB0J3A9FQ0SRAE91WJK",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_resolution",
+      "parked": false,
+      "detail_length": 102,
+      "judged_scope_kind": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M4S74CBR6RCNNNW6Y6WZDQ1A",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_resolution",
+      "parked": false,
+      "detail_length": 91,
+      "judged_scope_kind": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M307N448RH5V3WJ0SFQKA2W8",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_resolution",
+      "parked": false,
+      "detail_length": 91,
+      "judged_scope_kind": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M1WG6130ZDSFEP1AQMQB581J",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_resolution",
+      "parked": false,
+      "detail_length": 91,
+      "judged_scope_kind": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01KS5WTYMGSXPJW4SY72GGCZKH",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_resolution",
+      "parked": false,
+      "detail_length": 20,
+      "judged_scope_kind": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    }
+  ]
+}

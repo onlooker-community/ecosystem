@@ -39,6 +39,16 @@ Accepted promotions land in the user's typed memory store at `~/.claude/projects
 
 This plugin is **in design / scaffolding phase**. The hook entry points exist and load cleanly but the scan + classify + propose pipeline is not yet implemented. See [`docs/design.md`](docs/design.md) for the full design and [`docs/adr/001-propose-dont-auto-write.md`](docs/adr/001-propose-dont-auto-write.md) for the load-bearing decision.
 
+## Measurements
+
+**[2026-10-17 transform baseline](docs/measurements/2026-10-17-transform-baseline/README.md) / ONL-110** — 36 archivist artifacts transformed and juried, `claude-haiku-4-5-20251001`. **0 of 10** candidates cleared the gate, and the standard judge passed none either — `disclosure` is 0/10 for *both* judges at a min-mean of 0.417 against a 0.9 floor, which gates every candidate before the judges' disagreement matters. That contradicts ONL-110's "passes the standard judge, then fails adversarial review," which rested on n=2. Only 11 of 36 artifacts produced a candidate at all, and the *richest* artifacts transformed worst (2/9 in the top detail quartile, against 6/9 mid-corpus).
+
+```bash
+plugins/librarian/scripts/measure-lesson-transform.sh --dry-run --samples 36   # show the plan, spend nothing
+```
+
+The harness measures in a throwaway `ONLOOKER_DIR`: a decline is terminal, so an in-place run would burn its own corpus and have nothing to measure the second time.
+
 ## Requirements
 
 - The `ecosystem` plugin installed (for `~/.onlooker/` substrate).
