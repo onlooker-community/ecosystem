@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.22.2](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.22.1...librarian-v0.22.2) (2026-10-17)
+
+
+### Bug Fixes
+
+* **librarian:** let a dispatched judge actually answer :detective: ([#450](https://github.com/onlooker-community/ecosystem/issues/450)) ([061faf6](https://github.com/onlooker-community/ecosystem/commit/061faf6435a8b64a232e217bf3e4f049f2d18d4e))
+
 ## [0.22.1](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.22.0...librarian-v0.22.1) (2026-10-13)
 
 
