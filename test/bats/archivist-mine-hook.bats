@@ -189,3 +189,63 @@ Claude-Session: session_abc123XYZ"
 	run jq -r '.session_id' "$(_mined_artifact)"
 	[ "$output" = "abc123XYZ" ]
 }
+
+# --- a re-mine must overwrite, not accumulate (ONL-169) ---------------------
+#
+# The existing idempotence test above re-runs the hook on an UNCHANGED commit,
+# so the carrying date is identical and the id matches whether or not the id
+# depends on that date. Every real re-mine changes the date: a squash, a
+# rebase and a cherry-pick all rewrite it. These pin that case.
+#
+# Measured before the fix: 192 of 1011 mined artifacts in this repo's own store
+# (18%) were duplicate content, and this repo guarantees it by mandating
+# always-PR in CLAUDE.md.
+
+@test "re-mining after a rebase rewrites the date and still leaves one artifact" {
+	make_repo "fix(thing): stop dropping events :bug:
+
+Because the old path dropped them on every restart."
+
+	run run_hook
+	[ "$status" -eq 0 ] || return 1
+	[ "$(artifact_count)" -eq 1 ] || return 1
+	before=$(find "$(archivist_project_dir "$KEY")/decisions" -name '*.json' | head -1)
+	before_id=$(basename "$before" .json)
+
+	# What a rebase does to a commit: same message, new sha, new committer date.
+	# The old sha is then unreachable, so the hook drops its watermark and
+	# re-mines from scratch -- the path whose comment promises that
+	# "content-addressed ids make the re-mine an overwrite".
+	GIT_COMMITTER_DATE="2027-03-04T05:06:07Z" git -C "$REPO" commit -q --amend --no-edit --date="2027-03-04T05:06:07Z"
+
+	run run_hook
+	[ "$status" -eq 0 ] || return 1
+	[ "$(artifact_count)" -eq 1 ] || return 1
+	after_id=$(basename "$(find "$(archivist_project_dir "$KEY")/decisions" -name '*.json' | head -1)" .json)
+	# The id itself must not move either: evidence.artifact_ids cites it, and a
+	# changed id leaves every lesson pointing at an artifact that is gone.
+	[ "$before_id" = "$after_id" ]
+}
+
+@test "mining a squash-merged subject leaves one artifact, not a second" {
+	make_repo "fix(thing): stop dropping events :bug:
+
+Because the old path dropped them on every restart."
+
+	run run_hook
+	[ "$status" -eq 0 ] || return 1
+	[ "$(artifact_count)" -eq 1 ] || return 1
+	before_id=$(basename "$(find "$(archivist_project_dir "$KEY")/decisions" -name '*.json' | head -1)" .json)
+
+	# What GitHub does when it squash-merges: the same message with the pull
+	# request number appended to the subject.
+	git -C "$REPO" commit -q --amend --no-edit -m "fix(thing): stop dropping events :bug: (#450)
+
+Because the old path dropped them on every restart."
+
+	run run_hook
+	[ "$status" -eq 0 ] || return 1
+	[ "$(artifact_count)" -eq 1 ] || return 1
+	after_id=$(basename "$(find "$(archivist_project_dir "$KEY")/decisions" -name '*.json' | head -1)" .json)
+	[ "$before_id" = "$after_id" ]
+}

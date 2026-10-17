@@ -17,10 +17,20 @@
 archivist_mine_normalize() {
 	local message="$1"
 	message="${message#\* }"
-	# Command substitution already eats trailing newlines; this also drops
-	# trailing spaces on the last line so two spellings of the same message
-	# cannot hash differently.
-	printf '%s' "$(printf '%s' "$message" | sed 's/[[:space:]]*$//')"
+	# Two spellings of the same message must not hash differently, so both
+	# things a merge does to a subject are undone here.
+	#
+	# `1s` -- the pull request number GitHub appends when it squash-merges, and
+	# ONLY on the subject line. A number in the body is content: "reverts the
+	# change from (#450)" and "... (#451)" are different messages and must stay
+	# different ids. Without this the squash's digest differed from the branch
+	# commit's and content addressing bought nothing, which is half of ONL-169.
+	#
+	# The second expression is the original trailing-whitespace trim. Command
+	# substitution already eats trailing newlines; sed drops trailing spaces on
+	# every line.
+	printf '%s' "$(printf '%s' "$message" \
+		| sed -e '1s/[[:space:]]\{1,\}(#[0-9]\{1,\})[[:space:]]*$//' -e 's/[[:space:]]*$//')"
 }
 
 # Split a squashed body into its authored messages, NUL-separated.
@@ -62,30 +72,47 @@ archivist_mine_split() {
 # the lesson contract cites these, so a re-mine that minted fresh ids would
 # leave every lesson pointing at an artifact that no longer exists, silently.
 #
-# The timestamp half is the carrying commit's date, so a pull request's
-# artifacts sort together at the moment it landed.
+# NO TIMESTAMP, and that is the whole point (ONL-169). This used to prefix the
+# carrying commit's date so a pull request's artifacts would sort together --
+# and that defeated the stability the paragraph above promises, in exactly the
+# squash/rebase/cherry-pick case it names. Every one of those rewrites the
+# commit date, so the message was identical, the date was not, and the re-mine
+# appended a second artifact instead of overwriting the first. 192 of 1011
+# mined artifacts in this repo's own store (18%) were duplicate content.
 #
-# Usage: archivist_mine_id <normalized_message> <epoch_ms>
+# The ordering it bought was read by nobody: archivist_storage_load_ranked
+# sorts by updated_at, librarian_archivist_load_since sorts by created_at, and
+# nothing in either plugin sorts or ranges over an artifact id. The carrying
+# date is still recorded -- as created_at on the artifact, which is the field
+# those readers actually use.
+#
+# Still 26 Crockford base32 chars, because that charset IS load-bearing:
+# librarian-archivist-reader.sh:42 and the evidence.artifact_ids rule in
+# librarian-lesson-validate.sh:87 both validate against it, and nothing
+# anywhere decodes a ULID timestamp back out of one.
+#
+# Usage: archivist_mine_id <normalized_message>
 archivist_mine_id() {
 	local message="$1"
-	local epoch_ms="$2"
 
+	# Thirty hex chars = 120 bits, which is what three encoder calls consume.
 	local digest
 	if command -v shasum >/dev/null 2>&1; then
-		digest=$(printf '%s' "$message" | shasum -a 256 | cut -c1-20)
+		digest=$(printf '%s' "$message" | shasum -a 256 | cut -c1-30)
 	elif command -v sha256sum >/dev/null 2>&1; then
-		digest=$(printf '%s' "$message" | sha256sum | cut -c1-20)
+		digest=$(printf '%s' "$message" | sha256sum | cut -c1-30)
 	else
 		return 1
 	fi
 
-	# Eighty bits as two forty-bit halves, matching how archivist_ulid builds
-	# its own randomness so both pass through the same encoder.
-	local hi=$((16#${digest:0:10}))
-	local lo=$((16#${digest:10:10}))
+	# Three forty-bit thirds, matching how archivist_ulid builds its own
+	# randomness so both pass through the same encoder.
+	local a=$((16#${digest:0:10}))
+	local b=$((16#${digest:10:10}))
+	local c=$((16#${digest:20:10}))
 
 	printf '%s%s%s' \
-		"$(_archivist_ulid_encode "$epoch_ms" 10)" \
-		"$(_archivist_ulid_encode "$hi" 8)" \
-		"$(_archivist_ulid_encode "$lo" 8)"
+		"$(_archivist_ulid_encode "$a" 10)" \
+		"$(_archivist_ulid_encode "$b" 8)" \
+		"$(_archivist_ulid_encode "$c" 8)"
 }
