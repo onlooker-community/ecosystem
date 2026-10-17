@@ -110,7 +110,7 @@ while IFS=' ' read -r sha epoch; do
 		# free of records nothing will ever promote.
 		[[ -z "$detail" ]] && { record=""; continue; }
 
-		id=$(archivist_mine_id "$record" "$((epoch * 1000))")
+		id=$(archivist_mine_id "$record")
 		json=$(jq -n \
 			--arg id "$id" \
 			--arg key "$PROJECT_KEY" \

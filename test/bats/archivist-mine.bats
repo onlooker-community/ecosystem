@@ -70,6 +70,36 @@ body because reasons")
 	[ "$from_branch" = "$from_squash" ]
 }
 
+@test "normalizing strips a squash-appended pull request number" {
+	# GitHub appends " (#123)" to the SUBJECT when it squash-merges, so the
+	# message read off the squash differs from the branch commit's by exactly
+	# that suffix. The bullet is stripped for this same reason one line up; the
+	# number has to go the same way or the digest differs and content
+	# addressing buys nothing (ONL-169).
+	local from_branch from_squash
+	from_branch=$(archivist_mine_normalize "subject line
+
+body because reasons")
+	from_squash=$(archivist_mine_normalize "subject line (#450)
+
+body because reasons")
+	[ "$from_branch" = "$from_squash" ]
+}
+
+@test "normalizing leaves a pull request number inside the body alone" {
+	# Only the subject's trailing suffix is squash noise. A number referenced
+	# in prose is content, and stripping it would make two different messages
+	# hash the same.
+	local a b
+	a=$(archivist_mine_normalize "subject line
+
+reverts the change from (#450)")
+	b=$(archivist_mine_normalize "subject line
+
+reverts the change from (#451)")
+	[ "$a" != "$b" ]
+}
+
 @test "normalizing trims trailing whitespace" {
 	local a b
 	a=$(archivist_mine_normalize "subject because reasons")
@@ -80,35 +110,62 @@ body because reasons")
 }
 
 @test "the id is a well-formed ULID" {
-	run archivist_mine_id "subject because reasons" 1788618992794
+	run archivist_mine_id "subject because reasons"
 	[ "$status" -eq 0 ]
 	[[ "$output" =~ ^[0-9A-HJKMNP-TV-Z]{26}$ ]]
 }
 
-@test "the same message and time always produce the same id" {
+@test "the same message always produces the same id" {
 	# Idempotence. A re-mine must overwrite its own artifact rather than add a
 	# second, and every lesson citing that artifact must keep resolving.
 	local a b
-	a=$(archivist_mine_id "subject because reasons" 1788618992794)
-	b=$(archivist_mine_id "subject because reasons" 1788618992794)
+	a=$(archivist_mine_id "subject because reasons")
+	b=$(archivist_mine_id "subject because reasons")
 	[ "$a" = "$b" ]
 }
 
-@test "different messages at the same instant produce different ids" {
-	# Every message in one squashed pull request shares a carrying commit and
-	# therefore a timestamp. Only the content half separates them.
+# The id no longer takes a timestamp at all, so "stable across a re-mine at a
+# different time" cannot be stated through this signature -- which is the
+# point. It is asserted where a date really changes, in
+# test/bats/archivist-mine-hook.bats. See ONL-169.
+
+@test "a squash-appended pull request number does not change the id" {
+	# GitHub appends " (#123)" to the subject when it squash-merges, so the
+	# message read from the squash differs from the one read off the branch
+	# commit by exactly that suffix. archivist_mine_normalize already strips the
+	# squash bullet for this reason; the number has to go the same way or the
+	# digest differs and content addressing buys nothing.
+	local from_branch from_squash
+	from_branch=$(archivist_mine_id "$(archivist_mine_normalize "subject line
+
+body because reasons")")
+	from_squash=$(archivist_mine_id "$(archivist_mine_normalize "subject line (#450)
+
+body because reasons")")
+	[ "$from_branch" = "$from_squash" ]
+}
+
+@test "different messages produce different ids" {
 	local a b
-	a=$(archivist_mine_id "first because reasons" 1788618992794)
-	b=$(archivist_mine_id "second because reasons" 1788618992794)
+	a=$(archivist_mine_id "first because reasons")
+	b=$(archivist_mine_id "second because reasons")
 	[ "$a" != "$b" ]
 }
 
-@test "ids sort by the carrying commit's time" {
-	# ULIDs sort lexicographically by their timestamp prefix, so a pull
-	# request's artifacts sort at the moment it landed rather than in whatever
-	# order the miner happened to visit them.
-	local earlier later
-	earlier=$(archivist_mine_id "same text" 1788618992794)
-	later=$(archivist_mine_id "same text" 1788618999999)
-	[[ "$earlier" < "$later" ]]
+# There is deliberately no test that ids sort by the carrying commit's time.
+# They did, and that is what broke idempotence above. The ordering bought
+# nothing any reader uses: archivist_storage_load_ranked sorts by updated_at,
+# librarian_archivist_load_since sorts by created_at, and nothing in either
+# plugin sorts or ranges over the id. Both validators that touch an artifact id
+# (librarian-archivist-reader.sh:42 and the evidence.artifact_ids rule in
+# librarian-lesson-validate.sh:87) are charset-only regexes, and nothing
+# decodes a ULID timestamp back out of one. See ONL-169.
+
+@test "the id still passes the charset both validators require" {
+	# 26 Crockford base32 chars. evidence.artifact_ids is validated against
+	# this, so an id that stops matching silently invalidates every lesson that
+	# cites it.
+	run archivist_mine_id "subject because reasons"
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" =~ ^[0-9A-HJKMNP-TV-Z]{26}$ ]]
 }
