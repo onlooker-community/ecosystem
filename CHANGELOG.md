@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.72.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.72.0...ecosystem-v0.72.1) (2026-10-18)
+
+
+### Bug Fixes
+
+* **archivist:** let a mining backlog drain instead of wedging :unlock: ([#466](https://github.com/onlooker-community/ecosystem/issues/466)) ([31358fa](https://github.com/onlooker-community/ecosystem/commit/31358fa1bf002edbcd70c3b91605c212c84b6290))
+
 ## [0.72.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.71.1...ecosystem-v0.72.0) (2026-10-18)
 
 
