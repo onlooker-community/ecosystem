@@ -23,6 +23,12 @@ setup() {
 	HOOK="${PLUGIN_ROOT}/scripts/hooks/tribunal-stop-gate.sh"
 	export ONLOOKER_HOOK_HEALTH_LOG="${ONLOOKER_DIR}/logs/hook-health.jsonl"
 	mkdir -p "$(dirname "$ONLOOKER_HOOK_HEALTH_LOG")"
+	# Exported the way tribunal-events.bats does. setup_test_env alone does not
+	# set it — validate-path.sh is what normally exports it, and this file does
+	# not load it — so every assertion against the bus would otherwise read an
+	# empty path and fail for a reason unrelated to the gate.
+	export ONLOOKER_EVENTS_LOG="${ONLOOKER_DIR}/logs/onlooker-events.jsonl"
+	mkdir -p "$(dirname "$ONLOOKER_EVENTS_LOG")"
 
 	REPO="${BATS_TEST_TMPDIR}/repo"
 	mkdir -p "$REPO"
@@ -101,4 +107,117 @@ STUB
 	[ -f "$ONLOOKER_HOOK_HEALTH_LOG" ] || return 1
 	run jq -rs '[.[] | select(.hook == "tribunal-stop-gate") | .status] | join(",")' "$ONLOOKER_HOOK_HEALTH_LOG"
 	[[ "$output" != *"success"* ]]
+}
+
+# --- the gate now says why it judged nothing (ONL-172) ----------------------
+#
+# The cases above prove the off switch stops the model. They cannot prove the
+# BUS learns anything, and it did not: check-plugin-liveness read tribunal as a
+# broken emitter across 3398 hook runs while stop_hook.enabled was false,
+# because the absence of gate.passed/blocked cannot tell a disabled gate from a
+# broken one. Widening its window did not clarify that — it reported the plugin
+# `live` on 1076 events that all predated the off-switch, so no window read it
+# correctly.
+
+_skip_reasons() {
+	[ -f "$ONLOOKER_EVENTS_LOG" ] || return 1
+	jq -rs '[.[] | select(.event_type == "tribunal.gate.skipped") | .payload.reason] | join(",")' \
+		"$ONLOOKER_EVENTS_LOG"
+}
+
+@test "a disabled gate reports why instead of saying nothing" {
+	_settings '{"tribunal":{"stop_hook":{"enabled":false,"skip_if_no_file_changes":false}}}'
+	_run_hook
+	[ "$status" -eq 0 ] || return 1
+	[ ! -f "$CLAUDE_MARKER" ] || return 1
+	run _skip_reasons
+	[ "$output" = "disabled" ]
+}
+
+@test "the skipped event is a schema-valid envelope" {
+	# tribunal.gate.skipped landed in @onlooker-community/schema 3.1.0. Before
+	# that release the emitter would have rejected it under ONLOOKER_VALIDATE=1
+	# and the line would never reach the log at all.
+	_settings '{"tribunal":{"stop_hook":{"enabled":false,"skip_if_no_file_changes":false}}}'
+	_run_hook
+	[ "$status" -eq 0 ] || return 1
+	run bash -c "tail -n 1 '$ONLOOKER_EVENTS_LOG' | ONLOOKER_DIR='$ONLOOKER_DIR' node '${REPO_ROOT}/scripts/lib/onlooker-event.mjs' validate"
+	[ "$status" -eq 0 ]
+}
+
+@test "a clean tree reports no_file_changes, not silence" {
+	# The highest-volume skip on a real machine, and the one most likely to be
+	# mistaken for a dead plugin.
+	_settings '{"tribunal":{"stop_hook":{"enabled":true,"skip_if_no_file_changes":true}}}'
+	git -C "$REPO" checkout -- README.md
+	_run_hook
+	[ "$status" -eq 0 ] || return 1
+	[ ! -f "$CLAUDE_MARKER" ] || return 1
+	run _skip_reasons
+	[ "$output" = "no_file_changes" ]
+}
+
+@test "a missing transcript reports no_transcript" {
+	_settings '{"tribunal":{"stop_hook":{"enabled":true,"skip_if_no_file_changes":false}}}'
+	rm -f "$TRANSCRIPT"
+	_run_hook
+	[ "$status" -eq 0 ] || return 1
+	run _skip_reasons
+	[ "$output" = "no_transcript" ]
+}
+
+@test "a judge timeout reports judge_timeout, where a model call was spent" {
+	# One of the four post-dispatch reasons. These are the shapes where a Stop
+	# paid for a judge and got no verdict, which is what made the spend
+	# invisible in ecosystem-449.32 — reported on the bus now, not just in
+	# hook-health.
+	_settings '{"tribunal":{"stop_hook":{"enabled":true,"skip_if_no_file_changes":false}}}'
+	cat > "${STUB_BIN}/timeout" <<'STUB'
+#!/usr/bin/env bash
+exit 124
+STUB
+	chmod +x "${STUB_BIN}/timeout"
+	_run_hook
+	[ "$status" -eq 0 ] || return 1
+	run _skip_reasons
+	[ "$output" = "judge_timeout" ]
+}
+
+@test "a judge answering unparseable JSON reports judge_unparseable" {
+	_settings '{"tribunal":{"stop_hook":{"enabled":true,"skip_if_no_file_changes":false}}}'
+	cat > "${STUB_BIN}/claude" <<STUB
+#!/usr/bin/env bash
+printf 'invoked\n' >> "${CLAUDE_MARKER}"
+printf '%s' 'I have thoughts but no verdict object.'
+STUB
+	chmod +x "${STUB_BIN}/claude"
+	_run_hook
+	[ "$status" -eq 0 ] || return 1
+	[ -f "$CLAUDE_MARKER" ] || return 1
+	run _skip_reasons
+	[ "$output" = "judge_unparseable" ]
+}
+
+@test "a gate that actually judges emits no skip" {
+	# The success path must not claim a skip. _done takes its reason as an
+	# optional argument precisely so the last caller, after the full chain is
+	# emitted, stays silent.
+	_settings '{"tribunal":{"stop_hook":{"enabled":true,"skip_if_no_file_changes":false}}}'
+	_run_hook
+	[ "$status" -eq 0 ] || return 1
+	[ -f "$CLAUDE_MARKER" ] || return 1
+	run _skip_reasons
+	[ "$output" = "" ] || return 1
+	grep -q '"event_type":"tribunal.gate.passed"' "$ONLOOKER_EVENTS_LOG"
+}
+
+@test "the skip carries no task_id, which the schema refuses" {
+	# gate.passed and gate.blocked both require one. A skipped gate never minted
+	# a task, and a payload claiming otherwise would not validate — so if this
+	# ever regresses, the event stops appearing rather than appearing wrong.
+	_settings '{"tribunal":{"stop_hook":{"enabled":false,"skip_if_no_file_changes":false}}}'
+	_run_hook
+	[ "$status" -eq 0 ] || return 1
+	run jq -rs '[.[] | select(.event_type == "tribunal.gate.skipped") | (.payload | keys | join("+"))] | join(",")' "$ONLOOKER_EVENTS_LOG"
+	[ "$output" = "reason" ]
 }

@@ -72,7 +72,37 @@ TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | jq -r '.transcript_path // ""' 2>/dev/n
 
 # Stop hook MUST NOT emit any stdout besides the optional `{continue: ...}`
 # acknowledgement. Exiting 0 with no output is the safe path.
+#
+# Takes the reason this gate judged nothing, and reports it (ONL-172). Without
+# it the only signal is the ABSENCE of tribunal.gate.passed/blocked, which
+# cannot tell "the gate is switched off" from "the emitter is broken" --
+# check-plugin-liveness called tribunal a broken emitter over 3398 hook runs
+# while stop_hook.enabled was false, and its own advice to widen the window
+# then called the plugin healthy on 1076 events that all predated the
+# off-switch. No window read it correctly.
+#
+# The reason is optional on purpose: the last caller, after the full event
+# chain has been emitted, is the SUCCESS path and must not claim a skip.
+#
+# On the spend this adds to a disabled gate. The off-switch above is documented
+# as "consulted before anything else this hook could spend" (ecosystem-449.32),
+# and tribunal_emit_event does exec node. But what 449.32 was protecting against
+# is a `claude -p` costing seconds and money on every dirty-tree Stop; this is
+# one ~100ms exec, measured at 3398 Stops in 30 days -- about 11 seconds of CPU
+# per day for the whole fleet. A gate that cannot be distinguished from a broken
+# one costs more than that.
+#
+# No project resolve is needed first, even though the `disabled` caller runs
+# before onlooker_project_resolve. check-plugin-liveness counts an event with no
+# project_key as local by its own documented rule ("attributing them to some
+# other repo would be a guess, and over-counting here is the safer error"), and
+# no tribunal event has ever carried one.
 _done() {
+	local reason="${1:-}"
+	if [[ -n "$reason" ]]; then
+		tribunal_emit_event "tribunal.gate.skipped" \
+			"$(jq -cn --arg r "$reason" '{reason: $r}')" >/dev/null 2>&1 || true
+	fi
 	hook_health_exit 0
 }
 
@@ -96,28 +126,28 @@ WORKTREE_ROOT=$(onlooker_worktree_root "$CWD")
 #
 # Default is off: the accessor requires a literal true, so absent config keeps
 # the gate silent rather than opting a repo in by omission.
-tribunal_config_stop_hook_enabled || _done
+tribunal_config_stop_hook_enabled || _done "disabled"
 
 onlooker_project_resolve "$CWD"
 PROJECT_KEY="$ONLOOKER_PROJECT_KEY"
 if [[ -z "$PROJECT_KEY" || -z "$REPO_ROOT" ]]; then
-	_done
+	_done "no_project_context"
 fi
 
 if [[ -z "$TRANSCRIPT_PATH" || ! -f "$TRANSCRIPT_PATH" ]]; then
-	_done
+	_done "no_transcript"
 fi
 
 # Skip if no files were modified since the last commit AND skip_if_no_file_changes is true.
 SKIP_IF_CLEAN=$(tribunal_config_get '.tribunal.stop_hook.skip_if_no_file_changes')
 if [[ "$SKIP_IF_CLEAN" == "true" ]]; then
 	if git -C "$WORKTREE_ROOT" diff --quiet 2>/dev/null && git -C "$WORKTREE_ROOT" diff --cached --quiet 2>/dev/null; then
-		_done
+		_done "no_file_changes"
 	fi
 fi
 
 if ! command -v claude >/dev/null 2>&1; then
-	_done
+	_done "claude_unavailable"
 fi
 
 # ----------------------------------------------------------------------------
@@ -131,7 +161,7 @@ SCORE_THRESHOLD=$(tribunal_config_get '.tribunal.session.score_threshold')
 [[ -z "$SCORE_THRESHOLD" ]] && SCORE_THRESHOLD="0.75"
 
 TRANSCRIPT_TAIL=$(tail -c 30000 "$TRANSCRIPT_PATH" 2>/dev/null) || TRANSCRIPT_TAIL=""
-[[ -z "$TRANSCRIPT_TAIL" ]] && _done
+[[ -z "$TRANSCRIPT_TAIL" ]] && _done "empty_transcript"
 
 DIFF_SUMMARY=$(git -C "$WORKTREE_ROOT" diff --stat 2>/dev/null | tail -c 4000) || DIFF_SUMMARY=""
 
@@ -185,17 +215,17 @@ fi
 # gtimeout matches it.
 if [[ "$_JUDGE_RC" -eq 124 ]]; then
 	hook_health_failure "judge_timeout"
-	_done
+	_done "judge_timeout"
 elif [[ "$_JUDGE_RC" -ne 0 ]]; then
 	hook_health_failure "judge_error_rc_${_JUDGE_RC}"
-	_done
+	_done "judge_error"
 fi
 
-[[ -z "$RESPONSE" ]] && _done
+[[ -z "$RESPONSE" ]] && _done "judge_no_response"
 
 CLEAN_RESPONSE=$(printf '%s' "$RESPONSE" | sed -e 's/^```json//' -e 's/^```//' -e 's/```$//')
 if ! printf '%s' "$CLEAN_RESPONSE" | jq -e '.score and (.passed // false | type == "boolean") and .judge_type' >/dev/null 2>&1; then
-	_done
+	_done "judge_unparseable"
 fi
 
 # ----------------------------------------------------------------------------
