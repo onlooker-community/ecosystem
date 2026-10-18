@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.0](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.7.1...tribunal-v1.8.0) (2026-10-18)
+
+
+### Features
+
+* **tribunal:** say why the gate judged nothing :mag: ([#458](https://github.com/onlooker-community/ecosystem/issues/458)) ([3c8d1b1](https://github.com/onlooker-community/ecosystem/commit/3c8d1b1ae277184193f9994bec9894a6fc7d2cfb))
+
 ## [1.7.1](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.7.0...tribunal-v1.7.1) (2026-10-13)
 
 

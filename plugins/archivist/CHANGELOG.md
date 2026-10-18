@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.3](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.9.2...archivist-v0.9.3) (2026-10-18)
+
+
+### Bug Fixes
+
+* **archivist:** a body of only metadata is not a rationale :broom: ([#457](https://github.com/onlooker-community/ecosystem/issues/457)) ([cf462d2](https://github.com/onlooker-community/ecosystem/commit/cf462d259dba123b69bb091ef8be96d726bbf3f1))
+
 ## [0.9.2](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.9.1...archivist-v0.9.2) (2026-10-17)
 
 
