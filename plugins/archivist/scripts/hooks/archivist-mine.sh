@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Archivist SessionEnd mining hook.
 #
-# Reads commits on the default branch since a watermark, turns each authored
-# message into an artifact, and writes them through the same storage the
-# PreCompact extractor uses.
+# Reads first-parent commits on whatever branch is checked out (HEAD, not the
+# default branch) since a watermark, turns each authored message into an
+# artifact, and writes them through the same storage the PreCompact extractor
+# uses. Mining a feature branch and then its squash on main yields the same
+# content-addressed id, so the second pass overwrites rather than duplicates.
 #
 # Why this exists alongside archivist-extract: that hook has fired zero times on
 # the machine that dogfoods this marketplace, because compaction is its only
