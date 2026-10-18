@@ -87,7 +87,42 @@ COMMITS=$(git -C "$REPO_ROOT" log --first-parent --format='%H %ct' "$RANGE" 2>/d
 	git -C "$REPO_ROOT" log --first-parent --reverse --format='%H %ct' "$RANGE" 2>/dev/null)
 [[ -z "$COMMITS" ]] && hook_health_exit 0
 
-HEAD_SHA=$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null) || hook_health_exit 0
+# ---------------------------------------------------------------------------
+# Per-run cap
+#
+# The CLI gives the whole SessionEnd batch 1500ms, and a timeout declared in a
+# plugin's hooks.json does not raise it (#338). Each commit measured 43-62ms, so
+# a backlog past roughly 25 commits cannot finish in one run. That was not a
+# slow run but a stuck one: the watermark only moved at the end, every killed
+# run saved nothing, and the next session faced the same backlog plus whatever
+# had landed since. Measured on the dotfiles repo: 182 commits behind, killed
+# at ~1510ms on every session end for almost four weeks.
+#
+# Mining oldest-first a bounded slice at a time turns a backlog into a few
+# sessions of catch-up. Loaded only here, past the empty-range exit, so the
+# common up-to-date path pays nothing for it. 0 means no cap.
+# ---------------------------------------------------------------------------
+# shellcheck source=../lib/archivist-config.sh
+source "${PLUGIN_ROOT}/scripts/lib/archivist-config.sh"
+archivist_config_load "$CWD"
+MAX_COMMITS=$(archivist_config_int '.archivist.mining.max_commits_per_run' 10)
+if (( MAX_COMMITS > 0 )); then
+	# A here-string, not `printf | head`: head closing the pipe early makes printf
+	# report a broken pipe on stderr, and SessionEnd stderr reaches the terminal.
+	COMMITS=$(head -n "$MAX_COMMITS" <<< "$COMMITS")
+fi
+
+# Atomic, because it is now written while the run can still be killed: a
+# truncated mined.json parses as no watermark, which re-mines the whole history.
+archivist_mine_checkpoint() {
+	local sha="$1" tmp
+	mkdir -p "$(dirname "$MINED_PATH")" 2>/dev/null || return 0
+	tmp="${MINED_PATH}.tmp.$$"
+	printf '{"last_sha":"%s","at":"%s"}\n' \
+		"$sha" "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "$tmp" 2>/dev/null &&
+		mv -f "$tmp" "$MINED_PATH" 2>/dev/null || rm -f "$tmp" 2>/dev/null
+	return 0
+}
 
 wrote_any=0
 write_failed=0
@@ -150,28 +185,24 @@ while IFS=' ' read -r sha epoch; do
 		fi
 		record=""
 	done < <(archivist_mine_split "$body")
-done <<< "$COMMITS"
 
-# Only now. The watermark never moves ahead of the artifacts it claims to
-# describe - ecosystem-449.55 is what the inverse costs, and its failure is
-# invisible because the watermark is the thing asserting all is well.
-#
-# The condition is "nothing FAILED", not "something was written". Those came
-# apart once a body of pure metadata became a legitimate skip: a session whose
-# whole range is release and auto-format commits writes nothing and has still
-# examined everything, and gating on wrote_any would re-walk that range on
-# every session end forever. A failed write still holds the watermark back.
-# $wrote_any stays because it reads as the intent at a glance.
-if [[ $write_failed -eq 0 ]]; then
-	# The directory has to be ensured here now. It used to be a side effect of
-	# having written an artifact into it, which was guaranteed because the
-	# watermark only moved when something had been written. A skip-only run
-	# writes no artifact, so without this the redirect below fails into `|| true`
-	# and the watermark silently never advances -- which is the bug this
-	# condition was widened to fix, reappearing one line later.
-	mkdir -p "$(dirname "$MINED_PATH")" 2>/dev/null || true
-	printf '{"last_sha":"%s","at":"%s"}\n' \
-		"$HEAD_SHA" "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "$MINED_PATH" 2>/dev/null || true
-fi
+	# The watermark never moves ahead of the artifacts it claims to describe -
+	# ecosystem-449.55 is what the inverse costs, and its failure is invisible
+	# because the watermark is the thing asserting all is well. So a failed write
+	# stops the run here, leaving the watermark on the last commit that landed
+	# whole; the next session retries from this commit.
+	(( write_failed )) && break
+
+	# The condition is "nothing FAILED", not "something was written". Those came
+	# apart once a body of pure metadata became a legitimate skip: a commit that
+	# is all release or auto-format noise writes nothing and has still been
+	# examined, and gating on wrote_any would re-walk it on every session end
+	# forever. $wrote_any stays because it reads as the intent at a glance.
+	#
+	# After every commit rather than once at the end, so a run killed at the
+	# SessionEnd deadline keeps what it finished instead of handing the whole
+	# range to the next session.
+	archivist_mine_checkpoint "$sha"
+done <<< "$COMMITS"
 
 hook_health_exit 0

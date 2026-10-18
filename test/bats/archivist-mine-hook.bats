@@ -391,3 +391,118 @@ Co-authored-by: github-actions[bot] <41898282+github-actions[bot]@users.noreply.
 	[ "$status" -eq 0 ] || return 1
 	[ "$(artifact_count)" -eq 1 ]
 }
+
+# --- a backlog must drain, not wedge ----------------------------------------
+#
+# The CLI kills the whole SessionEnd batch at 1500ms, and a plugin's declared
+# timeout does not raise that (#338). At 43-62ms a commit, anything past about
+# 25 commits behind could not finish, and because the watermark moved only at
+# the end, every killed run saved nothing: the dotfiles repo sat 182 commits
+# behind for almost four weeks, cancelled on every session end. These pin the
+# two halves of the fix -- a bounded slice per run, and progress that survives
+# a run that stops partway.
+
+add_commit() {
+	printf '%s\n' "$RANDOM$RANDOM" >> "$REPO/a.txt"
+	git -C "$REPO" add .
+	git -C "$REPO" commit -q -m "$1"
+}
+
+# n commits, each a distinct decision with a rationale.
+make_backlog() {
+	local n="$1" i
+	make_repo "fix(c1): decision one
+
+Because reason one."
+	for (( i = 2; i <= n; i++ )); do
+		add_commit "fix(c${i}): decision ${i}
+
+Because reason ${i}."
+	done
+}
+
+set_max_commits() {
+	mkdir -p "${HOME}/.claude"
+	printf '{"archivist":{"mining":{"max_commits_per_run":%s}}}\n' "$1" \
+		> "${HOME}/.claude/settings.json"
+}
+
+watermark() {
+	jq -r '.last_sha' "$(archivist_project_dir "$KEY")/mined.json"
+}
+
+@test "mines at most max_commits_per_run, oldest first" {
+	make_backlog 3
+	set_max_commits 2
+
+	run run_hook
+	[ "$status" -eq 0 ] || return 1
+	[ "$(artifact_count)" -eq 2 ] || return 1
+	# Oldest first, so the watermark sits on the second commit and the third is
+	# still ahead of it -- the newest work is what waits, never a gap.
+	[ "$(watermark)" = "$(git -C "$REPO" rev-parse HEAD~1)" ] || return 1
+	run grep -l "decision 3" "$(archivist_project_dir "$KEY")/decisions"/*.json
+	[ "$status" -ne 0 ]
+}
+
+@test "a backlog larger than the cap drains over successive sessions" {
+	make_backlog 5
+	set_max_commits 2
+
+	run_hook
+	run_hook
+	run run_hook
+
+	[ "$status" -eq 0 ] || return 1
+	[ "$(artifact_count)" -eq 5 ] || return 1
+	[ "$(watermark)" = "$(git -C "$REPO" rev-parse HEAD)" ]
+}
+
+@test "a run that stops partway keeps the commits it finished" {
+	# Stands in for the deadline kill: a run that does not reach its end. Before,
+	# the watermark was written once after the loop, so commit 1's work was
+	# thrown away along with commit 2's and the next run started over.
+	make_backlog 2
+	source "${PLUGIN_ROOT}/scripts/lib/archivist-ulid.sh"
+	source "${PLUGIN_ROOT}/scripts/lib/archivist-mine.sh"
+	local body record id
+	body=$(git -C "$REPO" log -1 --format='%B' HEAD)
+	IFS= read -r -d '' record < <(archivist_mine_split "$body") || true
+	id=$(archivist_mine_id "$record")
+	archivist_storage_init "$KEY"
+	# A directory where commit 2's artifact goes makes exactly that write fail.
+	mkdir -p "$(archivist_project_dir "$KEY")/decisions/${id}.json"
+
+	run run_hook
+	[ "$status" -eq 0 ] || return 1
+	[ "$(watermark)" = "$(git -C "$REPO" rev-parse HEAD~1)" ] || return 1
+
+	# And the next session picks up exactly where that one stopped.
+	rmdir "$(archivist_project_dir "$KEY")/decisions/${id}.json"
+	run run_hook
+	[ "$status" -eq 0 ] || return 1
+	[ "$(artifact_count)" -eq 2 ] || return 1
+	[ "$(watermark)" = "$(git -C "$REPO" rev-parse HEAD)" ]
+}
+
+@test "the shipped default caps a run at 10 commits" {
+	# Pins config.json, so the default that keeps a run under the deadline cannot
+	# be dropped without a test noticing.
+	make_backlog 12
+
+	run run_hook
+
+	[ "$status" -eq 0 ] || return 1
+	[ "$(artifact_count)" -eq 10 ]
+}
+
+@test "max_commits_per_run of 0 removes the cap" {
+	make_backlog 12
+	set_max_commits 0
+
+	run run_hook
+
+	[ "$status" -eq 0 ] || return 1
+	[ "$(artifact_count)" -eq 12 ] || return 1
+	[ "$(watermark)" = "$(git -C "$REPO" rev-parse HEAD)" ]
+}

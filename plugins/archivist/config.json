@@ -12,6 +12,9 @@
       "max_chars": 2400,
       "include_open_questions": true,
       "include_dead_ends": true
+    },
+    "mining": {
+      "max_commits_per_run": 10
     }
   }
 }
