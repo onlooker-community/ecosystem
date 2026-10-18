@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.4](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.9.3...archivist-v0.9.4) (2026-10-18)
+
+
+### Bug Fixes
+
+* **archivist:** let a mining backlog drain instead of wedging :unlock: ([#466](https://github.com/onlooker-community/ecosystem/issues/466)) ([31358fa](https://github.com/onlooker-community/ecosystem/commit/31358fa1bf002edbcd70c3b91605c212c84b6290))
+
 ## [0.9.3](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.9.2...archivist-v0.9.3) (2026-10-18)
 
 
