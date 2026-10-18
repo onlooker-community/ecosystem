@@ -122,7 +122,7 @@ export function checkReleaseAnchor({ pluginVersion, packageVersion, manifestVers
   // vacuously.
   if (released.length === 0) {
     findings.push(
-      `no ${TAG_PREFIX}* tags are visible, so the root version cannot be checked against its releases — fetch tags (actions/checkout needs fetch-tags: true) rather than treating this as a pass`,
+      `no ${TAG_PREFIX}* tags are visible, so the root version cannot be checked against its releases — fetch tags (actions/checkout needs fetch-depth: 0; fetch-tags: true does nothing at the default depth of 1) rather than treating this as a pass`,
     );
     return { ok: false, cannotVerify: true, findings, highestTag: null };
   }
