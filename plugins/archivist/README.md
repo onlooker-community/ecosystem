@@ -12,6 +12,7 @@ Archivist is a sibling plugin to [`ecosystem`](../../) and assumes the Onlooker 
 |------|---------------------|
 | `PreCompact` | Reads the transcript tail, calls `claude -p` with a structured-extraction prompt, validates referenced file paths against the current repo, and writes ULID-keyed JSON artifacts under `~/.onlooker/archivist/<project-key>/`. |
 | `SessionStart` | Loads artifacts for the current project key, ranks them (pinned first, then recency), and emits them as invisible `additionalContext` within a token budget. |
+| `SessionEnd` | Mines commits on the default branch since a per-project watermark (`mined.json`) into decision artifacts, oldest first, at most `mining.max_commits_per_run` per session. The watermark advances after each commit, so a backlog clears over a few sessions instead of being retried whole. |
 
 ## Activation
 
@@ -40,6 +41,9 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
       "max_chars": 2400,
       "include_open_questions": true,
       "include_dead_ends": true
+    },
+    "mining": {
+      "max_commits_per_run": 10
     }
   }
 }
@@ -54,6 +58,7 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
 | `injection.max_chars` | `2400` | Hard ceiling on total injected context characters. |
 | `injection.include_open_questions` | `true` | Whether to inject open question artifacts. |
 | `injection.include_dead_ends` | `true` | Whether to inject dead end artifacts. |
+| `mining.max_commits_per_run` | `10` | Most commits mined per `SessionEnd`. Each costs roughly 40–60ms, and the CLI gives the whole SessionEnd batch 1500ms, which a plugin cannot raise. `0` removes the cap. |
 
 ## Storage layout
 
