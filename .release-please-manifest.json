@@ -1,5 +1,5 @@
 {
-  ".": "0.71.1",
+  ".": "0.72.0",
   "plugins/archivist": "0.9.3",
   "plugins/tribunal": "1.8.0",
   "plugins/echo": "0.12.0",
