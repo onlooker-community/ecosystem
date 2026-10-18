@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.72.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.71.1...ecosystem-v0.72.0) (2026-10-18)
+
+
+### Features
+
+* **librarian:** measure the lesson transform against a batch :microscope: ([#452](https://github.com/onlooker-community/ecosystem/issues/452)) ([a0445f6](https://github.com/onlooker-community/ecosystem/commit/a0445f6810e7c5353463fbe28d65b2ae8a15b598))
+* **tribunal:** say why the gate judged nothing :mag: ([#458](https://github.com/onlooker-community/ecosystem/issues/458)) ([3c8d1b1](https://github.com/onlooker-community/ecosystem/commit/3c8d1b1ae277184193f9994bec9894a6fc7d2cfb))
+
+
+### Bug Fixes
+
+* **archivist:** a body of only metadata is not a rationale :broom: ([#457](https://github.com/onlooker-community/ecosystem/issues/457)) ([cf462d2](https://github.com/onlooker-community/ecosystem/commit/cf462d259dba123b69bb091ef8be96d726bbf3f1))
+* **archivist:** make a re-mine overwrite, the way its id promised :recycle: ([#455](https://github.com/onlooker-community/ecosystem/issues/455)) ([23c7e65](https://github.com/onlooker-community/ecosystem/commit/23c7e65d2193b0e785b0e1731db7fa6a2eb04da2))
+* **counsel:** describe the whole window, sample its recent end :telescope: ([#442](https://github.com/onlooker-community/ecosystem/issues/442)) ([3794f5b](https://github.com/onlooker-community/ecosystem/commit/3794f5b3c43f505cd329fb7074b2b2957ffa5215))
+* **counsel:** map every shipped plugin to a signal class :telescope: ([#441](https://github.com/onlooker-community/ecosystem/issues/441)) ([1967ad1](https://github.com/onlooker-community/ecosystem/commit/1967ad109abfd5d06efa4a9a6cc31c594679d80f))
+* **librarian:** let a dispatched judge actually answer :detective: ([#450](https://github.com/onlooker-community/ecosystem/issues/450)) ([061faf6](https://github.com/onlooker-community/ecosystem/commit/061faf6435a8b64a232e217bf3e4f049f2d18d4e))
+* **release:** anchor the root version to a tag that exists :anchor: ([#463](https://github.com/onlooker-community/ecosystem/issues/463)) ([748ef0c](https://github.com/onlooker-community/ecosystem/commit/748ef0c941d7f03b67c40e9293bb73b692526166))
+* **release:** restore the ecosystem version above 0.71.2 :relieved: ([#461](https://github.com/onlooker-community/ecosystem/issues/461)) ([09727fb](https://github.com/onlooker-community/ecosystem/commit/09727fb238630260fd955e8a6c2f2aef81fb0c19))
+* **secrets:** close historian's two leaked shapes :relieved: ([#447](https://github.com/onlooker-community/ecosystem/issues/447)) ([1ea3ac5](https://github.com/onlooker-community/ecosystem/commit/1ea3ac5d9a99aa185e2446b080b4ffe8eb70fb2d))
+
 ## [0.9.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.9.0...ecosystem-v0.9.0) (2026-10-18)
 
 
