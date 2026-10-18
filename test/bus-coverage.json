@@ -79,6 +79,7 @@
     "tribunal.dissent.recorded",
     "tribunal.gate.blocked",
     "tribunal.gate.passed",
+    "tribunal.gate.skipped",
     "tribunal.iteration.start",
     "tribunal.judge.start",
     "tribunal.jury.empaneled",
