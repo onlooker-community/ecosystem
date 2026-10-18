@@ -25,6 +25,18 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
+        # lint:release-anchor compares the root version against the
+        # highest ecosystem-v* tag, and checkout fetches no tags by
+        # default. It exits 2 rather than 0 when none are visible, so
+        # omitting this breaks the gate loudly instead of silently --
+        # but it still has to be here for the gate to mean anything.
+        #
+        # fetch-depth: 0, not fetch-tags: true. With the default depth of
+        # 1, checkout fetches the single merge commit by SHA and passes no
+        # --tags at all, so fetch-tags is accepted and does nothing. That
+        # was this gate's first CI run: fetch-tags set, zero tags visible.
+        with:
+          fetch-depth: 0
 
       - name: Install mise
         uses: jdx/mise-action@v2
