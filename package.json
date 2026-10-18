@@ -36,13 +36,14 @@
     "coverage:bash": "node scripts/coverage/bash-coverage.mjs",
     "coverage": "npm run coverage:node && npm run coverage:bash",
     "store:prune": "node scripts/onlooker-store-prune.mjs",
-    "test:ci": "npm run test:shellcheck && npm run lint:bash-arithmetic && npm run test:bats && npm run test:schema && npm run test:bus && npm run lint:managed-blocks && npm run lint:check && npm run lint:manifests && npm run lint:references && npm run lint:plugin-catalog && npm run lint:lesson-schema",
+    "test:ci": "npm run test:shellcheck && npm run lint:bash-arithmetic && npm run test:bats && npm run test:schema && npm run test:bus && npm run lint:managed-blocks && npm run lint:check && npm run lint:manifests && npm run lint:references && npm run lint:plugin-catalog && npm run lint:lesson-schema && npm run lint:release-anchor",
     "lint:check": "biome check . && markdownlint '**/*.md'",
     "lint": "biome lint --write && markdownlint --fix '**/*.md'",
     "format": "biome format --write && markdownlint --fix '**/*.md'",
     "format:check": "biome format",
     "format:md": "markdownlint --fix '**/*.md'",
-    "biome:ci": "biome ci"
+    "biome:ci": "biome ci",
+    "lint:release-anchor": "node scripts/lint/check-release-anchor.mjs"
   },
   "engines": {
     "node": ">=18"
