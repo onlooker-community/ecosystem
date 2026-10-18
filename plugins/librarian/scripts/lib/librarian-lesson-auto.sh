@@ -188,9 +188,7 @@ librarian_lesson_auto_judge_prompt() {
 	[[ -z "$candidate" || -z "$rubric" ]] && return 0
 
 	local criteria
-	criteria=$(printf '%s' "$rubric" | jq -r \
-		'[.criteria[] | "- \(.name) (weight \(.weight), min_pass \(.min_pass))"] | join("\n")' \
-		2>/dev/null) || return 0
+	criteria=$(librarian_lesson_rubric_render_criteria "$rubric") || return 0
 
 	printf '%s\n%s\n\n%s\n%s\n\n%s\n\n%s\n%s\n\n%s\n%s\n' \
 		'Score this lesson candidate for promotion to the shared lesson pool.' \

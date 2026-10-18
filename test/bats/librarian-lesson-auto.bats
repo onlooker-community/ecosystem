@@ -399,6 +399,22 @@ STUB
 	[[ "$output" == *"generality"* ]] || return 1
 }
 
+@test "the judge prompt defines every criterion, not just names it (1z07vm.6)" {
+	# Given only the word, both judges scored `disclosure` as "acknowledges
+	# caveats" and floored every candidate in the 2026-10-17 baseline.
+	_auto_setup
+	local r
+	for r in lesson-promotion lesson-promotion-public lesson-promotion-public-auto; do
+		rubric=$(librarian_lesson_rubric_get "$r")
+		run librarian_lesson_auto_judge_prompt "$(_candidate "$(_versioned)")" "$rubric"
+		[ "$status" -eq 0 ] || return 1
+		while IFS= read -r d; do
+			[ -n "$d" ] || return 1
+			[[ "$output" == *"$d"* ]] || { echo "$r: prompt lacks: $d"; return 1; }
+		done < <(printf '%s' "$rubric" | jq -r '.criteria[].description')
+	done
+}
+
 @test "the judge prompt carries the candidate's claim, resolution and scope" {
 	_auto_setup
 	rubric=$(librarian_lesson_rubric_get lesson-promotion-public)

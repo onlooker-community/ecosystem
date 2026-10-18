@@ -111,9 +111,13 @@ For `lessons judge`, run the jury over confirmed candidates:
    - Otherwise spawn **both** `tribunal-judge-standard` and
      `tribunal-judge-adversarial` with the Task tool. Give each the candidate's
      `claim`, `rationale`, `evidence.resolution`, and `applies_to`, plus the
-     rubric criteria for its visibility: for `org`, grounding / scope_accuracy /
-     generality; for `public`, those three plus **disclosure** — does the text
-     leak a credential, internal hostname, customer name, or proprietary detail?
+     rubric criteria for its visibility **verbatim** from
+     `librarian_cli lessons rubric <org|public>`. That prints each criterion
+     with its weight, floor and definition. Pass the definitions, not just
+     the names: given the bare word, judges read **disclosure** as
+     "acknowledges caveats" when it is a leak check, and it floored every
+     candidate in the 2026-10-17 baseline. The unattended pipeline renders
+     the same text, so both panels score the same question.
    - Each judge returns a JSON object with `score`, `passed`, `judge_type`,
      `feedback_summary`, and `criterion_scores` — a map from **each rubric
      criterion name you gave it** to a score in `[0,1]`. **Tell each judge it
