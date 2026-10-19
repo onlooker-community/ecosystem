@@ -228,7 +228,13 @@ _sha256() {
 # reader cannot tell whether the baseline still applies. ONL-110's own notes
 # exist because an earlier figure could not say.
 TRANSFORM_SHA=$(_sha256 "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-transform.sh")
-JUDGE_SHA=$(_sha256 "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-auto.sh")
+# The judge prompt is the builder plus the criteria it renders, and the
+# criterion definitions live in config rather than in either lib. Hashing the
+# builder alone would call a run after a definition change the same instrument
+# as one before it (1z07vm.6).
+JUDGE_SHA=$(_sha256 <(cat "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-auto.sh" \
+	"${PLUGIN_ROOT}/scripts/lib/librarian-lesson-rubric.sh"
+	librarian_lesson_rubric_render_criteria "$RUBRIC"))
 
 SANDBOX=$(mktemp -d 2>/dev/null) || { printf 'cannot create a sandbox\n' >&2; exit 1; }
 trap 'rm -rf "$SANDBOX"' EXIT
@@ -285,8 +291,8 @@ for f in "${SELECTED[@]}"; do
 		# "standard|adversarial" literal would otherwise corrupt the split
 		# this whole measurement is about.
 		if [[ -n "$std" && -n "$adv" ]]; then
-			std=$(printf '%s' "$std" | jq -c '.judge_type = "standard"' 2>/dev/null) || std=""
-			adv=$(printf '%s' "$adv" | jq -c '.judge_type = "adversarial"' 2>/dev/null) || adv=""
+			std=$(printf '%s' "$std" | jq -c 'if (.score | type) == "number" and (.passed | type) == "boolean" then .judge_type = "standard" else empty end' 2>/dev/null) || std=""
+			adv=$(printf '%s' "$adv" | jq -c 'if (.score | type) == "number" and (.passed | type) == "boolean" then .judge_type = "adversarial" else empty end' 2>/dev/null) || adv=""
 		fi
 		if [[ -n "$std" && -n "$adv" ]]; then
 			verdicts=$(jq -cn --argjson a "$std" --argjson b "$adv" '[$a, $b]' 2>/dev/null) || verdicts='[]'

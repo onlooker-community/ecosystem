@@ -43,8 +43,11 @@ This plugin is **in design / scaffolding phase**. The hook entry points exist an
 
 **[2026-10-17 transform baseline](docs/measurements/2026-10-17-transform-baseline/README.md) / ONL-110** — 36 archivist artifacts transformed and juried, `claude-haiku-4-5-20251001`. **0 of 10** candidates cleared the gate, and the standard judge passed none either — `disclosure` is 0/10 for *both* judges at a min-mean of 0.417 against a 0.9 floor, which gates every candidate before the judges' disagreement matters. That contradicts ONL-110's "passes the standard judge, then fails adversarial review," which rested on n=2. Only 11 of 36 artifacts produced a candidate at all, and the *richest* artifacts transformed worst (2/9 in the top detail quartile, against 6/9 mid-corpus).
 
+**[2026-10-18 defined criteria](docs/measurements/2026-10-18-defined-criteria/README.md) / ONL-110** — the baseline's own candidates, re-judged after the judge prompt began defining each criterion instead of naming it. The judges had been reading `disclosure` as "acknowledges caveats" when it is a leak check. Gate **0/10 → 5/10**, disclosure **0/10 → 10/10**, and a synthetic leaky candidate still scores 0.0 on it. What still fails is `scope_accuracy` and `grounding`, with the adversarial judge dissenting.
+
 ```bash
 plugins/librarian/scripts/measure-lesson-transform.sh --dry-run --samples 36   # show the plan, spend nothing
+plugins/librarian/scripts/rejudge-lesson-baseline.sh <samples.json> <dir>      # re-score fixed candidates after a judge-side change
 ```
 
 The harness measures in a throwaway `ONLOOKER_DIR`: a decline is terminal, so an in-place run would burn its own corpus and have nothing to measure the second time.

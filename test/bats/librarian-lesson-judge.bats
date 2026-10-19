@@ -132,6 +132,60 @@ STUB
 	[ "$(jq -n --argjson a "$floor" --argjson b "$others_max" '$a > $b')" = "true" ] || return 1
 }
 
+# --- criteria carry their own definitions (ecosystem-1z07vm.6) ---------------
+#
+# The unattended judge prompt used to send each criterion as a bare name. Both
+# judges in the 2026-10-17 baseline read `disclosure` as "acknowledges caveats
+# and alternatives" rather than the leak check it is, and that reading floored
+# all 10 candidates. A judge can only score the criterion it is told about.
+
+_LESSON_RUBRICS=(lesson-promotion lesson-promotion-public lesson-promotion-public-auto)
+
+@test "every criterion of every lesson rubric carries a description" {
+	local r missing
+	for r in "${_LESSON_RUBRICS[@]}"; do
+		missing=$(librarian_lesson_rubric_get "$r" \
+			| jq -r '[.criteria[] | select((.description // "") | length == 0) | .name] | join(",")')
+		[ -z "$missing" ] || { echo "$r lacks descriptions for: $missing"; return 1; }
+	done
+}
+
+@test "a criterion name means the same thing in every lesson rubric" {
+	# Three rubrics repeat the same criteria at different floors. A description
+	# edited in one and not the others would have two panels scoring two
+	# different questions under one name.
+	local r all
+	all=$(for r in "${_LESSON_RUBRICS[@]}"; do librarian_lesson_rubric_get "$r"; done \
+		| jq -sc '[.[].criteria[]] | group_by(.name) | map(select([.[].description] | unique | length > 1) | .[0].name)')
+	[ "$all" = "[]" ]
+}
+
+@test "disclosure is defined as a leak check, not as acknowledging caveats" {
+	local d
+	d=$(librarian_lesson_rubric_get lesson-promotion-public \
+		| jq -r '.criteria[] | select(.name == "disclosure") | .description')
+	[[ "$d" == *"leak"* ]] || return 1
+	# The observed misreading, ruled out by name.
+	[[ "$d" == *"caveat"* ]]
+}
+
+@test "the criteria renderer gives each criterion its weight, floor and definition" {
+	run librarian_lesson_rubric_render_criteria "$(librarian_lesson_rubric_get lesson-promotion-public)"
+	[ "$status" -eq 0 ] || return 1
+	[ "$(printf '%s\n' "$output" | wc -l | tr -d ' ')" -eq 4 ] || return 1
+	[[ "$output" == *"- disclosure (weight 0.3, min_pass 0.9): "*"leak"* ]] || return 1
+	[[ "$output" == *"- grounding (weight 0.32, min_pass 0.7): "?* ]]
+}
+
+@test "the criteria renderer still names a criterion a user rubric left undefined" {
+	# ADR-004: a user may override a rubric in settings, and need not know the
+	# field exists. Name, weight and floor still render.
+	local rubric='{"id":"x","criteria":[{"name":"novelty","weight":1,"min_pass":0.5}]}'
+	run librarian_lesson_rubric_render_criteria "$rubric"
+	[ "$status" -eq 0 ] || return 1
+	[ "$output" = "- novelty (weight 1, min_pass 0.5)" ]
+}
+
 @test "an unknown rubric id is refused and echoes nothing" {
 	run librarian_lesson_rubric_get "no-such-rubric"
 	[ "$status" -ne 0 ]
@@ -518,6 +572,33 @@ _verdicts_split() {
 	[[ "$output" == *"unknown option"* && "$output" == *"--force"* ]] || return 1
 }
 
+@test "lessons rubric prints the criteria the attended walk hands its judges" {
+	# The attended walk and the unattended prompt must define the criteria with
+	# the same text, so both come from the one renderer.
+	run librarian_cli lessons rubric public
+	[ "$status" -eq 0 ] || return 1
+	[ "$output" = "$(librarian_lesson_rubric_render_criteria "$(librarian_lesson_rubric_get lesson-promotion-public)")" ]
+}
+
+@test "lessons rubric for org omits disclosure" {
+	run librarian_cli lessons rubric org
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" == *"- grounding"* ]] || return 1
+	[[ "$output" != *"disclosure"* ]]
+}
+
+@test "lessons rubric refuses private, which runs no jury" {
+	run librarian_cli lessons rubric private
+	[ "$status" -ne 0 ] || return 1
+	[[ "$output" == *"no jury"* ]]
+}
+
+@test "lessons rubric requires a visibility" {
+	run librarian_cli lessons rubric
+	[ "$status" -ne 0 ] || return 1
+	[[ "$output" == *"usage:"* && "$output" == *"rubric"* ]]
+}
+
 @test "a rubric missing from config is refused with a reason, not silently" {
 	# Reachable by config drift: the visibility map still names a rubric that
 	# librarian.lesson_judging.rubrics no longer defines. State stays safe —
@@ -760,12 +841,18 @@ PUBLIC_RUBRIC='{"id":"lesson-promotion-public","criteria":[
 	# A bare grep for "criterion_scores" passes even when the walk hands judges
 	# the wrong key names — which silently disables the floor, since no key
 	# matches the rubric. Assert the actual names, read from config.
-	local skill name
+	#
+	# Since 1z07vm.6 the walk no longer spells the names out; it hands judges
+	# the output of `lessons rubric`. So the guard is that the walk routes
+	# through that verb, and that the verb names every criterion.
+	local skill name rendered
 	skill="${REPO_ROOT}/plugins/librarian/skills/librarian/SKILL.md"
 	grep -q 'criterion_scores' "$skill" || return 1
+	grep -q 'librarian_cli lessons rubric' "$skill" || return 1
+	rendered=$(librarian_cli lessons rubric public) || return 1
 
 	while IFS= read -r name; do
-		grep -q "$name" "$skill" || return 1
+		[[ "$rendered" == *"- ${name} ("* ]] || return 1
 	done < <(jq -r '.librarian.lesson_judging.rubrics[]
 		| select(.id == "lesson-promotion-public") | .criteria[].name' \
 		"${REPO_ROOT}/plugins/librarian/config.json")

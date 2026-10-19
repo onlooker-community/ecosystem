@@ -38,9 +38,24 @@
         {
           "id": "lesson-promotion",
           "criteria": [
-            { "name": "grounding", "weight": 0.45, "min_pass": 0.7 },
-            { "name": "scope_accuracy", "weight": 0.35, "min_pass": 0.7 },
-            { "name": "generality", "weight": 0.2, "min_pass": 0.6 }
+            {
+              "name": "grounding",
+              "weight": 0.45,
+              "min_pass": 0.7,
+              "description": "Does the claim follow from its own rationale and stated resolution? Score low when it asserts something they contradict or do not support, or frames one remedy as the only one when the resolution shows others."
+            },
+            {
+              "name": "scope_accuracy",
+              "weight": 0.35,
+              "min_pass": 0.7,
+              "description": "Does applies_to bound the claim correctly, neither broader than the evidence supports nor narrower than the lesson holds? For a version_independent scope, judge whether it is TRUE that the lesson holds regardless of version."
+            },
+            {
+              "name": "generality",
+              "weight": 0.2,
+              "min_pass": 0.6,
+              "description": "Is this a transferable lesson another project could act on, rather than a description of one session's work or a pattern specific to one codebase restated as a general rule?"
+            }
           ],
           "score_threshold": 0.75,
           "judge_types": ["standard", "adversarial"],
@@ -49,10 +64,30 @@
         {
           "id": "lesson-promotion-public",
           "criteria": [
-            { "name": "grounding", "weight": 0.32, "min_pass": 0.7 },
-            { "name": "scope_accuracy", "weight": 0.24, "min_pass": 0.7 },
-            { "name": "generality", "weight": 0.14, "min_pass": 0.6 },
-            { "name": "disclosure", "weight": 0.3, "min_pass": 0.9 }
+            {
+              "name": "grounding",
+              "weight": 0.32,
+              "min_pass": 0.7,
+              "description": "Does the claim follow from its own rationale and stated resolution? Score low when it asserts something they contradict or do not support, or frames one remedy as the only one when the resolution shows others."
+            },
+            {
+              "name": "scope_accuracy",
+              "weight": 0.24,
+              "min_pass": 0.7,
+              "description": "Does applies_to bound the claim correctly, neither broader than the evidence supports nor narrower than the lesson holds? For a version_independent scope, judge whether it is TRUE that the lesson holds regardless of version."
+            },
+            {
+              "name": "generality",
+              "weight": 0.14,
+              "min_pass": 0.6,
+              "description": "Is this a transferable lesson another project could act on, rather than a description of one session's work or a pattern specific to one codebase restated as a general rule?"
+            },
+            {
+              "name": "disclosure",
+              "weight": 0.3,
+              "min_pass": 0.9,
+              "description": "A leak check, scored 1.0 when nothing leaks. Score low only if the text leaks a credential, internal hostname, customer or person name, or proprietary detail, or advocates a harmful practice. Missing caveats, limitations or alternatives are NOT a disclosure failure; score those under grounding or scope_accuracy."
+            }
           ],
           "score_threshold": 0.75,
           "judge_types": ["standard", "adversarial"],
@@ -61,10 +96,30 @@
         {
           "id": "lesson-promotion-public-auto",
           "criteria": [
-            { "name": "grounding", "weight": 0.32, "min_pass": 0.8 },
-            { "name": "scope_accuracy", "weight": 0.24, "min_pass": 0.8 },
-            { "name": "generality", "weight": 0.14, "min_pass": 0.7 },
-            { "name": "disclosure", "weight": 0.3, "min_pass": 0.95 }
+            {
+              "name": "grounding",
+              "weight": 0.32,
+              "min_pass": 0.8,
+              "description": "Does the claim follow from its own rationale and stated resolution? Score low when it asserts something they contradict or do not support, or frames one remedy as the only one when the resolution shows others."
+            },
+            {
+              "name": "scope_accuracy",
+              "weight": 0.24,
+              "min_pass": 0.8,
+              "description": "Does applies_to bound the claim correctly, neither broader than the evidence supports nor narrower than the lesson holds? For a version_independent scope, judge whether it is TRUE that the lesson holds regardless of version."
+            },
+            {
+              "name": "generality",
+              "weight": 0.14,
+              "min_pass": 0.7,
+              "description": "Is this a transferable lesson another project could act on, rather than a description of one session's work or a pattern specific to one codebase restated as a general rule?"
+            },
+            {
+              "name": "disclosure",
+              "weight": 0.3,
+              "min_pass": 0.95,
+              "description": "A leak check, scored 1.0 when nothing leaks. Score low only if the text leaks a credential, internal hostname, customer or person name, or proprietary detail, or advocates a harmful practice. Missing caveats, limitations or alternatives are NOT a disclosure failure; score those under grounding or scope_accuracy."
+            }
           ],
           "score_threshold": 0.85,
           "judge_types": ["standard", "adversarial"],

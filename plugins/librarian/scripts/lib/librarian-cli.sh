@@ -4,6 +4,7 @@
 # Exposes:
 #   librarian_cli list                         # one-line summary + table of pending proposals
 #   librarian_cli lessons list [--confirmed]   # pending lesson queue, or the confirmed ones
+#   librarian_cli lessons rubric <org|public>  # criteria + definitions to hand each judge
 #   librarian_cli show <proposal_id>           # full proposal body + provenance + conflict state
 #   librarian_cli accept <proposal_id>         # write to typed memory store, mark accepted
 #   librarian_cli reject <proposal_id> [reason]  # tombstone + mark rejected
@@ -873,6 +874,35 @@ librarian_cli_lessons_veto() {
 	return 0
 }
 
+# Print the criteria, with their definitions, that the attended judge walk hands
+# each judge for a visibility. Same renderer as the unattended prompt, so the
+# two panels cannot score two different questions under one criterion name
+# (ecosystem-1z07vm.6).
+#
+# The walk is human-confirmed by construction, so this always resolves the
+# human rubric; the model-asserted one is the unattended pipeline's alone.
+#
+# Usage: librarian_cli_lessons_rubric <org|public>
+librarian_cli_lessons_rubric() {
+	local visibility="${1:-}"
+	[[ -z "$visibility" ]] && { printf 'usage: librarian_cli lessons rubric <org|public>\n'; return 1; }
+	if [[ "$visibility" == "private" ]]; then
+		printf 'private lessons run no jury, so there is no rubric to hand a judge.\n'
+		return 1
+	fi
+
+	local rubric_id rubric
+	rubric_id=$(librarian_lesson_rubric_id_for_visibility "$visibility") || {
+		printf 'usage: librarian_cli lessons rubric <org|public>\n'
+		return 1
+	}
+	rubric=$(librarian_lesson_rubric_get "$rubric_id") || {
+		printf 'rubric %s is not defined in config.\n' "$rubric_id"
+		return 1
+	}
+	librarian_lesson_rubric_render_criteria "$rubric"
+}
+
 librarian_cli_lessons() {
 	local verb="${1:-list}"
 	shift || true
@@ -889,6 +919,7 @@ librarian_cli_lessons() {
 		veto) librarian_cli_lessons_veto "$@" ;;
 		defer) librarian_cli_lessons_defer "$@" ;;
 		status) librarian_cli_lessons_status "$@" ;;
+		rubric) librarian_cli_lessons_rubric "$@" ;;
 		*) printf 'unknown lessons action: %s\n' "$verb"; return 2 ;;
 	esac
 }

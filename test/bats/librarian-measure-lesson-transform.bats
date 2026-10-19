@@ -258,6 +258,26 @@ STUB
 	jq -e '.sample_mode == "spread" and .corpus_size == 1' "${OUT}/samples.json" >/dev/null
 }
 
+@test "the judge prompt fingerprint covers the criteria the judges were given" {
+	# The prompt's criterion definitions live in config, not in
+	# librarian-lesson-auto.sh. A fingerprint of that file alone would call two
+	# runs the same instrument after a definition changed (1z07vm.6).
+	_stub_claude
+	_seed_artifact A1 5
+
+	run "$HARNESS" --samples 1 --project-key "$PROJECT_KEY" \
+		--artifacts-from "$CORPUS" --out "${OUT}/public" --rubric lesson-promotion-public
+	[ "$status" -eq 0 ] || return 1
+	run "$HARNESS" --samples 1 --project-key "$PROJECT_KEY" \
+		--artifacts-from "$CORPUS" --out "${OUT}/org" --rubric lesson-promotion
+	[ "$status" -eq 0 ] || return 1
+
+	a=$(jq -r '.judge_prompt_sha256' "${OUT}/public/samples.json")
+	b=$(jq -r '.judge_prompt_sha256' "${OUT}/org/samples.json")
+	[ "${#a}" -eq 64 ] || return 1
+	[ "$a" != "$b" ]
+}
+
 @test "richest mode takes the longest artifacts and spread does not" {
 	_seed_artifact SHORT 2
 	_seed_artifact MEDIUM 20
@@ -408,4 +428,33 @@ STUB
 		--artifacts-from "$UNDER" --out "$OUT"
 	[ "$status" -eq 0 ] || return 1
 	jq -e '.corpus | startswith("$ONLOOKER_DIR/")' "${OUT}/samples.json" >/dev/null
+}
+
+@test "a judge reply that is not a verdict is recorded as a judge failure" {
+	# Observed live in the 1z07vm.6 re-judge: an adversarial reply yielded a
+	# nested {"kind":"version_independent"}. Production leaves such a panel
+	# unjudged; the harness used to score it as a block.
+	_seed_artifact A1 5
+	STUB_BIN="${BATS_TEST_TMPDIR}/bin"
+	mkdir -p "$STUB_BIN"
+	cat > "${STUB_BIN}/claude" <<'STUB'
+#!/usr/bin/env bash
+args="$*"
+cat > /dev/null
+if [[ "$args" == *"--agent tribunal-judge-adversarial"* ]]; then
+	printf '%s' '{"kind":"version_independent"}'
+elif [[ "$args" == *"--agent tribunal-judge-standard"* ]]; then
+	printf '%s' '{"score":0.9,"passed":true,"judge_type":"standard","feedback_summary":"fine","criterion_scores":{"grounding":0.9,"scope_accuracy":0.9,"generality":0.9,"disclosure":0.95}}'
+else
+	printf '%s' '{"claim":"c","rationale":"r","evidence":{"resolution":"Pin vitest to 3.x."},"applies_to":{"stack":["vite"],"scope":{"kind":"versioned","versions":{"vite":"<6"}},"file_patterns":[],"task_kinds":[]}}'
+fi
+STUB
+	chmod +x "${STUB_BIN}/claude"
+	export PATH="${STUB_BIN}:${PATH}"
+
+	run "$HARNESS" --samples 1 --project-key "$PROJECT_KEY" \
+		--artifacts-from "$CORPUS" --out "$OUT"
+	[ "$status" -eq 0 ] || return 1
+	jq -e '.candidates[0].candidate != null and .candidates[0].verdicts == [] and .candidates[0].gate == null' \
+		"${OUT}/samples.json" >/dev/null
 }

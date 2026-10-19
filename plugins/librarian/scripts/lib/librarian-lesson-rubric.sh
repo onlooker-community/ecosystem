@@ -73,3 +73,27 @@ librarian_lesson_rubric_get() {
 
 	printf '%s' "$found"
 }
+
+# Render a rubric's criteria for a judge, one line each:
+#   - <name> (weight <w>, min_pass <f>): <description>
+#
+# The one place a judge learns what a criterion MEANS. Both panels read it: the
+# unattended prompt (librarian_lesson_auto_judge_prompt) and the attended walk,
+# through `librarian_cli lessons rubric`. Before it existed the unattended
+# prompt sent bare names, and in the 2026-10-17 baseline both judges read
+# `disclosure` as "acknowledges caveats" instead of a leak check, flooring all
+# 10 candidates (ecosystem-1z07vm.6).
+#
+# A criterion with no description, as a user-overridden rubric may have
+# (ADR-004), still renders its name, weight and floor.
+#
+# Usage: librarian_lesson_rubric_render_criteria <rubric_json>
+librarian_lesson_rubric_render_criteria() {
+	local rubric="${1:-}"
+	[[ -z "$rubric" ]] && return 1
+	printf '%s' "$rubric" | jq -r '
+		[.criteria[]
+		 | "- \(.name) (weight \(.weight), min_pass \(.min_pass))"
+		   + (if (.description // "") == "" then "" else ": \(.description)" end)]
+		| join("\n")' 2>/dev/null
+}
