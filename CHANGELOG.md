@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.74.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.73.0...ecosystem-v0.74.0) (2026-10-21)
+
+
+### Features
+
+* **librarian:** say why the model refused a parked lesson :speech_balloon: ([#473](https://github.com/onlooker-community/ecosystem/issues/473)) ([7ed8e2e](https://github.com/onlooker-community/ecosystem/commit/7ed8e2e463db0a24c07883633f503b0c5b3b2c12))
+
+
+### Bug Fixes
+
+* **tests:** never let a skipped bats file read as a pass :mag: ([#472](https://github.com/onlooker-community/ecosystem/issues/472)) ([de74945](https://github.com/onlooker-community/ecosystem/commit/de7494554503f506cabaf904775886b4a8c799f1))
+
 ## [0.73.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.72.1...ecosystem-v0.73.0) (2026-10-21)
 
 

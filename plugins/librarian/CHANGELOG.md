@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.25.0](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.24.0...librarian-v0.25.0) (2026-10-21)
+
+
+### Features
+
+* **librarian:** say why the model refused a parked lesson :speech_balloon: ([#473](https://github.com/onlooker-community/ecosystem/issues/473)) ([7ed8e2e](https://github.com/onlooker-community/ecosystem/commit/7ed8e2e463db0a24c07883633f503b0c5b3b2c12))
+
 ## [0.24.0](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.23.0...librarian-v0.24.0) (2026-10-21)
 
 
