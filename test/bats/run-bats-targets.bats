@@ -75,6 +75,9 @@ setup() {
 	cd "$REPO_ROOT"
 	RUN_BATS_TARGETS_NESTED=1 run npm run --silent test:bats -- "${BATS_TEST_TMPDIR}/failing.bats"
 
+	# Shown only if an assertion below fails: npm, the runner and the nested
+	# bats each fail differently, and "not ok" alone does not say which.
+	printf 'status=%s\n%s\n' "$status" "$output"
 	[ "$status" -ne 0 ] || return 1
 	[[ "$output" == *"not ok 1 fails"* ]] || return 1
 	# Exact line: a substring match would accept the full suite's "1..1880".
