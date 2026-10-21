@@ -723,6 +723,25 @@ STUB
     "${LESSONS_DIR}/proposals/${id}.json"
 }
 
+@test "build_prompt carries the claim constraints in both modes" {
+  # ONL-110 / ecosystem-1z07vm.2. Each constraint answers a defect the
+  # 2026-10-18 judges named: one remedy framed as required, an assertion the
+  # artifact does not support, and file_patterns broader than the evidence.
+  # The stack rule is there because asking for less project detail made the
+  # model empty stack too, which the validator discards (2 -> 9 schema_invalid
+  # on a 36-artifact run). Chained with && for the bash 3.2 reason noted above.
+  _transform_setup
+  art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "Vitest 4.1.9 / Vite 5.x" "module-runner missing in 5.4.21")
+  for mode in versioned unscoped; do
+    prompt=$(librarian_lesson_build_prompt "$art" "$mode")
+    [[ "$prompt" == *"One fix that worked is not the only fix"* ]] \
+      && [[ "$prompt" == *"checkable against the"*"artifact text"* ]] \
+      && [[ "$prompt" == *"never one of this project's paths"* ]] \
+      && [[ "$prompt" == *"stack always lists at least one tool"* ]] \
+      || return 1
+  done
+}
+
 @test "build_prompt marks the mode so the model knows which contract applies" {
   _transform_setup
   art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "no token here" "none either")

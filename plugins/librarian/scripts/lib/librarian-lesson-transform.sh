@@ -113,6 +113,20 @@ Otherwise output:
   }
 }
 
+CLAIM RULES — a judge checks each of these against the artifact:
+- One fix that worked is not the only fix. Do not write "must", "always",
+  "only" or "never" about a remedy unless the artifact shows the alternatives
+  failing. Say what resolved the problem: "X resolves Y", not "Y must use X".
+- Every assertion in claim and rationale must be checkable against the
+  artifact text. Do not add a cause, a mechanism or tool behavior the artifact
+  does not state. If the artifact quotes code, a pattern or a command, the
+  claim must agree with what it quotes.
+- file_patterns is usually []. Add a glob only when the lesson is about a
+  kind of file (for example "*.bats"), never one of this project's paths, and
+  never a glob broader than the files the artifact names.
+- stack always lists at least one tool or package; an empty stack is
+  discarded.
+
 ${scope_rules}
 
 <scope-mode>${mode}</scope-mode>
