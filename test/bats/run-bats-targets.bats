@@ -19,6 +19,22 @@ setup() {
 	source "${BATS_TEST_DIRNAME}/../helpers/setup.bash"
 	setup_test_env
 
+	# Every nested run starts from a clean bats environment. Inside a test,
+	# the outer bats has put its internal libexec/bats-core first on PATH, so a
+	# bare `bats` resolves to the internal script rather than bin/bats. That
+	# script calls bats_readlinkf, which only reaches it as an exported
+	# function. npm runs scripts through `sh` -- dash on Ubuntu -- and dash
+	# drops exported functions, so on CI the nested run died with
+	# "bats_readlinkf: command not found" and executed nothing, while macOS's
+	# bash-backed sh passed. Strip the internal dir from PATH and the outer
+	# run's BATS_* state, so the public launcher sets itself up from scratch.
+	CLEAN_PATH=$(printf '%s' "$PATH" | tr ':' '\n' | grep -v '/libexec/bats-core$' | paste -sd: -)
+	CLEAN=(env)
+	while IFS= read -r name; do
+		CLEAN+=(-u "$name")
+	done < <(env | grep -oE '^(BATS_[A-Za-z0-9_]*|BASH_FUNC_bats[^=]*)')
+	CLEAN+=("PATH=${CLEAN_PATH}")
+
 	RUNNER="${REPO_ROOT}/scripts/test/run-bats.sh"
 	PLAN_CHECK="${REPO_ROOT}/scripts/test/check-bats-plan.sh"
 	export ONLOOKER_TEST_REPORT_DIR="${BATS_TEST_TMPDIR}/report"
@@ -30,7 +46,7 @@ setup() {
 }
 
 @test "a file under a directory target is refused before anything runs" {
-	run "$RUNNER" "$FX" "${FX}/pass.bats"
+	run "${CLEAN[@]}" "$RUNNER" "$FX" "${FX}/pass.bats"
 
 	[ "$status" -eq 2 ] || return 1
 	[[ "$output" == *"overlap"* ]] || return 1
@@ -41,7 +57,7 @@ setup() {
 }
 
 @test "the same file given twice is refused" {
-	run "$RUNNER" "${FX}/pass.bats" "${FX}/./pass.bats"
+	run "${CLEAN[@]}" "$RUNNER" "${FX}/pass.bats" "${FX}/./pass.bats"
 
 	[ "$status" -eq 2 ] || return 1
 	[[ "$output" == *"overlap"* ]]
@@ -51,21 +67,21 @@ setup() {
 	mkdir -p "$ONLOOKER_TEST_REPORT_DIR"
 	printf 'earlier\n' >"${ONLOOKER_TEST_REPORT_DIR}/emissions.jsonl"
 
-	run "$RUNNER" "$FX" "${FX}/pass.bats"
+	run "${CLEAN[@]}" "$RUNNER" "$FX" "${FX}/pass.bats"
 
 	[ "$status" -eq 2 ] || return 1
 	[ -f "${ONLOOKER_TEST_REPORT_DIR}/emissions.jsonl" ]
 }
 
 @test "an option value is not mistaken for an overlapping target" {
-	run "$RUNNER" --filter pass "${FX}/pass.bats" --output "$FX"
+	run "${CLEAN[@]}" "$RUNNER" --filter pass "${FX}/pass.bats" --output "$FX"
 
 	[ "$status" -eq 0 ] || return 1
 	[[ "$output" == *"pass one"* ]]
 }
 
 @test "a failing file named on its own fails the run" {
-	run "$RUNNER" "${BATS_TEST_TMPDIR}/failing.bats"
+	run "${CLEAN[@]}" "$RUNNER" "${BATS_TEST_TMPDIR}/failing.bats"
 
 	[ "$status" -ne 0 ] || return 1
 	[[ "$output" == *"not ok 1 fails"* ]]
@@ -73,7 +89,7 @@ setup() {
 
 @test "the npm script runs only the file it is given" {
 	cd "$REPO_ROOT"
-	RUN_BATS_TARGETS_NESTED=1 run npm run --silent test:bats -- "${BATS_TEST_TMPDIR}/failing.bats"
+	run "${CLEAN[@]}" RUN_BATS_TARGETS_NESTED=1 npm run --silent test:bats -- "${BATS_TEST_TMPDIR}/failing.bats"
 
 	# Shown only if an assertion below fails: npm, the runner and the nested
 	# bats each fail differently, and "not ok" alone does not say which.
@@ -139,7 +155,7 @@ exit 0
 STUB
 	chmod +x "${stub}/bats"
 
-	PATH="${stub}:${PATH}" run "$RUNNER" "${FX}/pass.bats"
+	run "${CLEAN[@]}" PATH="${stub}:${CLEAN_PATH}" "$RUNNER" "${FX}/pass.bats"
 
 	[ "$status" -ne 0 ] || return 1
 	[[ "$output" == *"2 of 3"* ]] || return 1
