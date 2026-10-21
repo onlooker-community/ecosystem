@@ -340,6 +340,12 @@ BODY
 #
 # This hook exits 0 either way, so status proves nothing. Asserting on
 # scan.complete is what makes this test bite.
+#
+# Either completion counts. "unlimited" falls back to the 500ms default, and a
+# loaded CI runner can spend that before the last phase, which completes the
+# scan as skipped/over_budget rather than ok. That still proves the shell
+# survived the bad value. Requiring "ok" made the test fail at random on a PR
+# that touched only CHANGELOG.md.
 @test "a non-numeric wall_clock_budget_ms does not kill the scan mid-flight" {
   jq -n --arg path "$MEM_DIR" \
     '{
@@ -353,8 +359,12 @@ BODY
   [ "$status" -eq 0 ] || return 1
 
   grep -q '"event_type":"curator.scan.started"' "$ONLOOKER_EVENTS_LOG" || return 1
+  # Counted first: `grep | jq -e` on an empty match fails the same way a wrong
+  # outcome does, so the two causes would otherwise be indistinguishable.
+  [ "$(grep -c '"event_type":"curator.scan.complete"' "$ONLOOKER_EVENTS_LOG")" -eq 1 ] || return 1
   grep '"event_type":"curator.scan.complete"' "$ONLOOKER_EVENTS_LOG" \
-    | jq -e '.payload.outcome == "ok"' >/dev/null
+    | jq -e '.payload.outcome == "ok"
+             or (.payload.outcome == "skipped" and .payload.skip_reason == "over_budget")' >/dev/null
 }
 
 # The other half: a bad budget must not be read as "no budget". A value that
