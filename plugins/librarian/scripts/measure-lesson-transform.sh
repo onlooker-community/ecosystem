@@ -331,8 +331,16 @@ for f in "${SELECTED[@]}"; do
 		printf '%s' "${outcome:0:1}" >&2
 	fi
 
+	# The refusal reason sits beside the claim it refused, which is what the
+	# false-refusal measurement hand-labels (ONL-183).
+	refusal_reason='null'
+	if [[ "$confirm_outcome" == "skipped:no_justification" && -f "$path" ]]; then
+		refusal_reason=$(jq -c '.auto_refusal.reason // null' "$path" 2>/dev/null) || refusal_reason='null'
+	fi
+
 	jq --arg aid "$aid" --arg lid "$lesson_id" --arg out "$outcome" \
 		--arg jsk "$judged_scope_kind" --arg co "$confirm_outcome" \
+		--argjson rr "${refusal_reason:-null}" \
 		--argjson parked "$parked" --argjson dl "$detail_len" \
 		--argjson cand "$candidate" --argjson v "$verdicts" \
 		--argjson agg "${aggregate:-null}" --argjson g "${gate:-null}" \
@@ -340,6 +348,7 @@ for f in "${SELECTED[@]}"; do
 		       parked: ($parked == 1), detail_length: $dl,
 		       judged_scope_kind: (if $jsk == "" then null else $jsk end),
 		       confirm_outcome: (if $co == "" then null else $co end),
+		       refusal_reason: $rr,
 		       candidate: $cand, verdicts: $v, aggregate: $agg, gate: $g}]' \
 		"$ACC" > "${ACC}.next" && mv "${ACC}.next" "$ACC"
 done

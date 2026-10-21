@@ -401,6 +401,32 @@ STUB
 	jq -e '.n == 0' "${OUT}/stats.json" >/dev/null
 }
 
+@test "a refused candidate's record carries the model's reason" {
+	# The false-refusal measurement hand-labels refusals as right or wrong,
+	# which needs the reason beside the claim it refused (ONL-183).
+	_stub_parked_claude "REFUSE: The stack names only internal plugins."
+	_seed_artifact_unversioned A1
+
+	run "$HARNESS" --samples 1 --project-key "$PROJECT_KEY" \
+		--artifacts-from "$CORPUS" --out "$OUT"
+	[ "$status" -eq 0 ] || return 1
+
+	jq -e '.candidates[0].refusal_reason == "The stack names only internal plugins."' \
+		"${OUT}/samples.json" >/dev/null
+}
+
+@test "a candidate nobody refused records a null refusal reason" {
+	_stub_parked_claude
+	_seed_artifact_unversioned A1
+
+	run "$HARNESS" --samples 1 --project-key "$PROJECT_KEY" \
+		--artifacts-from "$CORPUS" --out "$OUT"
+	[ "$status" -eq 0 ] || return 1
+
+	jq -e '.candidates[0] | has("refusal_reason") and .refusal_reason == null' \
+		"${OUT}/samples.json" >/dev/null
+}
+
 @test "--raw-scope reproduces the pre-fix shape for comparison" {
 	_stub_parked_claude
 	_seed_artifact_unversioned A1

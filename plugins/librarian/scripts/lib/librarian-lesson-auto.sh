@@ -12,7 +12,9 @@
 # held longer (librarian_lesson_promote).
 
 # Ask for one sentence saying why the claim holds regardless of version, or a
-# refusal. A refusal is a real answer and leaves the candidate for a human.
+# refusal with one sentence saying why not. A refusal is a real answer and
+# leaves the candidate for a human; its reason is what lets that human, and the
+# false-refusal measurement, tell a correct refusal from a wrong one (ONL-183).
 #
 # The two prohibitions in the prompt are the defects ONL-110 records, which are
 # exactly what the adversarial judge attacks: asserting one remedy is required
@@ -33,8 +35,9 @@ librarian_lesson_auto_justify() {
 
 	{
 		printf '%s\n' 'You are deciding whether a lesson holds regardless of version.'
-		printf '%s\n\n' 'Output ONE sentence, or exactly REFUSE. No markdown, no preamble.'
-		printf '%s\n' 'Say REFUSE unless the claim is true independent of any version of any'
+		printf '%s\n' 'Output ONE sentence, or REFUSE: followed by ONE sentence saying why.'
+		printf '%s\n\n' 'No markdown, no preamble.'
+		printf '%s\n' 'Refuse unless the claim is true independent of any version of any'
 		printf '%s\n\n' 'tool named in its stack.'
 		printf '%s\n' 'Two things make a justification wrong, and both are refusals:'
 		printf '%s\n' '- asserting one remedy is required when other standard remedies exist'
@@ -68,10 +71,32 @@ librarian_lesson_auto_justify() {
 	printf '%s' "$response" | tr '\n' ' ' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
 }
 
+# Record a refusal on the proposal so the review walk can show why the model
+# declined. `REFUSE: <reason>` keeps the reason; a bare `REFUSE` is still
+# recorded, with reason null, so "refused without saying why" stays
+# distinguishable from "never asked".
+#
+# Deliberately NOT a decline: a decline is terminal, and a refused candidate
+# belongs to a human. A later refusal overwrites the earlier one. Best effort --
+# a failed write must not turn a real refusal into a different outcome.
+#
+# Usage: _librarian_lesson_auto_record_refusal <proposal_path> <response>
+_librarian_lesson_auto_record_refusal() {
+	local path="$1" response="$2"
+	local reason now updated
+	reason=$(printf '%s' "$response" | sed -E 's/^REFUSE[[:space:]]*:?[[:space:]]*//')
+	now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+	updated=$(jq --arg r "$reason" --arg at "$now" \
+		'.auto_refusal = {reason: (if $r == "" then null else $r end), refused_at: $at}' \
+		"$path" 2>/dev/null) || return 0
+	librarian_lesson_write_atomic "$path" "$updated" >/dev/null 2>&1 || true
+}
+
 # Auto-confirm one parked candidate. Prints exactly one of:
 #   confirmed:<id>             model asserted a scope; now awaiting a jury
 #   skipped:not_parked         scope is not unscoped; nothing to assert
-#   skipped:no_justification   the model refused; left pending for a human
+#   skipped:no_justification   the model refused; left pending for a human,
+#                              with the refusal recorded as .auto_refusal
 #   unavailable                infrastructure; nothing written
 #
 # Usage: librarian_lesson_auto_confirm_one <key> <lesson_id>
@@ -98,6 +123,7 @@ librarian_lesson_auto_confirm_one() {
 	# librarian_lesson_transform_one draws. Leave the artifact untouched.
 	[[ -z "$justification" ]] && { printf 'unavailable'; return 0; }
 	if [[ "$justification" == REFUSE* ]]; then
+		_librarian_lesson_auto_record_refusal "$path" "$justification"
 		printf 'skipped:no_justification'
 		return 0
 	fi

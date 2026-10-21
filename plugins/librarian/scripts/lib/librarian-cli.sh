@@ -438,7 +438,13 @@ librarian_cli_lessons_show() {
 		"scope:       \(.candidate.applies_to.scope | tojson)"
 			+ (if .candidate.applies_to.scope.kind == "unscoped"
 			   then "   — needs a justification, at org or public visibility"
-			   else "" end)
+			   else "" end),
+		# Why the unattended path declined to assert version-independence
+		# (ONL-183). Shown so the human deciding knows what the model
+		# objected to; absent when nothing refused it.
+		(if .auto_refusal then
+			"refused:     \(.auto_refusal.reason // "(no reason given)")"
+		 else empty end)
 	' "$path"
 }
 
