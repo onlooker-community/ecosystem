@@ -80,7 +80,7 @@ For `lessons` / `lessons review` (default for the `lessons` route), loop:
 
 1. Call `librarian_cli lessons list`. If the output says `No pending lessons.`, tell the user the queue is clear and stop.
 2. Take the first pending id. Call `librarian_cli lessons show <id>` to render it.
-3. Present the candidate to the user in plain English, showing: `claim`, `rationale`, `evidence.resolution`, `applies_to.stack`, `scope.versions` (or the scope kind if unversioned), and the source artifact id.
+3. Present the candidate to the user in plain English, showing: `claim`, `rationale`, `evidence.resolution`, `applies_to.stack`, `scope.versions` (or the scope kind if unversioned), and the source artifact id. If `show` prints a `refused:` line, the unattended path was asked to justify this candidate as version-independent and declined. Show the user that reason verbatim, as the model's objection rather than a verdict: it is why the candidate is still waiting for them, and they may disagree with it. `(no reason given)` means the model refused without saying why.
 4. Ask the user how to route it: **confirm** (with a visibility), **pass** (optionally with a reason), or **defer**.
 5. Route the answer:
    - **confirm** → `librarian_cli lessons confirm <id> <visibility> [--justification TEXT]`. Confirming **requires** a visibility (`private`, `org`, or `public`) — never call confirm without one. `--justification` rewrites the scope to `version_independent` and requires `org` or `public` visibility: a `private` lesson runs no jury, so its justification would go unchecked. If the user wants version-independence at `private`, tell them why it's refused rather than silently dropping the justification.
