@@ -1,5 +1,10 @@
 # Defined criteria re-judge — 2026-10-18
 
+> **Correction, 2026-10-19.** This run judged parked candidates without the
+> justification production attaches when it confirms them, so its
+> `scope_accuracy` figures understate them. See
+> [2026-10-19-justified-scope](../2026-10-19-justified-scope/README.md).
+
 `ecosystem-1z07vm.6` / ONL-110. The [2026-10-17 baseline](../2026-10-17-transform-baseline/README.md)'s
 own candidates, re-scored after the judge prompt began **defining** each rubric
 criterion instead of sending a bare name.

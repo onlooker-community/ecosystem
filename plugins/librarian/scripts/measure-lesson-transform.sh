@@ -31,16 +31,23 @@
 #
 # IT JUDGES THE SHAPE PRODUCTION CONFIRMS INTO. librarian_lesson_auto_stage runs
 # auto_confirm_one BEFORE auto_judge_one, and that step rewrites a parked
-# candidate's scope from {"kind":"unscoped"} to {"kind":"version_independent"}.
-# The judge prompt then asserts "a MODEL asserted that this lesson holds
-# regardless of version" — true of the confirmed shape, false of the raw one.
-# Judging the raw candidate asserts a claim it does not make, and it costs real
-# score: measured on three candidates, scope_accuracy fell ~0.11 and grounding
-# ~0.05, in the same direction every time. So a parked candidate's scope is
-# rewritten here the way auto_confirm_one would write it. `--raw-scope` turns
-# that off to reproduce the pre-fix measurement. The justification model call
-# auto_confirm_one makes is NOT reproduced: it gates whether confirmation
-# happens, and does not change the candidate the panel sees.
+# candidate's scope from {"kind":"unscoped"} to
+# {"kind":"version_independent","justification":<one sentence>}. The judge
+# prompt then asserts "a MODEL asserted that this lesson holds regardless of
+# version" — true of the confirmed shape, false of the raw one. Judging the raw
+# candidate asserts a claim it does not make, and it costs real score: measured
+# on three candidates, scope_accuracy fell ~0.11 and grounding ~0.05, in the
+# same direction every time. So a parked candidate is confirmed here by calling
+# auto_confirm_one itself, which is safe because the store is the sandbox's.
+# `--raw-scope` turns that off to reproduce the pre-fix measurement.
+#
+# The justification call IS reproduced. An earlier version rewrote the scope to
+# a bare {"kind":"version_independent"} and skipped the call on the grounds
+# that it "does not change the candidate the panel sees". It does: the sentence
+# lands in the scope the judges read. Without it the panel saw the assertion
+# with its reason stripped, and on 2026-10-19 all 9 scope_accuracy floors in a
+# 13-panel run cited that missing support. A refusal (REFUSE) leaves the
+# candidate pending in production, never juried, so it is not judged here.
 #
 # THE UNSCOPED COST CAP IS BYPASSED, deliberately: unscoped_per_scan (3) is
 # cost control on a live scan, not a quality mechanism, and leaving it on would
@@ -204,6 +211,8 @@ POLICY=$(printf '%s' "$RUBRIC" | jq -r '.gate_policy')
 if [[ "$DRY_RUN" -eq 1 ]]; then
 	printf 'would run %d transform calls + %d judge calls (%d total)\n' \
 		"$SAMPLES" "$(( SAMPLES * 2 ))" "$(( SAMPLES * 3 ))"
+	[[ "$CONFIRM_SHAPE" -eq 1 ]] \
+		&& printf 'plus one justification call per parked candidate (at most %d)\n' "$SAMPLES"
 	printf 'transform model: %s\njudge model:     %s\n' "${TRANSFORM_MODEL:-default}" "$JUDGE_MODEL"
 	printf 'rubric:          %s (threshold %s, gate %s)\n' "$RUBRIC_ID" "$THRESHOLD" "$POLICY"
 	printf 'corpus:          %s (%d usable, mode %s)\n' "$ARTIFACTS_FROM" "$CORPUS_SIZE" "$SAMPLE_MODE"
@@ -272,16 +281,25 @@ for f in "${SELECTED[@]}"; do
 	fi
 
 	judged_scope_kind=""
+	confirm_outcome=""
+	judgeable=0
 	if [[ "$candidate" != "null" && -n "$candidate" ]]; then
+		judgeable=1
 		if [[ "$CONFIRM_SHAPE" -eq 1 && "$parked" -eq 1 ]]; then
-			candidate=$(printf '%s' "$candidate" \
-				| jq -c '.applies_to.scope = {"kind":"version_independent"}' 2>/dev/null) \
-				|| candidate='null'
+			# A refused or unavailable confirmation keeps the raw candidate in
+			# the record, so what was refused stays readable, but it is not
+			# judged: production never convenes a panel for it.
+			confirm_outcome=$(librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$lesson_id")
+			case "$confirm_outcome" in
+				confirmed:*) candidate=$(jq -c '.candidate' "$path" 2>/dev/null) || candidate='null' ;;
+				*) judgeable=0 ;;
+			esac
 		fi
-		judged_scope_kind=$(printf '%s' "$candidate" | jq -r '.applies_to.scope.kind // ""' 2>/dev/null)
+		[[ "$judgeable" -eq 1 ]] \
+			&& judged_scope_kind=$(printf '%s' "$candidate" | jq -r '.applies_to.scope.kind // ""' 2>/dev/null)
 	fi
 
-	if [[ "$candidate" != "null" && -n "$candidate" ]]; then
+	if [[ "$judgeable" -eq 1 && "$candidate" != "null" && -n "$candidate" ]]; then
 		prompt=$(librarian_lesson_auto_judge_prompt "$candidate" "$RUBRIC")
 		std=$(_librarian_lesson_auto_judge tribunal-judge-standard "$prompt" "$JUDGE_MODEL")
 		adv=$(_librarian_lesson_auto_judge tribunal-judge-adversarial "$prompt" "$JUDGE_MODEL")
@@ -307,18 +325,21 @@ for f in "${SELECTED[@]}"; do
 			# failure so a short batch cannot masquerade as a low pass rate.
 			printf 'x' >&2
 		fi
+	elif [[ "$confirm_outcome" == "skipped:no_justification" ]]; then
+		printf 'r' >&2
 	else
 		printf '%s' "${outcome:0:1}" >&2
 	fi
 
 	jq --arg aid "$aid" --arg lid "$lesson_id" --arg out "$outcome" \
-		--arg jsk "$judged_scope_kind" \
+		--arg jsk "$judged_scope_kind" --arg co "$confirm_outcome" \
 		--argjson parked "$parked" --argjson dl "$detail_len" \
 		--argjson cand "$candidate" --argjson v "$verdicts" \
 		--argjson agg "${aggregate:-null}" --argjson g "${gate:-null}" \
 		'. + [{artifact_id: $aid, lesson_id: $lid, transform_outcome: $out,
 		       parked: ($parked == 1), detail_length: $dl,
 		       judged_scope_kind: (if $jsk == "" then null else $jsk end),
+		       confirm_outcome: (if $co == "" then null else $co end),
 		       candidate: $cand, verdicts: $v, aggregate: $agg, gate: $g}]' \
 		"$ACC" > "${ACC}.next" && mv "${ACC}.next" "$ACC"
 done

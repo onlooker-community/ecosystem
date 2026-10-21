@@ -1,5 +1,10 @@
 # Lesson transform baseline — 2026-10-17
 
+> **Correction, 2026-10-19.** This run judged parked candidates without the
+> justification production attaches when it confirms them, so its
+> `scope_accuracy` figures understate them. See
+> [2026-10-19-justified-scope](../2026-10-19-justified-scope/README.md).
+
 Raw artifacts from the ONL-110 / `ecosystem-1z07vm.1` baseline run.
 `claude-haiku-4-5-20251001` for both the transform and the judges, rubric
 `lesson-promotion-public` read from `plugins/librarian/config.json`.
