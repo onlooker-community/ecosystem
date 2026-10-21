@@ -552,6 +552,37 @@ _set_status() {
 	[[ "$output" != *"null"* ]] || return 1
 }
 
+@test "lessons show surfaces why the model refused a parked candidate" {
+	_cli_setup
+	id=$(_seed_pending)
+	path="${ONLOOKER_DIR}/librarian/${PROJECT_KEY}/lessons/proposals/${id}.json"
+	jq '.auto_refusal = {reason: "The stack names only this repository'"'"'s own plugins.", refused_at: "2026-10-21T00:00:00Z"}' \
+		"$path" > "${path}.next" && mv "${path}.next" "$path"
+	run librarian_cli lessons show "$id" "$PROJECT_REPO"
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" == *"refused:     The stack names only this repository's own plugins."* ]]
+}
+
+@test "lessons show says when a refusal gave no reason" {
+	_cli_setup
+	id=$(_seed_pending)
+	path="${ONLOOKER_DIR}/librarian/${PROJECT_KEY}/lessons/proposals/${id}.json"
+	jq '.auto_refusal = {reason: null, refused_at: "2026-10-21T00:00:00Z"}' \
+		"$path" > "${path}.next" && mv "${path}.next" "$path"
+	run librarian_cli lessons show "$id" "$PROJECT_REPO"
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" == *"refused:     (no reason given)"* ]] || return 1
+	[[ "$output" != *"null"* ]]
+}
+
+@test "lessons show prints no refusal line for a lesson nobody refused" {
+	_cli_setup
+	id=$(_seed_pending)
+	run librarian_cli lessons show "$id" "$PROJECT_REPO"
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" != *"refused:"* ]]
+}
+
 @test "lessons show prints the claim" {
 	_cli_setup
 	claim="pin vitest below six to avoid the esm regression"
