@@ -12,10 +12,61 @@
 # the gate say which of the two actually happened. See ecosystem-0bh.
 #
 # Usage: scripts/test/run-bats.sh [bats args...]   (default target: test/bats)
+#
+# Explicit targets REPLACE the default rather than adding to it, which is why
+# package.json names no target. `npm run test:bats -- test/bats/foo.bats` used to
+# become `bats test/bats test/bats/foo.bats`; under -j bats then plans that file
+# twice, runs it once, and exits 0 -- a failing file vanished from a green run
+# (ONL-109). Overlapping targets are refused below, and check-bats-plan.sh fails
+# any run that executed fewer tests than it planned.
 set -uo pipefail
 
 REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 REPORT_DIR="${ONLOOKER_TEST_REPORT_DIR:-${REPO_ROOT}/test/tmp-emission-report}"
+
+# Physical path of a target, so `dir/a.bats` and `dir/./a.bats` compare equal.
+_canonical() {
+	if [[ -d "$1" ]]; then
+		(cd "$1" && pwd -P)
+	else
+		printf '%s/%s\n' "$(cd "$(dirname "$1")" && pwd -P)" "$(basename "$1")"
+	fi
+}
+
+# Collect the path targets, stepping over the values of bats options that take
+# one -- `--output <dir>` names a directory that is not a target.
+targets=()
+skip_next=0
+for arg in "$@"; do
+	if ((skip_next)); then
+		skip_next=0
+		continue
+	fi
+	case "$arg" in
+	-f | --filter | -F | --formatter | -j | --jobs | -o | --output | \
+		--report-formatter | --filter-status | --filter-tags | \
+		--code-quote-style | --line-reference-format | \
+		--gather-test-outputs-in | --setup-suite-file)
+		skip_next=1
+		;;
+	-*) ;;
+	*) [[ -e "$arg" ]] && targets+=("$(_canonical "$arg")") ;;
+	esac
+done
+
+# Refused before the report directory is touched, so an earlier run's report
+# survives and no completion sentinel claims a suite that never ran.
+for ((i = 0; i < ${#targets[@]}; i++)); do
+	for ((j = 0; j < ${#targets[@]}; j++)); do
+		((i == j)) && continue
+		a="${targets[i]}" b="${targets[j]}"
+		if [[ "$a" == "$b" || "$b" == "$a"/* ]]; then
+			echo "run-bats: targets overlap: ${b} is already covered by ${a}." >&2
+			echo "run-bats: bats would plan it twice and run it once under -j; pass only one." >&2
+			exit 2
+		fi
+	done
+done
 
 # Distinct per run, which is all the gate compares. Not an event id, so the
 # repo's ULID convention does not apply; the PID keeps concurrent runs apart.
@@ -33,7 +84,13 @@ status=0
 ONLOOKER_VALIDATE=1 \
 	ONLOOKER_TEST_REPORT_DIR="$REPORT_DIR" \
 	ONLOOKER_TEST_RUN_ID="$RUN_ID" \
-	bats "${jobs[@]+"${jobs[@]}"}" "${@:-test/bats}" || status=$?
+	bats "${jobs[@]+"${jobs[@]}"}" "${@:-test/bats}" \
+	--report-formatter tap --output "$REPORT_DIR" || status=$?
+
+# A green run that skipped planned tests is not green.
+if ((status == 0)); then
+	"${REPO_ROOT}/scripts/test/check-bats-plan.sh" "${REPORT_DIR}/report.tap" || status=1
+fi
 
 # Written last and only on return: an interrupted or killed suite leaves no
 # sentinel, which is exactly the "did not finish" the gate needs to see.
