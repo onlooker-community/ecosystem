@@ -62,17 +62,24 @@ _seed_artifact_unversioned() {
 		> "${CORPUS}/${name}.json"
 }
 
-# A `claude` whose transform answers with a PARKED candidate and whose judges
-# return a verdict.
+# A `claude` whose transform answers with a PARKED candidate, whose
+# justification call answers with <justification>, and whose judges return a
+# verdict. The justification call is told apart by its prompt, not its flags:
+# like the transform, it is a plain `claude -p` with no --agent.
+#
+# Usage: _stub_parked_claude [justification]
 _stub_parked_claude() {
+	local justification="${1:-The claim is about test design, not any tool version.}"
 	STUB_BIN="${BATS_TEST_TMPDIR}/bin"
 	mkdir -p "$STUB_BIN"
-	cat > "${STUB_BIN}/claude" <<'STUB'
+	cat > "${STUB_BIN}/claude" <<STUB
 #!/usr/bin/env bash
-args="$*"
-cat > /dev/null
-if [[ "$args" == *"--agent"* ]]; then
+args="\$*"
+prompt=\$(cat)
+if [[ "\$args" == *"--agent"* ]]; then
 	printf '%s' '{"score":0.6,"passed":false,"judge_type":"standard","feedback_summary":"f","criterion_scores":{"grounding":0.6,"scope_accuracy":0.6,"generality":0.6,"disclosure":0.5}}'
+elif [[ "\$prompt" == *"whether a lesson holds regardless of version"* ]]; then
+	printf '%s' '${justification}'
 else
 	printf '%s' '{"claim":"c","rationale":"r","evidence":{"resolution":"Assert the side effect in the log."},"applies_to":{"stack":["bats"],"scope":{"kind":"unscoped"},"file_patterns":[],"task_kinds":[]}}'
 fi
@@ -354,6 +361,44 @@ STUB
 	jq -e '.candidates[0].judged_scope_kind == "version_independent"' \
 		"${OUT}/samples.json" >/dev/null || return 1
 	jq -e '.confirm_shape == true' "${OUT}/samples.json" >/dev/null
+}
+
+@test "a parked candidate reaches the judges carrying the model's justification" {
+	# Production confirms through librarian_lesson_confirm, which writes
+	# {kind: "version_independent", justification: <sentence>}. Judging the
+	# bare {kind: "version_independent"} shows the panel an assertion with its
+	# reason stripped, and every scope_accuracy floor in the 2026-10-19 control
+	# arm (9 of 9) cited exactly that missing support.
+	_stub_parked_claude "Assertions on the log hold whatever the tool versions are."
+	_seed_artifact_unversioned A1
+
+	run "$HARNESS" --samples 1 --project-key "$PROJECT_KEY" \
+		--artifacts-from "$CORPUS" --out "$OUT"
+	[ "$status" -eq 0 ] || return 1
+
+	jq -e '.candidates[0].confirm_outcome | startswith("confirmed:")' \
+		"${OUT}/samples.json" >/dev/null || return 1
+	jq -e '.candidates[0].candidate.applies_to.scope.justification
+		== "Assertions on the log hold whatever the tool versions are."' \
+		"${OUT}/samples.json" >/dev/null || return 1
+	jq -e '.candidates[0].verdicts | length == 2' "${OUT}/samples.json" >/dev/null
+}
+
+@test "a refused justification is left unjudged, as production leaves it pending" {
+	# auto_confirm_one returns skipped:no_justification on REFUSE and the
+	# candidate never reaches a jury, so judging it here would measure a
+	# panel production never convenes.
+	_stub_parked_claude "REFUSE"
+	_seed_artifact_unversioned A1
+
+	run "$HARNESS" --samples 1 --project-key "$PROJECT_KEY" \
+		--artifacts-from "$CORPUS" --out "$OUT"
+	[ "$status" -eq 0 ] || return 1
+
+	jq -e '.candidates[0].confirm_outcome == "skipped:no_justification"' \
+		"${OUT}/samples.json" >/dev/null || return 1
+	jq -e '.candidates[0].verdicts == []' "${OUT}/samples.json" >/dev/null || return 1
+	jq -e '.n == 0' "${OUT}/stats.json" >/dev/null
 }
 
 @test "--raw-scope reproduces the pre-fix shape for comparison" {
