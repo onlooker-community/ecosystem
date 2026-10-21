@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.73.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.72.1...ecosystem-v0.73.0) (2026-10-21)
+
+
+### Features
+
+* **librarian:** tell lesson judges what each criterion means :ledger: ([#469](https://github.com/onlooker-community/ecosystem/issues/469)) ([64a8c4d](https://github.com/onlooker-community/ecosystem/commit/64a8c4d29846997b08c33ac76c15a9e382f763f0))
+
+
+### Bug Fixes
+
+* **librarian:** judge parked lessons with their justification :mag: ([#471](https://github.com/onlooker-community/ecosystem/issues/471)) ([2edde67](https://github.com/onlooker-community/ecosystem/commit/2edde6749ca20e1c114dc45767bc4dccaea8fdaf))
+
 ## [0.72.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.72.0...ecosystem-v0.72.1) (2026-10-18)
 
 
