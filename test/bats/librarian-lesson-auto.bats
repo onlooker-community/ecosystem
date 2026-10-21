@@ -159,7 +159,10 @@ _auto_stub() {
 	cat > "${STUB_BIN}/claude" <<'STUB'
 #!/usr/bin/env bash
 prompt=$(cat)
-if [[ "$prompt" == *"refuse-justification"* ]]; then
+[[ -n "${STUB_PROMPT_LOG:-}" ]] && printf '%s' "$prompt" > "$STUB_PROMPT_LOG"
+if [[ "$prompt" == *"refuse-with-reason"* ]]; then
+  printf '%s' "REFUSE: The stack names only this repository's own plugins."
+elif [[ "$prompt" == *"refuse-justification"* ]]; then
   printf '%s' 'REFUSE'
 elif [[ "$prompt" == *"why this lesson holds regardless of version"* ]]; then
   printf '%s' 'The failure is a property of the exec boundary, not of any release.'
@@ -197,6 +200,47 @@ STUB
 	[ "$output" = "skipped:no_justification" ]
 	jq -e '.status == "pending"' "${LESSONS_DIR}/proposals/${id}.json"
 	[ ! -f "${LESSONS_DIR}/declined.jsonl" ]
+}
+
+@test "a refusal records the model's reason on the proposal" {
+	_auto_setup; _auto_stub
+	id=$(_seed_pending_unscoped_marked "refuse-with-reason")
+	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	[ "$output" = "skipped:no_justification" ] || return 1
+	jq -e '.status == "pending"
+	   and .auto_refusal.reason == "The stack names only this repository'"'"'s own plugins."
+	   and (.auto_refusal.refused_at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T"))' \
+		"${LESSONS_DIR}/proposals/${id}.json" >/dev/null || return 1
+	# The reason is for a human; it is not a decline, which would be terminal.
+	[ ! -f "${LESSONS_DIR}/declined.jsonl" ]
+}
+
+@test "a bare REFUSE is still recorded, with no reason" {
+	_auto_setup; _auto_stub
+	id=$(_seed_pending_unscoped_marked "refuse-justification")
+	librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id" >/dev/null
+	jq -e '.status == "pending" and has("auto_refusal")
+	   and .auto_refusal.reason == null' \
+		"${LESSONS_DIR}/proposals/${id}.json" >/dev/null
+}
+
+@test "a refusal never leaves a reason on a confirmed lesson" {
+	_auto_setup; _auto_stub
+	id=$(_seed_pending_unscoped)
+	librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id" >/dev/null
+	jq -e '.status == "confirmed" and (has("auto_refusal") | not)' \
+		"${LESSONS_DIR}/proposals/${id}.json" >/dev/null
+}
+
+@test "the justification prompt asks for a reason with every refusal" {
+	_auto_setup; _auto_stub
+	export STUB_PROMPT_LOG="${BATS_TEST_TMPDIR}/prompt.txt"
+	# Through `run`, not a direct call: auto_justify sets and then clears an
+	# EXIT trap, which in this shell would clear bats' own -- and a failing
+	# assertion would then vanish from the report instead of failing (ONL-118).
+	run librarian_lesson_auto_justify "$(_candidate "$(_unscoped)")"
+	[ "$status" -eq 0 ] || return 1
+	grep -q 'REFUSE: ' "$STUB_PROMPT_LOG"
 }
 
 @test "an empty model response is infrastructure, not a verdict" {
