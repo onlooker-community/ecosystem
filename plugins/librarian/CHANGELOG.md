@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.25.1](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.25.0...librarian-v0.25.1) (2026-10-22)
+
+
+### Bug Fixes
+
+* **librarian:** let a commit-mined lesson name no session ([#477](https://github.com/onlooker-community/ecosystem/issues/477)) ([2d86904](https://github.com/onlooker-community/ecosystem/commit/2d869049ce0cf92272b6441432e8045453266454))
+
 ## [0.25.0](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.24.0...librarian-v0.25.0) (2026-10-21)
 
 
