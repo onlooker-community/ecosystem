@@ -91,6 +91,18 @@ _candidate() {
   [ "$status" -eq 0 ]
 }
 
+@test "validate_candidate accepts a candidate that names no session" {
+  run librarian_lesson_validate_candidate \
+    "$(_candidate '{"vite":"<6"}' '["vite"]' | jq -c '.evidence.session_ids = []')"
+  [ "$status" -eq 0 ]
+}
+
+@test "validate_candidate rejects an empty session id" {
+  run librarian_lesson_validate_candidate \
+    "$(_candidate '{"vite":"<6"}' '["vite"]' | jq -c '.evidence.session_ids = [""]')"
+  [ "$status" -eq 1 ]
+}
+
 @test "validate_candidate rejects a versions key absent from stack" {
   run librarian_lesson_validate_candidate \
     "$(_candidate '{"vite":"<6","vitest":">=4"}' '["vite"]')"

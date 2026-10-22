@@ -125,6 +125,16 @@ describe('lesson validator / vendored schema agreement', () => {
     assertAgree('baseline', baseCandidate(), true);
   });
 
+  // ONL-108: a commit-mined lesson has no session. Both mechanisms must agree
+  // that an empty list is valid and an empty string is not.
+  it('agree that no session ids is accepted', () => {
+    assertAgree('empty session_ids', withEvidence({ session_ids: [] }), true);
+  });
+
+  it('agree that an empty session id is rejected', () => {
+    assertAgree('blank session id', withEvidence({ session_ids: [''] }), false);
+  });
+
   it('agree that an extra evidence property is rejected (additionalProperties: false)', () => {
     assertAgree('extra evidence key', withEvidence({ confidence: 0.9 }), false);
   });
