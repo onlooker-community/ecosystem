@@ -10,7 +10,6 @@
       }
     },
     "session_ids": {
-      "minItems": 1,
       "type": "array",
       "items": {
         "type": "string",

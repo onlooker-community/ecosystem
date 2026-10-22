@@ -65,7 +65,7 @@ librarian_lesson_valid_range() {
 # clause. artifact_ids, session_ids, and observed_at are checked against the
 # same patterns as the vendored lesson-evidence.subschema.json (ULID,
 # non-empty string, RFC3339 date-time) — a provenance-less artifact
-# (session_id/created_at stitched in as "") must fail here, not pass through
+# (created_at, or a session id, stitched in as "") must fail here, not pass through
 # and get buried permanently once librarian_lesson_seen marks it handled.
 #
 # The `keys - [...] | length == 0` checks mirror `additionalProperties:
@@ -85,7 +85,9 @@ _LIBRARIAN_LESSON_STRUCTURAL='
 	and ((.evidence | keys) - ["artifact_ids", "session_ids", "project_key", "observed_at", "resolution"] | length) == 0
 	and (.evidence.artifact_ids | type) == "array" and (.evidence.artifact_ids | length) > 0
 	and (.evidence.artifact_ids | all(type == "string" and test("^[0-9A-HJKMNP-TV-Z]{26}$")))
-	and (.evidence.session_ids | type) == "array" and (.evidence.session_ids | length) > 0
+	# session_ids may be empty: a lesson mined from a commit has no session
+	# (ONL-108). An empty string is still refused - that was the ONL-82 placeholder.
+	and (.evidence.session_ids | type) == "array"
 	and (.evidence.session_ids | all(type == "string" and length > 0))
 	and (.evidence.project_key | type) == "string"
 	and (.evidence.project_key | test("^[0-9a-f]{12}$"))

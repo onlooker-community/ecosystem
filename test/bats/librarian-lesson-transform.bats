@@ -91,6 +91,18 @@ _candidate() {
   [ "$status" -eq 0 ]
 }
 
+@test "validate_candidate accepts a candidate that names no session" {
+  run librarian_lesson_validate_candidate \
+    "$(_candidate '{"vite":"<6"}' '["vite"]' | jq -c '.evidence.session_ids = []')"
+  [ "$status" -eq 0 ]
+}
+
+@test "validate_candidate rejects an empty session id" {
+  run librarian_lesson_validate_candidate \
+    "$(_candidate '{"vite":"<6"}' '["vite"]' | jq -c '.evidence.session_ids = [""]')"
+  [ "$status" -eq 1 ]
+}
+
 @test "validate_candidate rejects a versions key absent from stack" {
   run librarian_lesson_validate_candidate \
     "$(_candidate '{"vite":"<6","vitest":">=4"}' '["vite"]')"
@@ -520,11 +532,11 @@ STUB
     && [[ "$prompt" == *'">=0"'* ]]
 }
 
-@test "transform_one declines a provenance-less artifact instead of writing invalid evidence" {
-  # archivist-extract.sh writes session_id: null when the hook payload
-  # lacked one. That must not silently become evidence.session_ids: [""] in
-  # a written proposal — it must fail validation like any other schema
-  # violation, not get buried as though it had been judged and approved.
+@test "transform_one proposes a session-less artifact with no session ids" {
+  # archivist-mine.sh writes session_id: null for every commit with no
+  # Claude-Session trailer, and archivist-extract.sh does when the hook
+  # payload lacked one. That absence is honest (ONL-82, ONL-108): the
+  # proposal carries session_ids: [], never [""].
   _transform_setup
   art=$(jq -cn --arg id "01KZ45MKAM734ZS7JK24D2DK0R" --arg k "$PROJECT_KEY" \
     '{id: $id, kind: "decision", project_key: $k, session_id: null,
@@ -532,9 +544,11 @@ STUB
       summary: "Vitest 4.1.9 / Vite 5.x mismatch",
       detail: "Vitest 4.1.9 imports vite/module-runner which is absent in Vite 5.4.21."}')
   run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
-  [ "$status" -eq 0 ]
-  [ "$output" = "declined:schema_invalid" ]
-  [ -z "$(ls -A "${LESSONS_DIR}/proposals")" ]
+  id="${output#proposed:}"
+  [ "$status" -eq 0 ] \
+    && [[ "$output" == proposed:* ]] \
+    && jq -e '.candidate.evidence.session_ids == []' \
+      "${LESSONS_DIR}/proposals/${id}.json"
 }
 
 @test "transform_one recovers a candidate wrapped in prose instead of declining it as unparseable" {

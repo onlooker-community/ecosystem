@@ -1,10 +1,10 @@
 #!/usr/bin/env bats
 #
-# Replaying artifacts that were declined no_versions. A decline is terminal —
-# librarian_lesson_seen reads declined.jsonl — so recovering one means rewriting
-# that record, which is the only place in the pipeline that removes a terminal
-# decision. Only no_versions is eligible: no_resolution and schema_invalid are
-# still correct refusals (ONL-107).
+# Replaying declined artifacts. A decline is terminal — librarian_lesson_seen
+# reads declined.jsonl — so recovering one means rewriting that record, which
+# is the only place in the pipeline that removes a terminal decision.
+# no_versions replays forced unscoped (ONL-107); schema_invalid replays only
+# artifacts with no session (ONL-108); no_resolution is still a correct refusal.
 
 setup() {
   source "${BATS_TEST_DIRNAME}/../helpers/setup.bash"
@@ -41,6 +41,8 @@ _reconsider_setup() {
 prompt=$(cat)
 if [[ "$prompt" == *"<scope-mode>unscoped</scope-mode>"* ]]; then
   printf '%s' '{"claim":"A bare Release-As footer bumps every component","rationale":"release-please applies an unscoped footer to the whole manifest.","evidence":{"resolution":"Scope the bump in the manifest instead."},"applies_to":{"stack":["release-please"],"scope":{"kind":"unscoped"},"file_patterns":[],"task_kinds":[]}}'
+elif [[ "$prompt" == *"module-runner"* ]]; then
+  printf '%s' '{"claim":"Vitest 4 cannot import vite/module-runner on Vite 5","rationale":"vite/module-runner ships in Vite 6; Vitest 4 assumes it exists.","evidence":{"resolution":"Pin vitest to 3.x until Vite 6 lands."},"applies_to":{"stack":["vite","vitest"],"scope":{"kind":"versioned","versions":{"vite":"<6","vitest":">=4"}},"file_patterns":[],"task_kinds":[]}}'
 else
   printf '%s' 'not json at all'
 fi
@@ -50,11 +52,14 @@ STUB
 }
 
 # Writes an archivist artifact where librarian-archivist-reader.sh reads them.
+# An optional fourth argument sets the session; pass "" for a null one.
 _seed_artifact_on_disk() {
   local dir="${ONLOOKER_DIR}/archivist/${PROJECT_KEY}/decisions"
   mkdir -p "$dir"
   jq -cn --arg id "$1" --arg s "$2" --arg d "$3" --arg k "$PROJECT_KEY" \
-    '{id: $id, kind: "decision", project_key: $k, session_id: "sess-1",
+    --arg sid "${4-sess-1}" \
+    '{id: $id, kind: "decision", project_key: $k,
+      session_id: (if $sid == "" then null else $sid end),
       created_at: "2026-08-03T15:59:48Z", summary: $s, detail: $d, files: []}' \
     > "${dir}/$1.json"
 }
@@ -140,4 +145,48 @@ _seed_artifact_on_disk() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"Nothing to reconsider"* ]]
   grep -q "no_resolution" "${LESSONS_DIR}/declined.jsonl"
+}
+
+@test "reconsider --reason schema_invalid replays a session-less decline" {
+  _reconsider_setup
+  _seed_artifact_on_disk "01M3B87J7046SJE5BECNMP670K" \
+    "Vitest 4.1.9 / Vite 5.x mismatch" \
+    "Vitest 4.1.9 imports vite/module-runner which is absent in Vite 5.4.21." ""
+  printf '%s\n' \
+    '{"artifact_id":"01M3B87J7046SJE5BECNMP670K","reason":"schema_invalid","declined_at":"2026-10-18T21:46:22Z"}' \
+    > "${LESSONS_DIR}/declined.jsonl"
+
+  run librarian_cli lessons reconsider --reason schema_invalid "$PROJECT_REPO"
+  [ "$status" -eq 0 ] \
+    && [ "$(ls "${LESSONS_DIR}/proposals" | wc -l | tr -d ' ')" -eq 1 ] \
+    && jq -e '.candidate.evidence.session_ids == []
+              and .candidate.applies_to.scope.kind == "versioned"' \
+      "${LESSONS_DIR}/proposals/"*.json \
+    && ! grep -q "01M3B87J7046SJE5BECNMP670K" "${LESSONS_DIR}/declined.jsonl"
+}
+
+@test "reconsider --reason schema_invalid keeps a decline whose artifact has a session" {
+  # A schema_invalid with a real session failed for some other reason,
+  # which ONL-108 does not fix. Replaying it would spend a model call to be
+  # refused again.
+  _reconsider_setup
+  _seed_artifact_on_disk "01M3B87J7046SJE5BECNMP670K" \
+    "Vitest 4.1.9 / Vite 5.x mismatch" \
+    "Vitest 4.1.9 imports vite/module-runner which is absent in Vite 5.4.21."
+  printf '%s\n' \
+    '{"artifact_id":"01M3B87J7046SJE5BECNMP670K","reason":"schema_invalid","declined_at":"2026-10-18T21:46:22Z"}' \
+    > "${LESSONS_DIR}/declined.jsonl"
+
+  run librarian_cli lessons reconsider --reason schema_invalid "$PROJECT_REPO"
+  [ "$status" -eq 0 ] \
+    && [[ "$output" == *"has a session, decline kept"* ]] \
+    && jq -e 'select(.artifact_id == "01M3B87J7046SJE5BECNMP670K")
+              | .reason == "schema_invalid"' < "${LESSONS_DIR}/declined.jsonl" \
+    && [ -z "$(ls -A "${LESSONS_DIR}/proposals")" ]
+}
+
+@test "reconsider refuses a reason it cannot replay" {
+  _reconsider_setup
+  run librarian_cli lessons reconsider --reason no_resolution "$PROJECT_REPO"
+  [ "$status" -eq 1 ] && [[ "$output" == *"no_resolution"* ]]
 }
