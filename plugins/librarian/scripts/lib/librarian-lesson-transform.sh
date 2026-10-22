@@ -359,6 +359,9 @@ librarian_lesson_transform_one() {
 		return 0
 	fi
 
+	# A null session_id becomes [], not [""]: commit-mined artifacts have no
+	# session (ONL-108), and librarian-classify-worker.sh already writes
+	# source_session_ids the same way.
 	# Stitch in the provenance the model is not asked to produce.
 	local candidate
 	candidate=$(printf '%s' "$raw" | jq -c \
@@ -367,7 +370,7 @@ librarian_lesson_transform_one() {
 		--arg pk "$project_key" \
 		--arg at "$created_at" \
 		'.evidence.artifact_ids = [$aid]
-		 | .evidence.session_ids = [$sid]
+		 | .evidence.session_ids = (if $sid == "" then [] else [$sid] end)
 		 | .evidence.project_key = $pk
 		 | .evidence.observed_at = $at' 2>/dev/null) || candidate=""
 
