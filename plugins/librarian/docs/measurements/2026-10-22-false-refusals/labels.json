@@ -1,0 +1,67 @@
+{
+  "labeled_at": "2026-10-22",
+  "rule": "right: the refusal should stand under librarian_lesson_auto_justify's rules. wrong: a false refusal, where the claim is true independent of the version of every tool in its stack, asserts no one-required remedy, and claims nothing its evidence does not show. The claim is judged, not the rationale.",
+  "labelers": ["human (final)", "agent draft", "tribunal-judge-adversarial (blind)"],
+  "labels": [
+    {
+      "artifact_id": "01KT9KVJS8BWFB4QWS9082YG3T",
+      "label": "right",
+      "contested": true,
+      "note": "the latency figures the refusal cites live in the rationale; the claim's only version-sensitive word is \"acceptable\""
+    },
+    {
+      "artifact_id": "01KT9H73N8TYTYGGS3BRK2Y15J",
+      "label": "wrong",
+      "contested": true,
+      "note": "claim is general; the historian-specific detail the refusal cites lives in the rationale. Agent draft said right, blind judge said wrong, human ruled wrong"
+    },
+    {
+      "artifact_id": "01M1D7K0S01FXA1B47DRG1MDGG",
+      "label": "right",
+      "contested": false,
+      "note": "the claim names lineage's own baseline mechanism"
+    },
+    {
+      "artifact_id": "01M00E8P40C2MP244WN9Y8S9JH",
+      "label": "right",
+      "contested": false,
+      "note": "names an internal helper as the one required remedy; the prompt lists that as a refusal ground"
+    },
+    {
+      "artifact_id": "01M3GAVHJ0BQB5BSVM3N6ZS64R",
+      "label": "wrong",
+      "contested": false,
+      "note": "claim is general practice; refusal rests on the rationale's librarian_lesson_promote reference"
+    },
+    {
+      "artifact_id": "01KSGBXRGR2C5ZZTPE1V3VA2GX",
+      "label": "right",
+      "contested": false,
+      "note": "names tribunal-internal calls (tribunal_init_iteration)"
+    },
+    {
+      "artifact_id": "01KZYBHVNGBXN8B3PC1YE9T5WH",
+      "label": "right",
+      "contested": false,
+      "note": "describes one code comment keyed to ZLesson's current schema; an event, not a lesson"
+    },
+    {
+      "artifact_id": "01KZRVRPS84F66RXD9KWZX2PT8",
+      "label": "wrong",
+      "contested": false,
+      "note": "claim is general testing advice; refusal rests on a librarian behavior cited in the rationale"
+    },
+    {
+      "artifact_id": "01KSASC4JRKFZYVZMD0TDH93Z5",
+      "label": "right",
+      "contested": false,
+      "note": "GIT_CONFIG_GLOBAL needs git >= 2.32; the stated reason (one remedy asserted) is also a refusal ground"
+    },
+    {
+      "artifact_id": "01M08MNN802S2092FYPMP76PMW",
+      "label": "right",
+      "contested": false,
+      "note": "claim is false: GITHUB_TOKEN authenticates, git config sets authorship"
+    }
+  ]
+}

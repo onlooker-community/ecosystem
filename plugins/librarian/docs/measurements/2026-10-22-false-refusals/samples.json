@@ -1,0 +1,992 @@
+{
+  "transform_model": "claude-haiku-4-5-20251001",
+  "judge_model": "claude-haiku-4-5-20251001",
+  "transform_sha256": "fee9c5d7249d359eb8656d5a3a86f43b69bf26a0ef43db344850b25e5f1fa362",
+  "judge_prompt_sha256": "74abc6feaf5ccb060f665773f4c2cd984408452f0a1a2b8b95dbbf21a0e91905",
+  "measured_at": "2026-10-23T02:38:19Z",
+  "corpus": "pinned: the 36 artifacts of 2026-10-17-transform-baseline/confirmed-shape, copied from $ONLOOKER_DIR/archivist/ee2cfbe428c7",
+  "corpus_size": 36,
+  "sample_mode": "spread",
+  "project_key": "ee2cfbe428c7",
+  "confirm_shape": true,
+  "rubric": {
+    "id": "lesson-promotion-public",
+    "criteria": [
+      {
+        "name": "grounding",
+        "weight": 0.32,
+        "min_pass": 0.7,
+        "description": "Does the claim follow from its own rationale and stated resolution? Score low when it asserts something they contradict or do not support, or frames one remedy as the only one when the resolution shows others."
+      },
+      {
+        "name": "scope_accuracy",
+        "weight": 0.24,
+        "min_pass": 0.7,
+        "description": "Does applies_to bound the claim correctly, neither broader than the evidence supports nor narrower than the lesson holds? For a version_independent scope, judge whether it is TRUE that the lesson holds regardless of version."
+      },
+      {
+        "name": "generality",
+        "weight": 0.14,
+        "min_pass": 0.6,
+        "description": "Is this a transferable lesson another project could act on, rather than a description of one session's work or a pattern specific to one codebase restated as a general rule?"
+      },
+      {
+        "name": "disclosure",
+        "weight": 0.3,
+        "min_pass": 0.9,
+        "description": "A leak check, scored 1.0 when nothing leaks. Score low only if the text leaks a credential, internal hostname, customer or person name, or proprietary detail, or advocates a harmful practice. Missing caveats, limitations or alternatives are NOT a disclosure failure; score those under grounding or scope_accuracy."
+      }
+    ],
+    "score_threshold": 0.75,
+    "judge_types": ["standard", "adversarial"],
+    "gate_policy": "majority"
+  },
+  "candidates": [
+    {
+      "artifact_id": "01KT9KVJS8BWFB4QWS9082YG3T",
+      "lesson_id": "01M5K88E0J35EK3GZQ2ARW2T8C",
+      "transform_outcome": "proposed:01M5K88E0J35EK3GZQ2ARW2T8C:unscoped",
+      "parked": true,
+      "detail_length": 3281,
+      "judged_scope_kind": null,
+      "confirm_outcome": "skipped:no_justification",
+      "refusal_reason": "The rationale asserts specific performance characteristics (~50ms/chunk, <3s overhead) that depend on the ollama version, embedding model, and Python library versions in the stack, which vary across releases.",
+      "candidate": {
+        "claim": "A two-stage embedding pipeline — indexing chunks with vectors at SessionEnd and embedding the prompt at UserPromptSubmit for retrieval — produces a working recall system over unordered session records with acceptable performance overhead.",
+        "rationale": "The historian plugin shipped a complete implementation with ollama embeddings computed during SessionEnd indexing (~50ms/chunk, <3s overhead for 50-chunk transcripts) and UserPromptSubmit retrieval by embedding the prompt and ranking chunks via cosine similarity. Tests validate both stages; chunks without embeddings skip silently without schema migration. Schema validation caught early implementation mistakes (misnamed event types).",
+        "evidence": {
+          "resolution": "Shipped historian-embedder.sh (ollama HTTP client), historian-retriever.sh (cosine similarity search in Python), historian-session-end.sh (embed chunks during indexing), and historian-prompt-submit.sh (embed prompt and search), plus retrieval-state storage for rate-gating. Suite: 22 historian bats, schema validation, and full CI pipeline all pass.",
+          "artifact_ids": ["01KT9KVJS8BWFB4QWS9082YG3T"],
+          "session_ids": ["unknown"],
+          "project_key": "ee2cfbe428c7",
+          "observed_at": "2026-06-04T15:26:01Z"
+        },
+        "applies_to": {
+          "stack": ["ollama", "python", "bash"],
+          "scope": {
+            "kind": "unscoped"
+          },
+          "file_patterns": [],
+          "task_kinds": []
+        }
+      },
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01KT9H73N8TYTYGGS3BRK2Y15J",
+      "lesson_id": "01M5K89KN2233DN6XH6CAMKM3V",
+      "transform_outcome": "proposed:01M5K89KN2233DN6XH6CAMKM3V:unscoped",
+      "parked": true,
+      "detail_length": 2455,
+      "judged_scope_kind": null,
+      "confirm_outcome": "skipped:no_justification",
+      "refusal_reason": "The lesson's claim is grounded in historian's specific implementation pattern (character-based chunking, three redaction layers, truncate-then-append design), which could change in a future version without affecting the validity of alternative approaches to safe, idempotent transcript indexing.",
+      "candidate": {
+        "claim": "Character-based chunking with preserved turn boundaries and multiple redaction layers enables safe, idempotent transcript indexing at SessionEnd.",
+        "rationale": "The historian plugin successfully implements SessionEnd indexing using character-based chunking that never splits mid-turn, applies three redaction layers (secret patterns, skip markers, denied paths), and achieves idempotency through truncate-then-append design, verified by 9 test cases covering secret redaction, chunk drops, tool-block filtering, and re-run safety.",
+        "evidence": {
+          "resolution": "Implemented historian plugin with historian-chunker.sh (character chunking), historian-sanitizer.sh (three redaction layers), and historian-session-end.sh (idempotent truncate-then-append pipeline); all checks pass: shellcheck + bats + schema + biome + markdownlint + lint:manifests",
+          "artifact_ids": ["01KT9H73N8TYTYGGS3BRK2Y15J"],
+          "session_ids": ["unknown"],
+          "project_key": "ee2cfbe428c7",
+          "observed_at": "2026-06-04T14:39:53Z"
+        },
+        "applies_to": {
+          "stack": ["historian"],
+          "scope": {
+            "kind": "unscoped"
+          },
+          "file_patterns": [],
+          "task_kinds": []
+        }
+      },
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M1J9JVK0BWPH4RQD8K8H3E9D",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_versions",
+      "parked": false,
+      "detail_length": 2083,
+      "judged_scope_kind": null,
+      "confirm_outcome": null,
+      "refusal_reason": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M4YSXNDGW8D4KSKXTRVEQF7C",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_versions",
+      "parked": false,
+      "detail_length": 1896,
+      "judged_scope_kind": null,
+      "confirm_outcome": null,
+      "refusal_reason": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M3AX0YM8GY9TXKV045NK8V7G",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_versions",
+      "parked": false,
+      "detail_length": 1775,
+      "judged_scope_kind": null,
+      "confirm_outcome": null,
+      "refusal_reason": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M1D7K0S03X63K3GQTSFR8517",
+      "lesson_id": "01M5K8CVR05QQQKWEJ3M5M4DS4",
+      "transform_outcome": "proposed:01M5K8CVR05QQQKWEJ3M5M4DS4:unscoped",
+      "parked": true,
+      "detail_length": 1653,
+      "judged_scope_kind": "version_independent",
+      "confirm_outcome": "confirmed:01M5K8CVR05QQQKWEJ3M5M4DS4",
+      "refusal_reason": null,
+      "candidate": {
+        "claim": "Concurrent hooks that independently read-decide-write against a shared baseline can duplicate records; protect the entire decision cycle with file-level locking, not just the final write step",
+        "rationale": "When multiple processes independently read a baseline state, decide whether to update it, and write, each can see the same baseline and decide the change is new, causing duplicates. Full-cycle locking from initial read through final write ensures only the first process to acquire the lock performs the decision; temp-file-plus-rename prevents intermediate zero-byte states that lose history if builds fail.",
+        "evidence": {
+          "resolution": "The baseline read → decide → rebuild cycle now runs under a lock held from initial read through final write; baseline writes moved from truncating redirects to temp-file-plus-rename to prevent failed builds from leaving zero-byte files that reseed and lose changes.",
+          "artifact_ids": ["01M1D7K0S03X63K3GQTSFR8517"],
+          "session_ids": ["unknown"],
+          "project_key": "ee2cfbe428c7",
+          "observed_at": "2026-09-01T00:58:28Z"
+        },
+        "applies_to": {
+          "stack": ["bash"],
+          "scope": {
+            "kind": "version_independent",
+            "justification": "Concurrent read-decide-write race conditions and their file-level locking solution rely on stable OS-level mechanisms (flock, atomic rename) that are consistent across all bash versions."
+          },
+          "file_patterns": [],
+          "task_kinds": []
+        }
+      },
+      "verdicts": [
+        {
+          "score": 0.85,
+          "passed": true,
+          "judge_type": "standard",
+          "feedback_summary": "Claim is well-grounded: rationale and resolution both support full-cycle locking for concurrent read-decide-write races. Version-independence claim is accurate for POSIX systems with stable OS mechanisms. Highly generalizable to any concurrent read-decide-write pattern. No disclosure issues.",
+          "criterion_scores": {
+            "grounding": 0.78,
+            "scope_accuracy": 0.77,
+            "generality": 0.82,
+            "disclosure": 1.0
+          }
+        },
+        {
+          "score": 0.88,
+          "passed": true,
+          "judge_type": "adversarial",
+          "criterion_scores": {
+            "grounding": 0.85,
+            "scope_accuracy": 0.8,
+            "generality": 0.8,
+            "disclosure": 1.0
+          },
+          "feedback_summary": "The lesson correctly identifies a concurrent read-decide-write race condition pattern and its solution via full-cycle file-level locking plus atomic writes. The claim is well-grounded in the provided rationale: each independent process sees the same baseline state and decides the change is new, causing duplicates; holding a lock from initial read through final write prevents this. The resolution confirms the fix: lock-protected read→decide→rebuild cycle and temp-file-plus-rename to prevent zero-byte states. Scope claim of bash version-independence is accurate—flock and atomic rename are stable OS-level mechanisms. Empty file_patterns and task_kinds are appropriate for a general lesson. The lesson is transferable: any concurrent system with read-decide-write cycles against shared state could apply it. No credentials, hostnames, names, or proprietary details exposed. All minimum pass thresholds exceeded."
+        }
+      ],
+      "aggregate": 0.8626,
+      "gate": {
+        "passed": true,
+        "reason": "gate_passed"
+      }
+    },
+    {
+      "artifact_id": "01M1W2Z0YRNXWN6VJCRR8NNBM3",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_versions",
+      "parked": false,
+      "detail_length": 1594,
+      "judged_scope_kind": null,
+      "confirm_outcome": null,
+      "refusal_reason": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M1W212YGNY5Z4V44BC52QB46",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_versions",
+      "parked": false,
+      "detail_length": 1488,
+      "judged_scope_kind": null,
+      "confirm_outcome": null,
+      "refusal_reason": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M3075VV8QFMDFGFFDF73J979",
+      "lesson_id": "01M5K8JZ8E0RCNQA625M44APS9",
+      "transform_outcome": "proposed:01M5K8JZ8E0RCNQA625M44APS9:unscoped",
+      "parked": true,
+      "detail_length": 1392,
+      "judged_scope_kind": "version_independent",
+      "confirm_outcome": "confirmed:01M5K8JZ8E0RCNQA625M44APS9",
+      "refusal_reason": null,
+      "candidate": {
+        "claim": "Concurrent test agents writing to a shared emissions log produce false coverage regressions; run IDs and completion sentinels prevent this.",
+        "rationale": "Two overlapping test runs interleave writes to the shared report, leaving ambiguous counts. The fix stamps each emission with a run ID and writes a completion sentinel only after the suite finishes. The coverage gate then rejects records from incomplete or ambiguous runs, reporting accurately instead of falsely flagging all unmatched types as never-emitted.",
+        "evidence": {
+          "resolution": "Stamp each emission with a run ID, write complete.json only after bats finishes, require the sentinel in the gate and suppress coverage checks for incomplete runs.",
+          "artifact_ids": ["01M3075VV8QFMDFGFFDF73J979"],
+          "session_ids": [],
+          "project_key": "ee2cfbe428c7",
+          "observed_at": "2026-09-20T20:12:33Z"
+        },
+        "applies_to": {
+          "stack": ["bats"],
+          "scope": {
+            "kind": "version_independent",
+            "justification": "Concurrent writes to a shared log are a version-independent filesystem problem; detecting incomplete runs via sentinels and excluding them from coverage checks prevents false regressions regardless of bats version."
+          },
+          "file_patterns": [],
+          "task_kinds": []
+        }
+      },
+      "verdicts": [
+        {
+          "score": 0.85,
+          "passed": true,
+          "judge_type": "standard",
+          "feedback_summary": "The lesson is well-grounded in a sound principle: run IDs and completion sentinels are appropriate mechanisms for handling concurrent writes to shared logs. Version-independence claim is justified—the principle holds regardless of bats version. The solution is concrete and generalizable, with no disclosure issues. Minor weakness: the scope justification frames this as a filesystem problem when it's really about concurrent process coordination.",
+          "criterion_scores": {
+            "grounding": 0.83,
+            "scope_accuracy": 0.74,
+            "generality": 0.77,
+            "disclosure": 1.0
+          }
+        },
+        {
+          "score": 0.81,
+          "passed": true,
+          "judge_type": "adversarial",
+          "criteria_evaluated": ["grounding", "scope_accuracy", "generality", "disclosure"],
+          "criterion_scores": {
+            "grounding": 0.75,
+            "scope_accuracy": 0.72,
+            "generality": 0.7,
+            "disclosure": 1.0
+          },
+          "feedback_summary": "Claim is well-grounded: the concurrent writes problem and sentinel-based solution are clearly explained, with a specified mechanism for how gate-side checking prevents false regressions. The rationale and resolution align; however, the claim frames sentinels as the primary prevention mechanism when the actual fix requires both emission-side (run IDs, sentinel files) and gate-side (require sentinel, suppress incomplete runs) changes—the resolution specifies both, but the claim could highlight that dual responsibility. Version-independence claim is defensible for a filesystem-level concurrent-write problem; the sentinel mechanism itself is bats-version-independent, though gate implementation would need updating. The lesson generalizes reasonably to other projects with concurrent test infrastructure writing to shared logs, though specific implementation details (complete.json filename, gate architecture pattern) are somewhat framework-tied. No sensitive information, no harmful practices; disclosure criterion fully met."
+        }
+      ],
+      "aggregate": 0.8309,
+      "gate": {
+        "passed": true,
+        "reason": "gate_passed"
+      }
+    },
+    {
+      "artifact_id": "01KZXP7PJ89X6BYV7TWY1RH7CA",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_resolution",
+      "parked": false,
+      "detail_length": 1325,
+      "judged_scope_kind": null,
+      "confirm_outcome": null,
+      "refusal_reason": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M43TNRJGHH0C3DN6NZJJGJZW",
+      "lesson_id": "01M5K8RZKN398GFN301FDDW64N",
+      "transform_outcome": "proposed:01M5K8RZKN398GFN301FDDW64N",
+      "parked": false,
+      "detail_length": 1258,
+      "judged_scope_kind": "versioned",
+      "confirm_outcome": null,
+      "refusal_reason": null,
+      "candidate": {
+        "claim": "Query truncation becomes observable when the historian plugin reports the actual embedded query length alongside the original prompt length.",
+        "rationale": "Silent truncation occurred because truncated and complete queries appeared identical in events. Adding an embed_chars field to retrieval.started events, reported only when truncation occurs (embed_chars < prompt_chars), makes truncation visible from a single event without requiring external configuration knowledge.",
+        "evidence": {
+          "resolution": "Added embed_chars field to historian's retrieval.started event payload, reported alongside prompt_chars, present only when embed_chars < prompt_chars indicates truncation. Requires @onlooker-community/schema >=2.26.0 where the field was defined.",
+          "artifact_ids": ["01M43TNRJGHH0C3DN6NZJJGJZW"],
+          "session_ids": [],
+          "project_key": "ee2cfbe428c7",
+          "observed_at": "2026-10-04T16:06:42Z"
+        },
+        "applies_to": {
+          "stack": ["@onlooker-community/schema"],
+          "scope": {
+            "kind": "versioned",
+            "versions": {
+              "@onlooker-community/schema": ">=2.26.0"
+            }
+          },
+          "file_patterns": [],
+          "task_kinds": []
+        }
+      },
+      "verdicts": [
+        {
+          "score": 0.87,
+          "passed": true,
+          "judge_type": "standard",
+          "feedback_summary": "Claim is well-grounded: the rationale clearly motivates why reporting embed_chars alongside prompt_chars solves silent truncation, and the resolution directly implements it. Scope is correctly version-dependent to @onlooker-community/schema >=2.26.0 (the version that defined the field). Generality is moderate—the principle of dual-reporting to expose silent failures is transferable, but the lesson is fairly specific to embedding truncation. No disclosure issues.",
+          "criterion_scores": {
+            "grounding": 0.85,
+            "scope_accuracy": 0.85,
+            "generality": 0.7,
+            "disclosure": 1.0
+          }
+        },
+        {
+          "score": 0.76,
+          "passed": false,
+          "judge_type": "adversarial",
+          "feedback_summary": "Critical scope contradiction: The model asserted this lesson holds 'regardless of version', but the candidate's own applies_to explicitly scopes it as versioned with @onlooker-community/schema >=2.26.0. The resolution statement 'Requires @onlooker-community/schema >=2.26.0 where the field was defined' confirms the lesson is version-dependent, not version-independent. Grounding is sound (the claim that adding embed_chars makes truncation observable follows logically from the stated rationale and solution). Generality is adequate (the pattern—comparing original length to embedded length to detect truncation—is transferable). Disclosure is clean. But the scope_accuracy failure on the version-independence assertion is determinative: the candidate contradicts the model's claim at its core, and the version constraint is non-negotiable evidence that truncation observability via this mechanism does not hold in schema versions before 2.26.0.",
+          "criterion_scores": {
+            "grounding": 0.75,
+            "scope_accuracy": 0.5,
+            "generality": 0.7,
+            "disclosure": 1.0
+          }
+        }
+      ],
+      "aggregate": 0.8160000000000001,
+      "gate": {
+        "passed": false,
+        "reason": "jury_not_majority",
+        "failed_criterion": "scope_accuracy"
+      }
+    },
+    {
+      "artifact_id": "01M4M8S500EYJF9B3DSYX48FQQ",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_versions",
+      "parked": false,
+      "detail_length": 1203,
+      "judged_scope_kind": null,
+      "confirm_outcome": null,
+      "refusal_reason": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M1D7K0S01FXA1B47DRG1MDGG",
+      "lesson_id": "01M5K8WTJK73GV8HWS0MDY1HQZ",
+      "transform_outcome": "proposed:01M5K8WTJK73GV8HWS0MDY1HQZ:unscoped",
+      "parked": true,
+      "detail_length": 1128,
+      "judged_scope_kind": null,
+      "confirm_outcome": "skipped:no_justification",
+      "refusal_reason": "Other standard remedies exist (Bash checking prior operation type, Edit/Write/MultiEdit updating the baseline directly), and the rationale assumes implementation details—Edit/Write/MultiEdit skipping baseline, Bash using sha comparison—that may differ across versions.",
+      "candidate": {
+        "claim": "Advancing the lineage baseline's file content sha after Edit/Write/MultiEdit prevents subsequent Bash calls from duplicating the record as a shell_edit.",
+        "rationale": "Edit/Write/MultiEdit operations recorded their own change but did not advance the Bash rolling baseline. Subsequent Bash calls compared the file's current content sha against this stale baseline, saw a mismatch, and incorrectly recorded the file as a shell_edit. Updating the baseline immediately after Edit/Write/MultiEdit records a change prevents this false duplicate by ensuring the next Bash call sees a matching sha.",
+        "evidence": {
+          "resolution": "After a successful lineage_append on the Edit/Write/MultiEdit path, update that file's entry in the same baseline JSON to its new content sha — but only when a baseline file already exists for the session.",
+          "artifact_ids": ["01M1D7K0S01FXA1B47DRG1MDGG"],
+          "session_ids": ["unknown"],
+          "project_key": "ee2cfbe428c7",
+          "observed_at": "2026-09-01T00:58:28Z"
+        },
+        "applies_to": {
+          "stack": ["lineage", "Bash"],
+          "scope": {
+            "kind": "unscoped"
+          },
+          "file_patterns": [],
+          "task_kinds": []
+        }
+      },
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M00E8P40C2MP244WN9Y8S9JH",
+      "lesson_id": "01M5K8YM8Z1S446ZQ56Y89FZ06",
+      "transform_outcome": "proposed:01M5K8YM8Z1S446ZQ56Y89FZ06:unscoped",
+      "parked": true,
+      "detail_length": 1062,
+      "judged_scope_kind": null,
+      "confirm_outcome": "skipped:no_justification",
+      "refusal_reason": "The claim asserts one required remedy (librarian_lesson_write_atomic) when standard atomic-write patterns like temp-file-then-move exist independent of librarian version.",
+      "candidate": {
+        "claim": "Librarian lesson proposal writes must use atomic-write helper (librarian_lesson_write_atomic) to prevent zero-byte files on interruption",
+        "rationale": "librarian_lesson_judge used truncating write (`printf '%s\\n' > file`), which leaves zero-byte proposal files on interrupt. The same pattern was fixed in three other librarian lesson modules (confirm, unconfirm, pass) by routing writes through librarian_lesson_write_atomic.",
+        "evidence": {
+          "resolution": "Route the final write through librarian_lesson_write_atomic instead of direct truncation with `printf > file`, matching the fix already applied in librarian_lesson_confirm, librarian_lesson_unconfirm, and librarian_lesson_pass",
+          "artifact_ids": ["01M00E8P40C2MP244WN9Y8S9JH"],
+          "session_ids": ["unknown"],
+          "project_key": "ee2cfbe428c7",
+          "observed_at": "2026-08-14T15:29:20Z"
+        },
+        "applies_to": {
+          "stack": ["bash", "librarian"],
+          "scope": {
+            "kind": "unscoped"
+          },
+          "file_patterns": [],
+          "task_kinds": []
+        }
+      },
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01KVY10PWRPKW46N4QBCPDXDTM",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_resolution",
+      "parked": false,
+      "detail_length": 997,
+      "judged_scope_kind": null,
+      "confirm_outcome": null,
+      "refusal_reason": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01KSC28GR00KHTPQ7THH4R88CJ",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_versions",
+      "parked": false,
+      "detail_length": 929,
+      "judged_scope_kind": null,
+      "confirm_outcome": null,
+      "refusal_reason": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M3GAVHJ0BQB5BSVM3N6ZS64R",
+      "lesson_id": "01M5K90NF6770RXWJR6N2AK1HT",
+      "transform_outcome": "proposed:01M5K90NF6770RXWJR6N2AK1HT:unscoped",
+      "parked": true,
+      "detail_length": 871,
+      "judged_scope_kind": null,
+      "confirm_outcome": "skipped:no_justification",
+      "refusal_reason": "The rationale depends on librarian_lesson_promote's current error-handling pattern, which is version-specific and could change, breaking the \"mirror\" claim in the resolution.",
+      "candidate": {
+        "claim": "Warn on stderr instead of silently suppressing errors when an audit operation fails after an irreversible step, distinguishing error types for diagnostics.",
+        "rationale": "Veto had two failure modes in the declined-ledger write that produced no diagnostic: empty artifact_id skipped the append silently, and real failures were caught with || true. Keeping veto's exit code 0 (to preserve the semantic that the lesson can't be promoted) while warning on stderr mirrors the pattern in librarian_lesson_promote and surfaces audit-trail gaps for investigation.",
+        "evidence": {
+          "resolution": "Keep exit code 0 once the held file is gone, but warn on stderr distinguishing unresolvable artifact_id from failed append, mirroring librarian_lesson_promote's error handling after its own irreversible step.",
+          "artifact_ids": ["01M3GAVHJ0BQB5BSVM3N6ZS64R"],
+          "session_ids": [],
+          "project_key": "ee2cfbe428c7",
+          "observed_at": "2026-09-27T02:24:40Z"
+        },
+        "applies_to": {
+          "stack": ["librarian"],
+          "scope": {
+            "kind": "unscoped"
+          },
+          "file_patterns": [],
+          "task_kinds": []
+        }
+      },
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01KSGBXRGR2C5ZZTPE1V3VA2GX",
+      "lesson_id": "01M5K91M54616HY86B52RQFJRJ",
+      "transform_outcome": "proposed:01M5K91M54616HY86B52RQFJRJ:unscoped",
+      "parked": true,
+      "detail_length": 841,
+      "judged_scope_kind": null,
+      "confirm_outcome": "skipped:no_justification",
+      "refusal_reason": "The lesson prescribes specific tribunal implementation details—particular function signatures, tribunal_init_iteration calls, and artifact structure—that will become incorrect if tribunal changes its API, initialization pattern, or output format.",
+      "candidate": {
+        "claim": "Adding explicit function signatures, initialization calls, and artifact checklists to skill instructions resolves incomplete artifacts in retry iterations.",
+        "rationale": "Vague shorthand in skill instructions caused inconsistent LLM interpretation across retry iterations, producing stubs instead of verbatim output, missing verdicts/ directories, and missing jury.json manifests. Making signatures explicit and adding ceremony (tribunal_init_iteration calls, end-of-iteration checklists) provided unambiguous direction that the LLM consistently interpreted.",
+        "evidence": {
+          "resolution": "Added explicit tribunal_init_iteration calls at iteration start, showed full 5-argument signatures for tribunal_write_actor_output and tribunal_write_judge_verdict, added emphasis that actor output must be verbatim, and added end-of-iteration artifact checklist before aggregation.",
+          "artifact_ids": ["01KSGBXRGR2C5ZZTPE1V3VA2GX"],
+          "session_ids": ["unknown"],
+          "project_key": "ee2cfbe428c7",
+          "observed_at": "2026-05-25T20:06:23Z"
+        },
+        "applies_to": {
+          "stack": ["tribunal"],
+          "scope": {
+            "kind": "unscoped"
+          },
+          "file_patterns": [],
+          "task_kinds": []
+        }
+      },
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01KZYBHVNGBXN8B3PC1YE9T5WH",
+      "lesson_id": "01M5K933EM105K33V94DYMXVQ1",
+      "transform_outcome": "proposed:01M5K933EM105K33V94DYMXVQ1:unscoped",
+      "parked": true,
+      "detail_length": 793,
+      "judged_scope_kind": null,
+      "confirm_outcome": "skipped:no_justification",
+      "refusal_reason": "This lesson depends on ZLesson's schema definition (the absence of artifact_id), which is not a version-independent guarantee—a future librarian release could add artifact_id to the strict key set, making the approved/ branch reachable and the lesson false.",
+      "candidate": {
+        "claim": "A comment flagged the unreachable dedup branch where ZLesson's strict key set lacks the artifact_id field needed for matching.",
+        "rationale": "The librarian_lesson_seen dedup loop checks .artifact_id on both proposals/*.json and approved/*.json, but because ZLesson has no artifact_id field, the approved/ half cannot match. Documenting this prevents future developers from removing the apparently-redundant proposals/ check when pruning aged artifacts.",
+        "evidence": {
+          "resolution": "A comment flagged the unreachable approved-branch scan; ecosystem-d0m tracks the design decision on which branch to keep",
+          "artifact_ids": ["01KZYBHVNGBXN8B3PC1YE9T5WH"],
+          "session_ids": ["unknown"],
+          "project_key": "ee2cfbe428c7",
+          "observed_at": "2026-08-13T20:03:26Z"
+        },
+        "applies_to": {
+          "stack": ["librarian"],
+          "scope": {
+            "kind": "unscoped"
+          },
+          "file_patterns": [],
+          "task_kinds": []
+        }
+      },
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01KZRVRPS84F66RXD9KWZX2PT8",
+      "lesson_id": "01M5K94B2Z19A2CTQT4GQCZ0DG",
+      "transform_outcome": "proposed:01M5K94B2Z19A2CTQT4GQCZ0DG:unscoped",
+      "parked": true,
+      "detail_length": 735,
+      "judged_scope_kind": null,
+      "confirm_outcome": "skipped:no_justification",
+      "refusal_reason": "The lesson anchors on a version-specific librarian semantic (\"private refuses version_independent scope\") to assert that snapshot restoration is the *only* mechanism, but that behavior could change between versions, breaking the uniqueness claim.",
+      "candidate": {
+        "claim": "Tests named for multi-step user stories must implement those exact sequences; simpler variants that pass do not validate the intended mechanisms.",
+        "rationale": "The test named 'after unconfirm a fresh confirm at a different visibility succeeds' was supposed to test the full story but only used plain confirm, which bypassed snapshot restoration. The test passed even when snapshot was disabled, proving it was not exercising the claimed mechanism. Adding the composite sequence (confirm public with justification, unconfirm, confirm private) forces the test to exercise snapshot restoration, the only mechanism enabling private confirm after unconfirm.",
+        "evidence": {
+          "resolution": "Added composite test: confirm public with justification, unconfirm, then confirm private. Snapshot restoration is the only mechanism that makes this sequence work, as private refuses version_independent scope.",
+          "artifact_ids": ["01KZRVRPS84F66RXD9KWZX2PT8"],
+          "session_ids": ["unknown"],
+          "project_key": "ee2cfbe428c7",
+          "observed_at": "2026-08-11T16:51:21Z"
+        },
+        "applies_to": {
+          "stack": ["bats", "librarian"],
+          "scope": {
+            "kind": "unscoped"
+          },
+          "file_patterns": [],
+          "task_kinds": []
+        }
+      },
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01KSASC4JRKFZYVZMD0TDH93Z5",
+      "lesson_id": "01M5K95ECF2ED21CEG333TY826",
+      "transform_outcome": "proposed:01M5K95ECF2ED21CEG333TY826:unscoped",
+      "parked": true,
+      "detail_length": 667,
+      "judged_scope_kind": null,
+      "confirm_outcome": "skipped:no_justification",
+      "refusal_reason": "The resolution asserts one isolation approach when other standard remedies like disabling commit signing also prevent the described signing failures.",
+      "candidate": {
+        "claim": "Unsetting XDG_CONFIG_HOME and pointing GIT_CONFIG_GLOBAL and GIT_CONFIG_SYSTEM to /dev/null isolates bats tests from the developer's global git config.",
+        "rationale": "setup_test_env() reassigns HOME to isolate most config, but XDG_CONFIG_HOME is exported by the parent shell and unaffected by HOME reassignment. When SSH commit signing exists in global git config, bats tests that drive git commands fail trying to sign with a key path that resolves to the test environment's empty home. Unsetting the environment variable and redirecting the config paths prevents git from reading global/system config that would otherwise leak into tests.",
+        "evidence": {
+          "resolution": "unset XDG_CONFIG_HOME and point GIT_CONFIG_GLOBAL + GIT_CONFIG_SYSTEM at /dev/null",
+          "artifact_ids": ["01KSASC4JRKFZYVZMD0TDH93Z5"],
+          "session_ids": ["unknown"],
+          "project_key": "ee2cfbe428c7",
+          "observed_at": "2026-05-23T16:05:59Z"
+        },
+        "applies_to": {
+          "stack": ["bats", "git"],
+          "scope": {
+            "kind": "unscoped"
+          },
+          "file_patterns": [],
+          "task_kinds": []
+        }
+      },
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01KT34HKNRPJ0SK6KS2F9A0HM8",
+      "lesson_id": "01M5K98V3H7ZBRNAKV6HVZS7YB",
+      "transform_outcome": "proposed:01M5K98V3H7ZBRNAKV6HVZS7YB:unscoped",
+      "parked": true,
+      "detail_length": 610,
+      "judged_scope_kind": "version_independent",
+      "confirm_outcome": "confirmed:01M5K98V3H7ZBRNAKV6HVZS7YB",
+      "refusal_reason": null,
+      "candidate": {
+        "claim": "jq -r produces pretty-printed output across multiple lines, breaking downstream JSONL consumers; adding the -c flag ensures compact one-line-per-object output.",
+        "rationale": "counsel_count_events and counsel_sources_from_events failed to parse multi-line output from counsel_read_events. Changing jq -r to jq -rc fixed both functions by ensuring each JSON object occupies exactly one line, verified by two end-to-end bats tests piping the output through the downstream consumers.",
+        "evidence": {
+          "resolution": "Changed jq -r to jq -rc in counsel_read_events function. Locked the invariant with end-to-end bats tests piping counsel_read_events output directly into counsel_count_events and counsel_sources_from_events.",
+          "artifact_ids": ["01KT34HKNRPJ0SK6KS2F9A0HM8"],
+          "session_ids": ["unknown"],
+          "project_key": "ee2cfbe428c7",
+          "observed_at": "2026-06-02T03:02:59Z"
+        },
+        "applies_to": {
+          "stack": ["jq"],
+          "scope": {
+            "kind": "version_independent",
+            "justification": "The -c flag is a version-independent jq feature that ensures compact output; pretty-printing without -c is consistent across all jq releases, making this lesson version-invariant."
+          },
+          "file_patterns": [],
+          "task_kinds": []
+        }
+      },
+      "verdicts": [
+        {
+          "score": 0.869,
+          "passed": true,
+          "judge_type": "standard",
+          "feedback_summary": "Well-grounded claim correctly traced from problem (multi-line jq output) through fix (jq -rc) to verified resolution. Version-independent scope is accurate—the -c flag is stable across all jq releases. Generalizable to any jq-for-JSONL context, though narrowly focused on a single flag pattern. No disclosure issues.",
+          "criterion_scores": {
+            "grounding": 0.85,
+            "scope_accuracy": 0.8,
+            "generality": 0.75,
+            "disclosure": 1.0
+          }
+        },
+        {
+          "score": 0.78,
+          "passed": false,
+          "judge_type": "adversarial",
+          "feedback_summary": "Grounding failure: The claim 'jq -r produces pretty-printed output' is inaccurate. By default, jq outputs compact JSON regardless of the -r flag; pretty-printing is not a property of jq -r itself. While the fix (adding -c) is correct and tests verify it works, the lesson misattributes the cause of multiline output—whether it came from pretty-printed input, multiple filter outputs, or newlines within string values is never explained. This gap weakens scope_accuracy: the version-independence claim is reasonable (the -c flag has existed across all modern jq versions since 2013), but without identifying the root cause, it is unclear whether the lesson applies universally or only to specific input patterns. The generality of the JSONL-processing lesson itself remains sound.",
+          "criterion_scores": {
+            "grounding": 0.65,
+            "scope_accuracy": 0.68,
+            "generality": 0.78,
+            "disclosure": 1.0
+          }
+        }
+      ],
+      "aggregate": 0.8247,
+      "gate": {
+        "passed": false,
+        "reason": "jury_not_majority",
+        "failed_criterion": "grounding"
+      }
+    },
+    {
+      "artifact_id": "01KZYBHVNGG2XW731BN5ZTX32E",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_resolution",
+      "parked": false,
+      "detail_length": 554,
+      "judged_scope_kind": null,
+      "confirm_outcome": null,
+      "refusal_reason": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01KSASCK7GR8A8019XA6QAYF8M",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_resolution",
+      "parked": false,
+      "detail_length": 488,
+      "judged_scope_kind": null,
+      "confirm_outcome": null,
+      "refusal_reason": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M2M29J2GBWN0X5W9VC3MZK1E",
+      "lesson_id": "01M5K9FYZV000SVVH65AHP797K",
+      "transform_outcome": "proposed:01M5K9FYZV000SVVH65AHP797K:unscoped",
+      "parked": true,
+      "detail_length": 406,
+      "judged_scope_kind": "version_independent",
+      "confirm_outcome": "confirmed:01M5K9FYZV000SVVH65AHP797K",
+      "refusal_reason": null,
+      "candidate": {
+        "claim": "A watch-unmatched scanner implementing file pattern matching can be built by mirroring an existing matcher, correctly handling zero-matches, untracked files, and non-repo contexts.",
+        "rationale": "The _onlooker_watch_scan_files function implementation demonstrates this approach by mirroring the matcher logic from echo-stop-gate.sh and passing comprehensive tests that confirm correct pattern matching, zero-match reporting, untracked file exclusion, and non-repo safety.",
+        "evidence": {
+          "resolution": "Implementation of the _onlooker_watch_scan_files function and test suite; tests validate patterns correctly match tracked files, zero-matches are reported, untracked files are ignored, and the scanner safely handles non-repo roots.",
+          "artifact_ids": ["01M2M29J2GBWN0X5W9VC3MZK1E"],
+          "session_ids": ["unknown"],
+          "project_key": "ee2cfbe428c7",
+          "observed_at": "2026-09-16T02:56:18Z"
+        },
+        "applies_to": {
+          "stack": ["bash"],
+          "scope": {
+            "kind": "version_independent",
+            "justification": "This lesson holds because mirroring file-pattern matching logic in bash to implement a scanner is a version-independent approach that works consistently across all supported bash versions."
+          },
+          "file_patterns": [],
+          "task_kinds": []
+        }
+      },
+      "verdicts": [
+        {
+          "score": 0.825,
+          "passed": true,
+          "judge_type": "standard",
+          "feedback_summary": "Lesson is well-grounded with clear alignment between claim, rationale, and resolution; all key points (zero-matches, untracked files, non-repo safety) are directly supported by test evidence. Version-independence claim is plausible for bash file-pattern matching but lacks explicit cross-version testing evidence to fully support the assertion. Pattern is appropriately scoped to bash and generalizable to other projects adopting similar mirroring strategies.",
+          "criterion_scores": {
+            "grounding": 0.79,
+            "scope_accuracy": 0.71,
+            "generality": 0.73,
+            "disclosure": 1.0
+          }
+        },
+        {
+          "score": 0.65,
+          "passed": false,
+          "judge_type": "adversarial",
+          "feedback_summary": "Two named gaps prevent passage. (1) Scope_accuracy: The version_independent claim lacks substantiation. The candidate asserts the approach 'works consistently across all supported bash versions' but provides no evidence—no discussion of version-specific bash features (arrays, string expansion, arithmetic), no mention of testing on multiple versions (bash 3.2, 4.x, 5.x), no detail on what 'supported' means. Without this, version_independent is unverified. (2) Generality: The lesson reads as a specific implementation report rather than a transferable principle. The resolution names _onlooker_watch_scan_files and references echo-stop-gate.sh, grounding the lesson in one ecosystem's code. The claim ('can be built by mirroring') is stated generically, but the rationale and resolution provide only the artifact (tests pass), not the principle (why mirroring works, what properties make it safe, how to identify what to mirror elsewhere). Another project cannot act on 'mirror an existing matcher' without knowing the Onlooker ecosystem or seeing the named source. Grounding is adequate (claim follows from resolution), and disclosure is clean (no leaks), but floor failures on scope_accuracy and generality block promotion.",
+          "criterion_scores": {
+            "grounding": 0.7,
+            "scope_accuracy": 0.5,
+            "generality": 0.5,
+            "disclosure": 1.0
+          }
+        }
+      ],
+      "aggregate": 0.7697,
+      "gate": {
+        "passed": false,
+        "reason": "jury_not_majority",
+        "failed_criterion": "scope_accuracy"
+      }
+    },
+    {
+      "artifact_id": "01KSG4XGQRT2YBC86D5P0GNM5V",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_resolution",
+      "parked": false,
+      "detail_length": 364,
+      "judged_scope_kind": null,
+      "confirm_outcome": null,
+      "refusal_reason": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M2XTB91A5FXZSJNK74220NG0",
+      "lesson_id": "01M5K9P3HH42634EA37PV4J4FY",
+      "transform_outcome": "proposed:01M5K9P3HH42634EA37PV4J4FY",
+      "parked": false,
+      "detail_length": 294,
+      "judged_scope_kind": "versioned",
+      "confirm_outcome": null,
+      "refusal_reason": null,
+      "candidate": {
+        "claim": "Archivist 0.7.3 resolves a severe performance regression present in 0.7.1",
+        "rationale": "Hook-health measurements with the plugin_version field show Archivist 0.7.3 at 235–524 ms (success) versus 0.7.1 at 25,412–25,778 ms (terminated), a ~100× improvement",
+        "evidence": {
+          "resolution": "Archivist 0.7.3 fix deployed",
+          "artifact_ids": ["01M2XTB91A5FXZSJNK74220NG0"],
+          "session_ids": ["dcc3253b-1340-4e52-b17f-8caf3a29c991"],
+          "project_key": "ee2cfbe428c7",
+          "observed_at": "2026-09-19T21:49:49Z"
+        },
+        "applies_to": {
+          "stack": ["archivist"],
+          "scope": {
+            "kind": "versioned",
+            "versions": {
+              "archivist": ">=0.7.3"
+            }
+          },
+          "file_patterns": [],
+          "task_kinds": []
+        }
+      },
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M08MNN802S2092FYPMP76PMW",
+      "lesson_id": "01M5K9V5673JVKXX4N7BEPSP3B",
+      "transform_outcome": "proposed:01M5K9V5673JVKXX4N7BEPSP3B:unscoped",
+      "parked": true,
+      "detail_length": 253,
+      "judged_scope_kind": null,
+      "confirm_outcome": "skipped:no_justification",
+      "refusal_reason": "GITHUB_TOKEN handles authentication to push, while git config --global sets commit authorship metadata—these solve different problems and both are required, so one does not replace the other.",
+      "candidate": {
+        "claim": "GITHUB_TOKEN with id-token:write permission can replace manual git config --global in GitHub Actions release workflows.",
+        "rationale": "The fix involved switching from manual git configuration to GITHUB_TOKEN with id-token:write, indicating this OIDC-based token provides sufficient authentication for release operations.",
+        "evidence": {
+          "resolution": "switch to GITHUB_TOKEN with id-token:write and drop git config --global",
+          "artifact_ids": ["01M08MNN802S2092FYPMP76PMW"],
+          "session_ids": ["unknown"],
+          "project_key": "ee2cfbe428c7",
+          "observed_at": "2026-08-17T19:55:12Z"
+        },
+        "applies_to": {
+          "stack": ["github-actions", "git"],
+          "scope": {
+            "kind": "unscoped"
+          },
+          "file_patterns": [],
+          "task_kinds": []
+        }
+      },
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01KS83XHR0B278A7BW1FHZ2S7J",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_resolution",
+      "parked": false,
+      "detail_length": 207,
+      "judged_scope_kind": null,
+      "confirm_outcome": null,
+      "refusal_reason": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M1J6T7N09E47FVQZNMCD2MER",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_resolution",
+      "parked": false,
+      "detail_length": 158,
+      "judged_scope_kind": null,
+      "confirm_outcome": null,
+      "refusal_reason": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M1SM368GJ3A9FQ0SRAE91WJK",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_resolution",
+      "parked": false,
+      "detail_length": 102,
+      "judged_scope_kind": null,
+      "confirm_outcome": null,
+      "refusal_reason": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M0376RB0J3A9FQ0SRAE91WJK",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_resolution",
+      "parked": false,
+      "detail_length": 102,
+      "judged_scope_kind": null,
+      "confirm_outcome": null,
+      "refusal_reason": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M4S74CBR6RCNNNW6Y6WZDQ1A",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_resolution",
+      "parked": false,
+      "detail_length": 91,
+      "judged_scope_kind": null,
+      "confirm_outcome": null,
+      "refusal_reason": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M307N448RH5V3WJ0SFQKA2W8",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_versions",
+      "parked": false,
+      "detail_length": 91,
+      "judged_scope_kind": null,
+      "confirm_outcome": null,
+      "refusal_reason": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01M1WG6130ZDSFEP1AQMQB581J",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_resolution",
+      "parked": false,
+      "detail_length": 91,
+      "judged_scope_kind": null,
+      "confirm_outcome": null,
+      "refusal_reason": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    },
+    {
+      "artifact_id": "01KS5WTYMGSXPJW4SY72GGCZKH",
+      "lesson_id": "",
+      "transform_outcome": "declined:no_resolution",
+      "parked": false,
+      "detail_length": 20,
+      "judged_scope_kind": null,
+      "confirm_outcome": null,
+      "refusal_reason": null,
+      "candidate": null,
+      "verdicts": [],
+      "aggregate": null,
+      "gate": null
+    }
+  ]
+}
