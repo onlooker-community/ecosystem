@@ -792,7 +792,19 @@ librarian_cli_lessons_reconsider() {
 			fi
 		fi
 		result=$(librarian_lesson_transform_one "$key" "$artifact" "$unscoped" "$forced")
-		printf '%s: %s\n' "$id" "$result"
+		case "$result" in
+			# skipped:seen means a proposal or another decline already records
+			# it, which is a verdict too; writing this one back would duplicate it.
+			proposed:* | declined:* | skipped:seen) printf '%s: %s\n' "$id" "$result" ;;
+			*)
+				# Not a verdict. transform_one writes nothing on a skip or an
+				# unavailable call so a later scan can retry, but a replayed
+				# artifact is older than the watermark and no scan reads it again.
+				# Only the decline keeps it reachable (ONL-186).
+				printf '%s: %s, decline kept\n' "$id" "${result:-unavailable}"
+				librarian_lesson_append_declined "$key" "$id" "$reason"
+				;;
+		esac
 		case "$result" in
 			proposed:*:unscoped) unscoped=$((unscoped + 1)) ;;
 		esac

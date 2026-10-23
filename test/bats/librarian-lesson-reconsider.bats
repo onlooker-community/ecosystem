@@ -39,7 +39,9 @@ _reconsider_setup() {
   cat > "${STUB_BIN}/claude" <<'STUB'
 #!/usr/bin/env bash
 prompt=$(cat)
-if [[ "$prompt" == *"<scope-mode>unscoped</scope-mode>"* ]]; then
+if [[ "$prompt" == *"stub-answers-nothing"* ]]; then
+  exit 0
+elif [[ "$prompt" == *"<scope-mode>unscoped</scope-mode>"* ]]; then
   printf '%s' '{"claim":"A bare Release-As footer bumps every component","rationale":"release-please applies an unscoped footer to the whole manifest.","evidence":{"resolution":"Scope the bump in the manifest instead."},"applies_to":{"stack":["release-please"],"scope":{"kind":"unscoped"},"file_patterns":[],"task_kinds":[]}}'
 elif [[ "$prompt" == *"module-runner"* ]]; then
   printf '%s' '{"claim":"Vitest 4 cannot import vite/module-runner on Vite 5","rationale":"vite/module-runner ships in Vite 6; Vitest 4 assumes it exists.","evidence":{"resolution":"Pin vitest to 3.x until Vite 6 lands."},"applies_to":{"stack":["vite","vitest"],"scope":{"kind":"versioned","versions":{"vite":"<6","vitest":">=4"}},"file_patterns":[],"task_kinds":[]}}'
@@ -189,4 +191,46 @@ _seed_artifact_on_disk() {
   _reconsider_setup
   run librarian_cli lessons reconsider --reason no_resolution "$PROJECT_REPO"
   [ "$status" -eq 1 ] && [[ "$output" == *"no_resolution"* ]]
+}
+
+@test "reconsider puts back a decline the unscoped cap skipped" {
+  # remove_declined has already dropped every eligible decline, and a replayed
+  # artifact is older than the scan watermark, so no later scan would ever see
+  # one the cap skipped. Without its decline it is neither declined nor
+  # proposed, and nothing reconsiders it again (ONL-186).
+  _reconsider_setup
+  local ids=(01M3B87J7046SJE5BECNMP670K 01M3B93JPGAKHGEQ5KD9N836HD
+    01M33440PGTWP4QMMG1BVA52DR 01M3HZPKT8N8AQMSPW16C8M830) id
+  : > "${LESSONS_DIR}/declined.jsonl"
+  for id in "${ids[@]}"; do
+    _seed_artifact_on_disk "$id" "bare Release-As $id" "A bare Release-As footer hit every component."
+    printf '{"artifact_id":"%s","reason":"no_versions","declined_at":"2026-09-20T17:39:59Z"}\n' "$id" \
+      >> "${LESSONS_DIR}/declined.jsonl"
+  done
+
+  run librarian_cli lessons reconsider "$PROJECT_REPO"
+  [ "$status" -eq 0 ] \
+    && [ "$(ls "${LESSONS_DIR}/proposals" | wc -l | tr -d ' ')" -eq 3 ] \
+    && [[ "$output" == *"skipped:unscoped_cap, decline kept"* ]] \
+    && [ "$(jq -s '[.[] | select(.reason == "no_versions")] | length' \
+      < "${LESSONS_DIR}/declined.jsonl")" -eq 1 ]
+}
+
+@test "reconsider puts back a decline when the model answers nothing" {
+  # Empty is infrastructure, not a verdict: transform_one writes nothing so
+  # that the artifact can be retried. Inside reconsider, only the decline makes
+  # a retry possible (ONL-186).
+  _reconsider_setup
+  _seed_artifact_on_disk "01M3B87J7046SJE5BECNMP670K" \
+    "stub-answers-nothing" "A bare Release-As footer hit every component."
+  printf '%s\n' \
+    '{"artifact_id":"01M3B87J7046SJE5BECNMP670K","reason":"no_versions","declined_at":"2026-09-20T17:39:59Z"}' \
+    > "${LESSONS_DIR}/declined.jsonl"
+
+  run librarian_cli lessons reconsider "$PROJECT_REPO"
+  [ "$status" -eq 0 ] \
+    && [[ "$output" == *"unavailable, decline kept"* ]] \
+    && jq -e 'select(.artifact_id == "01M3B87J7046SJE5BECNMP670K")
+              | .reason == "no_versions"' < "${LESSONS_DIR}/declined.jsonl" \
+    && [ -z "$(ls -A "${LESSONS_DIR}/proposals")" ]
 }
