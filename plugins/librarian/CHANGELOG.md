@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.25.2](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.25.1...librarian-v0.25.2) (2026-10-23)
+
+
+### Bug Fixes
+
+* **librarian:** keep a replayed decline the transform didn't judge :anchor: ([#479](https://github.com/onlooker-community/ecosystem/issues/479)) ([aaf5812](https://github.com/onlooker-community/ecosystem/commit/aaf58122faa399f8437d89037c57193608a5c159))
+
 ## [0.25.1](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.25.0...librarian-v0.25.1) (2026-10-22)
 
 
