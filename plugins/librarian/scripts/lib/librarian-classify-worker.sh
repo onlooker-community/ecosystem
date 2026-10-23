@@ -125,9 +125,30 @@ PY
 # One worker per queue file. mkdir is the atomic test-and-set, the same
 # mechanism plugin-currency-surfacer's _spawn_refresh uses. Declining is not a
 # failure: the run already in flight owns this window.
+#
+# The lock records its owner's pid, because the EXIT trap below cannot release
+# it after SIGKILL or a reboot, and a lock nobody releases blocks its queue file
+# forever: every later spawn declines here and says nothing (ONL-118). A lock
+# whose owner is gone is reclaimed. One with no owner recorded is either being
+# created this instant or predates owners; age tells them apart, since no
+# worker holds a lock for a day.
 QUEUE_LOCK="${QUEUE_FILE}.lock"
-mkdir "$QUEUE_LOCK" 2>/dev/null || exit 0
-trap 'rmdir "$QUEUE_LOCK" 2>/dev/null || true' EXIT
+_queue_lock_stale() {
+	local owner=""
+	[[ -f "${QUEUE_LOCK}/pid" ]] && owner=$(cat "${QUEUE_LOCK}/pid" 2>/dev/null)
+	if [[ "$owner" =~ ^[0-9]+$ ]]; then
+		! kill -0 "$owner" 2>/dev/null
+	else
+		[[ -n "$(find "$QUEUE_LOCK" -maxdepth 0 -mmin +1440 2>/dev/null)" ]]
+	fi
+}
+if ! mkdir "$QUEUE_LOCK" 2>/dev/null; then
+	_queue_lock_stale || exit 0
+	rm -rf "$QUEUE_LOCK" 2>/dev/null
+	mkdir "$QUEUE_LOCK" 2>/dev/null || exit 0
+fi
+printf '%s\n' "$$" > "${QUEUE_LOCK}/pid" 2>/dev/null || true
+trap 'rm -rf "$QUEUE_LOCK" 2>/dev/null || true' EXIT
 
 # Restore what SessionEnd established before the handoff. Anything read here
 # that the queue does not carry would silently be empty, so the writer and this
