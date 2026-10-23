@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.25.3](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.25.2...librarian-v0.25.3) (2026-10-23)
+
+
+### Bug Fixes
+
+* **librarian:** reclaim a queue lock its worker can't release :unlock: ([#482](https://github.com/onlooker-community/ecosystem/issues/482)) ([2fe8006](https://github.com/onlooker-community/ecosystem/commit/2fe80065e823ee17bf49eda3b726ddec6385cad1))
+
 ## [0.25.2](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.25.1...librarian-v0.25.2) (2026-10-23)
 
 
