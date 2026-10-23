@@ -304,3 +304,117 @@ STUBEOF
 	# answer arrived and made the classifier look like it returned nothing.
 	[ "$configured" -gt 46 ]
 }
+
+# ONL-118. The worker's EXIT trap is the only thing that releases its queue
+# lock, and three libs it calls used to replace that trap with their own
+# prompt-file cleanup and then clear it with `trap - EXIT`. The worker happens
+# to call each of them through $(...), whose subshell keeps the change to
+# itself, so the release survived -- but only by accident of call form. Called
+# directly, any of them left the caller with no EXIT trap at all.
+@test "no model-calling lib disarms its caller's EXIT trap" {
+	local fn
+	for fn in librarian_classifier_call librarian_lesson_call librarian_lesson_auto_justify; do
+		run bash -c '
+			source "$1/scripts/lib/librarian-config.sh"
+			source "$1/scripts/lib/librarian-classifier.sh"
+			source "$1/scripts/lib/librarian-lesson-transform.sh"
+			source "$1/scripts/lib/librarian-lesson-auto.sh"
+			librarian_config_load "$2" >/dev/null 2>&1
+			trap "echo caller-cleanup" EXIT
+			"$3" "{\"claim\":\"x\",\"evidence\":{},\"applies_to\":{\"stack\":[]}}" >/dev/null 2>&1
+			trap -p EXIT
+		' _ "$PLUGIN_ROOT" "$PROJECT_REPO" "$fn"
+		[[ "$output" == *"caller-cleanup"* ]] || { echo "$fn disarmed the trap: $output"; return 1; }
+	done
+}
+
+@test "the worker releases its queue lock when killed during a model call" {
+	_seed_survivor
+	run _run_hook
+	local queued
+	queued=$(find "$QUEUE_DIR" -name '*.json' -type f | head -1)
+	[ -n "$queued" ] || return 1
+
+	# A call still in flight when the worker dies, which is when a lib's own
+	# cleanup would be installed if it could reach the worker's trap. The stub
+	# says when it started.
+	local started="${BATS_TEST_TMPDIR}/call-started"
+	cat > "${STUB_BIN}/claude" <<STUB
+#!/usr/bin/env bash
+cat >/dev/null
+touch "${started}"
+sleep 5
+STUB
+	chmod +x "${STUB_BIN}/claude"
+
+	bash "$WORKER" "$queued" >/dev/null 2>&1 3>&- &
+	local pid=$! i
+	for i in $(seq 1 100); do
+		[ -f "$started" ] && break
+		sleep 0.1
+	done
+	[ -f "$started" ] || return 1
+	kill -TERM "$pid"
+	wait "$pid" 2>/dev/null || true
+
+	[ ! -d "${queued}.lock" ] || return 1
+	# The input stays for the retry the lock release makes possible.
+	[ -f "$queued" ]
+}
+
+# SIGKILL runs no trap, so no amount of trap hygiene releases the lock then.
+# The lock records its owner, and a lock whose owner is gone is reclaimed.
+@test "a lock left by a worker that no longer exists is reclaimed" {
+	_seed_survivor
+	run _run_hook
+	local queued
+	queued=$(find "$QUEUE_DIR" -name '*.json' -type f | head -1)
+	[ -n "$queued" ] || return 1
+
+	bash -c 'exit 0' &
+	local dead=$!
+	wait "$dead"
+	mkdir "${queued}.lock"
+	printf '%s\n' "$dead" > "${queued}.lock/pid"
+
+	run bash "$WORKER" "$queued"
+	[ "$status" -eq 0 ] || return 1
+	[ "$(wc -l < "$CLAUDE_CALL_LOG" | tr -d ' ')" -ge 1 ] || return 1
+	[ ! -f "$queued" ] || return 1
+	[ ! -d "${queued}.lock" ]
+}
+
+@test "a lock whose recorded owner is still running is honored" {
+	_seed_survivor
+	run _run_hook
+	local queued
+	queued=$(find "$QUEUE_DIR" -name '*.json' -type f | head -1)
+	[ -n "$queued" ] || return 1
+
+	mkdir "${queued}.lock"
+	printf '%s\n' "$$" > "${queued}.lock/pid"
+
+	run bash "$WORKER" "$queued"
+	[ "$status" -eq 0 ] || return 1
+	[ "$(wc -l < "$CLAUDE_CALL_LOG" | tr -d ' ')" -eq 0 ] || return 1
+	[ -f "$queued" ]
+}
+
+# A lock with no owner recorded is either one being created this instant or one
+# stranded before locks recorded owners. Age tells them apart: no worker holds
+# a lock for a day.
+@test "an ownerless lock older than a day is reclaimed" {
+	_seed_survivor
+	run _run_hook
+	local queued
+	queued=$(find "$QUEUE_DIR" -name '*.json' -type f | head -1)
+	[ -n "$queued" ] || return 1
+
+	mkdir "${queued}.lock"
+	touch -t 202001010000 "${queued}.lock"
+
+	run bash "$WORKER" "$queued"
+	[ "$status" -eq 0 ] || return 1
+	[ "$(wc -l < "$CLAUDE_CALL_LOG" | tr -d ' ')" -ge 1 ] || return 1
+	[ ! -f "$queued" ]
+}

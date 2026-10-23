@@ -30,8 +30,12 @@ librarian_lesson_auto_justify() {
 	local prompt_file
 	prompt_file=$(mktemp -t librarian-auto.XXXXXX 2>/dev/null) \
 		|| prompt_file="/tmp/librarian-auto.$$"
-	# shellcheck disable=SC2064
-	trap "rm -f '$prompt_file'" EXIT
+	# No EXIT trap for this file. Called directly rather than through $(...), a
+	# trap here replaces the caller's and the `trap - EXIT` after it clears it
+	# outright, and the classify worker's EXIT trap is what releases its queue
+	# lock (ONL-118). Every path out removes the file itself; a killed call
+	# leaks one small file under $TMPDIR, which costs nothing next to a lock
+	# that blocks its queue for good.
 
 	{
 		printf '%s\n' 'You are deciding whether a lesson holds regardless of version.'
@@ -46,7 +50,7 @@ librarian_lesson_auto_justify() {
 		printf '%s\n' '<candidate>'
 		printf '%s' "$candidate" | jq -r '"claim: \(.claim)\nrationale: \(.rationale)\nresolution: \(.evidence.resolution)\nstack: \(.applies_to.stack | join(", "))"' 2>/dev/null
 		printf '%s\n' '</candidate>'
-	} > "$prompt_file" || { rm -f "$prompt_file"; trap - EXIT; return 0; }
+	} > "$prompt_file" || { rm -f "$prompt_file"; return 0; }
 
 	local args=(-p --max-turns 1)
 	[[ -n "$model" ]] && args+=(--model "$model")
@@ -64,7 +68,6 @@ librarian_lesson_auto_justify() {
 	fi
 
 	rm -f "$prompt_file"
-	trap - EXIT
 
 	# Collapse to one line and trim: a justification is a single sentence, and
 	# a stray newline would corrupt the envelope's shape.

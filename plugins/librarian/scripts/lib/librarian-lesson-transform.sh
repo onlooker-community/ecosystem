@@ -206,10 +206,14 @@ librarian_lesson_call() {
 	local prompt_file
 	prompt_file=$(mktemp -t librarian-lesson.XXXXXX 2>/dev/null) \
 		|| prompt_file="/tmp/librarian-lesson.$$"
-	# shellcheck disable=SC2064
-	trap "rm -f '$prompt_file'" EXIT
-
-	librarian_lesson_build_prompt "$artifact" "$mode" > "$prompt_file" || return 0
+	# No EXIT trap for this file. Called directly rather than through $(...), a
+	# trap here replaces the caller's and the `trap - EXIT` after it clears it
+	# outright, and the classify worker's EXIT trap is what releases its queue
+	# lock (ONL-118). Every path out removes the file itself; a killed call
+	# leaks one small file under $TMPDIR, which costs nothing next to a lock
+	# that blocks its queue for good.
+	librarian_lesson_build_prompt "$artifact" "$mode" > "$prompt_file" \
+		|| { rm -f "$prompt_file"; return 0; }
 
 	local args=(-p --max-turns 1)
 	[[ -n "$model" ]] && args+=(--model "$model")
@@ -231,7 +235,6 @@ librarian_lesson_call() {
 	fi
 
 	rm -f "$prompt_file"
-	trap - EXIT
 
 	[[ -z "$response" ]] && return 0
 
