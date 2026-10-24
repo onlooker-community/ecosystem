@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.74.3](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.74.2...ecosystem-v0.74.3) (2026-10-23)
+
+
+### Bug Fixes
+
+* **librarian:** reclaim a queue lock its worker can't release :unlock: ([#482](https://github.com/onlooker-community/ecosystem/issues/482)) ([2fe8006](https://github.com/onlooker-community/ecosystem/commit/2fe80065e823ee17bf49eda3b726ddec6385cad1))
+
 ## [0.74.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.74.1...ecosystem-v0.74.2) (2026-10-23)
 
 
