@@ -772,7 +772,11 @@ _set_status() {
 	librarian_lesson_confirm "$PROJECT_KEY" "$id" "public" "git behavior is stable across versions"
 	librarian_lesson_unconfirm "$PROJECT_KEY" "$id"
 
-	run diff <(jq -S . "$before") <(jq -S . "${LESSONS_DIR}/proposals/${id}.json")
+	# Except for one field unconfirm adds on purpose: the hold that keeps the
+	# unattended stage from confirming it again (ONL-112). It is asserted
+	# rather than ignored, so this test still notices anything else changing.
+	jq -e '.auto_hold.by == "unconfirm"' "${LESSONS_DIR}/proposals/${id}.json" >/dev/null || return 1
+	run diff <(jq -S . "$before") <(jq -S 'del(.auto_hold)' "${LESSONS_DIR}/proposals/${id}.json")
 	[ "$status" -eq 0 ]
 }
 

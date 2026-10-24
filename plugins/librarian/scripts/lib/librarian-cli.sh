@@ -444,6 +444,10 @@ librarian_cli_lessons_show() {
 		# objected to; absent when nothing refused it.
 		(if .auto_refusal then
 			"refused:     \(.auto_refusal.reason // "(no reason given)")"
+		 else empty end),
+		# A person held it against the unattended stage (ONL-112).
+		(if .auto_hold then
+			"held:        by \(.auto_hold.by) at \(.auto_hold.at); the unattended stage leaves it alone"
 		 else empty end)
 	' "$path"
 }
@@ -671,10 +675,22 @@ librarian_cli_lessons_promote() {
 	printf 'Lesson %s promoted.\n' "$lesson_id"
 }
 
+# Defer a pending candidate: it stays in the human queue, and is held against
+# the unattended stage so the next scan does not confirm it on a model's word
+# (ONL-112). It used to write nothing at all, which was harmless only while
+# nobody but a person could confirm a lesson.
+#
+# Usage: librarian_cli lessons defer <lesson_id> [cwd]
 librarian_cli_lessons_defer() {
-	local lesson_id="${1:-}"
-	[[ -z "$lesson_id" ]] && { printf 'usage: librarian_cli lessons defer <lesson_id>\n'; return 1; }
-	printf 'Deferred %s; it stays in the queue.\n' "$lesson_id"
+	local lesson_id="${1:-}" cwd="${2:-}"
+	[[ -z "$lesson_id" ]] && { printf 'usage: librarian_cli lessons defer <lesson_id> [cwd]\n'; return 1; }
+
+	local key
+	key=$(_librarian_cli_project_key "$cwd")
+	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
+
+	librarian_lesson_hold "$key" "$lesson_id" defer 2>&1 || return 1
+	printf 'Deferred %s; it stays in the queue, and the unattended stage will leave it alone.\n' "$lesson_id"
 }
 
 # One authoritative line for the whole lesson queue.

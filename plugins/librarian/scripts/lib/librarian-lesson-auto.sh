@@ -28,6 +28,10 @@
 # evidence that the claim holds only for some version.
 #
 # Usage: librarian_lesson_auto_justify <candidate_json> [model]
+#
+# The instructions are _librarian_lesson_auto_justify_preamble, kept apart
+# from the candidate so a refusal can be fingerprinted against exactly the
+# text that produced it (ONL-112).
 librarian_lesson_auto_justify() {
 	local candidate="$1"
 	local model="${2:-}"
@@ -45,23 +49,7 @@ librarian_lesson_auto_justify() {
 	# that blocks its queue for good.
 
 	{
-		printf '%s\n' 'You are deciding whether a lesson holds regardless of version.'
-		printf '%s\n' 'Output ONE sentence, or REFUSE: followed by ONE sentence saying why.'
-		printf '%s\n\n' 'No markdown, no preamble.'
-		printf '%s\n' 'Judge the claim line, as written. Do not restate it as a more general'
-		printf '%s\n' 'principle and judge that instead. A claim that names a project'"'"'s own'
-		printf '%s\n' 'plugin, helper or internal mechanism is project-specific: refuse it.'
-		printf '%s\n' 'The rationale, resolution and stack are evidence about the claim, not'
-		printf '%s\n' 'what is being judged. A rationale that cites a specific project, plugin'
-		printf '%s\n' 'or helper records where the lesson was learned, and that is not by'
-		printf '%s\n' 'itself a reason to refuse. Refuse on the evidence only when it shows the'
-		printf '%s\n\n' 'claim itself depends on a version.'
-		printf '%s\n' 'Refuse unless the claim is true independent of any version of any'
-		printf '%s\n\n' 'tool named in its stack.'
-		printf '%s\n' 'Two things make a justification wrong, and both are refusals:'
-		printf '%s\n' '- asserting one remedy is required when other standard remedies exist'
-		printf '%s\n\n' '- claiming anything the cited evidence does not actually show'
-		printf '%s\n' 'Write why this lesson holds regardless of version:'
+		_librarian_lesson_auto_justify_preamble
 		printf '%s\n' '<candidate>'
 		printf '%s' "$candidate" | jq -r '"claim: \(.claim)\nrationale: \(.rationale)\nresolution: \(.evidence.resolution)\nstack: \(.applies_to.stack | join(", "))"' 2>/dev/null
 		printf '%s\n' '</candidate>'
@@ -89,6 +77,40 @@ librarian_lesson_auto_justify() {
 	printf '%s' "$response" | tr '\n' ' ' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
 }
 
+# Everything the justification prompt says before the candidate.
+_librarian_lesson_auto_justify_preamble() {
+	printf '%s\n' 'You are deciding whether a lesson holds regardless of version.'
+	printf '%s\n' 'Output ONE sentence, or REFUSE: followed by ONE sentence saying why.'
+	printf '%s\n\n' 'No markdown, no preamble.'
+	printf '%s\n' 'Judge the claim line, as written. Do not restate it as a more general'
+	printf '%s\n' 'principle and judge that instead. A claim that names a project'"'"'s own'
+	printf '%s\n' 'plugin, helper or internal mechanism is project-specific: refuse it.'
+	printf '%s\n' 'The rationale, resolution and stack are evidence about the claim, not'
+	printf '%s\n' 'what is being judged. A rationale that cites a specific project, plugin'
+	printf '%s\n' 'or helper records where the lesson was learned, and that is not by'
+	printf '%s\n' 'itself a reason to refuse. Refuse on the evidence only when it shows the'
+	printf '%s\n\n' 'claim itself depends on a version.'
+	printf '%s\n' 'Refuse unless the claim is true independent of any version of any'
+	printf '%s\n\n' 'tool named in its stack.'
+	printf '%s\n' 'Two things make a justification wrong, and both are refusals:'
+	printf '%s\n' '- asserting one remedy is required when other standard remedies exist'
+	printf '%s\n\n' '- claiming anything the cited evidence does not actually show'
+	printf '%s\n' 'Write why this lesson holds regardless of version:'
+}
+
+# Identify the question a refusal answered: the prompt's instructions and the
+# model that read them (ONL-112). A refusal is held only while both are
+# unchanged, so a rewritten prompt (as ONL-187 did) or a different model
+# re-asks each refused candidate once instead of trusting an answer to a
+# question nobody is asking any more. librarian_body_hash normalizes case and
+# whitespace, so reflowing the prompt does not re-bill anything.
+#
+# Usage: librarian_lesson_auto_justify_fingerprint [model]
+librarian_lesson_auto_justify_fingerprint() {
+	librarian_body_hash "$(_librarian_lesson_auto_justify_preamble)
+model: ${1:-}"
+}
+
 # Record a refusal on the proposal so the review walk can show why the model
 # declined. `REFUSE: <reason>` keeps the reason; a bare `REFUSE` is still
 # recorded, with reason null, so "refused without saying why" stays
@@ -98,14 +120,18 @@ librarian_lesson_auto_justify() {
 # belongs to a human. A later refusal overwrites the earlier one. Best effort --
 # a failed write must not turn a real refusal into a different outcome.
 #
-# Usage: _librarian_lesson_auto_record_refusal <proposal_path> <response>
+# The fingerprint is what holds the refusal against the next scan; see
+# librarian_lesson_auto_justify_fingerprint.
+#
+# Usage: _librarian_lesson_auto_record_refusal <proposal_path> <response> <fingerprint>
 _librarian_lesson_auto_record_refusal() {
-	local path="$1" response="$2"
+	local path="$1" response="$2" fingerprint="${3:-}"
 	local reason now updated
 	reason=$(printf '%s' "$response" | sed -E 's/^REFUSE[[:space:]]*:?[[:space:]]*//')
 	now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-	updated=$(jq --arg r "$reason" --arg at "$now" \
-		'.auto_refusal = {reason: (if $r == "" then null else $r end), refused_at: $at}' \
+	updated=$(jq --arg r "$reason" --arg at "$now" --arg f "$fingerprint" \
+		'.auto_refusal = {reason: (if $r == "" then null else $r end), refused_at: $at}
+		 + (if $f == "" then {} else {fingerprint: $f} end)' \
 		"$path" 2>/dev/null) || return 0
 	librarian_lesson_write_atomic "$path" "$updated" >/dev/null 2>&1 || true
 }
@@ -133,7 +159,14 @@ _librarian_lesson_auto_emit_asserted() {
 #   skipped:not_parked         scope is not unscoped; nothing to assert
 #   skipped:no_justification   the model refused; left pending for a human,
 #                              with the refusal recorded as .auto_refusal
-#   unavailable                infrastructure; nothing written
+#   skipped:held               a person deferred or unconfirmed it (.auto_hold)
+#   skipped:refused            already refused by this prompt and model
+#   unavailable                infrastructure, or a lesson_auto.visibility
+#                              confirm would refuse; nothing written
+#
+# The two skips are what keep this loop from re-billing the same refusal on
+# every scan and from undoing a person's "not now" (ONL-112). Neither asks
+# the model, so neither emits librarian.lesson.asserted.
 #
 # Every outcome but skipped:not_parked emits librarian.lesson.asserted. A
 # candidate that is not parked was never a question for the model.
@@ -155,23 +188,43 @@ librarian_lesson_auto_confirm_one() {
 		return 0
 	fi
 
-	local model justification
+	if jq -e 'has("auto_hold")' "$path" >/dev/null 2>&1; then
+		printf 'skipped:held'
+		return 0
+	fi
+
+	# Checked before the model call, not after: librarian_lesson_confirm refuses
+	# a justification at private visibility, so a misconfigured value used to
+	# pay for an answer that could never be written, on every scan.
+	local visibility
+	visibility=$(librarian_config_get '.librarian.lesson_auto.visibility' 2>/dev/null)
+	case "$visibility" in ''|null) visibility="org" ;; esac
+	case "$visibility" in
+		org | public) ;;
+		*) _librarian_lesson_auto_emit_asserted "$lesson_id" unavailable; printf 'unavailable'; return 0 ;;
+	esac
+
+	local model fingerprint justification
 	model=$(librarian_config_get '.librarian.lesson_transform.model' 2>/dev/null)
+	case "$model" in null) model="" ;; esac
+	fingerprint=$(librarian_lesson_auto_justify_fingerprint "$model")
+	if [[ -n "$fingerprint" ]] && jq -e --arg f "$fingerprint" \
+		'.auto_refusal.fingerprint == $f' "$path" >/dev/null 2>&1; then
+		printf 'skipped:refused'
+		return 0
+	fi
+
 	justification=$(librarian_lesson_auto_justify "$candidate" "$model")
 
 	# Empty is infrastructure, not a verdict — the same distinction
 	# librarian_lesson_transform_one draws. Leave the artifact untouched.
 	[[ -z "$justification" ]] && { _librarian_lesson_auto_emit_asserted "$lesson_id" unavailable; printf 'unavailable'; return 0; }
 	if [[ "$justification" == REFUSE* ]]; then
-		_librarian_lesson_auto_record_refusal "$path" "$justification"
+		_librarian_lesson_auto_record_refusal "$path" "$justification" "$fingerprint"
 		_librarian_lesson_auto_emit_asserted "$lesson_id" refused "$justification"
 		printf 'skipped:no_justification'
 		return 0
 	fi
-
-	local visibility
-	visibility=$(librarian_config_get '.librarian.lesson_auto.visibility' 2>/dev/null)
-	case "$visibility" in ''|null) visibility="org" ;; esac
 
 	librarian_lesson_confirm "$key" "$lesson_id" "$visibility" "$justification" model \
 		>/dev/null 2>&1 || { _librarian_lesson_auto_emit_asserted "$lesson_id" unavailable; printf 'unavailable'; return 0; }
