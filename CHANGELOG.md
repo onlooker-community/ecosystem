@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.74.4](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.74.3...ecosystem-v0.74.4) (2026-10-24)
+
+
+### Bug Fixes
+
+* **librarian:** tell the justification step it judges the claim :dart: ([#484](https://github.com/onlooker-community/ecosystem/issues/484)) ([26217cd](https://github.com/onlooker-community/ecosystem/commit/26217cd9fc7556a88b22676dfae156bf6829db1a))
+
 ## [0.74.3](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.74.2...ecosystem-v0.74.3) (2026-10-23)
 
 
