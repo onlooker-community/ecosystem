@@ -20,6 +20,13 @@
 # exactly what the adversarial judge attacks: asserting one remedy is required
 # when others exist, and claiming anything the cited evidence does not show.
 #
+# What is judged is the claim, because the claim is what gets promoted. The
+# model sees the whole candidate, and until ONL-187 the prompt never said which
+# part it was judging: all three false refusals in the 2026-10-22 record
+# (docs/measurements/2026-10-22-false-refusals) refused a general claim over a
+# rationale that cited this repo's plugins. The rationale still counts, as
+# evidence that the claim holds only for some version.
+#
 # Usage: librarian_lesson_auto_justify <candidate_json> [model]
 librarian_lesson_auto_justify() {
 	local candidate="$1"
@@ -41,6 +48,14 @@ librarian_lesson_auto_justify() {
 		printf '%s\n' 'You are deciding whether a lesson holds regardless of version.'
 		printf '%s\n' 'Output ONE sentence, or REFUSE: followed by ONE sentence saying why.'
 		printf '%s\n\n' 'No markdown, no preamble.'
+		printf '%s\n' 'Judge the claim line, as written. Do not restate it as a more general'
+		printf '%s\n' 'principle and judge that instead. A claim that names a project'"'"'s own'
+		printf '%s\n' 'plugin, helper or internal mechanism is project-specific: refuse it.'
+		printf '%s\n' 'The rationale, resolution and stack are evidence about the claim, not'
+		printf '%s\n' 'what is being judged. A rationale that cites a specific project, plugin'
+		printf '%s\n' 'or helper records where the lesson was learned, and that is not by'
+		printf '%s\n' 'itself a reason to refuse. Refuse on the evidence only when it shows the'
+		printf '%s\n\n' 'claim itself depends on a version.'
 		printf '%s\n' 'Refuse unless the claim is true independent of any version of any'
 		printf '%s\n\n' 'tool named in its stack.'
 		printf '%s\n' 'Two things make a justification wrong, and both are refusals:'
