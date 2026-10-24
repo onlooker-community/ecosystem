@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.75.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.75.0...ecosystem-v0.75.1) (2026-10-24)
+
+
+### Bug Fixes
+
+* **librarian:** let a refusal or a person's "not now" stick :pushpin: ([#489](https://github.com/onlooker-community/ecosystem/issues/489)) ([04b84cf](https://github.com/onlooker-community/ecosystem/commit/04b84cf42336a33e232a84f7749c6dd58aa62f22))
+
 ## [0.75.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.74.4...ecosystem-v0.75.0) (2026-10-24)
 
 

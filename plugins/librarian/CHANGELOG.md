@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.1](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.26.0...librarian-v0.26.1) (2026-10-24)
+
+
+### Bug Fixes
+
+* **librarian:** let a refusal or a person's "not now" stick :pushpin: ([#489](https://github.com/onlooker-community/ecosystem/issues/489)) ([04b84cf](https://github.com/onlooker-community/ecosystem/commit/04b84cf42336a33e232a84f7749c6dd58aa62f22))
+
 ## [0.26.0](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.25.4...librarian-v0.26.0) (2026-10-24)
 
 
