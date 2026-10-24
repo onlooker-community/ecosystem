@@ -1,0 +1,300 @@
+{
+  "arm": "v1",
+  "model": "claude-haiku-4-5-20251001",
+  "responses": [
+    {
+      "run": 1,
+      "artifact_id": "01KT9KVJS8BWFB4QWS9082YG3T",
+      "response": "REFUSE: The claim's \"acceptable performance overhead\" is tied to specific tool performance (ollama ~50ms/chunk), which is version-dependent and could change significantly across ollama, python, or bash versions.",
+      "refused": true,
+      "empty": false
+    },
+    {
+      "run": 1,
+      "artifact_id": "01KT9H73N8TYTYGGS3BRK2Y15J",
+      "response": "Character-based chunking with turn-boundary preservation and multi-layer redaction is a version-independent architectural technique that works regardless of which version of historian or any other tool implements it.",
+      "refused": false,
+      "empty": false
+    },
+    {
+      "run": 1,
+      "artifact_id": "01M1D7K0S03X63K3GQTSFR8517",
+      "response": "The race condition of concurrent read-decide-write creating duplicates without full-cycle locking is inherent to file-based concurrency and exists in all versions of bash, making the lesson version-independent.",
+      "refused": false,
+      "empty": false
+    },
+    {
+      "run": 1,
+      "artifact_id": "01M3075VV8QFMDFGFFDF73J979",
+      "response": "The concurrent write problem exists in any version of bats; run IDs and completion sentinels prevent it as a version-independent mechanism.",
+      "refused": false,
+      "empty": false
+    },
+    {
+      "run": 1,
+      "artifact_id": "01M1D7K0S01FXA1B47DRG1MDGG",
+      "response": "Keeping a rolling baseline synchronized with file edits so that subsequent operations don't compare against stale state is a version-independent principle that applies whenever the baseline mechanism exists.",
+      "refused": false,
+      "empty": false
+    },
+    {
+      "run": 1,
+      "artifact_id": "01M00E8P40C2MP244WN9Y8S9JH",
+      "response": "REFUSE: Claim asserts one specific remedy (librarian_lesson_write_atomic) is required when other standard atomic-write patterns (temp file with mv, flock, etc.) also prevent zero-byte files on interruption.",
+      "refused": true,
+      "empty": false
+    },
+    {
+      "run": 1,
+      "artifact_id": "01M3GAVHJ0BQB5BSVM3N6ZS64R",
+      "response": "This is a version-independent error-handling principle about warning on stderr after irreversible operations, regardless of how librarian implements the declined-ledger write.",
+      "refused": false,
+      "empty": false
+    },
+    {
+      "run": 1,
+      "artifact_id": "01KSGBXRGR2C5ZZTPE1V3VA2GX",
+      "response": "Explicit, unambiguous instructions to an LLM remain more reliably interpreted than vague shorthand across any version of any tool.",
+      "refused": false,
+      "empty": false
+    },
+    {
+      "run": 1,
+      "artifact_id": "01KZYBHVNGBXN8B3PC1YE9T5WH",
+      "response": "REFUSE: The claim depends on ZLesson's schema permanently lacking an artifact_id field, which is a version-specific implementation detail that could change in future versions of librarian.",
+      "refused": true,
+      "empty": false
+    },
+    {
+      "run": 1,
+      "artifact_id": "01KZRVRPS84F66RXD9KWZX2PT8",
+      "response": "Tests named for multi-step user stories must implement those exact sequences; simpler variants that pass do not validate the mechanisms are required.",
+      "refused": false,
+      "empty": false
+    },
+    {
+      "run": 1,
+      "artifact_id": "01KSASC4JRKFZYVZMD0TDH93Z5",
+      "response": "This lesson holds regardless of version: XDG_CONFIG_HOME persistence across HOME reassignment and git's respect for GIT_CONFIG_* environment variable overrides are stable Unix and git mechanisms.",
+      "refused": false,
+      "empty": false
+    },
+    {
+      "run": 1,
+      "artifact_id": "01KT34HKNRPJ0SK6KS2F9A0HM8",
+      "response": "The -r and -c flags are core stable jq features that produce the documented behavior regardless of version; the lesson correctly identifies that -c ensures single-line-per-object output where -r alone does not.",
+      "refused": false,
+      "empty": false
+    },
+    {
+      "run": 1,
+      "artifact_id": "01M2M29J2GBWN0X5W9VC3MZK1E",
+      "response": "The implementation demonstrates that a scanner built by replicating an existing file-matching pattern handles all required cases—pattern correctness, zero-match reporting, untracked-file exclusion, and non-repo safety—without relying on version-specific bash or git behavior.",
+      "refused": false,
+      "empty": false
+    },
+    {
+      "run": 1,
+      "artifact_id": "01M08MNN802S2092FYPMP76PMW",
+      "response": "GITHUB_TOKEN with id-token:write is a stable OIDC authentication mechanism in GitHub Actions that has been available independently of version and works with all modern git versions.",
+      "refused": false,
+      "empty": false
+    },
+    {
+      "run": 2,
+      "artifact_id": "01KT9KVJS8BWFB4QWS9082YG3T",
+      "response": "REFUSE: The claim asserts \"acceptable performance overhead,\" but the evidence provides ollama-specific performance characteristics (~50ms/chunk, <3s total) from a particular version, and different versions could have substantially different performance profiles that might not meet that threshold.",
+      "refused": true,
+      "empty": false
+    },
+    {
+      "run": 2,
+      "artifact_id": "01KT9H73N8TYTYGGS3BRK2Y15J",
+      "response": "Character-based chunking with turn boundaries and layered redaction is a design pattern that achieves safe idempotency independent of how any tool implements it; the evidence demonstrates historian's successful implementation of this approach, which generalizes beyond historian's version.",
+      "refused": false,
+      "empty": false
+    },
+    {
+      "run": 2,
+      "artifact_id": "01M1D7K0S03X63K3GQTSFR8517",
+      "response": "Race conditions in concurrent read-decide-write operations and their solution through full-cycle locking with atomic writes via temp-file-plus-rename are fundamental OS principles independent of bash version.",
+      "refused": false,
+      "empty": false
+    },
+    {
+      "run": 2,
+      "artifact_id": "01M3075VV8QFMDFGFFDF73J979",
+      "response": "Concurrent writes to a shared file produce ambiguous records regardless of bats version; the fix addresses the underlying I/O contention pattern, not framework behavior.",
+      "refused": false,
+      "empty": false
+    },
+    {
+      "run": 2,
+      "artifact_id": "01M1D7K0S01FXA1B47DRG1MDGG",
+      "response": "Keeping tracked state synchronized with actual changes is a version-independent coordination principle that prevents false duplicates regardless of lineage implementation.",
+      "refused": false,
+      "empty": false
+    },
+    {
+      "run": 2,
+      "artifact_id": "01M00E8P40C2MP244WN9Y8S9JH",
+      "response": "REFUSE - the claim mandates a specific function instead of stating the atomic-write principle it solves, creating potential version-dependence on librarian's implementation.",
+      "refused": true,
+      "empty": false
+    },
+    {
+      "run": 2,
+      "artifact_id": "01M3GAVHJ0BQB5BSVM3N6ZS64R",
+      "response": "Distinguishing error types and warning on stderr during audit failures after irreversible operations is a version-independent error-handling principle applicable across all librarian versions.",
+      "refused": false,
+      "empty": false
+    },
+    {
+      "run": 2,
+      "artifact_id": "01KSGBXRGR2C5ZZTPE1V3VA2GX",
+      "response": "Explicit instructions produce consistent LLM behavior independent of tribunal's version.",
+      "refused": false,
+      "empty": false
+    },
+    {
+      "run": 2,
+      "artifact_id": "01KZYBHVNGBXN8B3PC1YE9T5WH",
+      "response": "REFUSE: The claim depends on ZLesson lacking artifact_id, which is a version-dependent property of the librarian data model that could change in future versions, making the unreachable-branch claim false.",
+      "refused": true,
+      "empty": false
+    },
+    {
+      "run": 2,
+      "artifact_id": "01KZRVRPS84F66RXD9KWZX2PT8",
+      "response": "Tests must validate what their names promise; discovering this via snapshot restoration mechanics in librarian doesn't make the principle version-dependent—test design integrity holds regardless of what mechanisms enable the user story.",
+      "refused": false,
+      "empty": false
+    },
+    {
+      "run": 2,
+      "artifact_id": "01KSASC4JRKFZYVZMD0TDH93Z5",
+      "response": "Unsetting environment variables and redirecting config paths to /dev/null are standard git isolation techniques that work independent of git or bats version, and the evidence correctly identifies why XDG_CONFIG_HOME persistence causes test leakage and how the remedy prevents it.",
+      "refused": false,
+      "empty": false
+    },
+    {
+      "run": 2,
+      "artifact_id": "01KT34HKNRPJ0SK6KS2F9A0HM8",
+      "response": "The need for jq's -c flag to produce JSONL-compatible output is a fundamental property of how jq works, independent of version.",
+      "refused": false,
+      "empty": false
+    },
+    {
+      "run": 2,
+      "artifact_id": "01M2M29J2GBWN0X5W9VC3MZK1E",
+      "response": "Bash patterns for file matching, repository detection, and standard shell conditionals have remained stable across versions, making this implementation technique version-independent.",
+      "refused": false,
+      "empty": false
+    },
+    {
+      "run": 2,
+      "artifact_id": "01M08MNN802S2092FYPMP76PMW",
+      "response": "GITHUB_TOKEN with id-token:write provides OIDC-based authentication that is stable across git versions and GitHub Actions platforms without requiring manual git credential configuration.",
+      "refused": false,
+      "empty": false
+    },
+    {
+      "run": 3,
+      "artifact_id": "01KT9KVJS8BWFB4QWS9082YG3T",
+      "response": "REFUSE: The claim's assertion of \"acceptable performance overhead\" depends on ollama version performance characteristics—50ms/chunk and <3s overhead specifics that change with different ollama versions would alter whether the overhead remains acceptable.",
+      "refused": true,
+      "empty": false
+    },
+    {
+      "run": 3,
+      "artifact_id": "01KT9H73N8TYTYGGS3BRK2Y15J",
+      "response": "Character-based chunking with turn-boundary preservation and multi-layer redaction is a general architectural principle for safe, idempotent transcript indexing that holds independent of historian version.",
+      "refused": false,
+      "empty": false
+    },
+    {
+      "run": 3,
+      "artifact_id": "01M1D7K0S03X63K3GQTSFR8517",
+      "response": "The claim is true regardless of bash version; read-decide-write race conditions and their file-locking solution are fundamental concurrency patterns independent of tooling versions.",
+      "refused": false,
+      "empty": false
+    },
+    {
+      "run": 3,
+      "artifact_id": "01M3075VV8QFMDFGFFDF73J979",
+      "response": "Run IDs and completion sentinels are a version-independent pattern for disambiguating concurrent emissions to a shared log, regardless of how bats implements test execution.",
+      "refused": false,
+      "empty": false
+    },
+    {
+      "run": 3,
+      "artifact_id": "01M1D7K0S01FXA1B47DRG1MDGG",
+      "response": "The claim describes a fundamental principle of change tracking—that a baseline must be updated whenever the actual file state changes—which holds true regardless of how the lineage or Bash implementations change.",
+      "refused": false,
+      "empty": false
+    },
+    {
+      "run": 3,
+      "artifact_id": "01M00E8P40C2MP244WN9Y8S9JH",
+      "response": "Atomic writes prevent zero-byte files on interrupt the same way across all bash and librarian versions, making this lesson version-independent and consistent with the established pattern already in three other librarian modules.",
+      "refused": false,
+      "empty": false
+    },
+    {
+      "run": 3,
+      "artifact_id": "01M3GAVHJ0BQB5BSVM3N6ZS64R",
+      "response": "The principle of distinguishing error types and warning on stderr after an irreversible operation while preserving exit code semantics is version-independent error-handling design.",
+      "refused": false,
+      "empty": false
+    },
+    {
+      "run": 3,
+      "artifact_id": "01KSGBXRGR2C5ZZTPE1V3VA2GX",
+      "response": "Explicit instruction structure prevents LLM interpretation drift across all versions.",
+      "refused": false,
+      "empty": false
+    },
+    {
+      "run": 3,
+      "artifact_id": "01KZYBHVNGBXN8B3PC1YE9T5WH",
+      "response": "REFUSE: The claim depends on ZLesson's current schema (lacking artifact_id), which is version-dependent and could change in future librarian releases, making the documented unreachability false.",
+      "refused": true,
+      "empty": false
+    },
+    {
+      "run": 3,
+      "artifact_id": "01KZRVRPS84F66RXD9KWZX2PT8",
+      "response": "Tests must implement the sequences their names claim to test, because simpler variants can pass without exercising the intended mechanisms.",
+      "refused": false,
+      "empty": false
+    },
+    {
+      "run": 3,
+      "artifact_id": "01KSASC4JRKFZYVZMD0TDH93Z5",
+      "response": "The isolation mechanism is based on stable git environment variable handling (GIT_CONFIG_GLOBAL, GIT_CONFIG_SYSTEM) and shell behavior that work unchanged across any reasonable git or bats version.",
+      "refused": false,
+      "empty": false
+    },
+    {
+      "run": 3,
+      "artifact_id": "01KT34HKNRPJ0SK6KS2F9A0HM8",
+      "response": "jq's -c and -r flags controlling output format and string encoding have been stable core behavior since jq 1.3, making the claim that -rc ensures compact one-line-per-object output universally true across all supported jq versions.",
+      "refused": false,
+      "empty": false
+    },
+    {
+      "run": 3,
+      "artifact_id": "01M2M29J2GBWN0X5W9VC3MZK1E",
+      "response": "Mirroring existing matcher logic to build a file scanner is a version-independent approach that depends only on bash's stable core features, validated by test coverage of pattern matching, zero-matches, untracked-file handling, and non-repo safety.",
+      "refused": false,
+      "empty": false
+    },
+    {
+      "run": 3,
+      "artifact_id": "01M08MNN802S2092FYPMP76PMW",
+      "response": "REFUSE: This claim depends on GitHub Actions supporting OIDC token generation, which was introduced in late 2021 and would not hold for earlier runner versions.",
+      "refused": true,
+      "empty": false
+    }
+  ]
+}

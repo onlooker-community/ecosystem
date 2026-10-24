@@ -235,12 +235,25 @@ STUB
 @test "the justification prompt asks for a reason with every refusal" {
 	_auto_setup; _auto_stub
 	export STUB_PROMPT_LOG="${BATS_TEST_TMPDIR}/prompt.txt"
-	# Through `run`, not a direct call: auto_justify sets and then clears an
-	# EXIT trap, which in this shell would clear bats' own -- and a failing
-	# assertion would then vanish from the report instead of failing (ONL-118).
 	run librarian_lesson_auto_justify "$(_candidate "$(_unscoped)")"
 	[ "$status" -eq 0 ] || return 1
 	grep -q 'REFUSE: ' "$STUB_PROMPT_LOG"
+}
+
+# ONL-187. The model gets the whole candidate, and the prompt used to say only
+# "refuse unless the claim is true". All three false refusals in the 2026-10-22
+# record quoted a rationale that cited this repo's plugins while the claim was
+# general. The prompt now names what it judges and what the rest is for.
+@test "the justification prompt judges the claim, with the rest as evidence" {
+	_auto_setup; _auto_stub
+	export STUB_PROMPT_LOG="${BATS_TEST_TMPDIR}/prompt.txt"
+	run librarian_lesson_auto_justify "$(_candidate "$(_unscoped)")"
+	[ "$status" -eq 0 ] || return 1
+	grep -q 'Judge the claim line, as written' "$STUB_PROMPT_LOG" || return 1
+	grep -q 'Do not restate it as a more general' "$STUB_PROMPT_LOG" || return 1
+	grep -q "names a project's own" "$STUB_PROMPT_LOG" || return 1
+	grep -q 'are evidence about the claim, not' "$STUB_PROMPT_LOG" || return 1
+	grep -q 'itself a reason to refuse' "$STUB_PROMPT_LOG"
 }
 
 @test "an empty model response is infrastructure, not a verdict" {
