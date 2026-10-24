@@ -203,7 +203,8 @@ librarian_lesson_confirm() {
 			'. * {status: "confirmed", visibility: $v, confirmed_at: $t}
 			 | .candidate = $c
 			 | .candidate_before_confirm = $cb
-			 | .asserted_by = $ab' 2>/dev/null) || return 1
+			 | .asserted_by = $ab
+			 | del(.auto_hold)' 2>/dev/null) || return 1
 	else
 		# No rewrite happened, so there is nothing to snapshot — and any field
 		# already on the proposal is stale by definition. Deleting it holds the
@@ -216,9 +217,45 @@ librarian_lesson_confirm() {
 			--arg v "$visibility" --arg t "$now" --arg ab "$asserted_by" --argjson c "$candidate" \
 			'. * {status: "confirmed", visibility: $v, confirmed_at: $t}
 			 | .candidate = $c
-			 | del(.candidate_before_confirm)
+			 | del(.candidate_before_confirm, .auto_hold)
 			 | .asserted_by = $ab' 2>/dev/null) || return 1
 	fi
+	[[ -z "$updated" || "$updated" == "null" ]] && return 1
+	librarian_lesson_write_atomic "$path" "$updated"
+}
+
+# Hold a pending candidate against the unattended stage (ONL-112).
+#
+# The stage auto-confirms every parked pending candidate it finds, so a
+# person's "not now" or "take that back" left a candidate exactly where the
+# next scan would assert it again. .auto_hold is the marker the stage skips.
+# It names the verb so `lessons show` can say why the candidate is waiting.
+# A human confirm clears it; pass is terminal and needs nothing.
+#
+# Usage: librarian_lesson_hold <key> <lesson_id> <defer|unconfirm>
+librarian_lesson_hold() {
+	local key="$1" lesson_id="$2" by="${3:-}"
+	[[ -z "$key" || -z "$lesson_id" ]] && return 1
+	case "$by" in defer | unconfirm) ;; *) return 1 ;; esac
+
+	local path
+	path="$(librarian_lessons_dir "$key")/proposals/${lesson_id}.json"
+	[[ -f "$path" ]] || { printf 'Lesson %s not found.\n' "$lesson_id" >&2; return 1; }
+
+	local current_status
+	current_status=$(jq -r '.status // ""' "$path" 2>/dev/null)
+	if [[ "$current_status" != "pending" ]]; then
+		if [[ "$current_status" == "confirmed" ]]; then
+			printf 'Lesson %s is confirmed, not pending; unconfirm takes it back and holds it.\n' "$lesson_id" >&2
+		else
+			printf 'Lesson %s is %s, not pending; there is nothing to hold.\n' "$lesson_id" "${current_status:-unreadable}" >&2
+		fi
+		return 1
+	fi
+
+	local now updated
+	now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+	updated=$(jq --arg by "$by" --arg t "$now" '.auto_hold = {by: $by, at: $t}' "$path" 2>/dev/null) || return 1
 	[[ -z "$updated" || "$updated" == "null" ]] && return 1
 	librarian_lesson_write_atomic "$path" "$updated"
 }
@@ -234,6 +271,11 @@ librarian_lesson_confirm() {
 # Proceeds ONLY from `confirmed`. Every other status is refused, which is also
 # what makes this forward-safe: when the jury stage introduces a status of its
 # own, this verb refuses it through the catch-all with no change here.
+#
+# The lesson it returns to pending is held against the unattended stage, in
+# the same write: a person taking a confirmation back has said "not like
+# this", and the next scan must not confirm it again on a model's word
+# (ONL-112).
 #
 # Usage: librarian_lesson_unconfirm <key> <lesson_id>
 librarian_lesson_unconfirm() {
@@ -273,10 +315,13 @@ librarian_lesson_unconfirm() {
 	# reached only through unconfirm indistinguishable from one that was
 	# always pending.
 	local updated
-	updated=$(jq '
+	local now
+	now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+	updated=$(jq --arg t "$now" '
 		(if has("candidate_before_confirm") then .candidate = .candidate_before_confirm else . end)
 		| del(.candidate_before_confirm, .visibility, .confirmed_at, .asserted_by)
 		| .status = "pending"
+		| .auto_hold = {by: "unconfirm", at: $t}
 	' "$path" 2>/dev/null) || return 1
 	[[ -z "$updated" || "$updated" == "null" ]] && return 1
 	librarian_lesson_write_atomic "$path" "$updated"
