@@ -17,6 +17,26 @@ librarian_lessons_dir() {
 	printf '%s/lessons' "$(librarian_project_dir "$key")"
 }
 
+# Emit one lesson-pipeline event (ONL-116), best effort.
+#
+# Guarded rather than required, the same way librarian_lesson_promote's emit
+# is: librarian-emit.sh is in none of the lesson libs' dependency contracts,
+# and a caller that never sourced it must get the old behavior, not "command
+# not found". stdout is discarded because librarian_lesson_sweep_held reports
+# its ids on stdout, and SessionStart parses them.
+#
+# The session is whichever one the caller scoped into LIBRARIAN_SESSION_ID
+# (the classify worker's queue, SessionStart's input), then Claude Code's,
+# then "cli" for a person at a terminal.
+#
+# Usage: librarian_lesson_emit <event_type> <payload_json>
+librarian_lesson_emit() {
+	declare -F librarian_emit >/dev/null 2>&1 || return 0
+	librarian_emit "$1" "${LIBRARIAN_SESSION_ID:-${CLAUDE_SESSION_ID:-cli}}" "$2" \
+		>/dev/null 2>&1 || true
+	return 0
+}
+
 # The hold: an approved lesson that is not yet allowed to leave the machine.
 #
 # `onlooker sync` reads lessons/approved/*.json and nothing else (see
@@ -210,6 +230,27 @@ librarian_lesson_remove_declined() {
 	return 0
 }
 
+# Announce one swept lesson as shipped.
+#
+# held_ms runs from promoted_at, the stamp librarian_lesson_promote writes in
+# the same jq as shippable_after. jq's fromdateiso8601 reads exactly that
+# shape on both BSD and GNU, where date(1) would need two spellings. An
+# unreadable stamp drops the field rather than the event: the lesson still
+# shipped.
+#
+# Usage: _librarian_lesson_emit_shipped <lesson_id> <proposal_path>
+_librarian_lesson_emit_shipped() {
+	local id="$1" proposal="$2" promoted_s payload
+	promoted_s=$(jq -r '.promoted_at | fromdateiso8601' "$proposal" 2>/dev/null) || promoted_s=""
+	if [[ "$promoted_s" =~ ^[0-9]+$ ]]; then
+		payload=$(jq -cn --arg id "$id" --argjson ms "$(( ($(date +%s) - promoted_s) * 1000 ))" \
+			'{lesson_id: $id, held_ms: (if $ms < 0 then 0 else $ms end)}')
+	else
+		payload=$(jq -cn --arg id "$id" '{lesson_id: $id}')
+	fi
+	librarian_lesson_emit "librarian.lesson.shipped" "$payload"
+}
+
 # Move every held lesson whose window has elapsed into approved/, printing the
 # ids it moved. Deterministic file movement, no LLM work, so it is safe on the
 # SessionStart path.
@@ -253,6 +294,7 @@ librarian_lesson_sweep_held() {
 		mkdir -p "${dir}/approved" 2>/dev/null
 		mv -f "$file" "${dir}/approved/${id}.json" 2>/dev/null || continue
 		printf '%s\n' "$id"
+		_librarian_lesson_emit_shipped "$id" "${dir}/proposals/${id}.json"
 	done
 	[[ "$had_nullglob" -eq 0 ]] && shopt -u nullglob
 	return 0

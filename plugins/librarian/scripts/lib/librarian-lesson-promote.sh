@@ -105,7 +105,7 @@ librarian_lesson_promote() {
 			;;
 	esac
 
-	local now
+	local now held=false
 	now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 	if [[ "$current_status" == "approved" ]]; then
@@ -198,6 +198,7 @@ librarian_lesson_promote() {
 		# human-asserted one is unchanged — the attended path is not penalized.
 		if [[ "$asserted_by" == "model" ]]; then
 			pool_path="$(librarian_lesson_held_dir "$key")/${lesson_id}.json"
+			held=true
 		else
 			pool_path="${dir}/approved/${lesson_id}.json"
 		fi
@@ -320,18 +321,24 @@ librarian_lesson_promote() {
 	# promotion used to succeed. And librarian_emit's own last statement is the
 	# log append, so a read-only log would otherwise turn a completed promotion
 	# into a reported failure.
+	#
+	# held says whether this approval went to the veto-window hold instead of
+	# approved/ (ONL-116). Both are outcome approved, but only one is visible
+	# to sync yet. The session follows librarian_lesson_emit's order, so an
+	# unattended promotion is attributed to the worker's session.
 	if declare -F librarian_emit >/dev/null 2>&1; then
 		local duration_ms
 		duration_ms=$(( $(_librarian_lesson_now_ms) - started_ms ))
 		# The payload floor is 0, and the fallback clock tiers do not share a
 		# resolution, so a tier change mid-call could read backwards.
 		[[ "$duration_ms" -ge 0 ]] || duration_ms=0
-		librarian_emit "librarian.lesson.promoted" "${CLAUDE_SESSION_ID:-cli}" \
+		librarian_emit "librarian.lesson.promoted" "${LIBRARIAN_SESSION_ID:-${CLAUDE_SESSION_ID:-cli}}" \
 			"$(jq -cn \
 				--arg lesson_id "$lesson_id" \
 				--arg outcome "$current_status" \
 				--argjson duration_ms "$duration_ms" \
-				'{lesson_id: $lesson_id, outcome: $outcome, duration_ms: $duration_ms}')" \
+				--argjson held "$held" \
+				'{lesson_id: $lesson_id, outcome: $outcome, duration_ms: $duration_ms, held: $held}')" \
 			|| true
 	fi
 	return 0

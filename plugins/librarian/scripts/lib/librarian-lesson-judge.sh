@@ -214,6 +214,27 @@ librarian_lesson_coverage() {
 # broken judge as a rejection would bury a good lesson permanently.
 #
 # Usage: librarian_lesson_judge <key> <lesson_id> <verdicts_json>
+# Announce a verdict, or a panel that could not give one (ONL-116).
+#
+# Emitted here rather than from the unattended stage so the attended walk's
+# verdicts reach the bus too; asserted_by tells the two apart. An unjudged
+# panel records no verdict and leaves the lesson confirmed, and the unattended
+# stage re-bills both judges for it on the next scan, so it is counted with
+# the reason the panel was refused.
+#
+# Usage: _librarian_lesson_emit_judged <lesson_id> <outcome> <asserted_by> <juried> [unjudged_reason] [aggregate_score]
+_librarian_lesson_emit_judged() {
+	declare -F librarian_lesson_emit >/dev/null 2>&1 || return 0
+	local payload
+	payload=$(jq -cn --arg id "$1" --arg o "$2" --arg a "$3" --argjson j "$4" \
+		--arg r "${5:-}" --arg s "${6:-}" \
+		'{lesson_id: $id, outcome: $o, asserted_by: $a, juried: $j}
+		 + (if $r == "" then {} else {unjudged_reason: $r} end)
+		 + (if ($s | tonumber? // null) == null then {} else {aggregate_score: ($s | tonumber)} end)') \
+		|| return 0
+	librarian_lesson_emit "librarian.lesson.judged" "$payload"
+}
+
 librarian_lesson_judge() {
 	local key="$1"
 	local lesson_id="$2"
@@ -284,7 +305,10 @@ librarian_lesson_judge() {
 			              and (.passed | type) == "boolean")
 			      and ([.[].judge_type] | sort) == $want)
 			end' 2>/dev/null) || usable="false"
-		[[ "$usable" != "true" ]] && return 2
+		if [[ "$usable" != "true" ]]; then
+			_librarian_lesson_emit_judged "$lesson_id" unjudged "$asserted_by" true panel_mismatch
+			return 2
+		fi
 
 		# A floored criterion nobody scored, or a panel that covered too little
 		# of the rubric, is UNJUDGED — not a pass. The candidate stays
@@ -300,16 +324,23 @@ librarian_lesson_judge() {
 		if [[ -n "$unscored" ]]; then
 			printf 'Lesson %s: no judge scored these floored criteria, so the panel cannot be trusted: %s\n' \
 				"$lesson_id" "$unscored" >&2
+			_librarian_lesson_emit_judged "$lesson_id" unjudged "$asserted_by" true criterion_unscored
 			return 2
 		fi
 		if ! awk -v c="$covered" -v m="$min_coverage" 'BEGIN { exit !(c >= m) }'; then
 			printf 'Lesson %s: the panel scored only %s of the rubric weight (minimum %s).\n' \
 				"$lesson_id" "$covered" "$min_coverage" >&2
+			_librarian_lesson_emit_judged "$lesson_id" unjudged "$asserted_by" true coverage_below_min
 			return 2
 		fi
 
 		local aggregate gate
-		aggregate=$(librarian_lesson_aggregate "$verdicts" "$rubric") || return 2
+		# A panel that passed the shape check but will not aggregate is still
+		# a panel that cannot be trusted, which is what panel_mismatch names.
+		aggregate=$(librarian_lesson_aggregate "$verdicts" "$rubric") || {
+			_librarian_lesson_emit_judged "$lesson_id" unjudged "$asserted_by" true panel_mismatch
+			return 2
+		}
 		gate=$(librarian_lesson_gate "$policy" "$verdicts" "$aggregate" "$threshold" "$rubric") || {
 			printf 'Lesson %s: the gate could not be decided.\n' "$lesson_id" >&2
 			return 1
@@ -349,5 +380,11 @@ librarian_lesson_judge() {
 	# permanently-stuck proposal that a3b fixed in confirm, unconfirm, and
 	# pass — "unrecognized status: " from every verb, and even unconfirm
 	# cannot recover it because list_pending hides it too.
-	librarian_lesson_write_atomic "$path" "$updated"
+	librarian_lesson_write_atomic "$path" "$updated" || return 1
+
+	local juried=true
+	[[ -z "$rubric_id" ]] && juried=false
+	_librarian_lesson_emit_judged "$lesson_id" "$new_status" "$asserted_by" "$juried" "" \
+		"$(printf '%s' "$verdict" | jq -r '.aggregate_score // ""')"
+	return 0
 }

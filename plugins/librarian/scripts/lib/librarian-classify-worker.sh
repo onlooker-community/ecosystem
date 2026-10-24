@@ -539,7 +539,7 @@ done
 # over-cap candidate stays `confirmed` and is retried on a later scan rather
 # than being declined, since a decline is terminal.
 # ---------------------------------------------------------------------------
-librarian_lesson_auto_stage "$PROJECT_KEY" || true
+librarian_lesson_auto_stage "$PROJECT_KEY" "$SESSION_ID" || true
 
 # ----------------------------------------------------------------------------
 # Watermark advance + scan.complete.
