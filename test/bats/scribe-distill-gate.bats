@@ -111,6 +111,20 @@ _wait_for_event() {
 	return 1
 }
 
+# distill.complete is emitted from inside the pass, but the lock is released by
+# run-distill.sh's EXIT trap after it. A second Stop sent the moment the event
+# lands can still find the lock held and skip as already_running, so a test
+# that expects the second pass to run, or to skip for no_new_turns, raced the
+# trap: the second complete never came, or the skip was for the wrong reason.
+_wait_for_release() {
+	local lockdir="${SESSIONS_DIR}/${1}.distill.lock.d" waited=0
+	while [[ -d "$lockdir" && "$waited" -lt 50 ]]; do
+		sleep 0.2
+		waited=$((waited + 1))
+	done
+	[[ ! -d "$lockdir" ]]
+}
+
 _skip_reasons() {
 	grep '"event_type":"scribe.distill.skipped"' "$ONLOOKER_EVENTS_LOG" 2>/dev/null \
 		| jq -r '.payload.reason'
@@ -136,10 +150,15 @@ _marker() {
 		echo "first pass never completed"
 		return 1
 	}
+	_wait_for_release sess-twice || return 1
 
 	_run_hook sess-twice >/dev/null
 	_wait_for_event "scribe.distill.skipped" 1 || {
 		echo "second Stop neither distilled nor reported a skip"
+		return 1
+	}
+	_skip_reasons | grep -qx no_new_turns || {
+		echo "skipped for the wrong reason: $(_skip_reasons | tr '\n' ' ')"
 		return 1
 	}
 
@@ -154,6 +173,7 @@ _marker() {
 @test "the declined second Stop reports no_new_turns with both compared counts" {
 	_run_hook sess-reason >/dev/null
 	_wait_for_event "scribe.distill.complete" 1 || return 1
+	_wait_for_release sess-reason || return 1
 	_run_hook sess-reason >/dev/null
 	_wait_for_event "scribe.distill.skipped" 1 || return 1
 
@@ -174,6 +194,7 @@ _marker() {
 @test "enough new turns lets the pass run again" {
 	_run_hook sess-grow >/dev/null
 	_wait_for_event "scribe.distill.complete" 1 || return 1
+	_wait_for_release sess-grow || return 1
 
 	# 3 -> 8 turns: exactly the default threshold of last + 5.
 	_append_user_turn "four"
@@ -198,6 +219,7 @@ _marker() {
 @test "one turn short of the threshold still declines" {
 	_run_hook sess-edge >/dev/null
 	_wait_for_event "scribe.distill.complete" 1 || return 1
+	_wait_for_release sess-edge || return 1
 
 	_append_user_turn "four"
 	_append_user_turn "five"
@@ -206,6 +228,10 @@ _marker() {
 
 	_run_hook sess-edge >/dev/null
 	_wait_for_event "scribe.distill.skipped" 1 || return 1
+	_skip_reasons | grep -qx no_new_turns || {
+		echo "skipped for the wrong reason: $(_skip_reasons | tr '\n' ' ')"
+		return 1
+	}
 
 	local calls
 	calls=$(wc -l <"$CLAUDE_CALLED" | tr -d '[:space:]')
@@ -258,6 +284,7 @@ STUB
 
 	_run_hook sess-off >/dev/null
 	_wait_for_event "scribe.distill.complete" 1 || return 1
+	_wait_for_release sess-off || return 1
 	_run_hook sess-off >/dev/null
 	_wait_for_event "scribe.distill.complete" 2 || {
 		echo "gate still engaged with redistill_min_new_turns=0"
@@ -470,6 +497,7 @@ STUB
 		echo "the first pass never completed"
 		return 1
 	}
+	_wait_for_release sess-badredistill || return 1
 
 	# Falls back to the shipped 5, so a second pass over the same transcript is
 	# still gated. Unguarded, $((last_turns + redistill_min)) kills the shell
@@ -479,6 +507,10 @@ STUB
 	_run_hook sess-badredistill >/dev/null
 	_wait_for_event "scribe.distill.skipped" 1 || {
 		echo "second pass neither distilled nor reported a skip: gate died"
+		return 1
+	}
+	_skip_reasons | grep -qx no_new_turns || {
+		echo "skipped for the wrong reason: $(_skip_reasons | tr '\n' ' ')"
 		return 1
 	}
 
