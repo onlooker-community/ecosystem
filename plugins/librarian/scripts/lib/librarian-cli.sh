@@ -916,6 +916,12 @@ librarian_cli_lessons_veto() {
 		printf 'Lesson %s vetoed, but the declined-ledger row could not be written; the audit trail is incomplete.\n' \
 			"$lesson_id" >&2
 	fi
+	# The held file is already gone, so the veto happened whether or not the
+	# ledger row landed. Only whether a reason was given rides on the bus; the
+	# reason is in the ledger (ONL-116).
+	librarian_lesson_emit "librarian.lesson.vetoed" "$(jq -cn --arg id "$lesson_id" \
+		--argjson g "$([[ -n "$reason" ]] && echo true || echo false)" \
+		'{lesson_id: $id, reason_given: $g}')"
 	printf 'Lesson %s vetoed; it will not leave this machine.\n' "$lesson_id"
 	return 0
 }

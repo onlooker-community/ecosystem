@@ -241,6 +241,20 @@ _seed_shippable_lesson() {
 	[ ! -f "${LIBRARIAN_DIR}/lessons/approved_held/01M3SWEPTSURFACE00000001.json" ]
 }
 
+@test "session-start announces each lesson its sweep shipped, under this session" {
+	# The sweep's emit is guarded on librarian_emit being defined, and this
+	# hook did not source librarian-emit.sh before ONL-116, so a sweep driven
+	# from here would have shipped the lesson without a word on the bus.
+	# These fixtures carry no promoted_at, so held_ms is absent, not zero.
+	_seed_shippable_lesson 01M3SWEPTSURFACE00000003
+
+	run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+	[ "$status" -eq 0 ] || return 1
+	grep '"event_type":"librarian.lesson.shipped"' "${ONLOOKER_DIR}/logs/onlooker-events.jsonl" \
+		| jq -e '.payload == {lesson_id: "01M3SWEPTSURFACE00000003"}
+		         and .session_id == "sess-start-test"' >/dev/null
+}
+
 @test "session-start surfaces the swept count alongside a pending held lesson" {
 	_seed_shippable_lesson 01M3SWEPTSURFACE00000002
 	_seed_held_lesson 01M3HELDSURFACE000000003

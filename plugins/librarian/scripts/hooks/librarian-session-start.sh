@@ -42,6 +42,10 @@ source "${PLUGIN_ROOT}/scripts/lib/librarian-config.sh"
 source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
 # shellcheck source=../lib/librarian-storage.sh
 source "${PLUGIN_ROOT}/scripts/lib/librarian-storage.sh"
+# The sweep below announces each lesson it ships (ONL-116). It is guarded on
+# librarian_emit being defined, so without this source it would stay silent.
+# shellcheck source=../lib/librarian-emit.sh
+source "${PLUGIN_ROOT}/scripts/lib/librarian-emit.sh"
 # shellcheck source=../lib/librarian-lesson-storage.sh
 source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-storage.sh"
 # shellcheck source=../lib/librarian-lesson-validate.sh
@@ -86,6 +90,7 @@ fi
 # a lesson leaves this machine unattended. Captured here (rather than
 # discarded, as before) so that moment gets a line below instead of vanishing
 # the instant the veto window elapses between sessions.
+LIBRARIAN_SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || LIBRARIAN_SESSION_ID=""
 SWEPT_OUTPUT=$(librarian_lesson_sweep_held "$PROJECT_KEY" 2>/dev/null) || SWEPT_OUTPUT=""
 
 HELD=$(librarian_lesson_count_held "$PROJECT_KEY" 2>/dev/null) || HELD=0

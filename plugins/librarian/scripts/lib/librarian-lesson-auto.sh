@@ -110,12 +110,33 @@ _librarian_lesson_auto_record_refusal() {
 	librarian_lesson_write_atomic "$path" "$updated" >/dev/null 2>&1 || true
 }
 
+# Announce the model's answer for one parked candidate (ONL-116). On a
+# refusal, only whether a reason was given rides on the bus; the reason itself
+# is on the proposal, recorded by _librarian_lesson_auto_record_refusal.
+#
+# Usage: _librarian_lesson_auto_emit_asserted <lesson_id> <outcome> [response]
+_librarian_lesson_auto_emit_asserted() {
+	local id="$1" outcome="$2" response="${3:-}" payload
+	if [[ "$outcome" == "refused" ]]; then
+		local reason
+		reason=$(printf '%s' "$response" | sed -E 's/^REFUSE[[:space:]]*:?[[:space:]]*//')
+		payload=$(jq -cn --arg id "$id" --argjson g "$([[ -n "$reason" ]] && echo true || echo false)" \
+			'{lesson_id: $id, outcome: "refused", reason_given: $g}')
+	else
+		payload=$(jq -cn --arg id "$id" --arg o "$outcome" '{lesson_id: $id, outcome: $o}')
+	fi
+	librarian_lesson_emit "librarian.lesson.asserted" "$payload"
+}
+
 # Auto-confirm one parked candidate. Prints exactly one of:
 #   confirmed:<id>             model asserted a scope; now awaiting a jury
 #   skipped:not_parked         scope is not unscoped; nothing to assert
 #   skipped:no_justification   the model refused; left pending for a human,
 #                              with the refusal recorded as .auto_refusal
 #   unavailable                infrastructure; nothing written
+#
+# Every outcome but skipped:not_parked emits librarian.lesson.asserted. A
+# candidate that is not parked was never a question for the model.
 #
 # Usage: librarian_lesson_auto_confirm_one <key> <lesson_id>
 librarian_lesson_auto_confirm_one() {
@@ -125,8 +146,9 @@ librarian_lesson_auto_confirm_one() {
 
 	local path candidate
 	path="$(librarian_lessons_dir "$key")/proposals/${lesson_id}.json"
-	[[ -f "$path" ]] || { printf 'unavailable'; return 0; }
-	candidate=$(jq -c '.candidate' "$path" 2>/dev/null) || { printf 'unavailable'; return 0; }
+	[[ -f "$path" ]] || { _librarian_lesson_auto_emit_asserted "$lesson_id" unavailable; printf 'unavailable'; return 0; }
+	candidate=$(jq -c '.candidate' "$path" 2>/dev/null) \
+		|| { _librarian_lesson_auto_emit_asserted "$lesson_id" unavailable; printf 'unavailable'; return 0; }
 
 	if ! printf '%s' "$candidate" | jq -e '.applies_to.scope.kind == "unscoped"' >/dev/null 2>&1; then
 		printf 'skipped:not_parked'
@@ -139,9 +161,10 @@ librarian_lesson_auto_confirm_one() {
 
 	# Empty is infrastructure, not a verdict — the same distinction
 	# librarian_lesson_transform_one draws. Leave the artifact untouched.
-	[[ -z "$justification" ]] && { printf 'unavailable'; return 0; }
+	[[ -z "$justification" ]] && { _librarian_lesson_auto_emit_asserted "$lesson_id" unavailable; printf 'unavailable'; return 0; }
 	if [[ "$justification" == REFUSE* ]]; then
 		_librarian_lesson_auto_record_refusal "$path" "$justification"
+		_librarian_lesson_auto_emit_asserted "$lesson_id" refused "$justification"
 		printf 'skipped:no_justification'
 		return 0
 	fi
@@ -151,7 +174,8 @@ librarian_lesson_auto_confirm_one() {
 	case "$visibility" in ''|null) visibility="org" ;; esac
 
 	librarian_lesson_confirm "$key" "$lesson_id" "$visibility" "$justification" model \
-		>/dev/null 2>&1 || { printf 'unavailable'; return 0; }
+		>/dev/null 2>&1 || { _librarian_lesson_auto_emit_asserted "$lesson_id" unavailable; printf 'unavailable'; return 0; }
+	_librarian_lesson_auto_emit_asserted "$lesson_id" asserted
 	printf 'confirmed:%s' "$lesson_id"
 }
 
@@ -303,12 +327,19 @@ librarian_lesson_auto_judge_one() {
 }
 
 # Auto-confirm every parked candidate, then jury as many as the cap allows.
-# A no-op unless lesson_auto.enabled is true.
+# A no-op unless lesson_auto.enabled is true, and then it emits nothing, so a
+# scan with no librarian.autojury.complete is a scan where the stage was off.
 #
-# Usage: librarian_lesson_auto_stage <key>
+# session_id attributes every event the stage causes, including the verdicts
+# and promotions emitted deeper down. LIBRARIAN_SESSION_ID is declared local
+# here, so bash's dynamic scope hands it to every callee and nothing leaks
+# past the stage.
+#
+# Usage: librarian_lesson_auto_stage <key> [session_id]
 librarian_lesson_auto_stage() {
 	local key="$1"
 	[[ -z "$key" ]] && return 0
+	local LIBRARIAN_SESSION_ID="${2:-${LIBRARIAN_SESSION_ID:-}}"
 
 	local enabled
 	enabled=$(librarian_config_get '.librarian.lesson_auto.enabled' 2>/dev/null)
@@ -319,10 +350,18 @@ librarian_lesson_auto_stage() {
 	# and just as blind to a non-numeric value (ONL-132).
 	cap=$(librarian_config_int '.librarian.lesson_auto.max_juries_per_scan' 1 2>/dev/null)
 
-	local id
+	local started_ms
+	started_ms=$(_librarian_lesson_now_ms)
+
+	local id result asserted=0 refused=0 unavailable=0
 	while IFS= read -r id; do
 		[[ -z "$id" ]] && continue
-		librarian_lesson_auto_confirm_one "$key" "$id" >/dev/null
+		result=$(librarian_lesson_auto_confirm_one "$key" "$id")
+		case "$result" in
+			confirmed:*) asserted=$((asserted + 1)) ;;
+			skipped:no_justification) refused=$((refused + 1)) ;;
+			unavailable) unavailable=$((unavailable + 1)) ;;
+		esac
 	done < <(librarian_lesson_list_pending "$key" | jq -r '.[].id' 2>/dev/null)
 
 	# The jury is the expensive step, so it is capped. An over-cap candidate
@@ -340,17 +379,34 @@ librarian_lesson_auto_stage() {
 	# window at all. Read the envelope's asserted_by, not the candidate's
 	# scope kind: version_independent is reachable from both a human's
 	# justification and a model's, and would not tell them apart.
-	local juried=0
+	#
+	# The loop runs past the cap instead of breaking, only to count what the
+	# cap deferred: a backlog the cap keeps growing is the cost signal ONL-115
+	# has to see.
+	local juried=0 deferred=0
 	while IFS= read -r id; do
 		[[ -z "$id" ]] && continue
-		[[ "$juried" -ge "$cap" ]] && break
 		local proposal_path asserted_by
 		proposal_path="$(librarian_lessons_dir "$key")/proposals/${id}.json"
 		asserted_by=$(jq -r '.asserted_by // "human"' "$proposal_path" 2>/dev/null)
 		[[ "$asserted_by" != "model" ]] && continue
+		if [[ "$juried" -ge "$cap" ]]; then
+			deferred=$((deferred + 1))
+			continue
+		fi
 		librarian_lesson_auto_judge_one "$key" "$id" >/dev/null
 		juried=$((juried + 1))
 	done < <(librarian_lesson_list_by_status "$key" confirmed | jq -r '.[].id' 2>/dev/null)
+
+	local duration_ms
+	duration_ms=$(( $(_librarian_lesson_now_ms) - started_ms ))
+	[[ "$duration_ms" -ge 0 ]] || duration_ms=0
+	librarian_lesson_emit "librarian.autojury.complete" "$(jq -cn \
+		--argjson asserted "$asserted" --argjson refused "$refused" \
+		--argjson unavailable "$unavailable" --argjson juried "$juried" \
+		--argjson deferred "$deferred" --argjson duration_ms "$duration_ms" \
+		'{asserted: $asserted, refused: $refused, unavailable: $unavailable,
+		  juried: $juried, deferred_by_cap: $deferred, duration_ms: $duration_ms}')"
 
 	return 0
 }
