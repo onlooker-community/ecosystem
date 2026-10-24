@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.0](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.25.4...librarian-v0.26.0) (2026-10-24)
+
+
+### Features
+
+* **librarian:** emit lesson pipeline events :loudspeaker: ([#487](https://github.com/onlooker-community/ecosystem/issues/487)) ([bef9351](https://github.com/onlooker-community/ecosystem/commit/bef9351be9cf7101c841a0579760f310a76a4010))
+
 ## [0.25.4](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.25.3...librarian-v0.25.4) (2026-10-24)
 
 
