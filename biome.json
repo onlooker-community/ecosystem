@@ -47,6 +47,10 @@
     {
       "includes": [".claude/settings.json"],
       "formatter": { "enabled": false }
+    },
+    {
+      "includes": ["**/.claude-plugin/plugin.json"],
+      "json": { "formatter": { "expand": "always" } }
     }
   ]
 }
