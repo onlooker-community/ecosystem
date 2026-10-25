@@ -22,16 +22,22 @@
 # Fallback when config hasn't been loaded or leaves the key unset.
 _LIBRARIAN_LESSON_DEFAULT_TIMEOUT_SECONDS=20
 
-# Cap on how much of a response the JSON-object extractor will scan. The
-# scanner is a per-character bash loop — effectively O(n^2) on long input,
-# since bash string slicing on a long string isn't O(1) per call — and it
-# runs after the claude call, uncapped, inside a SessionEnd hook that must
-# not stall session end. `claude -p` has no output-size flag to bound the
-# response itself, so the bound is enforced here instead. A response that
+# Cap on how much of a response the JSON-object extractor will read. It runs
+# after the claude call, inside a SessionEnd hook that must not stall session
+# end, and hands the remainder of the response to jq once per opening it tries.
+# It was a per-character bash loop, effectively O(n^2), until ONL-194; the cap
+# predates that and still bounds every attempt's input. `claude -p` has no
+# output-size flag to bound the response itself, so the bound is enforced here
+# instead. A response that
 # exceeds this without yielding valid JSON in the scanned prefix has not
 # followed the "output ONLY a single JSON object on one line" instruction
 # anyway, so declining it is correct, not just expedient.
 _LIBRARIAN_LESSON_EXTRACT_MAX_CHARS=8192
+# How many plausible openings the extractor hands to jq before giving up. A
+# real response has at most one or two prose fragments that open like an object
+# before the object itself; eight leaves room for that while bounding the jq
+# processes a response full of `{"` fragments can cost.
+_LIBRARIAN_LESSON_EXTRACT_MAX_ATTEMPTS=8
 
 # Usage: librarian_lesson_build_prompt <artifact_json> [mode]
 #
@@ -142,49 +148,44 @@ created_at: ${created_at}
 EOF
 }
 
-# Extract the first balanced top-level JSON object from a string that may
-# carry surrounding prose ("Here is the JSON: {...}"). Prints the substring
-# on success, prints nothing and returns 1 on failure. Depth-tracks braces
-# while skipping ones inside string literals (honoring backslash escapes),
-# so a claim like `{"claim": "uses \"quotes\" and { in prose"}` still
-# extracts correctly.
+# Extract the first JSON object from a string that may carry surrounding prose
+# ("Here is the JSON: {...}"). Prints the object, compacted, on success; prints
+# nothing and returns 1 on failure.
 #
 # Prose wrapping is not the same failure as unparseable output: a model that
 # added a sentence around otherwise-valid JSON would very likely produce
 # clean JSON on a resample, so declining it as transform_invalid would bury
 # a good artifact over formatting noise rather than a real judgment problem.
 #
+# Only a brace followed by optional whitespace and `"` is tried, because every
+# object worth extracting opens with a key. Most of these lessons are about
+# bash, and a model restating one quotes `${v:-N}` and `{a,b}` freely. The
+# extractor used to take the first balanced brace pair, which handed the jury
+# `{v:-N}`, so every verdict for such a lesson was lost and the candidate was
+# re-juried each scan (ONL-194).
+#
+# jq does the parsing: `input` reads exactly one value from where the opening
+# starts and ignores whatever follows it, so strings, escapes and nested braces
+# are handled by a real parser, not a hand-rolled scan. An opening jq rejects
+# moves on to the next one, up to _LIBRARIAN_LESSON_EXTRACT_MAX_ATTEMPTS times.
+#
 # Usage: _librarian_lesson_extract_json_object <text>
 _librarian_lesson_extract_json_object() {
-	local text="$1"
-	local start=-1 depth=0 in_string=0 escape=0
-	local i len ch
+	local rest="${1:0:_LIBRARIAN_LESSON_EXTRACT_MAX_CHARS}"
+	local opening='\{[[:space:]]*"'
+	local attempts=0 before object
 
-	len=${#text}
-	for (( i = 0; i < len; i++ )); do
-		ch="${text:i:1}"
-		if [[ $start -eq -1 ]]; then
-			[[ "$ch" == "{" ]] && { start=$i; depth=1; }
-			continue
+	while (( attempts < _LIBRARIAN_LESSON_EXTRACT_MAX_ATTEMPTS )); do
+		[[ "$rest" =~ $opening ]] || return 1
+		before="${rest%%"${BASH_REMATCH[0]}"*}"
+		rest="${rest:${#before}}"
+		object=$(printf '%s' "$rest" | jq -cn input 2>/dev/null)
+		if [[ -n "$object" ]]; then
+			printf '%s' "$object"
+			return 0
 		fi
-		if [[ $escape -eq 1 ]]; then
-			escape=0
-			continue
-		fi
-		case "$ch" in
-			'\') [[ $in_string -eq 1 ]] && escape=1 ;;
-			'"') in_string=$((1 - in_string)) ;;
-			'{') [[ $in_string -eq 0 ]] && depth=$((depth + 1)) ;;
-			'}')
-				if [[ $in_string -eq 0 ]]; then
-					depth=$((depth - 1))
-					if [[ $depth -eq 0 ]]; then
-						printf '%s' "${text:start:i-start+1}"
-						return 0
-					fi
-				fi
-				;;
-		esac
+		rest="${rest:1}"
+		attempts=$((attempts + 1))
 	done
 
 	return 1
@@ -247,12 +248,10 @@ librarian_lesson_call() {
 		return 0
 	fi
 
-	# Slow path: pull the first balanced JSON object out of surrounding
-	# prose. Bounded to a fixed prefix (see _LIBRARIAN_LESSON_EXTRACT_MAX_CHARS)
-	# so a rambling, arbitrarily long response can't turn the O(n^2) scan
-	# into an unbounded stall. Only used when it actually recovers valid
-	# JSON — otherwise fall through to the original text so the
-	# unparseable case still declines.
+	# Slow path: pull the first JSON object out of surrounding prose, reading
+	# only a fixed prefix (see _LIBRARIAN_LESSON_EXTRACT_MAX_CHARS). Only used
+	# when it actually recovers valid JSON — otherwise fall through to the
+	# original text so the unparseable case still declines.
 	local extracted
 	extracted=$(_librarian_lesson_extract_json_object \
 		"${cleaned:0:_LIBRARIAN_LESSON_EXTRACT_MAX_CHARS}")
