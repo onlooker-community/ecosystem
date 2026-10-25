@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.4](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.26.3...librarian-v0.26.4) (2026-10-25)
+
+
+### Bug Fixes
+
+* **librarian:** window scans on write time, not commit time :hourglass: ([#497](https://github.com/onlooker-community/ecosystem/issues/497)) ([1a62c71](https://github.com/onlooker-community/ecosystem/commit/1a62c71bd084e3727eb965a8c6a4862d42c8c7d3))
+
 ## [0.26.3](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.26.2...librarian-v0.26.3) (2026-10-25)
 
 
