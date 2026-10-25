@@ -1,0 +1,6 @@
+plugin_root=~/.claude-personal/plugins/cache/onlooker-community/librarian/0.26.1
+judge_model=claude-haiku-4-5-20251001
+transform_model=claude-haiku-4-5-20251001
+01M5KD41FY4G1CVGYD5DD24TH7 unavailable
+01M5KD7A0N4PGTJ7HB6PGRV2ZJ judged:01M5KD7A0N4PGTJ7HB6PGRV2ZJ
+stage_seconds=276
