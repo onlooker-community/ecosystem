@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.75.5](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.75.4...ecosystem-v0.75.5) (2026-10-25)
+
+
+### Bug Fixes
+
+* **librarian:** hand off every kept window, even past budget :package: ([#499](https://github.com/onlooker-community/ecosystem/issues/499)) ([f1f6b3f](https://github.com/onlooker-community/ecosystem/commit/f1f6b3f6d7ab8db4b4145946c6816df93cf5c26d))
+
 ## [0.75.4](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.75.3...ecosystem-v0.75.4) (2026-10-25)
 
 
