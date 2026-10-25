@@ -46,7 +46,7 @@ printf '%s\n' "$@" > "$ARGV_LOG"
 while (( $# )); do
   case "$1" in
     -p|--print) ;;
-    --max-turns|--model) shift ;;
+    --max-turns|--model|--settings) shift ;;
     --*)
       printf "error: unknown option '%s'\n" "$1" >&2
       exit 1

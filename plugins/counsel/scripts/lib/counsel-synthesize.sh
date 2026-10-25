@@ -97,7 +97,7 @@ counsel_synthesize() {
 	# NOTE: `claude -p` does not accept --max-tokens (it errors with "unknown
 	# option") and has no temperature flag, so we pass neither. Output length is
 	# governed by the model/prompt; the synthesis prompt asks for terse JSON.
-	local claude_args=(-p --max-turns 1 --model "$model")
+	local claude_args=(-p --max-turns 1 --model "$model" --settings '{"disableAllHooks":true}')
 
 	local response=""
 	if command -v timeout >/dev/null 2>&1; then

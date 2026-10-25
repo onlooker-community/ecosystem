@@ -137,7 +137,7 @@ _ask() {
 	local rel_a="$1" body_a="$2" rel_b="$3" body_b="$4"
 	echo_build_pairwise_prompt "$rel_a" "$body_a" "$rel_b" "$body_b" > "$PROMPT_FILE"
 
-	local args=(-p --max-turns 1)
+	local args=(-p --max-turns 1 --settings '{"disableAllHooks":true}')
 	[[ -n "$EVAL_MODEL" ]] && args+=(--model "$EVAL_MODEL")
 
 	local response=""

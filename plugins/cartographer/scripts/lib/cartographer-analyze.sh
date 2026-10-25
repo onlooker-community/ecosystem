@@ -54,7 +54,7 @@ _cartographer_run_cli() {
 
 	local response cli_status=0
 	response=$(printf '%s' "$prompt" \
-		| $_CARTOGRAPHER_TIMEOUT_CMD "$timeout_s" claude -p \
+		| $_CARTOGRAPHER_TIMEOUT_CMD "$timeout_s" claude -p --settings '{"disableAllHooks":true}' \
 			--max-turns 1 \
 			--model "$model" \
 			2>"$cli_err") || cli_status=$?

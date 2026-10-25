@@ -140,7 +140,7 @@ for f in "${FILES[@]}"; do
 		ATTEMPTED=$((ATTEMPTED + 1))
 		echo_build_judge_prompt "$rel" "$content" > "$PROMPT_FILE"
 
-		args=(-p --max-turns 1)
+		args=(-p --max-turns 1 --settings '{"disableAllHooks":true}')
 		[[ -n "$EVAL_MODEL" ]] && args+=(--model "$EVAL_MODEL")
 
 		response=""

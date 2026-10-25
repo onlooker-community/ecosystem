@@ -1,0 +1,4 @@
+plugin_root=~/src/github.com/onlooker-community/ecosystem/plugins/librarian
+judge_model=claude-haiku-4-5-20251001
+transform_model=claude-haiku-4-5-20251001
+stage_seconds=302

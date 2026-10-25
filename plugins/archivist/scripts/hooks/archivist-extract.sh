@@ -173,7 +173,7 @@ trap 'rm -f "$PROMPT_FILE"; _approve "Archivist extraction errored out, compacti
 # raw text we asked for.
 # ----------------------------------------------------------------------------
 
-CLAUDE_ARGS=(-p --max-turns 1)
+CLAUDE_ARGS=(-p --max-turns 1 --settings '{"disableAllHooks":true}')
 [[ -n "$EXTRACTION_MODEL" ]] && CLAUDE_ARGS+=(--model "$EXTRACTION_MODEL")
 
 # 90-second hard ceiling on extraction so a hung LLM call never blocks the

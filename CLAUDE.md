@@ -150,6 +150,7 @@ Workflow:
 
 - All hooks are bash scripts. No Python, no Node entry points in hook scripts (they may shell out to `node` for event emission or heavy lifting).
 - Hook scripts source shared helpers from `scripts/lib/` (or the plugin's own `scripts/lib/`).
+- Every `claude -p` a plugin starts passes `--settings '{"disableAllHooks":true}'` on the line that builds its arguments. A nested session otherwise runs every installed plugin's hooks, which start model calls of their own: in ONL-115's measured run that was 59–66% of the spend, and each plugin's `*_NESTED` guard only stops it re-entering itself. `test/bats/nested-claude-runs-no-hooks.bats` fails on a call site without it (ONL-195).
 - Event types follow `<plugin>.<noun>.<verb>` — e.g. `compass.check.skipped`, `tribunal.gate.blocked`.
 - ULIDs everywhere for IDs (not UUIDs). Each plugin ships its own `*_ulid` helper (e.g. `archivist-ulid.sh`, `tribunal-ulid.sh`); there is no shared ecosystem helper. Copy `plugins/tribunal/scripts/lib/tribunal-ulid.sh` as a starting point and rename the function prefix.
 - Config defaults live in `config.json`. User overrides go in `~/.claude/settings.json` (global) or `.claude/settings.json` (per-project) under the plugin's namespace key (e.g. `"compass"`, `"tribunal"`). See ADR-004.
