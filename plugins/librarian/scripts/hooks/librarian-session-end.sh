@@ -187,8 +187,8 @@ FAULT_DROPS=$(printf '%s' "$DROPPED" \
 MAX_FAULT_RETRY=$(librarian_config_int '.librarian.scan.max_fault_retry_artifacts' 500)
 
 # Bounded: load_since re-reads every artifact in the window each session, so an
-# unbounded hold degrades SessionEnd until the budget bail discards the backlog
-# anyway. Past the ceiling we abandon it and say so, per artifact.
+# unbounded hold degrades SessionEnd until it overruns its ceiling and is
+# killed every session. Past the ceiling we abandon it and say so, per artifact.
 SHOULD_ADVANCE=1
 RETRY_CAP_HIT=0
 if [[ "$FAULT_DROPS" -gt 0 ]]; then
@@ -219,42 +219,6 @@ for ((i = 0; i < DROPPED_EMIT_COUNT; i++)); do
 		   source_artifact_id: $drop.artifact_id }
 		 | with_entries(select(.value != null))')"
 done
-
-# ----------------------------------------------------------------------------
-# Runtime budget check: SessionEnd has 1.5s total. If we're running low on time,
-# skip classification to ensure scan.complete can be emitted before CLI timeout.
-# Retained artifacts will be re-scanned on the next session when time permits.
-#
-# The threshold is config-driven rather than hardcoded (ONL-104). Everything
-# between SCAN_START_TS_MS and here -- loading the window, the durability filter
-# loop, its per-artifact jq calls -- counts against this clock, so on a loaded
-# machine the gate trips before classification and the scan proposes nothing.
-# That is correct in production and ruinous in a test, where it made every
-# assertion about proposals race a one-second timer and
-# librarian-session-end.bats flake under `bats -j`. A knob lets a test pin the
-# budget above any plausible delay, and lets this branch be driven on purpose.
-# ----------------------------------------------------------------------------
-
-ELAPSED_MS=$(( $(librarian_now_ms) - SCAN_START_TS_MS ))
-BUDGET_THRESHOLD_MS=$(librarian_config_int '.librarian.scan.budget_threshold_ms' 1000)
-if [[ "$ELAPSED_MS" -ge "$BUDGET_THRESHOLD_MS" ]]; then
-	# The hold is a property of THIS scan, so it has to be honored wherever the
-	# scan exits -- otherwise it leaks through the budget path at exactly the
-	# moment the backlog is largest and load_since is slowest.
-	[[ "$SHOULD_ADVANCE" == "1" ]] && { librarian_storage_write_last_scan "$PROJECT_KEY" "$SCAN_START_ISO" || true; }
-	DURATION_MS=$(( $(librarian_now_ms) - SCAN_START_TS_MS ))
-	librarian_emit "librarian.scan.complete" "$SESSION_ID" "$(jq -cn \
-		--arg outcome "budget_exceeded" \
-		--argjson duration_ms "$DURATION_MS" \
-		--argjson candidates_proposed 0 \
-		--argjson candidates_dropped "$DROPPED_TOTAL" \
-		--argjson artifact_count_in_window "$ARTIFACT_COUNT" \
-		'{ outcome: $outcome, duration_ms: $duration_ms,
-		   candidates_proposed: $candidates_proposed,
-		   candidates_dropped: $candidates_dropped,
-		   artifact_count_in_window: $artifact_count_in_window }')"
-	hook_health_exit 0
-fi
 
 # ----------------------------------------------------------------------------
 # Hand the surviving window to a detached worker (ecosystem-449.72).

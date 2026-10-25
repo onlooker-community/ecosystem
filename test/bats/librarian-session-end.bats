@@ -38,13 +38,7 @@ setup() {
 
   mkdir -p "${PROJECT_REPO}/.claude"
 
-  # The scan budget gate is wall clock (ONL-104). Its 1000ms production default
-  # is measured from before the window is even loaded, so on a loaded runner the
-  # durability filter can cross it and the hook bails with zero proposals --
-  # failing assertions about classification for a reason that has nothing to do
-  # with classification. Pin it past any plausible delay; _settings merges over
-  # this so a test can still drive the gate deliberately.
-  LIBRARIAN_TEST_BASE_SETTINGS='{"librarian":{"scan":{"budget_threshold_ms":600000}}}'
+  LIBRARIAN_TEST_BASE_SETTINGS='{}'
   printf '%s' "$LIBRARIAN_TEST_BASE_SETTINGS" > "${PROJECT_REPO}/.claude/settings.json"
 
   # Stub `claude` CLI on PATH. Returns a deterministic classifier response
@@ -427,13 +421,16 @@ _scan_complete() {
   ! grep -q '"outcome":"gave_up"' "$ONLOOKER_EVENTS_LOG" 2>/dev/null
 }
 
-# The scan-level budget gate is wall clock, and before ONL-104 its threshold was
-# a hardcoded 1000ms with no override. That left the gate both untestable and
-# unavoidable: nothing could drive it deliberately, and every test expecting
-# proposals was racing it. On a loaded CI runner the pre-classification work
-# crosses 1000ms, the hook bails with zero proposals, and line 181 fails with
-# `1 != 2` -- 1, not 0, because an unmatched glob leaves its own pattern behind.
-@test "a zero scan budget trips the gate before classification" {
+# ONL-85. SessionEnd used to bail when the scan had run past
+# budget_threshold_ms, and it advanced the watermark on the way out, so every
+# artifact the filter had kept fell behind it unclassified and was never offered
+# again. The bail dated from inline classification, which had to leave time for
+# scan.complete inside the 1500ms ceiling. Since ecosystem-449.72 the hook only
+# writes a queue file, so the bail now saved milliseconds and lost the window.
+#
+# The bail and its key are gone. The key is still set here so that a bail
+# reintroduced on the same knob fails this test.
+@test "a scan past the old budget still hands its window to the worker" {
   echo '{"librarian":{"scan":{"budget_threshold_ms":0}}}' | _settings
 
   _seed_artifact "decisions" "01PROPOSEEFEEDBACK00000000" \
@@ -443,45 +440,8 @@ _scan_complete() {
   _run_scan
   [ "$status" -eq 0 ] || return 1
 
+  ! grep -q '"outcome":"budget_exceeded"' "$ONLOOKER_EVENTS_LOG" || return 1
   grep '"event_type":"librarian.scan.complete"' "$ONLOOKER_EVENTS_LOG" \
-    | jq -e '.payload.outcome == "budget_exceeded" and .payload.candidates_proposed == 0' >/dev/null \
-    || return 1
-
-  # The gate sits upstream of classification, so no model call was ever made.
-  [ ! -s "$CLAUDE_CALL_LOG" ]
+    | jq -e '.payload.outcome == "ok" and .payload.candidates_proposed == 1' >/dev/null
 }
 
-# ONL-132. budget_threshold_ms is read at :233 and consumed at :234 in
-# `[[ "$ELAPSED_MS" -ge "$BUDGET_THRESHOLD_MS" ]]`, which sits on the path every
-# scan takes. The arithmetic comparison operators inside [[ ]] evaluate their
-# operands arithmetically, so a non-numeric value dies there exactly as it
-# would inside (( )) -- a hazard class ONL-132 did not mention and the sweep
-# only found after being taught to look for it.
-#
-# The fixture value must be NON-DIGIT-LEADING. "1500ms" looks like the more
-# plausible typo -- the surrounding docs all discuss SessionEnd's 1500ms
-# ceiling in that notation -- but it is the SURVIVING mode: bash reports "value
-# too great for base", the comparison merely returns non-zero, and the hook
-# runs on. That version of this test passed against the unfixed code. "none" is
-# read as a bare variable name instead, which is the mode that stops the shell.
-@test "a non-numeric budget_threshold_ms still terminates the scan" {
-  # An artifact is required, not decoration. The empty-store path emits its
-  # scan.complete at :146 and returns, BEFORE the budget read at :233 -- so
-  # without seeding, this test exercises none of the code it names. The first
-  # version of it passed against the unfixed hook for exactly that reason.
-  _seed_artifact "decisions" "01BUDGETGUARD0000000000000" \
-    "User prefers functional patterns prefer-functional-stub" \
-    "User explicitly said: always prefer plain functions over classes when adding new code in the api layer."
-
-  _settings <<'JSON'
-{"librarian":{"scan":{"budget_threshold_ms":"none"}}}
-JSON
-
-  _run_scan
-  [ "$status" -eq 0 ] || return 1
-
-  # The hook exits 0 either way, so the terminating event is the assertion that
-  # bites: the budget comparison runs between scan.started and scan.complete.
-  grep -q '"event_type":"librarian.scan.started"' "$ONLOOKER_EVENTS_LOG" || return 1
-  grep -q '"event_type":"librarian.scan.complete"' "$ONLOOKER_EVENTS_LOG"
-}
