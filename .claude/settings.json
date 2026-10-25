@@ -31,6 +31,11 @@
       "autoUpdate": true
     }
   },
+  "librarian": {
+    "lesson_auto": {
+      "enabled": true
+    }
+  },
   "inspector": {
     "checks": {
       ".sh": [
