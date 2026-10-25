@@ -155,3 +155,34 @@ STUB
 
   [ "$(librarian_storage_count_pending "$KEY")" -eq 2 ]
 }
+
+@test "write_last_scan records the instant it is given, not the time it runs" {
+  # ONL-200. The worker writes the watermark when it FINISHES, ~40s after the
+  # scan read the window. Stamping "now" there excluded everything archivist
+  # wrote in between, from this session or any concurrent one.
+  local scan_start
+  scan_start=$(relative_iso_days_ago 1)
+
+  librarian_storage_write_last_scan "$KEY" "$scan_start"
+
+  [ "$(librarian_storage_read_last_scan "$KEY")" = "$scan_start" ]
+}
+
+@test "write_last_scan never moves the watermark backward" {
+  # Concurrent sessions finish out of order: an older scan's worker landing
+  # after a newer scan must not re-open a window the newer one already took.
+  local newer older
+  newer=$(relative_iso_days_ago 1)
+  older=$(relative_iso_days_ago 2)
+
+  librarian_storage_write_last_scan "$KEY" "$newer"
+  librarian_storage_write_last_scan "$KEY" "$older"
+
+  [ "$(librarian_storage_read_last_scan "$KEY")" = "$newer" ]
+}
+
+@test "write_last_scan still defaults to now" {
+  librarian_storage_write_last_scan "$KEY"
+
+  librarian_storage_read_last_scan "$KEY" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z$'
+}

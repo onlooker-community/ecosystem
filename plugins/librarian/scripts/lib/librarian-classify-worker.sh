@@ -545,7 +545,14 @@ librarian_lesson_auto_stage "$PROJECT_KEY" "$SESSION_ID" || true
 # Watermark advance + scan.complete.
 # ----------------------------------------------------------------------------
 
-librarian_storage_write_last_scan "$PROJECT_KEY" || true
+# The scan's start, carried in the queue as queued_at_ms -- not now. This runs
+# when classification finishes, tens of seconds after the window was read, and
+# stamping now here excluded everything archivist wrote meanwhile (ONL-200).
+# The hook already wrote the same instant, so this is normally a no-op.
+SCAN_START_ISO=""
+[[ "$SCAN_START_TS_MS" =~ ^[0-9]+$ && "$SCAN_START_TS_MS" -gt 0 ]] \
+	&& SCAN_START_ISO=$(jq -rn --argjson ms "$SCAN_START_TS_MS" '$ms / 1000 | floor | todate' 2>/dev/null)
+librarian_storage_write_last_scan "$PROJECT_KEY" "$SCAN_START_ISO" || true
 
 TOTAL_DROPPED=$((DROPPED_TOTAL + POST_CLASSIFIER_DROPPED))
 OUTCOME="ok"

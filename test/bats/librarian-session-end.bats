@@ -168,6 +168,32 @@ _run_scan() {
   jq -e '.scanned_at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T")' "${LIBRARIAN_DIR}/last_scan.json" >/dev/null
 }
 
+@test "an artifact archivist writes after a scan's read is in the next scan's window" {
+  # ONL-200. archivist-mine and this hook start in the same millisecond at
+  # SessionEnd. When the hook reads first it sees nothing; archivist then
+  # writes a mined commit whose created_at is the COMMIT time, older than the
+  # watermark the hook just wrote. Under a created_at window that artifact was
+  # excluded from every later scan -- which is how the lesson_auto commit
+  # (decision 008G32CMFJAW5JHGV886RMXTA8) never reached the classifier.
+  _run_scan
+  grep '"event_type":"librarian.scan.complete"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e '.payload.skip_reason == "no_new_artifacts"' >/dev/null || return 1
+
+  # Archivist lands late: written now, dated by a commit from an hour ago.
+  local commit_time
+  commit_time=$(jq -rn 'now - 3600 | floor | todate')
+  _seed_artifact decisions 01JLATEMINEDCOMMIT00000000 \
+    "The scan watermark tracks when archivist wrote" \
+    "We decided the watermark keys on write time, because created_at is the commit time." \
+    "$commit_time"
+  : > "$ONLOOKER_EVENTS_LOG"
+
+  _run_scan
+  [ "$status" -eq 0 ] || return 1
+  grep '"event_type":"librarian.scan.started"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e '.payload.artifact_count_in_window == 1' >/dev/null
+}
+
 @test "session-end proposes promotion for marker-phrase + classifier success" {
   # Seed two promotable artifacts and one filter-rejected one.
   _seed_artifact "decisions" "01PROPOSEEFEEDBACK00000000" \

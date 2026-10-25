@@ -15,7 +15,8 @@ setup() {
 	ARTIFACT_DIR="${ONLOOKER_DIR}/archivist/${PROJECT_KEY}"
 }
 
-# Seed one archivist artifact. Shape mirrors archivist's storage.sh.
+# Seed one archivist artifact. Shape mirrors archivist's storage.sh. An
+# optional fourth argument sets the file's mtime apart from created_at.
 _seed() {
 	local kind="$1" id="$2" created_at="$3"
 	mkdir -p "${ARTIFACT_DIR}/${kind}"
@@ -25,6 +26,18 @@ _seed() {
 		'{id: $id, kind: "decision", created_at: $created_at, updated_at: $created_at,
 		  summary: $summary, detail: $detail, files: [], session_id: "s1"}' \
 		> "${ARTIFACT_DIR}/${kind}/${id}.json"
+	_set_mtime "${ARTIFACT_DIR}/${kind}/${id}.json" "${4:-$created_at}"
+}
+
+# Pin a file's mtime to an ISO-8601 UTC instant. The reader windows on when
+# archivist WROTE a file, so a fixture's mtime is part of its meaning; by
+# default _seed stamps it with created_at, which is what the PreCompact
+# extractor produces. `touch -t` under TZ=UTC is the one spelling BSD and GNU
+# agree on.
+_set_mtime() {
+	local file="$1" iso="$2" stamp
+	stamp=$(jq -rn --arg t "$iso" '$t | fromdateiso8601 | strftime("%Y%m%d%H%M.%S")')
+	TZ=UTC touch -t "$stamp" "$file"
 }
 
 # Put a counting wrapper for jq on PATH. Each invocation appends one byte to
@@ -87,14 +100,65 @@ STUB
 	[ "$(printf '%s' "$output" | jq -r '.[0].id')" = "new1" ]
 }
 
-@test "an artifact exactly at the watermark is excluded" {
+@test "a file written in the watermark's own second is included" {
+	# The watermark is the scan's start, floored to the second. A file written
+	# in that same second may have landed after the read, so the window has to
+	# include it; one that landed just before the read is re-read and dropped
+	# as a duplicate downstream. Excluding the second instead would lose the
+	# late write, which is ONL-200.
 	local watermark
 	watermark=$(relative_iso_days_ago 5)
 	_seed decisions edge "$watermark"
 
 	run librarian_archivist_load_since "$PROJECT_KEY" "$watermark"
 	[ "$status" -eq 0 ] || return 1
+	[ "$(printf '%s' "$output" | jq 'length')" -eq 1 ]
+}
+
+@test "an artifact written after the watermark is read even when created_at predates it" {
+	# ONL-200. archivist-mine stamps created_at with the COMMIT time, and runs
+	# concurrently with librarian at SessionEnd. When librarian reads first,
+	# the artifact lands after the scan -- with a created_at hours older than
+	# the watermark that scan then writes. A created_at window excludes it from
+	# every later scan; this is decision 008G32CMFJAW5JHGV886RMXTA8, the
+	# lesson_auto commit, which no scan ever classified.
+	local watermark
+	watermark=$(relative_iso_days_ago 1)
+	_seed decisions mined "$(relative_iso_days_ago 2)" "$(relative_iso_days_ago 0)"
+
+	run librarian_archivist_load_since "$PROJECT_KEY" "$watermark"
+	[ "$status" -eq 0 ] || return 1
+	[ "$(printf '%s' "$output" | jq 'length')" -eq 1 ] || return 1
+	[ "$(printf '%s' "$output" | jq -r '.[0].id')" = "mined" ]
+}
+
+@test "an artifact written before the watermark is excluded even when created_at is newer" {
+	# The other half of keying on write time: created_at no longer admits a
+	# file on its own. Without this, a file with a future-dated created_at
+	# would be re-read on every scan.
+	local watermark
+	watermark=$(relative_iso_days_ago 1)
+	_seed decisions stale "$(relative_iso_days_ago 0)" "$(relative_iso_days_ago 2)"
+
+	run librarian_archivist_load_since "$PROJECT_KEY" "$watermark"
+	[ "$status" -eq 0 ] || return 1
 	[ "$(printf '%s' "$output" | jq 'length')" -eq 0 ]
+}
+
+@test "falls back to created_at when no stat can report mtimes" {
+	# Fail soft: a host whose stat speaks neither GNU -c nor BSD -f still gets
+	# the old window rather than an empty one or every artifact ever written.
+	_seed decisions old1 "$(relative_iso_days_ago 10)" "$(relative_iso_days_ago 0)"
+	_seed decisions new1 "$(relative_iso_days_ago 1)" "$(relative_iso_days_ago 0)"
+	STUB_BIN="${BATS_TEST_TMPDIR}/bin"
+	mkdir -p "$STUB_BIN"
+	printf '#!/usr/bin/env bash\nexit 1\n' > "${STUB_BIN}/stat"
+	chmod +x "${STUB_BIN}/stat"
+	PATH="${STUB_BIN}:${PATH}"
+
+	run librarian_archivist_load_since "$PROJECT_KEY" "$(relative_iso_days_ago 5)"
+	[ "$status" -eq 0 ] || return 1
+	[ "$(printf '%s' "$output" | jq -r '[.[].id] | join(",")')" = "new1" ]
 }
 
 @test "results are sorted chronologically" {

@@ -8,8 +8,9 @@
 #   { id, kind, project_key, source, created_at, updated_at, summary,
 #     detail, files, session_id, trigger }
 #
-# Librarian reads the same project-key directory and filters by created_at,
-# returning candidates newer than the watermark.
+# Librarian reads the same project-key directory and returns the artifacts
+# archivist wrote at or after the watermark, by file mtime (ONL-200), falling
+# back to created_at only when no stat can report mtimes.
 
 # Resolve the archivist project dir for a given project key.
 # Returns empty if archivist artifacts are not present.
@@ -55,7 +56,7 @@ librarian_archivist_load_by_id() {
 	return 0
 }
 
-# Load archivist artifacts created since the given watermark.
+# Load archivist artifacts written since the given watermark.
 #
 # Usage: librarian_archivist_load_since <project_key> <watermark_iso>
 #
@@ -82,6 +83,47 @@ librarian_archivist_load_since() {
 	done
 
 	[[ ${#files[@]} -eq 0 ]] && { echo '[]'; return 0; }
+
+	# Window on when archivist WROTE each file, not on its created_at.
+	#
+	# archivist-mine stamps created_at with the commit time and runs alongside
+	# this scan at SessionEnd. When the scan reads first, the artifact lands
+	# afterward with a created_at older than the watermark the scan then writes,
+	# and a created_at window excludes it from every later scan. That stranded
+	# every commit mined in a race the scan won, and with it the lesson_auto
+	# stage, which only runs behind a non-empty window (ONL-200).
+	#
+	# Inclusive of the watermark's own second: the watermark is the scan's
+	# start floored to the second, and stat reports whole seconds, so a file
+	# written just after the read can share it. What that re-reads from just
+	# before the read is dropped downstream as a duplicate.
+	#
+	# One stat for the whole corpus, so the cost stays flat (see below). GNU
+	# first: BSD rejects -c outright, whereas GNU reads -f as --file-system and
+	# prints filesystem data before failing. If neither works, fall back to the
+	# created_at window rather than to nothing or to everything.
+	local by_created_at=1
+	if [[ -n "$watermark" ]]; then
+		local watermark_epoch stats
+		watermark_epoch=$(jq -rn --arg w "$watermark" '$w | fromdateiso8601' 2>/dev/null) \
+			|| watermark_epoch=""
+		if [[ -n "$watermark_epoch" ]] \
+			&& { stats=$(stat -c '%Y %n' "${files[@]}" 2>/dev/null) \
+				|| stats=$(stat -f '%m %N' "${files[@]}" 2>/dev/null); }; then
+			by_created_at=0
+			files=()
+			local mtime path
+			while IFS=' ' read -r mtime path; do
+				[[ "$mtime" =~ ^[0-9]+$ ]] || continue
+				[[ "$mtime" -ge "$watermark_epoch" ]] && files+=("$path")
+			done <<< "$stats"
+			[[ ${#files[@]} -eq 0 ]] && { echo '[]'; return 0; }
+		fi
+	fi
+
+	# Past this point $watermark is the created_at fallback only: once the
+	# mtime filter has run, the files list already IS the window.
+	[[ "$by_created_at" == "0" ]] && watermark=""
 
 	# One jq for the whole corpus, not two per file.
 	#
