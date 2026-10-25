@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.5](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.9.4...archivist-v0.9.5) (2026-10-25)
+
+
+### Bug Fixes
+
+* **plugins:** run every nested claude -p with hooks off :scissors: ([#494](https://github.com/onlooker-community/ecosystem/issues/494)) ([c6f4123](https://github.com/onlooker-community/ecosystem/commit/c6f4123f56ba63ff72bf2d17ac6b91fca4e5e349))
+
 ## [0.9.4](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.9.3...archivist-v0.9.4) (2026-10-18)
 
 
