@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.3](https://github.com/onlooker-community/ecosystem/compare/compass-v0.9.2...compass-v0.9.3) (2026-10-25)
+
+
+### Bug Fixes
+
+* **plugins:** run every nested claude -p with hooks off :scissors: ([#494](https://github.com/onlooker-community/ecosystem/issues/494)) ([c6f4123](https://github.com/onlooker-community/ecosystem/commit/c6f4123f56ba63ff72bf2d17ac6b91fca4e5e349))
+
 ## [0.9.2](https://github.com/onlooker-community/ecosystem/compare/compass-v0.9.1...compass-v0.9.2) (2026-10-09)
 
 

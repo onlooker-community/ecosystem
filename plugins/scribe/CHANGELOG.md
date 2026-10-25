@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.2](https://github.com/onlooker-community/ecosystem/compare/scribe-v0.10.1...scribe-v0.10.2) (2026-10-25)
+
+
+### Bug Fixes
+
+* **plugins:** run every nested claude -p with hooks off :scissors: ([#494](https://github.com/onlooker-community/ecosystem/issues/494)) ([c6f4123](https://github.com/onlooker-community/ecosystem/commit/c6f4123f56ba63ff72bf2d17ac6b91fca4e5e349))
+
 ## [0.10.1](https://github.com/onlooker-community/ecosystem/compare/scribe-v0.10.0...scribe-v0.10.1) (2026-10-13)
 
 
