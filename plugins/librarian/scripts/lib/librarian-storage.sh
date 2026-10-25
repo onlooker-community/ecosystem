@@ -136,15 +136,27 @@ librarian_storage_read_last_scan() {
 	jq -r '.scanned_at // empty' "$path" 2>/dev/null
 }
 
-# Write the current time as the new watermark.
+# Write the new watermark: the instant the scan READ its window, defaulting to
+# now. Callers pass the scan's start because the watermark used to be stamped
+# when it was written -- by the worker, ~40s after the read -- which excluded
+# everything archivist wrote in between, from any session (ONL-200).
+#
+# Never moves backward. Concurrent sessions finish out of order, and an older
+# scan's worker landing last would otherwise re-open a window a newer scan has
+# already taken. ISO-8601 UTC compares correctly as a string.
+#
+# Usage: librarian_storage_write_last_scan <key> [iso_instant]
 librarian_storage_write_last_scan() {
 	local key="$1"
+	local at="${2:-}"
 	[[ -z "$key" ]] && return 1
 	librarian_storage_init "$key" || return 1
-	local now path
-	now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+	[[ -z "$at" ]] && at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+	local path current
 	path=$(librarian_last_scan_path "$key")
-	jq -n --arg t "$now" '{ scanned_at: $t }' > "$path" 2>/dev/null
+	current=$(librarian_storage_read_last_scan "$key")
+	[[ -n "$current" && ! "$at" > "$current" ]] && return 0
+	jq -n --arg t "$at" '{ scanned_at: $t }' > "$path" 2>/dev/null
 }
 
 # ============================================================================

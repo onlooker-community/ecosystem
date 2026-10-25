@@ -119,6 +119,11 @@ fi
 # ----------------------------------------------------------------------------
 
 SCAN_START_TS_MS=$(librarian_now_ms)
+# The next watermark is this instant, captured BEFORE the window is read, not
+# the time the watermark gets written. Anything archivist writes after the read
+# is then in the next window, whichever SessionEnd hook finishes first (ONL-200).
+SCAN_START_ISO=$(jq -rn --argjson ms "$SCAN_START_TS_MS" '$ms / 1000 | floor | todate' 2>/dev/null) \
+	|| SCAN_START_ISO=""
 ARTIFACTS=$(librarian_archivist_load_since "$PROJECT_KEY" "$WATERMARK")
 ARTIFACT_COUNT=$(printf '%s' "$ARTIFACTS" | jq 'length' 2>/dev/null) || ARTIFACT_COUNT=0
 
@@ -142,7 +147,7 @@ librarian_emit "librarian.scan.started" "$SESSION_ID" "$(jq -cn \
 # reason is the vocabulary the schema already carried for this; librarian had
 # simply never used it.
 if [[ "$ARTIFACT_COUNT" == "0" ]]; then
-	librarian_storage_write_last_scan "$PROJECT_KEY" || true
+	librarian_storage_write_last_scan "$PROJECT_KEY" "$SCAN_START_ISO" || true
 	DURATION_MS=$(( $(librarian_now_ms) - SCAN_START_TS_MS ))
 	librarian_emit "librarian.scan.complete" "$SESSION_ID" "$(jq -cn \
 		--arg outcome "skipped" \
@@ -236,7 +241,7 @@ if [[ "$ELAPSED_MS" -ge "$BUDGET_THRESHOLD_MS" ]]; then
 	# The hold is a property of THIS scan, so it has to be honored wherever the
 	# scan exits -- otherwise it leaks through the budget path at exactly the
 	# moment the backlog is largest and load_since is slowest.
-	[[ "$SHOULD_ADVANCE" == "1" ]] && { librarian_storage_write_last_scan "$PROJECT_KEY" || true; }
+	[[ "$SHOULD_ADVANCE" == "1" ]] && { librarian_storage_write_last_scan "$PROJECT_KEY" "$SCAN_START_ISO" || true; }
 	DURATION_MS=$(( $(librarian_now_ms) - SCAN_START_TS_MS ))
 	librarian_emit "librarian.scan.complete" "$SESSION_ID" "$(jq -cn \
 		--arg outcome "budget_exceeded" \
@@ -284,7 +289,7 @@ if [[ "$KEPT_COUNT" == "0" ]]; then
 	# rather than through the handoff below. The comment above about the queue
 	# file making the advance safe reasons about the handoff path -- here there
 	# is no queue file, because there was nothing to put in one.
-	[[ "$SHOULD_ADVANCE" == "1" ]] && { librarian_storage_write_last_scan "$PROJECT_KEY" || true; }
+	[[ "$SHOULD_ADVANCE" == "1" ]] && { librarian_storage_write_last_scan "$PROJECT_KEY" "$SCAN_START_ISO" || true; }
 	DURATION_MS=$(( $(librarian_now_ms) - SCAN_START_TS_MS ))
 	librarian_emit "librarian.scan.complete" "$SESSION_ID" "$(jq -cn \
 		--arg outcome "empty" \
@@ -412,6 +417,6 @@ _spawn_classify || true
 # onlooker.currency.checked for itself.
 # ----------------------------------------------------------------------------
 
-[[ "$SHOULD_ADVANCE" == "1" ]] && { librarian_storage_write_last_scan "$PROJECT_KEY" || true; }
+[[ "$SHOULD_ADVANCE" == "1" ]] && { librarian_storage_write_last_scan "$PROJECT_KEY" "$SCAN_START_ISO" || true; }
 
 hook_health_exit 0
