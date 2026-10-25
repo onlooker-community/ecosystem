@@ -196,3 +196,14 @@ The controls are working only if all four hold at the review point. If any one f
    nested `claude -p`, and the re-baseline
    ([`2026-10-24-hooks-off/`](../measurements/2026-10-24-hooks-off/README.md)) puts it at roughly
    $0.85. Any nested spend that shows up again counts toward the $3.
+
+### Where it is enabled
+
+| project | enabled | review no earlier than | reached on |
+| --- | --- | --- | --- |
+| `onlooker-community/ecosystem` | 2026-10-25, in `.claude/settings.json` | 2026-11-24 (ONL-198) | not yet |
+
+Enabled with ONL-194 and ONL-195 merged, as criterion 1 requires. Going in, every juried
+model-asserted candidate across both baselines (3 of 3) failed on `grounding`, so criterion 2 is
+the one most likely to fail. That pattern was known at the time it was enabled, so it is not a
+finding of the review.
