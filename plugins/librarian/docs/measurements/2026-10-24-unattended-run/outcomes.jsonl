@@ -1,0 +1,3 @@
+{"id":"01M5KD41FY4G1CVGYD5DD24TH7","status":"confirmed","asserted_by":"model","auto_refusal":null,"verdict":null}
+{"id":"01M5KD7A0N4PGTJ7HB6PGRV2ZJ","status":"confirmed","asserted_by":"model","auto_refusal":null,"verdict":null}
+{"id":"01M5K7JM4T5Y539NNZ3NCCAWGG","status":"rejected","asserted_by":"model","auto_refusal":null,"verdict":{"passed":false,"reason":"jury_not_majority","aggregate_score":0.8621000000000001,"failed_criterion":"generality","judges":[{"judge_type":"standard","score":0.825,"passed":false,"criterion_scores":{"grounding":0.80,"scope_accuracy":0.80,"generality":0.55,"disclosure":1.0}},{"judge_type":"adversarial","score":0.90,"passed":true,"criterion_scores":{"grounding":0.90,"scope_accuracy":0.83,"generality":0.80,"disclosure":1.0}}]}}

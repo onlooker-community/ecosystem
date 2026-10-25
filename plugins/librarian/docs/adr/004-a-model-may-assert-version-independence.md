@@ -118,7 +118,8 @@ anywhere until a project explicitly turns it on.
 - `defer` and `unconfirm`, the attended walk's "not now" and "take it back" verbs, do not hold a
   parked, model-eligible candidate against the next unattended scan. A human who uses either verb
   on an opted-in project can have that decision reversed by the next scan, recoverable only
-  through the veto window (tracked as a follow-up, not addressed by this ADR).
+  through the veto window. ONL-112 has since closed this: both verbs now write an `auto_hold`
+  the unattended stage skips, and only a person's `confirm` clears it.
 - Widens the gap between attended and unattended librarian behavior that SKILL.md must now
   describe accurately — the two blanket statements it previously made ("auto-promotion is
   intentionally off," "never dispatch judges without the user's go-ahead") are scoped, in the
@@ -157,3 +158,39 @@ anywhere until a project explicitly turns it on.
 - SKILL.md's two blanket statements are corrected in the same change that adds this ADR: they
   remain accurate for the attended walk and for any project with the flag off, and now name what
   changes when `lesson_auto.enabled` is true.
+
+## Validation
+
+The compensating controls are only worth something if they can be seen working. These criteria
+say what would show it, and what would show they are not. The baseline is ONL-115's measured run,
+[`docs/measurements/2026-10-24-unattended-run/`](../measurements/2026-10-24-unattended-run/README.md).
+
+**Review point:** 30 days after `lesson_auto.enabled` is turned on in a project, or 20 juried
+model-asserted candidates, whichever comes later. Fewer than 20 verdicts can't tell a rate from
+noise.
+
+The controls are working only if all four hold at the review point. If any one fails,
+`lesson_auto` is turned off in that project and the reason is recorded against this ADR.
+
+1. **The jury returns verdicts.** At least 95% of jury dispatches produce a verdict
+   (`librarian.lesson.judged` events against `juried` in `librarian.autojury.complete`). An
+   `unavailable` jury is retried every scan at full cost and decides nothing, so a higher rate
+   means the stage is spending money without any control running. The baseline run measured 2 of
+   3, all failures from one extractor defect (ONL-194). Fixing it is a precondition for enabling, not
+   something to watch for later.
+2. **The rubric filters rather than walls.** Between 10% and 60% of juried model-asserted
+   candidates pass. Below 10%, the path costs money and ships nothing; check whether the failures
+   are in `grounding`, the criterion a judge without the repo can least assess (ONL-168), before
+   blaming the candidates. Above 60%, compare with the human-asserted pass rate at the same
+   visibility; if the `-auto` rate is not lower, the harder rubric is not harder in practice. The
+   baseline run passed 0 of 2, both failing on `grounding`.
+3. **The veto window is not catching much.** At most 25% of lessons that enter `approved_held/`
+   are vetoed (`librarian.lesson.vetoed` against holds). A higher rate means the rubric lets
+   through what a person would not, and the window is the only thing stopping it. Zero vetoes
+   across 10 or more held lessons is **inconclusive, not success**: nothing on the bus records
+   that anyone looked at a held lesson, so silence can't be told from approval.
+4. **An approved lesson is worth what it costs.** At most $3 of model spend per shipped lesson,
+   including the nested hook sessions every `claude -p` call starts. That spend was 59–66% of the
+   total in the baseline run (ONL-195); re-baseline once it is fixed. Cost is not on the bus, so this is measured by re-running the
+   baseline harness at the review point. At the baseline's per-call costs, a 20% pass rate comes
+   to roughly $2.40 per shipped lesson.
