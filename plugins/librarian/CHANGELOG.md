@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.2](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.26.1...librarian-v0.26.2) (2026-10-25)
+
+
+### Bug Fixes
+
+* **librarian:** stop the jury losing verdicts to ${v:-N} :jigsaw: ([#492](https://github.com/onlooker-community/ecosystem/issues/492)) ([b51dfde](https://github.com/onlooker-community/ecosystem/commit/b51dfde207f2bb6941b9a8d4efb1e3fb199cc7e5))
+
 ## [0.26.1](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.26.0...librarian-v0.26.1) (2026-10-24)
 
 
