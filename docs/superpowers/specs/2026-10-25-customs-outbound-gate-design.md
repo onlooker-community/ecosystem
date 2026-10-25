@@ -36,7 +36,8 @@ that kind of secret belongs?
 
 The issue named a second slice: package installs with typosquat-shaped names or
 unpinned versions. That's a different detector with a different false-positive profile,
-and none of its data has been collected yet. It becomes its own issue. Shipping both
+and none of its data has been collected yet. It becomes its own issue,
+[ONL-204](https://linear.app/onlooker/issue/ONL-204). Shipping both
 together would mean tuning two unrelated signals inside one wave.
 
 ### 2. A hit asks; it does not deny
@@ -208,20 +209,22 @@ The plugin's `config.json` holds the defaults, and the settings overlay
 {
   "customs": {
     "mode": "ask",
-    "pairs": {
-      "github_token": ["github.com", "api.github.com", "uploads.github.com"],
-      "anthropic_key": ["api.anthropic.com"],
-      "openai_key": ["api.openai.com"],
-      "aws_access_key_id": ["*.amazonaws.com"]
-    },
+    "pairs": {},
     "record_only_kinds": ["bearer_token"]
   }
 }
 ```
 
-User pairs **add** to the built-in hosts for a kind. Replacing them is deliberately
-not offered: nobody needs to stop GitHub tokens reaching GitHub, and making replace
-the default would let one settings line wipe the whole built-in table. `mode` accepts
+A settings file adds its own pairs, such as
+`"pairs": {"github_token": ["ghe.example.com"]}`.
+
+The built-in pairs from section 3 live in code (`customs-allowlist.sh`), not in
+`config.json`. That's because of how the config loader merges: its `deepmerge`
+merges objects but **replaces arrays**. With the built-ins in `config.json`, one user
+pair for `github_token` would silently drop `github.com`. Keeping them in code makes
+user pairs **add** to a kind's hosts, which is the only behavior offered. Replacing
+them is deliberately not offered: nobody needs to stop GitHub tokens reaching GitHub,
+and a replace option would let one settings line wipe the whole table. `mode` accepts
 `ask` or `deny`. Any other value is treated as `ask` and emits `customs.check.failed`
 with `stage: "config"`.
 
@@ -235,7 +238,9 @@ plugins/customs/
   config.json
   scripts/hooks/customs-pre-tool-use.sh     input -> prefilter -> detect -> destination -> decide
   scripts/lib/customs-destination.sh        host extraction (URLs, user@host, host:path)
-  scripts/lib/customs-allowlist.sh          kind x host matching, wildcard rules
+  scripts/lib/customs-allowlist.sh          built-in pairs, kind x host matching, the decision
+  scripts/lib/customs-config.sh             config_load_plugin wrapper, like warden-config.sh
+  scripts/lib/customs-events.sh             customs.* emission, like warden-events.sh
   scripts/lib/onlooker-secret-patterns.sh   seeded once, then kept current by sync-shared-libs.sh
   README.md  CHANGELOG.md
 test/bats/customs-*.bats
@@ -293,7 +298,7 @@ compass did, enabled in this repo's committed settings. The wave reads:
 
 ## Out of scope
 
-- **Package installs** (typosquat-shaped names, unpinned versions): a separate issue.
+- **Package installs** (typosquat-shaped names, unpinned versions): ONL-204.
 - **Secrets referenced through variables** (`$GITHUB_TOKEN`, `op run`). The command
   text never holds the value, so there's nothing to match, and expanding variables
   would mean reading the environment, which customs doesn't do.
