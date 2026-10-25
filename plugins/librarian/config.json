@@ -9,8 +9,7 @@
       "trigger": "SessionEnd",
       "bootstrap_lookback_days": 14,
       "min_detail_chars": 40,
-      "max_fault_retry_artifacts": 500,
-      "budget_threshold_ms": 1000
+      "max_fault_retry_artifacts": 500
     },
     "classifier": {
       "model": "claude-haiku-4-5-20251001",
