@@ -372,6 +372,33 @@ STUB
 	[ ! -f "${LESSONS_DIR}/declined.jsonl" ]
 }
 
+# ONL-194, measured: a judge restating a bash lesson in prose before its fenced
+# verdict handed the extractor `{v:-N}` out of `${v:-N}`. That is not JSON, so
+# the jury came back unavailable and the candidate was re-juried every scan.
+_jury_stub_quotes_expansion_first() {
+	STUB_BIN="${BATS_TEST_TMPDIR}/bin"
+	mkdir -p "$STUB_BIN"
+	cat > "${STUB_BIN}/claude" <<'STUB'
+#!/usr/bin/env bash
+cat >/dev/null
+printf '%s\n\n' 'The claim says ${v:-N} silently substitutes N, and "${v:-N}" under set -u is fine.'
+printf '%s\n' '```json'
+printf '%s\n' '{"score":0.93,"passed":true,"judge_type":"standard","feedback_summary":"ok","criterion_scores":{"grounding":0.9,"scope_accuracy":0.9,"generality":0.85,"disclosure":0.97}}'
+printf '%s\n' '```'
+STUB
+	chmod +x "${STUB_BIN}/claude"
+	export PATH="${STUB_BIN}:${PATH}"
+}
+
+@test "a judge that quotes a parameter expansion before its verdict is still judged" {
+	_auto_setup; _jury_stub_quotes_expansion_first
+	id=$(_seed_pending_unscoped)
+	librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	run librarian_lesson_auto_judge_one "$PROJECT_KEY" "$id"
+	[ "$output" = "judged:${id}" ] || return 1
+	jq -e '.status == "approved"' "${LESSONS_DIR}/proposals/${id}.json"
+}
+
 @test "the worker runs no auto stage when lesson_auto is disabled" {
 	_auto_setup; _jury_stub
 	mkdir -p "${PROJECT_REPO}/.claude"

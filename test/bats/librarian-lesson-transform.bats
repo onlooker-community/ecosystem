@@ -566,6 +566,81 @@ STUB
   [[ "$output" == proposed:* ]]
 }
 
+# ONL-194: the extractor used to return the first balanced brace pair, which in
+# a bash lesson is as likely to be `{v:-N}` out of `${v:-N}` as the JSON.
+@test "the extractor skips a parameter expansion that comes before the object" {
+  _transform_setup
+  run _librarian_lesson_extract_json_object 'Under set -u, ${v:-N} is safe: {"a":1}'
+  [ "$status" -eq 0 ] || return 1
+  [ "$output" = '{"a":1}' ]
+}
+
+@test "the extractor skips an unbalanced brace in the prose" {
+  _transform_setup
+  run _librarian_lesson_extract_json_object 'a lone { in prose, then {"a":{"b":2}}'
+  [ "$status" -eq 0 ] || return 1
+  [ "$output" = '{"a":{"b":2}}' ]
+}
+
+@test "the extractor moves past an opening that never closes" {
+  _transform_setup
+  run _librarian_lesson_extract_json_object 'the key {"unterminated is quoted, then {"a":1}'
+  [ "$status" -eq 0 ] || return 1
+  [ "$output" = '{"a":1}' ]
+}
+
+@test "the extractor moves past a balanced object that is not JSON" {
+  _transform_setup
+  run _librarian_lesson_extract_json_object 'first {"a": nope} then {"b":2}'
+  [ "$status" -eq 0 ] || return 1
+  [ "$output" = '{"b":2}' ]
+}
+
+@test "the extractor prints nothing when no brace opens a JSON object" {
+  _transform_setup
+  run _librarian_lesson_extract_json_object 'only ${v:-N} and ${#arr[@]} here'
+  [ "$status" -eq 1 ] || return 1
+  [ -z "$output" ]
+}
+
+@test "transform_one recovers a candidate after prose that quotes a parameter expansion" {
+  _transform_setup
+  cat > "${STUB_BIN}/claude" <<'STUB'
+#!/usr/bin/env bash
+cat >/dev/null
+printf '%s' 'The artifact uses ${v:-N} under set -u. {"claim":"Vitest 4 cannot import vite/module-runner on Vite 5","rationale":"vite/module-runner ships in Vite 6; Vitest 4 assumes it exists.","evidence":{"resolution":"Pin vitest to 3.x until Vite 6 lands."},"applies_to":{"stack":["vite","vitest"],"scope":{"kind":"versioned","versions":{"vite":"<6","vitest":">=4"}},"file_patterns":[],"task_kinds":[]}}'
+STUB
+  chmod +x "${STUB_BIN}/claude"
+  art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "Vitest 4.1.9 / Vite 5.x mismatch" \
+    "Vitest 4.1.9 imports vite/module-runner which is absent in Vite 5.4.21.")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
+  [ "$status" -eq 0 ] || return 1
+  [[ "$output" == proposed:* ]]
+}
+
+@test "the extractor spends no attempts on braces that cannot open an object" {
+  # A judge quoting a bash snippet can put a dozen expansions before its
+  # verdict. Only a brace followed by a key is tried, so they cost nothing
+  # against the attempt cap.
+  _transform_setup
+  text='set -u; a=${1:-x} b=${2:-y} c=${3:-z} d=${#e[@]} f=${g%%h} i=${j##k} l=${m/n/o} p=${q:-r} s=${t:-u}: {"a":1}'
+  run _librarian_lesson_extract_json_object "$text"
+  [ "$status" -eq 0 ] || return 1
+  [ "$output" = '{"a":1}' ]
+}
+
+@test "the extractor stays bounded when every opening fails" {
+  # Every `{"` is a plausible opening that jq rejects, so without a cap on
+  # attempts this would start one jq process per fragment, 2000 of them.
+  _transform_setup
+  text=$(for _ in $(seq 1 2000); do printf '%s' '{"x '; done)
+  start=$(date +%s)
+  run _librarian_lesson_extract_json_object "$text"
+  elapsed=$(( $(date +%s) - start ))
+  [ "$status" -eq 1 ] || return 1
+  [ "$elapsed" -lt 5 ]
+}
+
 @test "librarian_lesson_call reads timeout_seconds from config instead of hardcoding it" {
   _transform_setup
   mkdir -p "${PROJECT_REPO}/.claude"
@@ -591,16 +666,15 @@ STUB
 }
 
 @test "a pathologically large response terminates quickly instead of hanging on extraction" {
-  # _librarian_lesson_extract_json_object is a per-character bash scan —
-  # effectively O(n^2) on long input. It runs after the claude call,
-  # uncapped, inside a SessionEnd hook that must not stall session end, and
-  # nothing bounds the model's response size (claude -p has no such flag).
-  # This response has no brace anywhere, so recovery is impossible and the
-  # correct outcome is declined:transform_invalid — the test asserts that
-  # verdict is reached well inside a 5s budget, not just that it's eventually
-  # reached at all. 40k chars is sized to fail loudly (tens of seconds, not
-  # a borderline few) if the bound in librarian_lesson_call is ever removed,
-  # rather than flake near the threshold.
+  # Extraction runs after the claude call, inside a SessionEnd hook that must
+  # not stall session end, and nothing bounds the model's response size
+  # (claude -p has no such flag). This response has no brace anywhere, so
+  # recovery is impossible and the correct outcome is
+  # declined:transform_invalid — the test asserts that verdict is reached well
+  # inside a 5s budget, not just that it's eventually reached at all. It was
+  # sized against the per-character bash scan the extractor used before
+  # ONL-194, where 40k chars took tens of seconds; jq parses it in
+  # milliseconds now, and this keeps any regression to a scan honest.
   _transform_setup
   cat > "${STUB_BIN}/claude" <<'STUB'
 #!/usr/bin/env bash
