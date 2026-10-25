@@ -105,7 +105,7 @@ _compass_run_single_eval() {
 	prompt_file=$(mktemp -t compass-prompt.XXXXXX 2>/dev/null) || prompt_file="/tmp/compass-prompt.$$.${RANDOM}"
 	printf '%s' "$prompt" > "$prompt_file"
 
-	local args=(-p --max-turns 1)
+	local args=(-p --max-turns 1 --settings '{"disableAllHooks":true}')
 	[[ -n "$model" ]] && args+=(--model "$model")
 
 	local response=""

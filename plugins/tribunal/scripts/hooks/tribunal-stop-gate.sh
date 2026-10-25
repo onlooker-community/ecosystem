@@ -193,7 +193,7 @@ PROMPT_FILE=$(mktemp -t tribunal-stop-prompt.XXXXXX 2>/dev/null) || PROMPT_FILE=
 	printf '%s\n' '---END TRANSCRIPT TAIL---'
 } > "$PROMPT_FILE"
 
-CLAUDE_ARGS=(-p --max-turns 1)
+CLAUDE_ARGS=(-p --max-turns 1 --settings '{"disableAllHooks":true}')
 [[ -n "$JUDGE_MODEL" ]] && CLAUDE_ARGS+=(--model "$JUDGE_MODEL")
 
 RESPONSE=""

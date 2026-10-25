@@ -99,7 +99,7 @@ TIMEOUT_SECS=$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" assayer_config_timeout)
 PROMPT_FILE=$(mktemp -t assayer-prompt.XXXXXX 2>/dev/null) || PROMPT_FILE="/tmp/assayer-prompt.$$"
 assayer_build_extraction_prompt "$FINAL_MESSAGE" "$MAX_CLAIMS" >"$PROMPT_FILE"
 
-CLAUDE_ARGS=(-p --max-turns 1)
+CLAUDE_ARGS=(-p --max-turns 1 --settings '{"disableAllHooks":true}')
 [[ -n "$EVAL_MODEL" ]] && CLAUDE_ARGS+=(--model "$EVAL_MODEL")
 
 RESPONSE=""

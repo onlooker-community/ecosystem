@@ -55,7 +55,7 @@ librarian_lesson_auto_justify() {
 		printf '%s\n' '</candidate>'
 	} > "$prompt_file" || { rm -f "$prompt_file"; return 0; }
 
-	local args=(-p --max-turns 1)
+	local args=(-p --max-turns 1 --settings '{"disableAllHooks":true}')
 	[[ -n "$model" ]] && args+=(--model "$model")
 
 	local timeout_seconds response=""
@@ -269,7 +269,7 @@ _librarian_lesson_auto_judge() {
 	local agent="$1" prompt="$2" model="${3:-}"
 	command -v claude >/dev/null 2>&1 || return 0
 
-	local args=(-p --max-turns "$_LIBRARIAN_LESSON_JUDGE_MAX_TURNS" --agent "$agent")
+	local args=(-p --max-turns "$_LIBRARIAN_LESSON_JUDGE_MAX_TURNS" --agent "$agent" --settings '{"disableAllHooks":true}')
 	[[ -n "$model" ]] && args+=(--model "$model")
 
 	local timeout_seconds response=""

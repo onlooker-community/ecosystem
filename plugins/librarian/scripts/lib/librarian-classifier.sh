@@ -117,7 +117,7 @@ librarian_classifier_call() {
 	librarian_classifier_build_prompt "$artifact" > "$prompt_file" \
 		|| { rm -f "$prompt_file"; return 0; }
 
-	local args=(-p --max-turns 1)
+	local args=(-p --max-turns 1 --settings '{"disableAllHooks":true}')
 	[[ -n "$model" ]] && args+=(--model "$model")
 
 	local bound

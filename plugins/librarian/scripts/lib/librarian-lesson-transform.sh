@@ -216,7 +216,7 @@ librarian_lesson_call() {
 	librarian_lesson_build_prompt "$artifact" "$mode" > "$prompt_file" \
 		|| { rm -f "$prompt_file"; return 0; }
 
-	local args=(-p --max-turns 1)
+	local args=(-p --max-turns 1 --settings '{"disableAllHooks":true}')
 	[[ -n "$model" ]] && args+=(--model "$model")
 
 	local timeout_seconds

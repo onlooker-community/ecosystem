@@ -133,7 +133,7 @@ scribe_extract_intent() {
 	# wrote 13,201 capture files and produced not one distilled artifact. See
 	# ecosystem-449.54. The CLI exposes no output-token cap, so $max_tokens is
 	# accepted for signature stability and deliberately not forwarded.
-	local claude_args=(-p --max-turns 1 --model "$model")
+	local claude_args=(-p --max-turns 1 --model "$model" --settings '{"disableAllHooks":true}')
 
 	# Keep the CLI's stderr. Discarding it is what made the flag bug survive:
 	# a hard failure and a quiet no-op looked identical from the outside.

@@ -189,8 +189,10 @@ The controls are working only if all four hold at the review point. If any one f
    through what a person would not, and the window is the only thing stopping it. Zero vetoes
    across 10 or more held lessons is **inconclusive, not success**: nothing on the bus records
    that anyone looked at a held lesson, so silence can't be told from approval.
-4. **An approved lesson is worth what it costs.** At most $3 of model spend per shipped lesson,
-   including the nested hook sessions every `claude -p` call starts. That spend was 59–66% of the
-   total in the baseline run (ONL-195); re-baseline once it is fixed. Cost is not on the bus, so this is measured by re-running the
-   baseline harness at the review point. At the baseline's per-call costs, a 20% pass rate comes
-   to roughly $2.40 per shipped lesson.
+4. **An approved lesson is worth what it costs.** At most $3 of model spend per shipped lesson.
+   Cost is not on the bus, so this is measured by re-running the baseline harness at the review
+   point. The first baseline included nested hook sessions, which were 59–66% of its spend and
+   put a shipped lesson at roughly $2.40 at a 20% pass rate. ONL-195 turned hooks off in every
+   nested `claude -p`, and the re-baseline
+   ([`2026-10-24-hooks-off/`](../measurements/2026-10-24-hooks-off/README.md)) puts it at roughly
+   $0.85. Any nested spend that shows up again counts toward the $3.
