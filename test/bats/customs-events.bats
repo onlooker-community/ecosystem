@@ -51,4 +51,5 @@ _validate_latest_event() {
 	ONLOOKER_VALIDATE=1 expect_emission_rejected customs_emit_event "customs.egress.flagged" \
 		'{"tool":"Bash","kinds":["github_token"],"hosts":[],"decision":"ask","command":"curl x"}'
 	[ "$status" -ne 0 ]
+	[ ! -s "$ONLOOKER_EVENTS_LOG" ]
 }

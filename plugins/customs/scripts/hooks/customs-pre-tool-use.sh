@@ -92,9 +92,11 @@ HOSTS_ALL=$(printf '%s' "$HOST_LINES" | jq -R . | jq -sc 'map(select(length > 0)
 # The cap bounds the event only, never the decision: a host past the 16th must
 # still reach customs_decide.
 HOSTS=$(printf '%s' "$HOSTS_ALL" | jq -c '.[:16]')
-# Exit 2: a candidate customs could not read. It is decided as if no host were
-# readable, so an allowed host beside it cannot carry the call through. The
-# event still lists the hosts that were read.
+# Exit 2: a candidate customs could not read (or one shaped like a secret), a
+# network command that named no readable host, or a WebFetch URL a URL parser
+# would read differently. It is decided as if no host were readable, so an
+# allowed host beside it cannot carry the call through. The event still lists
+# the hosts that were read.
 DECIDE_HOSTS="$HOSTS_ALL"
 [[ "$HOST_STATUS" -eq 2 ]] && DECIDE_HOSTS='[]'
 

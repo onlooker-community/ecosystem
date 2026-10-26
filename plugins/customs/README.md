@@ -13,14 +13,18 @@ Customs is a sibling plugin to [`ecosystem`](../../) and assumes the Onlooker ob
 | `PreToolUse` | `Bash` | Checks the command for a network tool first. With none, exits before any detection runs. With one, scans the command for secret-shaped literals and decides on the hosts it finds. |
 | `PreToolUse` | `WebFetch` | Scans the URL, and treats its host as the destination. The prompt is not scanned, because WebFetch never sends it to that host. |
 
-Network tools are `curl`, `wget`, `http`, `https`, `xh`, `nc`, `ncat`, `ssh`, `scp`, `sftp`, `rsync`, `gh api`, and `git` when the command writes out an `http(s)://`, `ssh://` or `user@host:` remote. A tool named by path, such as `/usr/bin/curl`, counts too. A secret in a command with no network tool passes: that covers `export`, an `echo` into `.env`, and `op` writes. Customs guards egress, not storage.
+Network tools are `curl`, `wget`, `http`, `https`, `xh`, `nc`, `ncat`, `ssh`, `scp`, `sftp`, `rsync`, `gh api`, and `git` when the command writes out an `http(s)://`, `ssh://` or `user@host:` remote. A tool named by path, such as `/usr/bin/curl`, counts too, and so does one opened by a quote or a backslash (`sh -c 'curl …'`, `"curl"`, `\curl`). A quoted mention such as `git commit -m 'curl is great'` therefore runs detection as well; it asks only if a secret is also present. A secret in a command with no network tool passes: that covers `export`, an `echo` into `.env`, and `op` writes. Customs guards egress, not storage.
 
 ### Decision flow
 
 1. A Bash call with no network tool exits silently. No event.
 2. The call is scanned for secret-shaped literals. Customs gates on specific token shapes only, never on a generic `KEY=value` assignment. None found: exit silently. No event.
-3. Destination hosts are read from URLs, `user@host` and `host:path` arguments, and written-out git remotes. Hosts are lowercased and ports dropped.
-4. If customs cannot read any one of the call's hosts, the whole call asks. An allowed host beside it cannot carry the call through. This is the safe direction: it costs a prompt.
+3. Destination hosts are read from URLs, `user@host` and `host:path` arguments, and written-out git remotes. For `curl`, `wget`, `http`, `https` and `xh`, a bare word shaped like a host (`evil.test/x`, `api.github.com`) counts too. Hosts are lowercased and ports dropped.
+4. The whole call asks, as if no host were readable, when any of these holds. An allowed host elsewhere in the call cannot carry it through. This is the safe direction: it costs a prompt.
+   - A candidate cannot be read as a host (`ev_il.test`, `[::1]`, over 253 characters).
+   - A candidate is shaped like a secret (`https://<key>.evil.test/`). It is left out of the event and the reason.
+   - One of the commands in the line runs a network tool but names no host customs can read (`nc evil.test 80`, `ssh evil.test`). The line is split on `;`, `|`, `&`, parentheses, backticks and newlines, quotes or not, so `sh -c 'curl …; nc …'` is split too.
+   - A WebFetch URL holds a backslash, whitespace or a control character, which a URL parser reads differently from customs.
 5. Each kind of secret is checked against each host. A call passes only when every gated kind is headed solely to hosts paired with that kind.
 6. A pass emits `customs.egress.allowed` and writes nothing. A miss emits `customs.egress.flagged` and returns `ask`, or `deny` under `mode: "deny"`. The reason names the kind of secret and the host, never the value.
 
@@ -39,6 +43,8 @@ A host is trusted for its own kinds of secret only.
 
 A pattern matches a host exactly. A leading `*.` matches any subdomain and the bare domain too, so `*.amazonaws.com` accepts `amazonaws.com`.
 
+`*.amazonaws.com` is broad on purpose. Any S3 bucket is a host under it, including one someone else owns, so an AWS access key id can reach any bucket without a prompt. That is accepted because the key id alone is low value: without its secret key it cannot sign a request.
+
 `bearer_token` has no issuer and so no built-in pair. A bare bearer token is recorded, not gated: it emits `customs.egress.flagged` with `decision: "none"` and the call proceeds. A bearer whose value matches a specific kind, such as a GitHub token after the word `Bearer`, is checked as that kind.
 
 ## Activation
@@ -50,6 +56,14 @@ Install Customs from the marketplace:
 ```
 
 Then enable it in `.claude/settings.json`. Customs is opt-in and does nothing until you do.
+
+```json
+{
+  "enabledPlugins": {
+    "customs@onlooker-community": true
+  }
+}
+```
 
 ## Configuration
 
@@ -92,6 +106,8 @@ User pairs add to the built-ins rather than replacing them. The built-in pairs l
 - **Request bodies read from files** (`curl -d @file`). Customs does not read files.
 - **Package installs** (typosquat-shaped names, unpinned versions). Tracked as ONL-204.
 - **Hosts hidden in variables or built at runtime.** These are not caught as such, but they ask, since an unreadable host is never a pass.
+- **Clients outside the tool list.** `python`, `node`, `perl`, `ruby`, `socat`, `telnet`, `openssl s_client` and cloud CLIs such as `aws` or `gcloud` are not network tools to customs, so a secret they send passes unchecked.
+- **Command text crafted to evade it.** Customs assumes the command was not written to fool it. Quote concatenation (`api.github.com"".evil.test`), curl's `--connect-to` and `--resolve`, and `GH_HOST=` all send a call somewhere other than the host customs reads.
 
 ## Unattended runs
 
