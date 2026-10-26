@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.6](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.26.5...librarian-v0.26.6) (2026-10-26)
+
+
+### Bug Fixes
+
+* **plugins:** report failures as errored, not skipped :rotating_light: ([#501](https://github.com/onlooker-community/ecosystem/issues/501)) ([652685f](https://github.com/onlooker-community/ecosystem/commit/652685f062ebd916fd2d6dce9be2b09e9c3c6db9))
+
 ## [0.26.5](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.26.4...librarian-v0.26.5) (2026-10-25)
 
 

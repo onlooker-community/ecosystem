@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.2](https://github.com/onlooker-community/ecosystem/compare/inspector-v0.9.1...inspector-v0.9.2) (2026-10-26)
+
+
+### Bug Fixes
+
+* **plugins:** report failures as errored, not skipped :rotating_light: ([#501](https://github.com/onlooker-community/ecosystem/issues/501)) ([652685f](https://github.com/onlooker-community/ecosystem/commit/652685f062ebd916fd2d6dce9be2b09e9c3c6db9))
+
 ## [0.9.1](https://github.com/onlooker-community/ecosystem/compare/inspector-v0.9.0...inspector-v0.9.1) (2026-10-13)
 
 
