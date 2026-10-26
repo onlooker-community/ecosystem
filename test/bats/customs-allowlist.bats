@@ -61,16 +61,25 @@ _decide() {
 	[ "$(customs_decide '["github_token"]' '["api.github.com"]' '["x"]' '"x"')" = "allow" ]
 }
 
+@test "malformed kinds or hosts print nothing and fail, never allow" {
+	run customs_decide 'null' '["api.github.com"]' '{}' '[]'
+	[ "$status" -ne 0 ]
+	[ -z "$output" ]
+	run customs_decide '["github_token"]' '"api.github.com"' '{}' '[]'
+	[ "$status" -ne 0 ]
+	[ -z "$output" ]
+}
+
 @test "the reason names kind and host" {
 	run customs_reason '["github_token"]' '["paste.example.com"]'
-	[[ "$output" == *"a GitHub token"* ]]
-	[[ "$output" == *"paste.example.com"* ]]
-	[[ "$output" == *"customs.pairs"* ]]
+	[[ "$output" == *"a GitHub token"* ]] || false
+	[[ "$output" == *"paste.example.com"* ]] || false
+	[[ "$output" == *"customs.pairs"* ]] || false
 }
 
 @test "the reason says so when no host could be read" {
 	run customs_reason '["openai_key"]' '[]'
-	[[ "$output" == *"a host customs could not read"* ]]
+	[[ "$output" == *"a host customs could not read"* ]] || false
 }
 
 @test "config defaults ship ask, no user pairs, bearer record-only" {

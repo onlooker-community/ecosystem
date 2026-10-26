@@ -10,6 +10,11 @@
 # Exposes:
 #   customs_decide <kinds> <hosts> <user-pairs> <record-only>   allow | record | flag
 #   customs_reason <kinds> <hosts>                              one line, no values
+#
+# On malformed <kinds> or <hosts> (not a JSON array), customs_decide prints
+# nothing and returns non-zero. The caller must treat that as a failed check
+# (fail open, recorded), never as "allow". Malformed <user-pairs> and
+# <record-only> are tolerated and treated as empty.
 
 _CUSTOMS_BUILTIN_PAIRS='{
 	"github_token": ["github.com", "api.github.com", "uploads.github.com"],
