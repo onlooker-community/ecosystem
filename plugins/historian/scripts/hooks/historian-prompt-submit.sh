@@ -8,7 +8,9 @@
 #   2. Embed the prompt via the configured backend.
 #   3. Stream every chunk record for the project from disk one line at
 #      a time, cosine-search against the query vector, filter by
-#      min_similarity and max_age_days.
+#      min_similarity and max_age_days. A chunk stored without a vector
+#      is matched by term overlap with the prompt instead, ranked below
+#      every vector match (ONL-124).
 #   4. Emit one historian.retrieval.surfaced event for the top match
 #      and inject an `additionalContext` block whose first line is a
 #      "looks similar" pointer and whose body is a multi-line excerpt
@@ -24,7 +26,8 @@
 #     skipped` and (on skipped) a `skip_reason` enum (short_prompt,
 #     cooldown, budget, embedder_unavailable). The surfaced case also
 #     emits historian.retrieval.surfaced with the matched chunk's
-#     chunk_id, similarity, age_days, and source_session_id.
+#     chunk_id, similarity, age_days, source_session_id, and match
+#     (vector | lexical), so a fallback hit never reads as a cosine one.
 
 set -uo pipefail
 
@@ -232,11 +235,15 @@ MIN_SIMILARITY=$(historian_config_get '.historian.retrieval.min_similarity')
 [[ -z "$MIN_SIMILARITY" || "$MIN_SIMILARITY" == "null" ]] && MIN_SIMILARITY="0.55"
 MAX_AGE=$(historian_config_get '.historian.retrieval.max_age_days')
 [[ -z "$MAX_AGE" || "$MAX_AGE" == "null" ]] && MAX_AGE=180
+LEXICAL_MIN=$(historian_config_get '.historian.retrieval.lexical_min_overlap')
+[[ "$LEXICAL_MIN" =~ ^(0|1)?(\.[0-9]+)?$ && -n "$LEXICAL_MIN" ]] || LEXICAL_MIN="0.5"
 
 SESSIONS_DIR=$(historian_sessions_dir "$PROJECT_KEY")
 RESULTS=$(historian_retriever_search "$SESSIONS_DIR" "$QUERY_EMBEDDING" "$TOP_K" \
-	"$MIN_SIMILARITY" "$MAX_AGE" "$SESSION_ID")
+	"$MIN_SIMILARITY" "$MAX_AGE" "$SESSION_ID" "$EMBED_TEXT" "$LEXICAL_MIN")
 RESULT_COUNT=$(printf '%s' "$RESULTS" | jq 'length' 2>/dev/null) || RESULT_COUNT=0
+VECTOR_COUNT=$(printf '%s' "$RESULTS" | jq '[.[] | select(.match != "lexical")] | length' 2>/dev/null) || VECTOR_COUNT=0
+LEXICAL_COUNT=$(printf '%s' "$RESULTS" | jq '[.[] | select(.match == "lexical")] | length' 2>/dev/null) || LEXICAL_COUNT=0
 
 # Bump the rate-gate state for any non-skipped run (we paid for the
 # embedding regardless of whether anything matched).
@@ -268,6 +275,7 @@ TOP_SIM=$(printf '%s' "$TOP" | jq -r '.similarity // 0')
 TOP_AGE=$(printf '%s' "$TOP" | jq -r '.age_days // 0')
 TOP_SESSION=$(printf '%s' "$TOP" | jq -r '.session_id // ""')
 TOP_BODY=$(printf '%s' "$TOP" | jq -r '.body_redacted // ""')
+TOP_MATCH=$(printf '%s' "$TOP" | jq -r '.match // "vector"')
 
 EXCERPT="$TOP_BODY"
 if (( ${#EXCERPT} > EXCERPT_MAX )); then
@@ -280,34 +288,48 @@ else
 	AGE_HINT=""
 fi
 
-CONTEXT=$(printf 'Historian: a past chunk looks similar%s. Excerpt:\n\n> %s\n' \
-	"$AGE_HINT" "$EXCERPT")
+# A lexical hit only shares words with the prompt, and its chunk was never
+# embedded. Calling it "similar" would claim a match nobody measured.
+if [[ "$TOP_MATCH" == "lexical" ]]; then
+	LEAD="a past chunk shares terms with this prompt"
+else
+	LEAD="a past chunk looks similar"
+fi
+CONTEXT=$(printf 'Historian: %s%s. Excerpt:\n\n> %s\n' \
+	"$LEAD" "$AGE_HINT" "$EXCERPT")
 
 historian_emit "historian.retrieval.surfaced" "$SESSION_ID" "$(jq -cn \
 	--arg chunk_id "$TOP_CHUNK_ID" \
 	--argjson similarity "$TOP_SIM" \
 	--argjson age_days "$TOP_AGE" \
 	--arg source_session_id "$TOP_SESSION" \
+	--arg match "$TOP_MATCH" \
 	'{
 		chunk_id: $chunk_id,
 		similarity: $similarity,
 		age_days: $age_days,
-		source_session_id: $source_session_id
+		source_session_id: $source_session_id,
+		match: $match
 	}')"
 
 NOW=$(_now_ms)
 DURATION_MS=$((NOW - RETRIEVAL_STARTED_MS))
+# top_similarity and candidates_above_floor stay vector-only: an overlap
+# fraction is not a cosine, so folding it in would skew both.
 historian_emit "historian.retrieval.complete" "$SESSION_ID" "$(jq -cn \
 	--arg outcome "surfaced" \
+	--arg top_match "$TOP_MATCH" \
 	--argjson top_similarity "$TOP_SIM" \
-	--argjson candidates_above_floor "$RESULT_COUNT" \
+	--argjson candidates_above_floor "$VECTOR_COUNT" \
+	--argjson lexical_candidates "$LEXICAL_COUNT" \
 	--argjson duration_ms "$DURATION_MS" \
 	'{
 		outcome: $outcome,
-		top_similarity: $top_similarity,
 		candidates_above_floor: $candidates_above_floor,
 		duration_ms: $duration_ms
-	}')"
+	}
+	+ (if $top_match == "vector" then { top_similarity: $top_similarity } else {} end)
+	+ (if $lexical_candidates > 0 then { lexical_candidates: $lexical_candidates } else {} end)')"
 
 _emit_context "$CONTEXT"
 hook_health_exit 0

@@ -13,7 +13,7 @@ See [`docs/design.md`](docs/design.md) and [ADR-001](docs/adr/001-local-embeddin
 | Hook | What Historian does |
 |------|---------------------|
 | `SessionEnd` | Launches `scripts/run-index.sh` detached and exits. The indexer reads the transcript at `transcript_path`, drops tool calls and tool results (keeps user + assistant messages), chunks inside the configured character target with overlap, runs the sanitizer (secret redaction + `[historian:skip]` markers + path-deny list), embeds each surviving chunk via the configured backend, and appends one JSONL line per chunk to the session's file. Emits `historian.indexing.*`, `historian.chunk.*`, `historian.embedder.unavailable` and `historian.embedder.failed` events along the way. |
-| `UserPromptSubmit` | Rate-gated retrieval: short prompts, cooldown windows, and per-session caps short-circuit before the embedder runs. Otherwise embeds the prompt, streams every JSONL chunk for the project, and injects an `additionalContext` block — a header pointer line plus a multi-line excerpt — for the top cosine-similarity match above the floor. Excludes chunks from the current session id (a session retrieving its own chunks is the degenerate case). Emits `historian.retrieval.started` when the rate gate clears (with `prompt_chars`, plus `embed_chars` when the query had to be fitted to the embedder's `max_input_chars`), `historian.retrieval.surfaced` on the surfaced outcome, and `historian.retrieval.complete` with `outcome: surfaced\|empty\|skipped` and a `skip_reason` enum for skipped runs. |
+| `UserPromptSubmit` | Rate-gated retrieval: short prompts, cooldown windows, and per-session caps short-circuit before the embedder runs. Otherwise embeds the prompt, streams every JSONL chunk for the project, and injects an `additionalContext` block — a header pointer line plus a multi-line excerpt — for the top cosine-similarity match above the floor. A chunk stored without a vector is matched by term overlap instead and ranks below every vector match. Excludes chunks from the current session id (a session retrieving its own chunks is the degenerate case). Emits `historian.retrieval.started` when the rate gate clears (with `prompt_chars`, plus `embed_chars` when the query had to be fitted to the embedder's `max_input_chars`), `historian.retrieval.surfaced` on the surfaced outcome (with `match: vector\|lexical`), and `historian.retrieval.complete` with `outcome: surfaced\|empty\|skipped` and a `skip_reason` enum for skipped runs. |
 
 ## Activation
 
@@ -86,8 +86,20 @@ The `embedding` field is present only when that chunk's embed call actually
 succeeded — which is not the same as the embedder having been *available*.
 The availability probe asks `/api/tags`, which answers instantly from disk
 whether or not the model is resident, so a cold daemon passes the probe and
-then fails every embed. Chunks stored without a vector are still readable but
-invisible to similarity retrieval until something embeds them.
+then fails every embed. Chunks stored without a vector cannot be found by
+similarity, and nothing re-embeds them on a later SessionEnd pass.
+
+Retrieval still reaches them, at a lower rank (ONL-124). A chunk with no
+vector is scored by the fraction of the prompt's distinct terms its body
+contains, ignoring common words, and counts as a match at
+`historian.retrieval.lexical_min_overlap` (default `0.5`) with at least two
+shared terms. Every such match ranks below every vector match, since an
+overlap fraction and a cosine are not on the same scale, so the fallback only
+fills slots similarity left empty. It is visible as such:
+`historian.retrieval.surfaced` carries `match: "lexical"`, `retrieval.complete`
+counts it in `lexical_candidates` and leaves `candidates_above_floor` and
+`top_similarity` to vector matches, and the injected context says the chunk
+*shares terms with* the prompt rather than that it *looks similar*.
 
 `/historian backfill` is that something. It embeds every stored chunk that has
 no vector, in place, and leaves every other line untouched (ONL-207). Run

@@ -172,7 +172,8 @@ _index_session() {
   [[ "$ctx" == *"redash"* ]]
 
   grep '"event_type":"historian.retrieval.surfaced"' "$ONLOOKER_EVENTS_LOG" \
-    | jq -e '.payload.similarity >= 0.55 and .payload.source_session_id == "past-1"' >/dev/null
+    | jq -e '.payload.similarity >= 0.55 and .payload.source_session_id == "past-1"
+      and .payload.match == "vector"' >/dev/null
 }
 
 @test "retrieval returns empty when no chunk clears the similarity floor" {
@@ -236,6 +237,70 @@ _index_session() {
   [ "$status" -eq 0 ]
 
   echo "$output" | jq -e '.hookSpecificOutput.additionalContext == ""' >/dev/null
+  grep '"event_type":"historian.retrieval.complete"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e '.payload.outcome == "empty"' >/dev/null
+}
+
+# ONL-124. A chunk whose embed failed at indexing has no vector. Retrieval used
+# to skip it outright, so it was invisible to every query for good.
+_index_session_unembedded() {
+  HISTORIAN_STUB_EMBED_RC=28 _index_session "$@"
+  jq -e 'has("embedding") | not' "${HIST_DIR}/sessions/${1}.jsonl" >/dev/null
+}
+
+@test "a chunk stored without a vector is found by term overlap" {
+  _index_session_unembedded "past-unembedded" \
+    "Tracking down why the nightly invoice export drops rows whose currency column is null in the billing warehouse." \
+    "ok"
+
+  run bash -c "printf '%s' '$(_retrieve_input "The nightly invoice export is dropping rows again where currency is null in billing")' | '$RETRIEVE_HOOK'"
+  [ "$status" -eq 0 ] || return 1
+
+  local ctx
+  ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
+  # It shares words with the prompt; nothing measured it as similar.
+  [[ "$ctx" == *"Historian: a past chunk shares terms with this prompt"* ]] || return 1
+  [[ "$ctx" == *"invoice export"* ]] || return 1
+
+  grep '"event_type":"historian.retrieval.surfaced"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e '.payload.match == "lexical" and .payload.source_session_id == "past-unembedded"' >/dev/null || return 1
+  grep '"event_type":"historian.retrieval.complete"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e '.payload.outcome == "surfaced"
+      and .payload.lexical_candidates == 1
+      and .payload.candidates_above_floor == 0
+      and (has("top_similarity") | not)' >/dev/null
+}
+
+@test "a lexical match never outranks a vector match" {
+  # The stub embeds text with no sentinel word to [0.5,0.5,0.5] and a redash
+  # prompt to [1,0,0]: cosine 0.577, just over the 0.55 floor. The unembedded
+  # chunk repeats the prompt word for word, an overlap of 1.0. Comparing the
+  # two numbers directly would put the fallback first.
+  _index_session "past-vector" \
+    "Some dashboard saved query parameters went wrong this morning and the report needed a manual rerun." \
+    "ok"
+  local prompt="redash dashboard timezone issue on the saved query parameters again today"
+  _index_session_unembedded "past-lexical" "$prompt" "ok"
+
+  run bash -c "printf '%s' '$(_retrieve_input "$prompt")' | '$RETRIEVE_HOOK'"
+  [ "$status" -eq 0 ] || return 1
+
+  [[ "$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')" == *"looks similar"* ]] || return 1
+  grep '"event_type":"historian.retrieval.surfaced"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e '.payload.match == "vector" and .payload.source_session_id == "past-vector"' >/dev/null || return 1
+  grep '"event_type":"historian.retrieval.complete"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e '.payload.candidates_above_floor == 1 and .payload.lexical_candidates == 1
+      and .payload.top_similarity < 0.6' >/dev/null
+}
+
+@test "an unembedded chunk that shares no terms with the prompt stays out" {
+  _index_session_unembedded "past-unrelated" \
+    "Investigating kafka consumer lag on the ingest pipeline today after the rebalance event yesterday." \
+    "ok"
+
+  run bash -c "printf '%s' '$(_retrieve_input "Working on a postgres migration plan today for our settings tables to add new columns safely")' | '$RETRIEVE_HOOK'"
+  [ "$status" -eq 0 ] || return 1
+  echo "$output" | jq -e '.hookSpecificOutput.additionalContext == ""' >/dev/null || return 1
   grep '"event_type":"historian.retrieval.complete"' "$ONLOOKER_EVENTS_LOG" \
     | jq -e '.payload.outcome == "empty"' >/dev/null
 }

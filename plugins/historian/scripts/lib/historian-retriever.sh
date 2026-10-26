@@ -6,10 +6,16 @@
 # similarity between the query vector and each chunk's `embedding`
 # field, and returns the top-K candidates above a similarity floor.
 #
-# Chunks indexed before the embedder shipped don't have an `embedding`
-# field; the retriever silently skips them rather than treating them as
-# zero-similarity. They'll join the index after the next SessionEnd
-# indexing pass.
+# A chunk has no `embedding` when its embed failed at indexing time: a
+# cold or unreachable ollama, a timeout, an oversized input. Nothing
+# re-embeds it on a later SessionEnd pass (`/historian backfill` does, but
+# only when someone runs it), so skipping it would make it invisible for
+# good. Instead such a chunk is scored by term overlap with the prompt
+# text (ONL-124): the fraction of the prompt's distinct terms that appear
+# in its body. Those matches carry `match: "lexical"` and rank strictly
+# below every vector match, so the fallback fills empty slots and can
+# never displace a real similarity hit. Their score is not a cosine and
+# is not compared against min_similarity.
 
 # Aggregate every chunk record for the project. Returns a JSON array.
 historian_retriever_load_all_chunks() {
@@ -64,11 +70,15 @@ PY
 #                                   <query_embedding_json>
 #                                   <top_k> <min_similarity>
 #                                   <max_age_days> <current_session_id>
+#                                   [<query_text>] [<lexical_min_overlap>]
 #
-# Output: JSON array sorted by similarity descending, length <= top_k.
+# Without query_text, unembedded chunks are skipped as before.
+#
+# Output: JSON array, vector matches first by similarity descending, then
+# lexical matches by overlap descending, length <= top_k.
 # Each entry: {
 #   chunk_id, session_id, similarity, age_days, body_redacted,
-#   chunk_index, start_turn_index, end_turn_index, source
+#   chunk_index, start_turn_index, end_turn_index, source, match
 # }
 historian_retriever_search() {
 	local sessions_dir="${1:-}"
@@ -77,14 +87,17 @@ historian_retriever_search() {
 	local min_sim="${4:-0.55}"
 	local max_age_days="${5:-180}"
 	local current_session="${6:-}"
+	local query_text="${7:-}"
+	local lexical_min="${8:-0.5}"
 
 	if [[ -z "$sessions_dir" || ! -d "$sessions_dir" ]]; then
 		echo '[]'
 		return 0
 	fi
 
-	python3 - "$sessions_dir" "$top_k" "$min_sim" "$max_age_days" "$current_session" "$query" <<'PY'
-import datetime, json, math, os, sys
+	python3 - "$sessions_dir" "$top_k" "$min_sim" "$max_age_days" "$current_session" "$query" \
+		"$query_text" "$lexical_min" <<'PY'
+import datetime, json, math, os, re, sys
 
 sessions_dir = sys.argv[1]
 top_k = int(sys.argv[2])
@@ -92,6 +105,37 @@ min_sim = float(sys.argv[3])
 max_age_days = int(sys.argv[4])
 current_session = sys.argv[5]
 query = json.loads(sys.argv[6] or "null")
+query_text = sys.argv[7]
+try:
+    lexical_min = float(sys.argv[8])
+except ValueError:
+    lexical_min = 0.5
+
+# Words too common to say anything about what a prompt is about. Without
+# them, any two English paragraphs would clear the overlap floor.
+STOPWORDS = frozenset(
+    """
+    about above after again against all also and any are because been before
+    being below between both but can could did does doing down during each
+    few for from further had has have having her here hers him his how into
+    its itself just let more most much must not now off once only other our
+    ours out over own same she should some such than that the their theirs
+    them then there these they this those through too under until upon very
+    was were what when where which while who whom why will with would you
+    your yours yourself
+    """.split()
+)
+
+
+def terms(text):
+    return {
+        t
+        for t in re.findall(r"[a-z0-9][a-z0-9_]*", (text or "").lower())
+        if len(t) >= 3 and t not in STOPWORDS
+    }
+
+
+query_terms = terms(query_text)
 
 
 def cosine(a, b):
@@ -135,11 +179,23 @@ def consider(chunk):
     if current_session and sid == current_session:
         return
     embedding = chunk.get("embedding")
-    if not isinstance(embedding, list) or not embedding:
-        return
-    sim = cosine(query, embedding)
-    if sim is None or sim < min_sim:
-        return
+    if isinstance(embedding, list) and embedding:
+        match = "vector"
+        sim = cosine(query, embedding)
+        if sim is None or sim < min_sim:
+            return
+    else:
+        # Two shared terms at minimum, so a one-word prompt cannot match on
+        # a single coincidence.
+        if not query_terms:
+            return
+        shared = len(query_terms & terms(chunk.get("body_redacted", "")))
+        if shared < 2:
+            return
+        sim = shared / len(query_terms)
+        if sim < lexical_min:
+            return
+        match = "lexical"
     created = parse_iso(chunk.get("created_at"))
     if created is None:
         age_days = -1
@@ -152,6 +208,7 @@ def consider(chunk):
             "chunk_id": chunk.get("chunk_id"),
             "session_id": sid,
             "similarity": round(sim, 4),
+            "match": match,
             "age_days": age_days,
             "body_redacted": chunk.get("body_redacted", ""),
             "chunk_index": chunk.get("chunk_index"),
@@ -185,7 +242,9 @@ for name in names:
     except OSError:
         continue
 
-scored.sort(key=lambda c: c["similarity"], reverse=True)
+# Every vector match ahead of every lexical one, whatever their scores: an
+# overlap fraction and a cosine are not on the same scale.
+scored.sort(key=lambda c: (c["match"] != "vector", -c["similarity"]))
 print(json.dumps(scored[:top_k]))
 PY
 }
