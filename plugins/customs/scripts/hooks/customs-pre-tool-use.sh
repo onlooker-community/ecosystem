@@ -87,12 +87,15 @@ KINDS=$(printf '%s' "$DETECTED" | jq -c '.[0].kinds | arrays' 2>/dev/null)
 
 HOST_LINES=$(customs_destination_hosts "$TOOL_NAME" "$TEXT")
 HOST_STATUS=$?
-HOSTS=$(printf '%s' "$HOST_LINES" | jq -R . | jq -sc 'map(select(length > 0)) | .[:16]' 2>/dev/null)
-[[ -z "$HOSTS" ]] && _customs_fail_open "destination"
+HOSTS_ALL=$(printf '%s' "$HOST_LINES" | jq -R . | jq -sc 'map(select(length > 0))' 2>/dev/null)
+[[ -z "$HOSTS_ALL" ]] && _customs_fail_open "destination"
+# The cap bounds the event only, never the decision: a host past the 16th must
+# still reach customs_decide.
+HOSTS=$(printf '%s' "$HOSTS_ALL" | jq -c '.[:16]')
 # Exit 2: a candidate customs could not read. It is decided as if no host were
 # readable, so an allowed host beside it cannot carry the call through. The
 # event still lists the hosts that were read.
-DECIDE_HOSTS="$HOSTS"
+DECIDE_HOSTS="$HOSTS_ALL"
 [[ "$HOST_STATUS" -eq 2 ]] && DECIDE_HOSTS='[]'
 
 customs_config_load "$CWD"
