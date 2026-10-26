@@ -4,7 +4,7 @@
 # Exposes:
 #   librarian_cli list                         # one-line summary + table of pending proposals
 #   librarian_cli lessons list [--confirmed]   # pending lesson queue, or the confirmed ones
-#   librarian_cli lessons rubric <org|public>  # criteria + definitions to hand each judge
+#   librarian_cli lessons rubric <lesson_id>   # criteria + definitions to hand each judge
 #   librarian_cli show <proposal_id>           # full proposal body + provenance + conflict state
 #   librarian_cli accept <proposal_id>         # write to typed memory store, mark accepted
 #   librarian_cli reject <proposal_id> [reason]  # tombstone + mark rejected
@@ -947,21 +947,42 @@ librarian_cli_lessons_veto() {
 # two panels cannot score two different questions under one criterion name
 # (ecosystem-1z07vm.6).
 #
-# The walk is human-confirmed by construction, so this always resolves the
-# human rubric; the model-asserted one is the unattended pipeline's alone.
+# Given a lesson id, it resolves the rubric the recorder will check that lesson
+# against: visibility AND asserted_by, the same pair librarian_lesson_judge
+# reads. A bare visibility resolves the human rubric. With lesson_auto on, the
+# confirmed queue the walk reads holds model-asserted lessons too, and handing
+# those the human org rubric left `disclosure` unscored, so every one came
+# back UNJUDGED (ONL-208). The walk passes the id.
 #
-# Usage: librarian_cli_lessons_rubric <org|public>
+# Usage: librarian_cli_lessons_rubric <lesson_id|org|public> [cwd]
 librarian_cli_lessons_rubric() {
-	local visibility="${1:-}"
-	[[ -z "$visibility" ]] && { printf 'usage: librarian_cli lessons rubric <org|public>\n'; return 1; }
+	local target="${1:-}"
+	local cwd="${2:-}"
+	[[ -z "$target" ]] && { printf 'usage: librarian_cli lessons rubric <lesson_id|org|public>\n'; return 1; }
+
+	local visibility asserted_by="human"
+	case "$target" in
+		private | org | public) visibility="$target" ;;
+		*)
+			local key path
+			key=$(_librarian_cli_project_key "$cwd")
+			[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
+			path="$(librarian_lessons_dir "$key")/proposals/${target}.json"
+			[[ -f "$path" ]] || { printf 'Lesson %s not found.\n' "$target"; return 1; }
+			visibility=$(jq -r '.visibility // ""' "$path" 2>/dev/null)
+			asserted_by=$(jq -r '.asserted_by // "human"' "$path" 2>/dev/null)
+			[[ -z "$asserted_by" || "$asserted_by" == "null" ]] && asserted_by="human"
+			;;
+	esac
+
 	if [[ "$visibility" == "private" ]]; then
 		printf 'private lessons run no jury, so there is no rubric to hand a judge.\n'
 		return 1
 	fi
 
 	local rubric_id rubric
-	rubric_id=$(librarian_lesson_rubric_id_for_visibility "$visibility") || {
-		printf 'usage: librarian_cli lessons rubric <org|public>\n'
+	rubric_id=$(librarian_lesson_rubric_id_for_visibility "$visibility" "$asserted_by") || {
+		printf 'Lesson %s has an unrecognized visibility: %s\n' "$target" "$visibility"
 		return 1
 	}
 	rubric=$(librarian_lesson_rubric_get "$rubric_id") || {
@@ -995,6 +1016,11 @@ librarian_cli_lessons() {
 librarian_cli() {
 	local action="${1:-list}"
 	shift || true
+	# The skill sources these libs and calls straight in; no hook ran first, so
+	# nothing has loaded config. Without this every rubric lookup missed and
+	# `lessons judge` failed after its judges were already paid for (ONL-208).
+	# Loaded from the working directory, which is where the skill runs.
+	librarian_config_ensure_loaded "$(pwd)"
 	case "$action" in
 		list) librarian_cli_list "$@" ;;
 		show) librarian_cli_show "$@" ;;
