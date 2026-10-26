@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.11.0](https://github.com/onlooker-community/ecosystem/compare/historian-v0.10.2...historian-v0.11.0) (2026-10-26)
+
+
+### Features
+
+* **customs:** ask before a secret leaves for the wrong host :passport_control: ([#506](https://github.com/onlooker-community/ecosystem/issues/506)) ([7cb89b5](https://github.com/onlooker-community/ecosystem/commit/7cb89b5551f13fed50aec93a34556c6d951aa93c))
+* **historian:** backfill vectors for chunks stored during an outage :seedling: ([#505](https://github.com/onlooker-community/ecosystem/issues/505)) ([e9b03da](https://github.com/onlooker-community/ecosystem/commit/e9b03da383544d873c2be0f4b56fb9a13f7eb86a))
+
 ## [0.10.2](https://github.com/onlooker-community/ecosystem/compare/historian-v0.10.1...historian-v0.10.2) (2026-10-15)
 
 

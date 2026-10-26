@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.76.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.75.6...ecosystem-v0.76.0) (2026-10-26)
+
+
+### Features
+
+* **customs:** ask before a secret leaves for the wrong host :passport_control: ([#506](https://github.com/onlooker-community/ecosystem/issues/506)) ([7cb89b5](https://github.com/onlooker-community/ecosystem/commit/7cb89b5551f13fed50aec93a34556c6d951aa93c))
+* **historian:** backfill vectors for chunks stored during an outage :seedling: ([#505](https://github.com/onlooker-community/ecosystem/issues/505)) ([e9b03da](https://github.com/onlooker-community/ecosystem/commit/e9b03da383544d873c2be0f4b56fb9a13f7eb86a))
+
+
+### Bug Fixes
+
+* **librarian:** let the attended jury walk actually record verdicts :scales: ([#503](https://github.com/onlooker-community/ecosystem/issues/503)) ([59d5c05](https://github.com/onlooker-community/ecosystem/commit/59d5c051d52775da1f66923e7a481bb801cd5058))
+
 ## [0.75.6](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.75.5...ecosystem-v0.75.6) (2026-10-26)
 
 

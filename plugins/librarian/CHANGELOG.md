@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.7](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.26.6...librarian-v0.26.7) (2026-10-26)
+
+
+### Bug Fixes
+
+* **librarian:** let the attended jury walk actually record verdicts :scales: ([#503](https://github.com/onlooker-community/ecosystem/issues/503)) ([59d5c05](https://github.com/onlooker-community/ecosystem/commit/59d5c051d52775da1f66923e7a481bb801cd5058))
+
 ## [0.26.6](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.26.5...librarian-v0.26.6) (2026-10-26)
 
 
