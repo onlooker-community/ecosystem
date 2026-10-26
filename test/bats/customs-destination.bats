@@ -3,6 +3,8 @@
 # Where a call is headed (customs spec, sections 4 and 5). A host customs cannot
 # read is not a pass - the hook asks - so "no output" is a real answer here.
 
+bats_require_minimum_version 1.5.0
+
 setup() {
 	source "${BATS_TEST_DIRNAME}/../helpers/setup.bash"
 	setup_test_env
@@ -24,11 +26,41 @@ _hosts() { customs_destination_hosts "$1" "$2" | paste -sd, -; }
 }
 
 @test "commands with no network tool are not checked" {
-	! customs_has_network_tool "export GITHUB_TOKEN=abc"
-	! customs_has_network_tool "echo 'https://x.test' > notes.md"
-	! customs_has_network_tool "git commit -m 'curl is great'"
-	! customs_has_network_tool "git push origin main"
-	! customs_has_network_tool "grep -r curlify src/"
+	run ! customs_has_network_tool "export GITHUB_TOKEN=abc"
+	run ! customs_has_network_tool "echo 'https://x.test' > notes.md"
+	run ! customs_has_network_tool "git commit -m 'curl is great'"
+	run ! customs_has_network_tool "git push origin main"
+	run ! customs_has_network_tool "grep -r curlify src/"
+}
+
+@test "path-qualified tools are checked" {
+	customs_has_network_tool "/usr/bin/curl https://x.test"
+	customs_has_network_tool "./nc x.test 80"
+	customs_has_network_tool "~/bin/wget https://x.test"
+}
+
+@test "a shell separator ends the host instead of hiding it" {
+	[ "$(_hosts Bash "curl https://ok.test/x; curl https://evil.test; echo")" = "evil.test,ok.test" ]
+	[ "$(_hosts Bash "(curl https://evil.test) && curl https://ok.test")" = "evil.test,ok.test" ]
+	run customs_destination_hosts Bash "curl https://ok.test/x; curl https://evil.test; echo"
+	[ "$status" -eq 0 ]
+}
+
+@test "a candidate that cannot be read exits 2 and keeps the readable hosts" {
+	run customs_destination_hosts Bash "curl https://ok.test https://ev_il.test"
+	[ "$status" -eq 2 ]
+	[ "$output" = "ok.test" ]
+	run customs_destination_hosts Bash "curl https://[::1]:8080/x"
+	[ "$status" -eq 2 ]
+	[ -z "$output" ]
+}
+
+@test "a host over 253 characters exits 2" {
+	local long
+	long="$(printf 'a%.0s' {1..250}).com"
+	run customs_destination_hosts Bash "curl https://${long}/x"
+	[ "$status" -eq 2 ]
+	[ -z "$output" ]
 }
 
 @test "a URL's host is read without scheme, userinfo or port" {
