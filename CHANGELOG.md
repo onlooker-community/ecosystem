@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.0...ecosystem-v0.76.1) (2026-10-26)
+
+
+### Bug Fixes
+
+* **historian:** let retrieval reach chunks that never got a vector :lantern: ([#507](https://github.com/onlooker-community/ecosystem/issues/507)) ([0e42219](https://github.com/onlooker-community/ecosystem/commit/0e4221904f766e15b4c4dcef924695eb8adcc5b3))
+
 ## [0.76.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.75.6...ecosystem-v0.76.0) (2026-10-26)
 
 
