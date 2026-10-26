@@ -149,3 +149,49 @@ _redact_one() {
 	printf '%s' "$output" | grep -qF "$sample" && return 1
 	true
 }
+
+# Detect one string; print its kinds as a compact JSON array.
+_detect_one() {
+	onlooker_detect_secrets "$(jq -cn --arg s "$1" '[$s]')" | jq -c '.[0].kinds'
+}
+
+@test "detection reports each token shape as its kind" {
+	[ "$(_detect_one "AKIA""0123456789ABCDEF")" = '["aws_access_key_id"]' ]
+	[ "$(_detect_one "ghp""_aaaaaaaaaaaaaaaaaaaaaaaa")" = '["github_token"]' ]
+	[ "$(_detect_one "ghs""_cccccccccccccccccccccccc")" = '["github_token"]' ]
+	[ "$(_detect_one "sk-""ant-ffffffffffffffffffffff")" = '["anthropic_key"]' ]
+	[ "$(_detect_one "sk-""gggggggggggggggggggggggg")" = '["openai_key"]' ]
+	[ "$(_detect_one "Bearer ""hhhhhhhhhhhhhhhhhhhhhhhh")" = '["bearer_token"]' ]
+}
+
+@test "an Anthropic key is anthropic_key only, never openai_key too" {
+	[ "$(_detect_one "x-api-key: sk-""ant-ffffffffffffffffffffff")" = '["anthropic_key"]' ]
+}
+
+@test "a bearer whose value is a GitHub token is a github_token, not a bearer" {
+	[ "$(_detect_one "Authorization: Bearer ghp""_aaaaaaaaaaaaaaaaaaaaaaaa")" = '["github_token"]' ]
+}
+
+@test "KEY=value shapes are never reported as a kind" {
+	[ "$(_detect_one "API_KEY=""iiiiiiiiiiiiiiii")" = '[]' ]
+	[ "$(_detect_one "max_output_tokens: 192")" = '[]' ]
+}
+
+@test "detection reports several kinds in one string, in table order" {
+	[ "$(_detect_one "sk-""gggggggggggggggggggggggg and AKIA""0123456789ABCDEF")" = '["aws_access_key_id","openai_key"]' ]
+}
+
+@test "detection answers per element and coerces non-strings to no kinds" {
+	run onlooker_detect_secrets "$(jq -cn --arg a "ghp""_aaaaaaaaaaaaaaaaaaaaaaaa" '[$a, "clean", 42]')"
+	[ "$status" -eq 0 ]
+	[ "$(printf '%s' "$output" | jq -c 'map(.kinds)')" = '[["github_token"],[],[]]' ]
+}
+
+@test "detection fails closed: no python3 means empty stdout" {
+	local shim="${BATS_TEST_TMPDIR}/nopython"
+	mkdir -p "$shim"
+	printf '#!/bin/sh\nexit 127\n' > "${shim}/python3"
+	chmod +x "${shim}/python3"
+	PATH="${shim}:${PATH}" run -127 onlooker_detect_secrets '["ghp_x"]'
+	[ -z "$output" ]
+}
