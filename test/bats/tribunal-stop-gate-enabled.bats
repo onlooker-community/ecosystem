@@ -119,11 +119,18 @@ STUB
 # `live` on 1076 events that all predated the off-switch, so no window read it
 # correctly.
 
-_skip_reasons() {
+_reasons_for() {
 	[ -f "$ONLOOKER_EVENTS_LOG" ] || return 1
-	jq -rs '[.[] | select(.event_type == "tribunal.gate.skipped") | .payload.reason] | join(",")' \
+	jq -rs --arg t "$1" '[.[] | select(.event_type == $t) | .payload.reason] | join(",")' \
 		"$ONLOOKER_EVENTS_LOG"
 }
+
+_skip_reasons() { _reasons_for "tribunal.gate.skipped"; }
+
+# ONL-192. A judge that was dispatched and produced no verdict is a failure,
+# not the gate choosing to do nothing, so it is reported as its own type. A
+# consumer that keeps only event types could not tell the two apart.
+_error_reasons() { _reasons_for "tribunal.gate.errored"; }
 
 @test "a disabled gate reports why instead of saying nothing" {
 	_settings '{"tribunal":{"stop_hook":{"enabled":false,"skip_if_no_file_changes":false}}}'
@@ -180,6 +187,8 @@ STUB
 	_run_hook
 	[ "$status" -eq 0 ] || return 1
 	run _skip_reasons
+	[ "$output" = "" ] || return 1
+	run _error_reasons
 	[ "$output" = "judge_timeout" ]
 }
 
@@ -195,7 +204,22 @@ STUB
 	[ "$status" -eq 0 ] || return 1
 	[ -f "$CLAUDE_MARKER" ] || return 1
 	run _skip_reasons
+	[ "$output" = "" ] || return 1
+	run _error_reasons
 	[ "$output" = "judge_unparseable" ]
+}
+
+@test "the errored event is a schema-valid envelope" {
+	_settings '{"tribunal":{"stop_hook":{"enabled":true,"skip_if_no_file_changes":false}}}'
+	cat > "${STUB_BIN}/timeout" <<'STUB'
+#!/usr/bin/env bash
+exit 124
+STUB
+	chmod +x "${STUB_BIN}/timeout"
+	_run_hook
+	[ "$status" -eq 0 ] || return 1
+	run bash -c "grep '\"event_type\":\"tribunal.gate.errored\"' '$ONLOOKER_EVENTS_LOG' | ONLOOKER_DIR='$ONLOOKER_DIR' node '${REPO_ROOT}/scripts/lib/onlooker-event.mjs' validate"
+	[ "$status" -eq 0 ]
 }
 
 @test "a gate that actually judges emits no skip" {
@@ -207,6 +231,8 @@ STUB
 	[ "$status" -eq 0 ] || return 1
 	[ -f "$CLAUDE_MARKER" ] || return 1
 	run _skip_reasons
+	[ "$output" = "" ] || return 1
+	run _error_reasons
 	[ "$output" = "" ] || return 1
 	grep -q '"event_type":"tribunal.gate.passed"' "$ONLOOKER_EVENTS_LOG"
 }

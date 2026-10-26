@@ -103,10 +103,27 @@ _validate_latest_event() {
 		tool_name: "Edit",
 		check_name: "shellcheck",
 		check_kind: "lint",
-		reason: "tool_missing",
+		reason: "total_budget_exhausted",
 		project_key: "a1b2c3d4e5f6"
 	}')
 	inspector_emit_event "inspector.check.skipped" "$p"
+	run _validate_latest_event
+	[ "$status" -eq 0 ]
+}
+
+@test "inspector.check.errored validates" {
+	_require_inspector_schema
+	local p
+	p=$(jq -n '{
+		file_path: "/repo/scripts/deploy.sh",
+		file_path_relative: "scripts/deploy.sh",
+		tool_name: "Edit",
+		check_name: "shellcheck",
+		check_kind: "lint",
+		reason: "tool_missing",
+		project_key: "a1b2c3d4e5f6"
+	}')
+	inspector_emit_event "inspector.check.errored" "$p"
 	run _validate_latest_event
 	[ "$status" -eq 0 ]
 }
@@ -137,6 +154,7 @@ _validate_latest_event() {
 		checks_passed: 1,
 		checks_failed: 1,
 		checks_skipped: 0,
+		checks_errored: 0,
 		duration_ms: 1080,
 		project_key: "a1b2c3d4e5f6"
 	}')

@@ -3,7 +3,7 @@
 #
 # Reads:   $INSPECTOR_FILE, $INSPECTOR_FILE_RELATIVE, $INSPECTOR_REPO_ROOT,
 #          $INSPECTOR_PROJECT_KEY, $INSPECTOR_TOOL_NAME
-# Emits:   inspector.check.passed / .failed / .skipped (per check), then
+# Emits:   inspector.check.passed / .failed / .skipped / .errored (per check), then
 #          inspector.run.completed (once).
 # Writes:  a compact per-file summary to stdout, intended to be shown to the
 #          agent as PostToolUse additional context.
@@ -149,7 +149,7 @@ inspector_run() {
 	# the first bump from 0 returns exit status 1. Bash 4+ aborts on that under
 	# errexit (3.2 does not, which is why it stayed invisible on macOS). Same
 	# idiom run-audit.sh uses for its five counters (ONL-29).
-	local passed=0 failed=0 skipped=0 ran=0
+	local passed=0 failed=0 skipped=0 errored=0 ran=0
 
 	# Buffer agent-facing output so we only print the file header when at least
 	# one issue (or, when show_clean is set, one check) is worth reporting.
@@ -193,18 +193,20 @@ inspector_run() {
 		check_end=$(_inspector_now_ms)
 		local dur=$(( check_end - check_start ))
 
+		# A check that cannot run is a failure, not a decision not to check, so
+		# both of these are .errored rather than .skipped (ONL-192).
 		if (( rc == 127 )); then
 			# Tool not on PATH.
-			_inspector_emit_skipped "$check_name" "$check_kind" "tool_missing"
-			(( skipped++ )) || true
+			_inspector_emit_errored "$check_name" "$check_kind" "tool_missing"
+			(( errored++ )) || true
 			continue
 		fi
 
 		if (( rc == 124 )); then
-			# Timed out — emit skipped + a single agent-facing line.
-			_inspector_emit_skipped "$check_name" "$check_kind" "timeout"
+			# Timed out — emit errored + a single agent-facing line.
+			_inspector_emit_errored "$check_name" "$check_kind" "timeout"
 			agent_lines+=("  · $check_name timed out after ${timeout_per_check}s")
-			(( skipped++ )) || true
+			(( errored++ )) || true
 			(( issues_seen++ )) || true
 			continue
 		fi
@@ -243,7 +245,7 @@ inspector_run() {
 	run_end=$(_inspector_now_ms)
 	local run_dur=$(( run_end - run_start ))
 
-	_inspector_emit_run_completed "$ran" "$passed" "$failed" "$skipped" "$run_dur"
+	_inspector_emit_run_completed "$ran" "$passed" "$failed" "$skipped" "$errored" "$run_dur"
 
 	if (( issues_seen > 0 )) || (( show_clean && (passed + failed) > 0 )); then
 		printf 'inspector: %s\n' "$INSPECTOR_FILE_RELATIVE"
@@ -310,6 +312,21 @@ _inspector_emit_skipped() {
 	inspector_emit_event "inspector.check.skipped" "$payload" || true
 }
 
+_inspector_emit_errored() {
+	local name="$1" kind="$2" reason="$3"
+	local payload
+	payload=$(jq -n \
+		--arg file "$INSPECTOR_FILE" \
+		--arg rel "$INSPECTOR_FILE_RELATIVE" \
+		--arg tool "$INSPECTOR_TOOL_NAME" \
+		--arg name "$name" \
+		--arg kind "$kind" \
+		--arg reason "$reason" \
+		--arg pk "$INSPECTOR_PROJECT_KEY" \
+		'{file_path:$file,file_path_relative:$rel,tool_name:$tool,check_name:$name,check_kind:$kind,reason:$reason,project_key:$pk}')
+	inspector_emit_event "inspector.check.errored" "$payload" || true
+}
+
 # Whole-file skips are the paths that do no work at all -- no_extension_match,
 # not_in_repo, excluded_path -- and they are roughly a fifth of invocations.
 # Their cost was the one thing the hook never reported, which is how
@@ -343,7 +360,7 @@ inspector_emit_whole_file_skipped() {
 }
 
 _inspector_emit_run_completed() {
-	local ran="$1" passed="$2" failed="$3" skipped="$4" dur="$5"
+	local ran="$1" passed="$2" failed="$3" skipped="$4" errored="$5" dur="$6"
 	local payload
 	payload=$(jq -n \
 		--arg file "$INSPECTOR_FILE" \
@@ -354,7 +371,8 @@ _inspector_emit_run_completed() {
 		--argjson passed "$passed" \
 		--argjson failed "$failed" \
 		--argjson skipped "$skipped" \
+		--argjson errored "$errored" \
 		--argjson dur "$dur" \
-		'{file_path:$file,file_path_relative:$rel,tool_name:$tool,checks_run:$ran,checks_passed:$passed,checks_failed:$failed,checks_skipped:$skipped,duration_ms:$dur,project_key:$pk}')
+		'{file_path:$file,file_path_relative:$rel,tool_name:$tool,checks_run:$ran,checks_passed:$passed,checks_failed:$failed,checks_skipped:$skipped,checks_errored:$errored,duration_ms:$dur,project_key:$pk}')
 	inspector_emit_event "inspector.run.completed" "$payload" || true
 }

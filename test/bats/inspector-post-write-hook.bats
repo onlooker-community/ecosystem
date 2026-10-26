@@ -202,16 +202,27 @@ EOF
 	[ "$(jq -r 'select(.event_type=="inspector.check.failed").payload.exit_code' "$ONLOOKER_EVENTS_LOG")" = "2" ]
 }
 
-@test "a missing tool emits .skipped with tool_missing and produces no agent output" {
+# ONL-192. A configured check that cannot run is a failure, not inspector
+# deciding not to check, so it is reported as .errored rather than .skipped.
+@test "a missing tool emits .errored with tool_missing and produces no agent output" {
 	echo '{"inspector":{"checks":{".ts":[{"name":"ghost","kind":"lint","argv":["this-tool-does-not-exist"]}]}}}' | _settings
 	run _run_hook "$(_input)"
-	[ "$status" -eq 0 ]
-	[ -z "$output" ]
-	[ "$(_event_count inspector.check.skipped)" = "1" ]
-	[ "$(jq -r 'select(.event_type=="inspector.check.skipped").payload.reason' "$ONLOOKER_EVENTS_LOG")" = "tool_missing" ]
+	[ "$status" -eq 0 ] || return 1
+	[ -z "$output" ] || return 1
+	[ "$(_event_count inspector.check.skipped)" = "0" ] || return 1
+	[ "$(_event_count inspector.check.errored)" = "1" ] || return 1
+	[ "$(jq -r 'select(.event_type=="inspector.check.errored").payload.reason' "$ONLOOKER_EVENTS_LOG")" = "tool_missing" ]
 }
 
-@test "run.completed aggregates pass/fail/skip counts" {
+@test "a timed-out check emits .errored with timeout" {
+	echo '{"inspector":{"timeout_seconds_per_check":1,"checks":{".ts":[{"name":"slow","kind":"lint","argv":["sleep","5"]}]}}}' | _settings
+	run _run_hook "$(_input)"
+	[ "$status" -eq 0 ] || return 1
+	[ "$(_event_count inspector.check.skipped)" = "0" ] || return 1
+	[ "$(jq -r 'select(.event_type=="inspector.check.errored").payload.reason' "$ONLOOKER_EVENTS_LOG")" = "timeout" ]
+}
+
+@test "run.completed aggregates pass/fail/error counts" {
 	cat <<'EOF' | _settings
 {"inspector":{"checks":{".ts":[
 	{"name":"clean", "kind":"lint",      "argv":["true"]},
@@ -226,7 +237,8 @@ EOF
 	[ "$(echo "$completed" | jq -r '.checks_run')" = "2" ]
 	[ "$(echo "$completed" | jq -r '.checks_passed')" = "1" ]
 	[ "$(echo "$completed" | jq -r '.checks_failed')" = "1" ]
-	[ "$(echo "$completed" | jq -r '.checks_skipped')" = "1" ]
+	[ "$(echo "$completed" | jq -r '.checks_skipped')" = "0" ] || return 1
+	[ "$(echo "$completed" | jq -r '.checks_errored')" = "1" ]
 }
 
 @test "argv is expanded with the touched file path" {

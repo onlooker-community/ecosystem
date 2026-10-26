@@ -242,6 +242,47 @@ BROKEN
 	[ "$(_events_of librarian.candidate.dropped)" -eq 0 ]
 }
 
+# ONL-192. When some calls answer and others come back empty, the run goes on,
+# and the empty ones used to be recorded as candidate.dropped with
+# classified_null -- a verdict nobody made, under a type a consumer reads as a
+# deliberate skip. They are librarian.classifier.errored now.
+@test "a call that does not come back is errored, not dropped as classified_null" {
+	_seed_survivor
+	_seed_artifact decisions "01JBXQ2K3M4N5P6Q7R8S9T0W" \
+		"silent-stub: pin the runtime version" \
+		"We decided to pin the runtime version in the repo. Because two machines drifted apart, we now require the pinned version everywhere."
+
+	cat > "${STUB_BIN}/claude" <<'PARTIAL'
+#!/usr/bin/env bash
+prompt=$(cat)
+[[ "$prompt" == *"silent-stub"* ]] && exit 0
+if [[ "$prompt" == *"marker-stub"* ]]; then
+  printf '%s' '{"type":"feedback","title":"Prefer explicit config","body":"Prefer explicit configuration over inference.\n\n**Why:** Stated in review.\n**How to apply:** Require a config key rather than guessing.","confidence":0.88}'
+else
+  printf '%s' '{"type":null,"title":"","body":"","confidence":0.2}'
+fi
+PARTIAL
+	chmod +x "${STUB_BIN}/claude"
+
+	run _run_hook
+	[ "$status" -eq 0 ] || return 1
+	local queued
+	queued=$(find "$QUEUE_DIR" -name '*.json' -type f | head -1)
+	[ -n "$queued" ] || return 1
+	[ "$(jq '.artifacts | length' "$queued")" -eq 2 ] || return 1
+
+	run bash "$WORKER" "$queued"
+	[ "$status" -eq 0 ] || return 1
+
+	[ "$(_events_of librarian.classifier.errored)" -eq 1 ] || return 1
+	grep '"event_type":"librarian.classifier.errored"' "$ONLOOKER_EVENTS_LOG" \
+		| jq -e '.payload.reason == "no_response"
+			and .payload.source_artifact_id == "01JBXQ2K3M4N5P6Q7R8S9T0W"' >/dev/null || return 1
+	! grep '"event_type":"librarian.candidate.dropped"' "$ONLOOKER_EVENTS_LOG" 2>/dev/null \
+		| jq -e 'select(.payload.reason == "classified_null")' >/dev/null || return 1
+	[ "$(_events_of librarian.candidate.proposed)" -eq 1 ]
+}
+
 @test "a second worker will not run against a queue already in flight" {
 	_seed_survivor
 	run _run_hook
