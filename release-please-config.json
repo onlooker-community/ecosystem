@@ -159,6 +159,22 @@
         }
       ]
     },
+    "plugins/customs": {
+      "changelog-path": "CHANGELOG.md",
+      "release-type": "simple",
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": false,
+      "component": "customs",
+      "draft": false,
+      "prerelease": false,
+      "extra-files": [
+        {
+          "type": "json",
+          "path": ".claude-plugin/plugin.json",
+          "jsonpath": "$.version"
+        }
+      ]
+    },
     "plugins/librarian": {
       "changelog-path": "CHANGELOG.md",
       "release-type": "simple",

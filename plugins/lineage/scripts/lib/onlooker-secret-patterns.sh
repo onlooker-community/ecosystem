@@ -26,24 +26,39 @@
 # FAILS CLOSED. If python3 is missing or errors, stdout is empty and no raw
 # input text escapes. A redactor that failed open would be the leak it exists
 # to prevent.
-onlooker_redact_secrets() {
-	local inputs="${1:-[]}"
+#
+# DETECTION reads the same table. onlooker_detect_secrets reports which kinds a
+# string holds, for customs, which pairs a kind with the hosts that issued it.
+# It substitutes as it goes, in table order, so an Anthropic key is
+# anthropic_key and never openai_key too, and a bearer whose value is a GitHub
+# token is a github_token. KV_PATTERN is redaction-only and never a kind:
+# "max_output_tokens: 192" matches it, which costs a placeholder in a stored
+# transcript but would cost a permission prompt in a gate.
+#
+# Usage: onlooker_detect_secrets '<json array of strings>'
+#   stdout: JSON array of {"kinds": [string, ...]}, element i for input i.
 
-	python3 - "$inputs" <<'PY'
+_onlooker_secret_patterns_run() {
+	local mode="$1"
+	local inputs="${2:-[]}"
+
+	python3 - "$mode" "$inputs" <<'PY'
 import json, re, sys
 
-inputs = json.loads(sys.argv[1] or "[]")
+mode = sys.argv[1]
+inputs = json.loads(sys.argv[2] or "[]")
 
 PLACEHOLDER = "[REDACTED:secret]"
 
-# Order is load-bearing: sk-ant- precedes the bare sk- so an Anthropic key is
-# labeled by the more specific pattern.
+# (kind, pattern). Order is load-bearing: sk-ant- precedes the bare sk- so an
+# Anthropic key is labeled by the more specific pattern, and every specific
+# shape precedes bearer so `Bearer ghp_...` is a github_token.
 TOKEN_PATTERNS = [
-    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),            # AWS access key id
-    re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b"),  # GitHub tokens, all five kinds
-    re.compile(r"\bsk-ant-[A-Za-z0-9_-]{20,}\b"),   # Anthropic API keys
-    re.compile(r"\bsk-[A-Za-z0-9]{20,}\b"),         # OpenAI-style keys
-    re.compile(r"(?i:Bearer)\s+[A-Za-z0-9._\-+/=]{20,}"),  # bearer tokens
+    ("aws_access_key_id", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
+    ("github_token", re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b")),   # all five kinds
+    ("anthropic_key", re.compile(r"\bsk-ant-[A-Za-z0-9_-]{20,}\b")),
+    ("openai_key", re.compile(r"\bsk-[A-Za-z0-9]{20,}\b")),
+    ("bearer_token", re.compile(r"(?i:Bearer)\s+[A-Za-z0-9._\-+/=]{20,}")),
 ]
 
 # KEY=value or "key": "value" where the key name implies a secret. Group 1
@@ -58,7 +73,7 @@ KV_PATTERN = re.compile(
 def redact(text):
     count = 0
     out = text
-    for pat in TOKEN_PATTERNS:
+    for _kind, pat in TOKEN_PATTERNS:
         found = pat.findall(out)
         if found:
             count += len(found)
@@ -70,9 +85,31 @@ def redact(text):
     return {"redacted": out, "count": count}
 
 
+def detect(text):
+    kinds = []
+    out = text
+    for kind, pat in TOKEN_PATTERNS:
+        if pat.search(out):
+            kinds.append(kind)
+            out = pat.sub(PLACEHOLDER, out)
+    return {"kinds": kinds}
+
+
+fn, empty = {
+    "redact": (redact, {"redacted": "", "count": 0}),
+    "detect": (detect, {"kinds": []}),
+}[mode]
+
 # Non-strings are coerced rather than raising: one malformed element must not
 # cost the whole batch, which for historian is a whole session's transcript.
-print(json.dumps([redact(t) if isinstance(t, str) else {"redacted": "", "count": 0}
-                  for t in inputs]))
+print(json.dumps([fn(t) if isinstance(t, str) else empty for t in inputs]))
 PY
+}
+
+onlooker_redact_secrets() {
+	_onlooker_secret_patterns_run redact "${1:-[]}"
+}
+
+onlooker_detect_secrets() {
+	_onlooker_secret_patterns_run detect "${1:-[]}"
 }

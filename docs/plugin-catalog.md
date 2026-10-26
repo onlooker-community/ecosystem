@@ -55,6 +55,7 @@ Block harmful or ambiguous actions before they land.
 
 - **compass** — shipped — PreToolUse(Write, Edit, MultiEdit, Bash). Pre-write intent clarity gate. N=5 parallel Haiku evaluators score whether two independent readers would converge on the same interpretation; blocks below threshold.
 - **warden** — shipped — PostToolUse(WebFetch, Read), PreToolUse(Write, Edit, MultiEdit, Bash), SessionStart. Scans ingested content for prompt-injection patterns; closes a session-scoped gate that blocks write-class tools until cleared.
+- **customs** — shipped — PreToolUse(Bash, WebFetch). Asks before a secret-shaped literal leaves for a host that is not paired with that kind of secret (a GitHub token to anywhere but GitHub). Opt-in; fails open with `customs.check.failed`. The outbound counterpart to warden.
 
 ## Analysis
 
@@ -114,7 +115,7 @@ Link artifacts back to the prompts and agents that produced them.
 | quality | tribunal, muse, rubric |
 | governance | governor, bursar, arbiter |
 | testing | echo, canary, gauntlet |
-| safety | compass, warden |
+| safety | compass, customs, warden |
 | analysis | cartographer, counsel, scribe |
 | memory | archivist, historian, librarian, curator |
 | discovery / routing | wayfinder, herald, dispatcher |
@@ -122,4 +123,4 @@ Link artifacts back to the prompts and agents that produced them.
 | feedback / adaptation | attendant, interpreter, adept |
 | provenance | lineage, ledger, witness |
 
-Every layer holds at least two plugins; most hold three. Total: 16 shipped, 0 design, 14 planned.
+Every layer holds at least two plugins; most hold three. Total: 17 shipped, 0 design, 14 planned.

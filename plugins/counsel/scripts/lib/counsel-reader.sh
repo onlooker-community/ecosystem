@@ -29,6 +29,7 @@
 _COUNSEL_SOURCE_MAP='{
   "compass":      "gate_blocks",
   "warden":       "gate_blocks",
+  "customs":      "gate_blocks",
   "tribunal":     "gate_blocks",
   "inspector":    "verification",
   "assayer":      "verification",
