@@ -1,0 +1,9 @@
+{
+  "plugin_name": "customs",
+  "storage_path": "~/.onlooker",
+  "customs": {
+    "mode": "ask",
+    "pairs": {},
+    "record_only_kinds": ["bearer_token"]
+  }
+}
