@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.1...ecosystem-v0.76.2) (2026-10-26)
+
+
+### Bug Fixes
+
+* **customs:** read the host each network tool names :passport_control: ([#509](https://github.com/onlooker-community/ecosystem/issues/509)) ([5b59701](https://github.com/onlooker-community/ecosystem/commit/5b59701f7d10b7c063511a3c7db66ba97e837aeb))
+
 ## [0.76.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.0...ecosystem-v0.76.1) (2026-10-26)
 
 
