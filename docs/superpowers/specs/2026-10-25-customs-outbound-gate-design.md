@@ -53,9 +53,9 @@ interactive sessions too.
 Unattended runs probably need no switch. The hooks reference says that for `"ask"`,
 the reason is "shown to the user in the permission prompt. When Claude Code denies the
 call in a `-p` run where no one can answer that prompt, Claude reads the reason in the
-tool result instead." That implies a `-p` run with nobody to answer is denied. It
-doesn't say so outright, so [Testing](#testing) settles it with a real `-p` run before
-the README claims it.
+tool result instead." That implies a `-p` run with nobody to answer is denied.
+**Measured 2026-10-25:** gate-block-contract.bats' ask canary passes, so a `-p` run
+denies an ask that nobody answers.
 
 `"ask"` also holds in auto mode. The reference says a hook's `"ask"` "forces a
 permission prompt in auto mode: the classifier can still deny the tool call, but it
