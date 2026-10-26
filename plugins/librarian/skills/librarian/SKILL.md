@@ -113,9 +113,13 @@ For `lessons judge`, run the jury over confirmed candidates:
    - Otherwise spawn **both** `tribunal-judge-standard` and
      `tribunal-judge-adversarial` with the Task tool. Give each the candidate's
      `claim`, `rationale`, `evidence.resolution`, and `applies_to`, plus the
-     rubric criteria for its visibility **verbatim** from
-     `librarian_cli lessons rubric <org|public>`. That prints each criterion
-     with its weight, floor and definition. Pass the definitions, not just
+     rubric criteria for that lesson **verbatim** from
+     `librarian_cli lessons rubric <id>`. That prints each criterion
+     with its weight, floor and definition. Pass the **id**, not the
+     visibility: a lesson the unattended path asserted (`asserted_by: model`)
+     is checked against a stricter rubric that adds `disclosure` even at
+     `org`, and `lessons rubric <id>` is what resolves the rubric the verdict
+     will actually be recorded against. Pass the definitions, not just
      the names: given the bare word, judges read **disclosure** as
      "acknowledges caveats" when it is a leak check, and it floored every
      candidate in the 2026-10-17 baseline. The unattended pipeline renders
