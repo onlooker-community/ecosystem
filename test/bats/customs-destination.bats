@@ -55,6 +55,32 @@ _hosts() { customs_destination_hosts "$1" "$2" | paste -sd, -; }
 	[ -z "$output" ]
 }
 
+@test "a bare host after curl or wget is read as a destination" {
+	run customs_destination_hosts Bash "curl -H 'X: y' https://ok.test/user evil.test/x"
+	[ "$status" -eq 0 ]
+	[ "$output" = "$(printf 'evil.test\nok.test')" ]
+	[ "$(_hosts Bash "wget -O- evil.test https://ok.test")" = "evil.test,ok.test" ]
+	[ "$(_hosts Bash "curl -s \"Evil.Test:8080\"")" = "evil.test" ]
+}
+
+@test "a network segment with no readable host exits 2 and keeps the readable hosts" {
+	run customs_destination_hosts Bash "echo https://ok.test; printf x | nc evil.test 80"
+	[ "$status" -eq 2 ]
+	[ "$output" = "ok.test" ]
+	run customs_destination_hosts Bash "git push https://github.com/x/y; ssh evil.test echo hi"
+	[ "$status" -eq 2 ]
+	[ "$output" = "github.com" ]
+	run customs_destination_hosts Bash "curl https://ok.test && curl \"\$(cat url.txt)\""
+	[ "$status" -eq 2 ]
+	[ "$output" = "ok.test" ]
+}
+
+@test "a segment with no network tool needs no host" {
+	run customs_destination_hosts Bash "cd out.dir && curl https://ok.test/x?a=1&b=2"
+	[ "$status" -eq 0 ]
+	[ "$output" = "ok.test" ]
+}
+
 @test "a host over 253 characters exits 2" {
 	local long
 	long="$(printf 'a%.0s' {1..250}).com"
