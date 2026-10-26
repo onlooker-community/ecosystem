@@ -1662,7 +1662,7 @@ Then add a live canary after the existing ones. It's opt-in, and it settles what
 
 	run bash -c "cd '${workspace}' && HOME='${REAL_HOME}' claude -p \
 		--settings '${workspace}/.claude/settings.json' \
-		--allowedTools 'Bash(touch canary.txt)' \
+		--allowedTools='Bash(touch canary.txt)' \
 		'Run exactly this Bash command once: touch canary.txt. Do not retry.' \
 		< /dev/null"
 
@@ -1681,10 +1681,14 @@ Expected: the 3 new non-live tests pass, and the live canary skips.
 
 Run: `ONLOOKER_GATE_E2E=1 bats -f "ask payload is denied" test/bats/gate-block-contract.bats`
 
-In this setup `claude` may be an account-picker wrapper. If the test skips or fails on "pick an account", rerun with the account binary first on `PATH`. For this machine that's `claude-personal`, symlinked as `claude` in a temporary dir:
+`--allowedTools` is variadic, so write it with `=`. Written as `--allowedTools 'Bash(…)' 'prompt'`, it swallows the prompt, and with stdin at `/dev/null` the CLI exits non-zero before any model call ("Input must be provided…").
+
+In this setup `claude` may be an account-picker shell function. If the test skips or fails on "pick an account", put a shim first on `PATH`. The `claude-<account>` names are shell functions too, so a symlink to them points at nothing. The shim calls the real binary with that account's config directory:
 
 ```bash
-d=$(mktemp -d) && ln -s "$(command -v claude-personal)" "$d/claude"
+d=$(mktemp -d)
+printf '%s\n' '#!/usr/bin/env bash' 'CLAUDE_CONFIG_DIR="$HOME/.claude-personal" exec /opt/homebrew/bin/claude "$@"' > "$d/claude"
+chmod +x "$d/claude"
 PATH="$d:$PATH" ONLOOKER_GATE_E2E=1 bats -f "ask payload is denied" test/bats/gate-block-contract.bats
 ```
 
