@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.1](https://github.com/onlooker-community/ecosystem/compare/historian-v0.11.0...historian-v0.11.1) (2026-10-26)
+
+
+### Bug Fixes
+
+* **historian:** let retrieval reach chunks that never got a vector :lantern: ([#507](https://github.com/onlooker-community/ecosystem/issues/507)) ([0e42219](https://github.com/onlooker-community/ecosystem/commit/0e4221904f766e15b4c4dcef924695eb8adcc5b3))
+
 ## [0.11.0](https://github.com/onlooker-community/ecosystem/compare/historian-v0.10.2...historian-v0.11.0) (2026-10-26)
 
 
