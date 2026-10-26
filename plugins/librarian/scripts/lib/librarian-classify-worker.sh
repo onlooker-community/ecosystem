@@ -458,19 +458,18 @@ if [[ "$CALL_FAILURES" -gt 0 && "$CALL_ANSWERED" -eq 0 ]]; then
 	exit 0
 fi
 
-# Reachable, but these particular calls did not come back. classified_null
-# overstates it — it says the model judged them, and nothing judged them — but
-# the reason enum has no value for "the call failed" and adding one is a schema
-# change in another repo. Recorded rather than silent: the artifacts are about
-# to pass out of the window, so a silent drop would be worse than an imprecise
-# one. Worth a follow-up alongside filter_markers_unavailable, which is the
-# same distinction already drawn one layer up.
+# Reachable, but these particular calls did not come back. Recorded rather than
+# silent: the artifacts are about to pass out of the window, so a silent loss
+# would be worse than any report of it.
+#
+# These used to be candidate.dropped with classified_null, which claimed the
+# model judged them when nothing did, under a type a consumer reads as a
+# deliberate skip. They are librarian.classifier.errored now (ONL-192), and not
+# counted in candidates_dropped, which counts verdicts.
 for _fid in ${FAILED_IDS+"${FAILED_IDS[@]}"}; do
-	POST_CLASSIFIER_DROPPED=$((POST_CLASSIFIER_DROPPED + 1))
-	librarian_emit "librarian.candidate.dropped" "$SESSION_ID" "$(jq -cn \
-		--arg reason "classified_null" \
+	librarian_emit "librarian.classifier.errored" "$SESSION_ID" "$(jq -cn \
 		--arg src "$_fid" \
-		'{ reason: $reason, source_artifact_id: (if $src == "" then null else $src end) }
+		'{ reason: "no_response", source_artifact_id: (if $src == "" then null else $src end) }
 		 | with_entries(select(.value != null))')"
 done
 unset _fid

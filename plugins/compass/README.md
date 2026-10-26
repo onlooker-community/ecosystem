@@ -114,7 +114,7 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
 | `context_chars_max` | `600` | Maximum characters of context sent to the evaluator. Set to `0` for near-zero egress. |
 | `include_file_contents` | `false` | When `false`, file contents are never sent to the evaluator — only tool name, file path, operation type, prior turn excerpt, and context excerpt. |
 | `skip_globs` | lock/sum/`node_modules`/`.git`/`dist`/`build` patterns | Paths matching any glob skip evaluation entirely. |
-| `error_policy` | `"closed"` | `closed` blocks on evaluator failure; `open` passes the write through and emits `compass.check.skipped` with reason `sampler_error`. |
+| `error_policy` | `"closed"` | `closed` blocks on evaluator failure; `open` passes the write through. Either way the gate emits `compass.check.errored`, with `blocked` saying which. |
 | `circuit_breaker.enabled` | `true` | Enables the session-scoped circuit breaker. |
 | `circuit_breaker.consecutive_failures_to_open` | `3` | Consecutive evaluator failures before the circuit opens. |
 | `circuit_breaker.open_duration_seconds` | `300` | How long the circuit stays open (failing open) before attempting to close. While open, writes skip with reason `circuit_open`. |
@@ -146,8 +146,9 @@ Compass emits the canonical `compass.*` event surface from [`@onlooker-community
 | `compass.check.passed` | Confidence ≥ threshold and stddev ≤ threshold. | `confidence`, `stddev`, `file_path`, `tool_name`, `had_prior_turn` |
 | `compass.check.failed` | Confidence < threshold or stddev > threshold. | `confidence`, `stddev`, `primary_concern`, `file_path` |
 | `compass.check.skipped` | A gate rule or the symbolic skip layer matched. | `reason`, `file_path` |
+| `compass.check.errored` | The evaluators produced no usable measurement. | `reason` (`sampler_error`), `file_path`, `blocked` |
 
-`compass.check.skipped` reasons: `skip_sentinel`, `skip_glob`, `dir_plus_stem_cooldown`, `turn_budget_exhausted`, `insufficient_context`, `circuit_open`, `reply_to_question_pattern`, and `sampler_error`.
+`compass.check.skipped` reasons: `skip_sentinel`, `skip_glob`, `dir_plus_stem_cooldown`, `turn_budget_exhausted`, `insufficient_context`, `circuit_open`, and `reply_to_question_pattern`.
 
 ## Requirements
 

@@ -518,24 +518,21 @@ compass_run_gate() {
 			error_allows="true"
 		fi
 
+		# Either way the evaluator failed, so this is compass.check.errored and
+		# `blocked` records what the policy did with it. It used to be .skipped
+		# when allowed and .failed when denied, which a consumer that keeps
+		# only event types read as a skip or a verdict; .failed is left to mean
+		# the evaluator measured the write and found it unclear (ONL-192).
+		compass_emit_event "compass.check.errored" \
+			"$(jq -n --arg f "$file_path" --arg t "$tool_name" \
+				--argjson blocked "$([[ "$error_allows" == "true" ]] && echo false || echo true)" \
+				'{reason:"sampler_error",file_path:$f,tool_name:$t,blocked:$blocked}
+				 | if .tool_name == "" then del(.tool_name) else . end' \
+				2>/dev/null || echo '{}')" 2>/dev/null || true
+
 		if [[ "$error_allows" == "true" ]]; then
-			# Allowed. Compass genuinely declined to act, so this really is a
-			# skip and keeps saying so.
-			compass_emit_event "compass.check.skipped" \
-				"$(jq -n --arg r "sampler_error" --arg f "$file_path" \
-				'{reason:$r,file_path:$f}' 2>/dev/null || echo '{}')" 2>/dev/null || true
 			return $_allow_exit
 		fi
-
-		# Denied. confidence and stddev are null rather than 0 because the
-		# evaluator measured nothing — a zero would assert a measured zero
-		# confidence, which is a different and stronger claim than "not
-		# measured". Requires @onlooker-community/schema >= 2.21.0, which made
-		# both nullable and added reason (ecosystem-449.52 gap 2).
-		compass_emit_event "compass.check.failed" \
-			"$(jq -n --arg f "$file_path" --arg t "$tool_name" \
-			'{confidence:null,stddev:null,reason:"sampler_error",file_path:$f,tool_name:$t}' \
-			2>/dev/null || echo '{}')" 2>/dev/null || true
 
 		# fail-closed: block
 		_compass_intervention \

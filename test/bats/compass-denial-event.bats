@@ -13,9 +13,11 @@
 # different and worse claim. Schema 2.21.0 makes both nullable and adds a
 # reason (ecosystem-449.52 gap 2), so the denial now has a truthful event.
 #
-# The distinction under test is decision-shaped, not error-shaped: an evaluator
-# error that ALLOWS is still a skip, because compass genuinely declined to act.
-# Only the denial changes.
+# ONL-192 moved both shapes again. Whether the error policy allowed or denied
+# the call, the evaluator failed, and a consumer that keeps only event types
+# read the old pair as a skip or a verdict. Both are now compass.check.errored,
+# and `blocked` records what the policy did. compass.check.failed is left to
+# mean what it says: the evaluator measured the write and found it unclear.
 
 setup() {
 	source "${BATS_TEST_DIRNAME}/../helpers/setup.bash"
@@ -79,7 +81,7 @@ _last_event() {
 	grep "\"event_type\":\"$1\"" "$ONLOOKER_EVENTS_LOG" 2>/dev/null | tail -n 1
 }
 
-@test "an evaluator error that denies emits failed, not skipped" {
+@test "an evaluator error that denies emits errored, not failed or skipped" {
 	# The headline. Below the breaker threshold, so error_policy closed blocks.
 	_seed_state 0
 	_stub_evaluator_error
@@ -92,11 +94,12 @@ _last_event() {
 	printf '%s' "$output" | jq -e \
 		'.hookSpecificOutput.permissionDecision == "deny"' >/dev/null || return 1
 
-	[[ -n "$(_last_event compass.check.failed)" ]] || return 1
+	[[ -n "$(_last_event compass.check.errored)" ]] || return 1
+	[[ -z "$(_last_event compass.check.failed)" ]] || return 1
 	[[ -z "$(_last_event compass.check.skipped)" ]] || return 1
 }
 
-@test "the denial reports no measurement rather than a measured zero" {
+@test "the denial says it blocked" {
 	_seed_state 0
 	_stub_evaluator_error
 
@@ -105,18 +108,15 @@ _last_event() {
 	[ "$status" -eq 0 ] || return 1
 
 	local ev
-	ev=$(_last_event compass.check.failed)
+	ev=$(_last_event compass.check.errored)
 	[[ -n "$ev" ]] || return 1
-	# null, not 0. A zero here would claim the evaluator measured no confidence.
-	printf '%s' "$ev" | jq -e '.payload.confidence == null' >/dev/null || return 1
-	printf '%s' "$ev" | jq -e '.payload.stddev == null' >/dev/null || return 1
+	printf '%s' "$ev" | jq -e '.payload.blocked == true' >/dev/null || return 1
 	printf '%s' "$ev" | jq -e '.payload.reason == "sampler_error"' >/dev/null
 }
 
-@test "an evaluator error that allows is still a skip" {
+@test "an evaluator error that allows is errored, and says it did not block" {
 	# The breaker trips on this call and open_behavior is fail_open, so the
-	# write proceeds. Compass genuinely declined to act, so skipped is correct
-	# — the fix must not relabel every evaluator error as a denial.
+	# write proceeds. The fix must not relabel an allowed call as a denial.
 	_seed_state 2
 	_stub_evaluator_error
 
@@ -126,8 +126,9 @@ _last_event() {
 	# Allow is signaled by empty stdout.
 	[ -z "$output" ] || return 1
 
-	[[ -n "$(_last_event compass.check.skipped)" ]] || return 1
+	[[ -z "$(_last_event compass.check.skipped)" ]] || return 1
 	[[ -z "$(_last_event compass.check.failed)" ]] || return 1
+	_last_event compass.check.errored | jq -e '.payload.blocked == false' >/dev/null
 }
 
 @test "a measured denial still carries its numbers and no reason of its own" {

@@ -92,7 +92,7 @@ A bare argv array (`["shellcheck", "${file}"]`) is also accepted as a shorthand
 
 | Field | Default | Meaning |
 |---|---|---|
-| `timeout_seconds_per_check` | `10` | Wall-clock cap per check. Exceeded → `inspector.check.skipped` with `reason: "timeout"`. |
+| `timeout_seconds_per_check` | `10` | Wall-clock cap per check. Exceeded → `inspector.check.errored` with `reason: "timeout"`. |
 | `total_timeout_seconds` | `30` | Wall-clock cap for the whole run. Remaining checks emit `.skipped` with `reason: "total_budget_exhausted"`. |
 | `output_excerpt_max_bytes` | `4096` | Cap on captured output, both in the event and shown to the agent. Excess is replaced with `…[truncated]`. |
 | `show_clean_runs` | `false` | If `true`, the agent-facing summary includes passing checks too. Off by default to keep token usage low. |
@@ -112,8 +112,9 @@ All events are registered in `@onlooker-community/schema`.
 |---|---|---|
 | `inspector.check.passed` | A check returned exit 0 | `file_path`, `tool_name`, `check_name`, `check_kind`, `argv`, `duration_ms` |
 | `inspector.check.failed` | A check returned non-zero | `exit_code`, `issue_count` (best-effort, may be `null`), `output_excerpt`, `output_truncated` |
-| `inspector.check.skipped` | A check or whole file was not run | `reason`: one of `excluded_path`, `no_extension_match`, `not_in_repo`, `tool_missing`, `timeout`, `total_budget_exhausted` |
-| `inspector.run.completed` | Once per hook fire after all checks | `checks_run`, `checks_passed`, `checks_failed`, `checks_skipped`, `duration_ms` |
+| `inspector.check.skipped` | A check or whole file was deliberately not run | `reason`: one of `excluded_path`, `no_extension_match`, `not_in_repo`, `total_budget_exhausted` |
+| `inspector.check.errored` | A configured check could not run | `reason`: `tool_missing` (exit 127) or `timeout` (exit 124) |
+| `inspector.run.completed` | Once per hook fire after all checks | `checks_run`, `checks_passed`, `checks_failed`, `checks_skipped`, `checks_errored`, `duration_ms` |
 
 Downstream consumers that just want "did this edit produce broken code?" read
 `inspector.run.completed` and check `checks_failed > 0`. Consumers that want

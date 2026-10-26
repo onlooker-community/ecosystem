@@ -120,10 +120,16 @@ _scan_noop() {
 
 if [[ -z "$MEM_DIR" ]]; then
 	# Could not work out WHERE the store lives. That is a failure, not an
-	# empty store, and calling it "ok" is what hid ONL-126 for months.
+	# empty store, and calling it "ok" is what hid ONL-126 for months. It was
+	# then reported as outcome "skipped", which a consumer that keeps only
+	# event types still cannot tell from a deliberate skip, so it ends the scan
+	# with curator.scan.errored instead (ONL-192).
 	# Defense in depth: with the derivation above, reaching this needs cwd
 	# itself to be unreadable, which the project-key gate already rejects.
-	_scan_noop "skipped"
+	curator_emit "curator.scan.started" "$SESSION_ID" "$(jq -cn '{ mode: "cheap" }')"
+	curator_emit "curator.scan.errored" "$SESSION_ID" \
+		"$(jq -cn '{ mode: "cheap", reason: "memory_path_unresolved" }')"
+	_emit ""
 	hook_health_exit 0
 fi
 

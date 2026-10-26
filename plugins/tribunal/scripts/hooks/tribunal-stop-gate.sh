@@ -97,10 +97,20 @@ TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | jq -r '.transcript_path // ""' 2>/dev/n
 # project_key as local by its own documented rule ("attributing them to some
 # other repo would be a guess, and over-counting here is the safer error"), and
 # no tribunal event has ever carried one.
+#
+# A reason that means the gate could not reach a verdict -- no claude to call,
+# or a judge that was dispatched and gave nothing usable -- is reported as
+# tribunal.gate.errored rather than .skipped (ONL-192). A consumer that keeps
+# only event types counts a skip as the gate choosing to do nothing, which is
+# not what happened.
 _done() {
 	local reason="${1:-}"
 	if [[ -n "$reason" ]]; then
-		tribunal_emit_event "tribunal.gate.skipped" \
+		local event_type="tribunal.gate.skipped"
+		case "$reason" in
+			claude_unavailable | judge_*) event_type="tribunal.gate.errored" ;;
+		esac
+		tribunal_emit_event "$event_type" \
 			"$(jq -cn --arg r "$reason" '{reason: $r}')" >/dev/null 2>&1 || true
 	fi
 	hook_health_exit 0
