@@ -38,6 +38,7 @@
       "min_prompt_chars": 60,
       "retrieval_top_k": 5,
       "min_similarity": 0.55,
+      "lexical_min_overlap": 0.5,
       "max_age_days": 180
     },
     "surfacer": {
