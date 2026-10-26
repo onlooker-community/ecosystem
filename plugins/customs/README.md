@@ -19,11 +19,16 @@ Network tools are `curl`, `wget`, `http`, `https`, `xh`, `nc`, `ncat`, `ssh`, `s
 
 1. A Bash call with no network tool exits silently. No event.
 2. The call is scanned for secret-shaped literals. Customs gates on specific token shapes only, never on a generic `KEY=value` assignment. None found: exit silently. No event.
-3. Destination hosts are read from URLs, `user@host` and `host:path` arguments, and written-out git remotes. For `curl`, `wget`, `http`, `https` and `xh`, a bare word shaped like a host (`evil.test/x`, `api.github.com`) counts too. Hosts are lowercased and ports dropped.
+3. Destination hosts are read from URLs, `user@host` arguments, written-out git remotes, and each network tool's own arguments. Hosts are lowercased and ports dropped.
+   - After `curl` or `wget`, every word that is not an option or an option's value is a destination, whatever its shape: `evil.test.`, `1.2.3.4`, `localhost:9` and `[::1]` all count, and one that cannot be read asks. The value after an option that takes one is skipped, so `-o out.json` and `-H 'Authorization: …'` are not hosts. The value of a proxy option (`--proxy`, `-x`) is a host.
+   - After `http`, `https` or `xh`, the URL is the first word that is not an option or a method. The request items after it are not hosts.
+   - After `nc`, `ssh` or `sftp`, the first word that is not an option is the host, even when a URL appears elsewhere in the same command. What follows it is a port or a remote command. `ssh -J` names a host too.
+   - After `scp` or `rsync`, each `host:path` word is remote. A colon after a slash is part of a local path.
+   - An option customs does not know is skipped on its own, and its value is then read as a destination. That costs a prompt at most. Only options known to take a value have that value skipped, since skipping the wrong word would hide a host.
 4. The whole call asks, as if no host were readable, when any of these holds. An allowed host elsewhere in the call cannot carry it through. This is the safe direction: it costs a prompt.
    - A candidate cannot be read as a host (`ev_il.test`, `[::1]`, over 253 characters).
    - A candidate is shaped like a secret (`https://<key>.evil.test/`). It is left out of the event and the reason.
-   - One of the commands in the line runs a network tool but names no host customs can read (`nc evil.test 80`, `ssh evil.test`). The line is split on `;`, `|`, `&`, parentheses, backticks and newlines, quotes or not, so `sh -c 'curl …; nc …'` is split too.
+   - One of the commands in the line runs a network tool but names no host customs can read (`nc "$HOST" 80`, `curl "$(cat url.txt)"`). The line is split on `;`, `|`, `&`, parentheses, backticks and newlines, quotes or not, so `sh -c 'curl …; nc …'` is split too.
    - A WebFetch URL holds a backslash, whitespace or a control character, which a URL parser reads differently from customs.
 5. Each kind of secret is checked against each host. A call passes only when every gated kind is headed solely to hosts paired with that kind.
 6. A pass emits `customs.egress.allowed` and writes nothing. A miss emits `customs.egress.flagged` and returns `ask`, or `deny` under `mode: "deny"`. The reason names the kind of secret and the host, never the value.

