@@ -139,6 +139,19 @@
       "tags": ["safety", "security"]
     },
     {
+      "name": "customs",
+      "source": "./plugins/customs",
+      "description": "Outbound secret gate. Before a Bash command or WebFetch URL leaves the machine, checks it for secret-shaped literals and asks when one is headed to a host that is not where that kind of secret goes. The counterpart to warden, which guards what comes in. Requires the ecosystem plugin.",
+      "author": {
+        "name": "Onlooker Community"
+      },
+      "homepage": "https://onlooker.dev",
+      "repository": "https://github.com/onlooker-community/ecosystem",
+      "license": "MIT",
+      "keywords": ["security", "secrets", "egress", "safety", "gate", "exfiltration"],
+      "tags": ["safety", "security"]
+    },
+    {
       "name": "librarian",
       "source": "./plugins/librarian",
       "description": "Consolidation layer between archivist's per-session artifacts and the user's durable typed memory store. Detects which session decisions, dead-ends, and open questions deserve to live across sessions, classifies them into the user/feedback/project/reference types, and queues them as proposals for explicit confirmation. Auto-promotion is opt-in. Requires the ecosystem plugin.",

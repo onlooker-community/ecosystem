@@ -9,6 +9,7 @@
   "plugins/scribe": "0.10.2",
   "plugins/counsel": "0.11.1",
   "plugins/warden": "0.7.1",
+  "plugins/customs": "0.1.0",
   "plugins/librarian": "0.26.6",
   "plugins/curator": "0.7.2",
   "plugins/historian": "0.10.2",

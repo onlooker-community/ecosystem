@@ -48,7 +48,7 @@ _validate_latest_event() {
 }
 
 @test "a payload carrying a command is rejected, so it cannot be logged" {
-	ONLOOKER_VALIDATE=1 run customs_emit_event "customs.egress.flagged" \
+	ONLOOKER_VALIDATE=1 expect_emission_rejected customs_emit_event "customs.egress.flagged" \
 		'{"tool":"Bash","kinds":["github_token"],"hosts":[],"decision":"ask","command":"curl x"}'
 	[ "$status" -ne 0 ]
 }
