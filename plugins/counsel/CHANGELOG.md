@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/onlooker-community/ecosystem/compare/counsel-v0.11.1...counsel-v0.12.0) (2026-10-26)
+
+
+### Features
+
+* **customs:** ask before a secret leaves for the wrong host :passport_control: ([#506](https://github.com/onlooker-community/ecosystem/issues/506)) ([7cb89b5](https://github.com/onlooker-community/ecosystem/commit/7cb89b5551f13fed50aec93a34556c6d951aa93c))
+
 ## [0.11.1](https://github.com/onlooker-community/ecosystem/compare/counsel-v0.11.0...counsel-v0.11.1) (2026-10-25)
 
 

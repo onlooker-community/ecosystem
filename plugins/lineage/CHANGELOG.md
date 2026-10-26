@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/onlooker-community/ecosystem/compare/lineage-v0.8.2...lineage-v0.9.0) (2026-10-26)
+
+
+### Features
+
+* **customs:** ask before a secret leaves for the wrong host :passport_control: ([#506](https://github.com/onlooker-community/ecosystem/issues/506)) ([7cb89b5](https://github.com/onlooker-community/ecosystem/commit/7cb89b5551f13fed50aec93a34556c6d951aa93c))
+
 ## [0.8.2](https://github.com/onlooker-community/ecosystem/compare/lineage-v0.8.1...lineage-v0.8.2) (2026-10-15)
 
 

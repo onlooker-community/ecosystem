@@ -1,6 +1,6 @@
 {
   "name": "customs",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Outbound secret gate. Before a Bash command or WebFetch URL leaves the machine, checks it for secret-shaped literals and asks when one is headed to a host that is not where that kind of secret goes. A GitHub token to api.github.com passes; the same token to anywhere else asks. The counterpart to warden, which guards what comes in. Builds on the Onlooker ecosystem plugin.",
   "author": {
     "name": "Onlooker Community",
