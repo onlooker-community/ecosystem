@@ -62,10 +62,12 @@ _decide() {
 }
 
 @test "malformed kinds or hosts print nothing and fail, never allow" {
-	run customs_decide 'null' '["api.github.com"]' '{}' '[]'
+	bats_require_minimum_version 1.5.0
+	# jq's error goes to stderr; the decision on stdout must stay empty.
+	run --separate-stderr customs_decide 'null' '["api.github.com"]' '{}' '[]'
 	[ "$status" -ne 0 ]
 	[ -z "$output" ]
-	run customs_decide '["github_token"]' '"api.github.com"' '{}' '[]'
+	run --separate-stderr customs_decide '["github_token"]' '"api.github.com"' '{}' '[]'
 	[ "$status" -ne 0 ]
 	[ -z "$output" ]
 }
