@@ -7,7 +7,11 @@
 #
 # Chunk record shape:
 #   { chunk_id, session_id, chunk_index, start_turn_index, end_turn_index,
-#     body_redacted, body_chars, created_at, source, redaction_count }
+#     body_redacted, body_chars, created_at, source, redaction_count,
+#     embedding?, embedding_model? }
+#
+# The two embedding fields appear together, and only when the embed succeeded.
+# scripts/backfill.sh adds them later to chunks stored without one.
 #
 # Append-only writes keep the indexing path simple and safe to re-run; if a
 # session is re-indexed (rare; SessionEnd should fire once), callers can
