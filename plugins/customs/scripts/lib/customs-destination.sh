@@ -54,6 +54,11 @@ _CUSTOMS_BARE_HOST_TOOL_RE="${_CUSTOMS_LEAD}${_CUSTOMS_PATH}(curl|wget|http|http
 # start python3 a second time per call. gh*_ already fails the validator on
 # its underscore and is listed for clarity.
 _CUSTOMS_SECRET_LABEL_RE='(^|[.@-])(akia[0-9a-z]{16}|sk-[a-z0-9_-]{20,}|gh[pousr]_)'
+# A WebFetch URL that a URL parser reads differently from grep. WHATWG treats
+# `\` like `/`, so `https://evil.test\@api.github.com/` goes to evil.test, and
+# it drops tabs and newlines, joining what grep splits. Customs does not parse
+# URLs, so it declines to read one with any of these.
+_CUSTOMS_URL_ODD_RE='[\[:space:][:cntrl:]]'
 _CUSTOMS_BARE_HOST_WORD_RE="^(--[a-z-]+=)?[\"']?[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}([\"'/:]|$)"
 
 customs_has_network_tool() {
@@ -111,6 +116,11 @@ customs_destination_hosts() {
 	local tool="${1:-}"
 	local text="${2:-}"
 	local candidates seg bare host valid="" bad=0
+
+	# No host is printed: what grep would read is the wrong host.
+	if [[ "$tool" == "WebFetch" && "$text" =~ $_CUSTOMS_URL_ODD_RE ]]; then
+		return 2
+	fi
 
 	candidates="$(_customs_candidates "$tool" "$text")"
 

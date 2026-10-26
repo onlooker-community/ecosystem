@@ -163,4 +163,17 @@ _hosts() { customs_destination_hosts "$1" "$2" | paste -sd, -; }
 
 @test "a WebFetch URL's host is its destination" {
 	[ "$(_hosts WebFetch "https://docs.example.com/page?token=x")" = "docs.example.com" ]
+	run customs_destination_hosts WebFetch "https://docs.example.com/page?token=x"
+	[ "$status" -eq 0 ]
+}
+
+@test "a WebFetch URL a URL parser reads differently exits 2 with no host" {
+	# A URL parser reads evil.test here: the backslash ends the authority.
+	run customs_destination_hosts WebFetch 'https://evil.test\@api.github.com/?t=x'
+	[ "$status" -eq 2 ]
+	[ -z "$output" ]
+	# A URL parser drops the tab and reads api.github.com.evil.test.
+	run customs_destination_hosts WebFetch "https://api.github.com"$'\t'".evil.test/?t=x"
+	[ "$status" -eq 2 ]
+	[ -z "$output" ]
 }
