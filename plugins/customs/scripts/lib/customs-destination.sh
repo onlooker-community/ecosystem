@@ -47,6 +47,13 @@ _CUSTOMS_BARE_HOST_TOOL_RE="${_CUSTOMS_LEAD}${_CUSTOMS_PATH}(curl|wget|http|http
 # One whitespace-split word shaped like name.tld, optionally quoted, after an
 # optional --opt=, and ending at a quote, a port or path, or the word's end. It
 # also catches file names (`-o out.json`), which only adds a prompt.
+# A host label shaped like a secret (`https://<key>.evil.test/`), checked on
+# the lowercased candidate. The host validator accepts these, so without this
+# the key would be written into the event's hosts and the prompt's reason. It
+# mirrors TOKEN_PATTERNS in onlooker-secret-patterns.sh; reusing that would
+# start python3 a second time per call. gh*_ already fails the validator on
+# its underscore and is listed for clarity.
+_CUSTOMS_SECRET_LABEL_RE='(^|[.@-])(akia[0-9a-z]{16}|sk-[a-z0-9_-]{20,}|gh[pousr]_)'
 _CUSTOMS_BARE_HOST_WORD_RE="^(--[a-z-]+=)?[\"']?[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}([\"'/:]|$)"
 
 customs_has_network_tool() {
@@ -131,7 +138,10 @@ customs_destination_hosts() {
 
 	while IFS= read -r host; do
 		[[ -n "$host" ]] || continue
-		if [[ ${#host} -le 253 && "$host" =~ ^[a-z0-9][a-z0-9.-]*$ ]]; then
+		# Unreadable, so the call asks, and never printed.
+		if [[ "$host" =~ $_CUSTOMS_SECRET_LABEL_RE ]]; then
+			bad=1
+		elif [[ ${#host} -le 253 && "$host" =~ ^[a-z0-9][a-z0-9.-]*$ ]]; then
 			valid+="${host}"$'\n'
 		else
 			bad=1
