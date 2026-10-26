@@ -77,7 +77,8 @@ Each chunk line:
   "created_at": "2026-06-04T...",
   "source": "local",
   "redaction_count": 0,
-  "embedding": [0.123, 0.456, ...]
+  "embedding": [0.123, 0.456, ...],
+  "embedding_model": "nomic-embed-text"
 }
 ```
 
@@ -86,7 +87,15 @@ succeeded — which is not the same as the embedder having been *available*.
 The availability probe asks `/api/tags`, which answers instantly from disk
 whether or not the model is resident, so a cold daemon passes the probe and
 then fails every embed. Chunks stored without a vector are still readable but
-invisible to similarity retrieval until they are re-indexed.
+invisible to similarity retrieval until something embeds them.
+
+`/historian backfill` is that something. It embeds every stored chunk that has
+no vector, in place, and leaves every other line untouched (ONL-207). Run
+`/historian backfill --dry-run` first to see how many there are. It refuses
+to start when the embedder is unreachable, and refuses when the store already
+holds vectors from a different model, since vectors from two models are not
+comparable. `embedding_model` records which model made each vector. Chunks
+indexed before it shipped have only their vector length to go on.
 
 How many there are is reported rather than left to be discovered: every
 `historian.indexing.complete` carries `chunks_embedded` and
@@ -146,7 +155,7 @@ This plugin ships **scaffolding + the SessionEnd indexing pipeline + the UserPro
 
 - **fastembed sidecar and remote embedder backends** — opt-in via the two-key egress affirmation from [ADR-001](docs/adr/001-local-embeddings-only.md).
 - **Prune (retention sweep) and purge (manual)** skills.
-- **`/historian recall`, `/historian setup`, `/historian stats`, `/historian purge`** slash commands.
+- **`/historian recall`, `/historian setup`, `/historian stats`, `/historian purge`** slash commands. `/historian backfill` is the one that has shipped.
 
 ## Requirements
 

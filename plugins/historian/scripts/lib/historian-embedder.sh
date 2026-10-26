@@ -112,6 +112,17 @@ historian_embedder_max_input_chars() {
 	_historian_embedder_max_chars
 }
 
+# The model new vectors come from, or "" when no backend is configured.
+# Stored beside each vector as `embedding_model`: vectors from two models are
+# not comparable, and their length alone cannot tell them apart when two models
+# share a dimension (ONL-207).
+historian_embedder_model() {
+	case "$(_historian_embedder_backend)" in
+		ollama) _historian_embedder_ollama_model ;;
+		*) printf '' ;;
+	esac
+}
+
 # Returns 0 if the currently-configured embedder is reachable AND the
 # target model is installed. A side-effect-free probe.
 #

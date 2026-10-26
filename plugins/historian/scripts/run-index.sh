@@ -179,6 +179,7 @@ DROPPED=$(printf '%s' "$SANITIZED" | jq '.dropped')
 # out on every embed. That is why the loop reports its own failures rather than
 # trusting this.
 EMBEDDER_READY=0
+EMBEDDER_MODEL=$(historian_embedder_model)
 EMBEDDER_BACKEND=$(historian_config_get '.historian.embedder.backend')
 [[ -z "$EMBEDDER_BACKEND" || "$EMBEDDER_BACKEND" == "null" ]] && EMBEDDER_BACKEND="none"
 if [[ "$EMBEDDER_BACKEND" != "none" ]]; then
@@ -228,7 +229,8 @@ while IFS= read -r CHUNK; do
 		historian_embedder_parse "$(historian_embedder_embed_reported "$BODY")"
 		if [[ -n "$HISTORIAN_EMBEDDER_VECTOR" ]]; then
 			RECORD=$(printf '%s' "$RECORD" | jq -c \
-				--argjson v "$HISTORIAN_EMBEDDER_VECTOR" '. + { embedding: $v }')
+				--argjson v "$HISTORIAN_EMBEDDER_VECTOR" --arg m "$EMBEDDER_MODEL" \
+				'. + { embedding: $v, embedding_model: $m }')
 			CHUNKS_EMBEDDED=$((CHUNKS_EMBEDDED + 1))
 			EMBED_ATTEMPTED=$((EMBED_ATTEMPTED + 1))
 		else
