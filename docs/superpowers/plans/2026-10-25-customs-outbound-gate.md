@@ -28,7 +28,7 @@
 - Shell edits to tracked files go through the Edit and Write tools, not `sed -i`, because lineage observes tool calls.
 - Commits go through `/git-workflow:commit`, never `git commit -m` written ad hoc. The messages below are suggestions for it.
 - American English in code, comments and docs.
-- Every new or changed `.sh` **and `.bats`** file passes `"$(mise which shellcheck)" -S error -x <files>`, the same check `npm run test:shellcheck` runs. shellcheck is a mise tool, so it may not be on a subagent's PATH. In bats, negate with `run ! cmd`. A bare `! cmd` asserts nothing unless it's the last line (SC2314).
+- Every new or changed `.sh` **and `.bats`** file passes `"$(mise which shellcheck)" -S error -x <files>`, the same check `npm run test:shellcheck` runs. shellcheck is a mise tool, so it may not be on a subagent's PATH. In bats, negate with `run ! cmd`. A bare `! cmd` asserts nothing unless it's the last line (SC2314). Likewise, end every `[[ … ]]` assertion with `|| false`. Under macOS `/bin/bash` 3.2, a false `[[ ]]` that isn't the test's last command does not fail the test. CI's Linux bash does fail it, so the gap is local only.
 - `onlooker_redact_secrets`' output must not change. `test/bats/onlooker-secret-patterns.bats` runs unchanged and passes.
 
 ---
