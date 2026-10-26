@@ -39,7 +39,7 @@ A host is trusted for its own kinds of secret only.
 
 A pattern matches a host exactly. A leading `*.` matches any subdomain and the bare domain too, so `*.amazonaws.com` accepts `amazonaws.com`.
 
-`bearer_token` has no issuer and so no built-in pair. A bare bearer token is recorded, not gated: it emits `customs.egress.flagged` with `decision: "none"` and the call proceeds. A bearer whose value matches a specific kind, such as a GitHub token after `Bearer `, is checked as that kind.
+`bearer_token` has no issuer and so no built-in pair. A bare bearer token is recorded, not gated: it emits `customs.egress.flagged` with `decision: "none"` and the call proceeds. A bearer whose value matches a specific kind, such as a GitHub token after the word `Bearer`, is checked as that kind.
 
 ## Activation
 
