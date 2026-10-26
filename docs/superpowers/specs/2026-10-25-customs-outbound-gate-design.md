@@ -311,6 +311,13 @@ compass did, enabled in this repo's committed settings. The wave reads:
 
 - **Bash parsing is heuristic.** A host hidden in a variable or built at runtime isn't
   readable, and that case asks. That's the safe direction, and it costs a prompt.
+  The same holds when only some of a call's hosts are unreadable. A candidate
+  that fails to parse (`https://[::1]/`, an underscore, more than 253 characters)
+  makes the whole call ask, even when another host was read and allowed. An
+  earlier draft filtered such candidates out, and the Task 3 review showed what
+  that does: `curl https://ok.test/x; curl https://evil.test` read only
+  `ok.test`, because the `;` made `evil.test` unparseable and the filter dropped
+  it. A tool named by path (`/usr/bin/curl`, `./nc`) counts as a network tool too.
 - **Ask fatigue.** If some legitimate pair comes up often, the answer is a settings
   pair, and the wave's data says which pairs to build in. If asks come mostly from
   test fixtures, the next step is a skip for fixture paths, not loosening the default.
