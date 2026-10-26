@@ -38,11 +38,21 @@ fi
 source "$_LIBRARIAN_CONFIG_LOADER"
 
 _LIBRARIAN_CONFIG="{}"
+_LIBRARIAN_CONFIG_LOADED=0
 
 librarian_config_load() {
 	local cwd="${1:-}"
 	config_load_plugin "librarian" "$cwd" "_LIBRARIAN_CONFIG"
+	_LIBRARIAN_CONFIG_LOADED=1
 	return 0
+}
+
+# Load config unless something already has. For an entry point that is not a
+# hook — librarian_cli, run by the skill — where nothing upstream loads it and
+# every getter would otherwise read the empty `{}` above (ONL-208).
+librarian_config_ensure_loaded() {
+	[[ "$_LIBRARIAN_CONFIG_LOADED" == "1" ]] && return 0
+	librarian_config_load "${1:-}"
 }
 
 # Read a value from the loaded config. Usage:
