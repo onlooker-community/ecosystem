@@ -5,7 +5,11 @@
 #   1. Rate gate (cooldown_seconds, max_retrievals_per_session,
 #      min_prompt_chars). Each ungated invocation costs one ollama
 #      embedding round-trip; the gates keep the cost bounded.
-#   2. Embed the prompt via the configured backend.
+#   2. Embed the prompt via the configured backend. If the embedder is
+#      down or the embed call fails, search by term overlap alone instead
+#      of skipping (ONL-213); retrieval.complete then carries
+#      query_unembedded. backend "none" is a choice, not a failure, and
+#      still skips.
 #   3. Stream every chunk record for the project from disk one line at
 #      a time, cosine-search against the query vector, filter by
 #      min_similarity and max_age_days. A chunk stored without a vector
@@ -24,10 +28,11 @@
 #     gate clears and we are about to embed. All outcomes flow through
 #     historian.retrieval.complete with `outcome: surfaced | empty |
 #     skipped` and (on skipped) a `skip_reason` enum (short_prompt,
-#     cooldown, budget, embedder_unavailable). The surfaced case also
-#     emits historian.retrieval.surfaced with the matched chunk's
-#     chunk_id, similarity, age_days, source_session_id, and match
-#     (vector | lexical), so a fallback hit never reads as a cosine one.
+#     cooldown, budget, embedder_unavailable for backend "none"). The
+#     surfaced case also emits historian.retrieval.surfaced with the
+#     matched chunk's chunk_id, similarity, age_days, source_session_id,
+#     and match (vector | lexical), so a fallback hit never reads as a
+#     cosine one.
 
 set -uo pipefail
 
@@ -185,48 +190,61 @@ historian_emit "historian.retrieval.started" "$SESSION_ID" "$(jq -cn \
 	'{ prompt_chars: $prompt_chars }
 	 + (if $embed_chars == $prompt_chars then {} else { embed_chars: $embed_chars } end)')"
 
-if ! historian_embedder_available; then
-	BACKEND=$(historian_config_get '.historian.embedder.backend')
-	[[ -z "$BACKEND" || "$BACKEND" == "null" ]] && BACKEND="none"
-	historian_emit "historian.embedder.unavailable" "$SESSION_ID" "$(jq -cn \
-		--arg backend "$BACKEND" '{ backend: $backend }')"
+BACKEND=$(historian_config_get '.historian.embedder.backend')
+[[ -z "$BACKEND" || "$BACKEND" == "null" ]] && BACKEND="none"
+
+# Set when the query could not be embedded. Either failure used to end the
+# retrieval as skipped with every chunk still on disk: 456 of 1,225 prompts
+# between 2026-10-12 and 10-26, all during one ollama outage (ONL-213). Term
+# overlap needs only the prompt text, so the search runs on that instead.
+QUERY_EMBEDDING=""
+QUERY_UNEMBEDDED=""
+
+# backend "none" means no embedder was ever configured, and its config note
+# promises retrieval no-ops. That is a choice, not an outage to recover from,
+# and not an embedder.unavailable either: that event's backend enum has no
+# "none", so emitting it here was rejected by the schema.
+if [[ "$BACKEND" == "none" ]]; then
 	_emit_complete_skipped "embedder_unavailable"
 	_emit_context ""
 	hook_health_exit 0
 fi
 
-# Reaching this line means historian_embedder_available already passed, so a
-# failure here is NOT the embedder being unreachable — and reporting it as
-# embedder_unavailable is what hid ONL-123 on this path. The probe asks
-# /api/tags, which answers instantly from disk whether or not the model is
-# resident, so a cold daemon passes it and then times out on every embed.
-# Measured on the live log: 59 of 115 prompt submissions spent the full 8s
-# timeout that way, each one reported as the embedder being unreachable.
-historian_embedder_parse "$(historian_embedder_embed_reported "$EMBED_TEXT")"
-QUERY_EMBEDDING="$HISTORIAN_EMBEDDER_VECTOR"
-if [[ -z "$QUERY_EMBEDDING" ]]; then
-	if [[ -n "$HISTORIAN_EMBEDDER_REASON" ]]; then
-		BACKEND=$(historian_config_get '.historian.embedder.backend')
-		[[ -z "$BACKEND" || "$BACKEND" == "null" ]] && BACKEND="none"
-		historian_emit "historian.embedder.failed" "$SESSION_ID" "$(jq -cn \
-			--arg backend "$BACKEND" \
-			--arg reason "$HISTORIAN_EMBEDDER_REASON" \
-			--arg error_summary "$HISTORIAN_EMBEDDER_DETAIL" \
-			'{ backend: $backend, reason: $reason, attempted: 1, failed: 1 }
-			 + (if $error_summary == "" then {} else { error_summary: $error_summary } end)')"
+if ! historian_embedder_available; then
+	historian_emit "historian.embedder.unavailable" "$SESSION_ID" "$(jq -cn \
+		--arg backend "$BACKEND" '{ backend: $backend }')"
+	QUERY_UNEMBEDDED="embedder_unavailable"
+else
+	# Reaching this branch means historian_embedder_available already passed,
+	# so a failure here is NOT the embedder being unreachable — and reporting
+	# it as embedder_unavailable is what hid ONL-123 on this path. The probe
+	# asks /api/tags, which answers instantly from disk whether or not the
+	# model is resident, so a cold daemon passes it and then times out on
+	# every embed. Measured on the live log: 59 of 115 prompt submissions
+	# spent the full 8s timeout that way, each one reported as the embedder
+	# being unreachable.
+	historian_embedder_parse "$(historian_embedder_embed_reported "$EMBED_TEXT")"
+	QUERY_EMBEDDING="$HISTORIAN_EMBEDDER_VECTOR"
+	if [[ -z "$QUERY_EMBEDDING" ]]; then
+		if [[ -n "$HISTORIAN_EMBEDDER_REASON" ]]; then
+			historian_emit "historian.embedder.failed" "$SESSION_ID" "$(jq -cn \
+				--arg backend "$BACKEND" \
+				--arg reason "$HISTORIAN_EMBEDDER_REASON" \
+				--arg error_summary "$HISTORIAN_EMBEDDER_DETAIL" \
+				'{ backend: $backend, reason: $reason, attempted: 1, failed: 1 }
+				 + (if $error_summary == "" then {} else { error_summary: $error_summary } end)')"
 
-		# A timeout means the model was almost certainly cold. Start loading it
-		# now, detached, so the next prompt finds it resident rather than
-		# paying the same 11.2s load again. Nothing here waits on it.
-		if [[ "$HISTORIAN_EMBEDDER_REASON" == "timeout" ]]; then
-			historian_embedder_warm
+			# A timeout means the model was almost certainly cold. Start loading
+			# it now, detached, so the next prompt finds it resident rather than
+			# paying the same 11.2s load again. Nothing here waits on it.
+			if [[ "$HISTORIAN_EMBEDDER_REASON" == "timeout" ]]; then
+				historian_embedder_warm
+			fi
+			QUERY_UNEMBEDDED="embed_failed"
+		else
+			QUERY_UNEMBEDDED="embedder_unavailable"
 		fi
-		_emit_complete_skipped "embed_failed"
-	else
-		_emit_complete_skipped "embedder_unavailable"
 	fi
-	_emit_context ""
-	hook_health_exit 0
 fi
 
 TOP_K=$(historian_config_get '.historian.retrieval.retrieval_top_k')
@@ -239,14 +257,15 @@ LEXICAL_MIN=$(historian_config_get '.historian.retrieval.lexical_min_overlap')
 [[ "$LEXICAL_MIN" =~ ^(0|1)?(\.[0-9]+)?$ && -n "$LEXICAL_MIN" ]] || LEXICAL_MIN="0.5"
 
 SESSIONS_DIR=$(historian_sessions_dir "$PROJECT_KEY")
-RESULTS=$(historian_retriever_search "$SESSIONS_DIR" "$QUERY_EMBEDDING" "$TOP_K" \
+RESULTS=$(historian_retriever_search "$SESSIONS_DIR" "${QUERY_EMBEDDING:-[]}" "$TOP_K" \
 	"$MIN_SIMILARITY" "$MAX_AGE" "$SESSION_ID" "$EMBED_TEXT" "$LEXICAL_MIN")
 RESULT_COUNT=$(printf '%s' "$RESULTS" | jq 'length' 2>/dev/null) || RESULT_COUNT=0
 VECTOR_COUNT=$(printf '%s' "$RESULTS" | jq '[.[] | select(.match != "lexical")] | length' 2>/dev/null) || VECTOR_COUNT=0
 LEXICAL_COUNT=$(printf '%s' "$RESULTS" | jq '[.[] | select(.match == "lexical")] | length' 2>/dev/null) || LEXICAL_COUNT=0
 
-# Bump the rate-gate state for any non-skipped run (we paid for the
-# embedding regardless of whether anything matched).
+# Bump the rate-gate state for any non-skipped run. A run whose query had no
+# vector counts too: the gates bound how often context is injected, not only
+# what the embed costs, and the store read costs the same either way.
 historian_retrieval_state_write "$PROJECT_KEY" "$SESSION_ID" \
 	"$((PREV_COUNT + 1))" "$NOW_MS" || true
 
@@ -255,8 +274,10 @@ if [[ "$RESULT_COUNT" == "0" ]]; then
 	DURATION_MS=$((NOW - RETRIEVAL_STARTED_MS))
 	historian_emit "historian.retrieval.complete" "$SESSION_ID" "$(jq -cn \
 		--arg outcome "empty" \
+		--arg query_unembedded "$QUERY_UNEMBEDDED" \
 		--argjson duration_ms "$DURATION_MS" \
-		'{ outcome: $outcome, duration_ms: $duration_ms }')"
+		'{ outcome: $outcome, duration_ms: $duration_ms }
+		 + (if $query_unembedded == "" then {} else { query_unembedded: $query_unembedded } end)')"
 	_emit_context ""
 	hook_health_exit 0
 fi
@@ -322,6 +343,7 @@ historian_emit "historian.retrieval.complete" "$SESSION_ID" "$(jq -cn \
 	--argjson top_similarity "$TOP_SIM" \
 	--argjson candidates_above_floor "$VECTOR_COUNT" \
 	--argjson lexical_candidates "$LEXICAL_COUNT" \
+	--arg query_unembedded "$QUERY_UNEMBEDDED" \
 	--argjson duration_ms "$DURATION_MS" \
 	'{
 		outcome: $outcome,
@@ -329,7 +351,8 @@ historian_emit "historian.retrieval.complete" "$SESSION_ID" "$(jq -cn \
 		duration_ms: $duration_ms
 	}
 	+ (if $top_match == "vector" then { top_similarity: $top_similarity } else {} end)
-	+ (if $lexical_candidates > 0 then { lexical_candidates: $lexical_candidates } else {} end)')"
+	+ (if $lexical_candidates > 0 then { lexical_candidates: $lexical_candidates } else {} end)
+	+ (if $query_unembedded == "" then {} else { query_unembedded: $query_unembedded } end)')"
 
 _emit_context "$CONTEXT"
 hook_health_exit 0

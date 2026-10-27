@@ -13,7 +13,7 @@ See [`docs/design.md`](docs/design.md) and [ADR-001](docs/adr/001-local-embeddin
 | Hook | What Historian does |
 |------|---------------------|
 | `SessionEnd` | Launches `scripts/run-index.sh` detached and exits. The indexer reads the transcript at `transcript_path`, drops tool calls and tool results (keeps user + assistant messages), chunks inside the configured character target with overlap, runs the sanitizer (secret redaction + `[historian:skip]` markers + path-deny list), embeds each surviving chunk via the configured backend, and appends one JSONL line per chunk to the session's file. Emits `historian.indexing.*`, `historian.chunk.*`, `historian.embedder.unavailable` and `historian.embedder.failed` events along the way. |
-| `UserPromptSubmit` | Rate-gated retrieval: short prompts, cooldown windows, and per-session caps short-circuit before the embedder runs. Otherwise embeds the prompt, streams every JSONL chunk for the project, and injects an `additionalContext` block — a header pointer line plus a multi-line excerpt — for the top cosine-similarity match above the floor. A chunk stored without a vector is matched by term overlap instead and ranks below every vector match. Excludes chunks from the current session id (a session retrieving its own chunks is the degenerate case). Emits `historian.retrieval.started` when the rate gate clears (with `prompt_chars`, plus `embed_chars` when the query had to be fitted to the embedder's `max_input_chars`), `historian.retrieval.surfaced` on the surfaced outcome (with `match: vector\|lexical`), and `historian.retrieval.complete` with `outcome: surfaced\|empty\|skipped` and a `skip_reason` enum for skipped runs. |
+| `UserPromptSubmit` | Rate-gated retrieval: short prompts, cooldown windows, and per-session caps short-circuit before the embedder runs. Otherwise embeds the prompt, streams every JSONL chunk for the project, and injects an `additionalContext` block — a header pointer line plus a multi-line excerpt — for the top cosine-similarity match above the floor. A chunk stored without a vector is matched by term overlap instead and ranks below every vector match. When the prompt itself cannot be embedded, every chunk is matched by term overlap and `retrieval.complete` carries `query_unembedded`. Excludes chunks from the current session id (a session retrieving its own chunks is the degenerate case). Emits `historian.retrieval.started` when the rate gate clears (with `prompt_chars`, plus `embed_chars` when the query had to be fitted to the embedder's `max_input_chars`), `historian.retrieval.surfaced` on the surfaced outcome (with `match: vector\|lexical`), and `historian.retrieval.complete` with `outcome: surfaced\|empty\|skipped` and a `skip_reason` enum for skipped runs (`embedder_unavailable` there now means `backend: "none"`). |
 
 ## Activation
 
@@ -100,6 +100,18 @@ fills slots similarity left empty. It is visible as such:
 counts it in `lexical_candidates` and leaves `candidates_above_floor` and
 `top_similarity` to vector matches, and the injected context says the chunk
 *shares terms with* the prompt rather than that it *looks similar*.
+
+The same scoring covers a prompt that cannot be embedded (ONL-213). When the
+embedder is unreachable or the embed call fails, retrieval used to end as
+`skipped` with every chunk still on disk: 456 of 1,225 prompts over two weeks,
+all during one ollama outage. Now every chunk, embedded or not, is scored by
+term overlap against the prompt. `historian.embedder.unavailable` or
+`historian.embedder.failed` still fires, `retrieval.complete` reports
+`surfaced` or `empty` with `query_unembedded` naming the failure, and any hit
+is a `lexical` one. Reading the store dominates the cost either way, so this
+takes about as long as a vector search: about 3s on a 12.7k-chunk, 219MB
+store, against about 2s for the normal path. `backend: "none"` still skips,
+since no embedder there is a choice rather than an outage.
 
 `/historian backfill` is that something. It embeds every stored chunk that has
 no vector, in place, and leaves every other line untouched (ONL-207). Run
