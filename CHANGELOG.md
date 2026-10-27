@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.3](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.2...ecosystem-v0.76.3) (2026-10-27)
+
+
+### Bug Fixes
+
+* **historian:** match by terms when the prompt can't embed :lantern: ([#512](https://github.com/onlooker-community/ecosystem/issues/512)) ([c990037](https://github.com/onlooker-community/ecosystem/commit/c990037eea4a20b48a507adec5f16d76dc8e9748))
+
 ## [0.76.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.1...ecosystem-v0.76.2) (2026-10-26)
 
 

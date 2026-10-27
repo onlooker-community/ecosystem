@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.2](https://github.com/onlooker-community/ecosystem/compare/historian-v0.11.1...historian-v0.11.2) (2026-10-27)
+
+
+### Bug Fixes
+
+* **historian:** match by terms when the prompt can't embed :lantern: ([#512](https://github.com/onlooker-community/ecosystem/issues/512)) ([c990037](https://github.com/onlooker-community/ecosystem/commit/c990037eea4a20b48a507adec5f16d76dc8e9748))
+
 ## [0.11.1](https://github.com/onlooker-community/ecosystem/compare/historian-v0.11.0...historian-v0.11.1) (2026-10-26)
 
 
