@@ -467,7 +467,7 @@ _index_session_unembedded() {
 @test "retrieval.started reports embed_chars when the query was truncated" {
   # ONL-131 done-when: a truncated query must be distinguishable from a complete
   # one in the event stream. prompt_chars is the whole prompt, embed_chars is
-  # what actually reached the embedder, so embed_chars < prompt_chars is the
+  # the query as fitted for the embedder, so embed_chars < prompt_chars is the
   # truncation — readable without knowing the configured limit at the time.
   local long_prompt padding
   padding=$(printf 'additional context line %s. ' $(seq 1 400))

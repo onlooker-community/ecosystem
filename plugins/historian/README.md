@@ -140,10 +140,13 @@ retrievals, 38%, over the five days after the counters shipped.
 The prompt path now fits the query to the same limit before embedding, keeping
 the head so a given opening text embeds to the same vector whatever follows it.
 Truncating silently would just move the problem, so `historian.retrieval.started`
-carries `embed_chars` — what was actually sent — alongside the `prompt_chars` it
-always had. The field is **present only when the two differ**, so
-`embed_chars < prompt_chars` is the truncation, readable from the one event
-without knowing what the limit happened to be at the time.
+carries `embed_chars` — the length of the query as fitted — alongside the
+`prompt_chars` it always had. The field is **present only when the two
+differ**, so `embed_chars < prompt_chars` is the truncation, readable from the
+one event without knowing what the limit happened to be at the time. It is
+decided before the embed is attempted, so it does not confirm anything reached
+the embedder: when the embed never happens, `retrieval.complete` carries
+`query_unembedded` (ONL-139).
 
 ## Embedder
 
