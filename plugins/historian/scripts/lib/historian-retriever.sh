@@ -16,6 +16,13 @@
 # below every vector match, so the fallback fills empty slots and can
 # never displace a real similarity hit. Their score is not a cosine and
 # is not compared against min_similarity.
+#
+# When the query itself has no vector (the embedder was down, or the embed
+# call failed), every chunk is scored that way, embedded or not (ONL-213).
+# Restricting it to unembedded chunks would find almost nothing once a
+# backfill has run. The cost is the same as a vector pass: reading the store
+# dominates both, about 2.5s for 12.7k chunks / 219MB, and the overlap
+# scoring adds about 0.06s of that.
 
 # Aggregate every chunk record for the project. Returns a JSON array.
 historian_retriever_load_all_chunks() {
@@ -72,7 +79,8 @@ PY
 #                                   <max_age_days> <current_session_id>
 #                                   [<query_text>] [<lexical_min_overlap>]
 #
-# Without query_text, unembedded chunks are skipped as before.
+# Without query_text, unembedded chunks are skipped as before. An empty
+# query embedding ("[]") with query_text searches by term overlap alone.
 #
 # Output: JSON array, vector matches first by similarity descending, then
 # lexical matches by overlap descending, length <= top_k.
@@ -164,7 +172,8 @@ def parse_iso(s):
         return None
 
 
-if not isinstance(query, list) or not query:
+query_vector = query if isinstance(query, list) and query else None
+if query_vector is None and not query_terms:
     print("[]")
     sys.exit(0)
 
@@ -179,9 +188,9 @@ def consider(chunk):
     if current_session and sid == current_session:
         return
     embedding = chunk.get("embedding")
-    if isinstance(embedding, list) and embedding:
+    if query_vector is not None and isinstance(embedding, list) and embedding:
         match = "vector"
-        sim = cosine(query, embedding)
+        sim = cosine(query_vector, embedding)
         if sim is None or sim < min_sim:
             return
     else:

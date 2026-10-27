@@ -211,20 +211,90 @@ _index_session() {
     | jq -e '.payload.outcome == "skipped" and .payload.skip_reason == "cooldown"' >/dev/null
 }
 
-@test "retrieval skipped when the embedder is unreachable" {
+@test "an unreachable embedder searches by term overlap, and says so" {
   _index_session "past-4" \
     "Yet another redash dashboard query that we had to fix the timezone on this morning to make the report run again." \
     "ok"
 
-  # Turn off the stub so the probe fails.
+  # Turn off the stub so the probe fails. The prompt shares three of its ten
+  # terms with the chunk, under the 0.5 overlap floor, so the search runs and
+  # finds nothing.
   HISTORIAN_STUB_OLLAMA_AVAILABLE=0 \
     run bash -c "printf '%s' '$(_retrieve_input "redash dashboard timezone problem long enough to clear the prompt floor for retrieval")' | '$RETRIEVE_HOOK'"
-  [ "$status" -eq 0 ]
-  echo "$output" | jq -e '.hookSpecificOutput.additionalContext == ""' >/dev/null
+  [ "$status" -eq 0 ] || return 1
+  echo "$output" | jq -e '.hookSpecificOutput.additionalContext == ""' >/dev/null || return 1
 
-  grep -q '"event_type":"historian.embedder.unavailable"' "$ONLOOKER_EVENTS_LOG"
+  grep -q '"event_type":"historian.embedder.unavailable"' "$ONLOOKER_EVENTS_LOG" || return 1
   grep '"event_type":"historian.retrieval.complete"' "$ONLOOKER_EVENTS_LOG" \
-    | jq -e '.payload.outcome == "skipped" and .payload.skip_reason == "embedder_unavailable"' >/dev/null
+    | jq -e '.payload.outcome == "empty" and .payload.query_unembedded == "embedder_unavailable"
+      and (.payload | has("skip_reason") | not)' >/dev/null
+}
+
+# ONL-213. When the prompt could not be embedded, retrieval used to end as
+# skipped with every chunk still on disk: 456 of 1,225 prompts over two weeks,
+# all during one ollama outage. Term overlap needs no query vector.
+@test "an unreachable embedder still surfaces an embedded chunk by term overlap" {
+  _index_session "past-embedded" \
+    "Tracking down why the nightly invoice export drops rows whose currency column is null in the billing warehouse." \
+    "ok"
+  jq -e 'has("embedding")' "${HIST_DIR}/sessions/past-embedded.jsonl" >/dev/null || return 1
+
+  run env HISTORIAN_STUB_OLLAMA_AVAILABLE=0 bash -c \
+    "printf '%s' '$(_retrieve_input "The nightly invoice export is dropping rows again where currency is null in billing")' | '$RETRIEVE_HOOK'"
+  [ "$status" -eq 0 ] || return 1
+
+  local ctx
+  ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
+  [[ "$ctx" == *"Historian: a past chunk shares terms with this prompt"* ]] || return 1
+  [[ "$ctx" == *"invoice export"* ]] || return 1
+
+  # The failure stays visible, and nothing reads as a vector hit.
+  grep -q '"event_type":"historian.embedder.unavailable"' "$ONLOOKER_EVENTS_LOG" || return 1
+  grep '"event_type":"historian.retrieval.surfaced"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e '.payload.match == "lexical" and .payload.source_session_id == "past-embedded"' >/dev/null || return 1
+  grep '"event_type":"historian.retrieval.complete"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e '.payload.outcome == "surfaced"
+      and .payload.query_unembedded == "embedder_unavailable"
+      and .payload.candidates_above_floor == 0
+      and .payload.lexical_candidates == 1
+      and (has("top_similarity") | not)' >/dev/null
+}
+
+@test "a failed embed still surfaces a chunk by term overlap" {
+  _index_session "past-embedded" \
+    "Tracking down why the nightly invoice export drops rows whose currency column is null in the billing warehouse." \
+    "ok"
+
+  run env HISTORIAN_STUB_EMBED_RC=28 bash -c \
+    "printf '%s' '$(_retrieve_input "The nightly invoice export is dropping rows again where currency is null in billing")' | '$RETRIEVE_HOOK'"
+  [ "$status" -eq 0 ] || return 1
+
+  grep -q '"event_type":"historian.embedder.failed"' "$ONLOOKER_EVENTS_LOG" || return 1
+  grep '"event_type":"historian.retrieval.surfaced"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e '.payload.match == "lexical"' >/dev/null || return 1
+  grep '"event_type":"historian.retrieval.complete"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e '.payload.outcome == "surfaced" and .payload.query_unembedded == "embed_failed"' >/dev/null
+}
+
+@test "backend none still skips: no embedder is a choice, not an outage" {
+  _index_session "past-embedded" \
+    "Tracking down why the nightly invoice export drops rows whose currency column is null in the billing warehouse." \
+    "ok"
+  printf '%s\n' \
+    '{"historian":{"embedder":{"backend":"none"},"retrieval":{"min_prompt_chars":40,"max_age_days":365}}}' \
+    > "${PROJECT_REPO}/.claude/settings.json"
+
+  run bash -c "printf '%s' '$(_retrieve_input "The nightly invoice export is dropping rows again where currency is null in billing")' | '$RETRIEVE_HOOK'"
+  [ "$status" -eq 0 ] || return 1
+  echo "$output" | jq -e '.hookSpecificOutput.additionalContext == ""' >/dev/null || return 1
+
+  ! grep -q '"event_type":"historian.retrieval.surfaced"' "$ONLOOKER_EVENTS_LOG" || return 1
+  # No embedder is configured, so none is unavailable; the event's backend enum
+  # has no "none" to report anyway.
+  ! grep -q '"event_type":"historian.embedder.unavailable"' "$ONLOOKER_EVENTS_LOG" || return 1
+  grep '"event_type":"historian.retrieval.complete"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e '.payload.outcome == "skipped" and .payload.skip_reason == "embedder_unavailable"
+      and (.payload | has("query_unembedded") | not)' >/dev/null
 }
 
 @test "retrieval excludes chunks from the current session id" {
@@ -314,7 +384,7 @@ _index_session_unembedded() {
   [ "$status" -eq 0 ] || return 1
 
   grep '"event_type":"historian.retrieval.complete"' "$ONLOOKER_EVENTS_LOG" \
-    | jq -e '.payload.outcome == "skipped" and .payload.skip_reason == "embed_failed"' >/dev/null || return 1
+    | jq -e '.payload.query_unembedded == "embed_failed"' >/dev/null || return 1
 
   grep '"event_type":"historian.embedder.failed"' "$ONLOOKER_EVENTS_LOG" \
     | jq -e '.payload.reason == "timeout" and .payload.attempted == 1 and .payload.failed == 1' >/dev/null
@@ -327,7 +397,7 @@ _index_session_unembedded() {
   [ "$status" -eq 0 ] || return 1
 
   grep '"event_type":"historian.retrieval.complete"' "$ONLOOKER_EVENTS_LOG" \
-    | jq -e '.payload.skip_reason == "embedder_unavailable"' >/dev/null || return 1
+    | jq -e '.payload.query_unembedded == "embedder_unavailable"' >/dev/null || return 1
 
   ! grep -q '"event_type":"historian.embedder.failed"' "$ONLOOKER_EVENTS_LOG"
 }
@@ -439,7 +509,7 @@ _index_session_unembedded() {
 
   # ...and the outcome is what reports that nothing was embedded.
   grep '"event_type":"historian.retrieval.complete"' "$ONLOOKER_EVENTS_LOG" \
-    | jq -e '.payload.outcome == "skipped" and .payload.skip_reason == "embedder_unavailable"' >/dev/null
+    | jq -e '.payload.query_unembedded == "embedder_unavailable"' >/dev/null
 }
 
 # ----------------------------------------------------------------------------
