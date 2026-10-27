@@ -174,8 +174,10 @@ fi
 # instead. Truncating the head keeps the prefix stable, so the same opening text
 # embeds to the same vector whatever follows it.
 #
-# This runs before retrieval.started so the event can carry what was actually
-# sent. A shortened query that looks identical to a complete one is the silent
+# This runs before retrieval.started so the event can carry the query as
+# fitted. That is decided before the embed is attempted, so embed_chars does not
+# confirm anything was sent; query_unembedded on retrieval.complete says when
+# nothing was (ONL-139). A shortened query that looks identical to a complete one is the silent
 # degradation ONL-123 existed to remove, so embed_chars is only present when it
 # differs from prompt_chars, and the pair is the signal.
 EMBED_TEXT="$PROMPT"
