@@ -156,6 +156,7 @@ _run_hook() {
   [ "$status" -eq 0 ]
 
   jq -e '.scanned_at' "${LIBRARIAN_DIR}/last_scan.json" >/dev/null
+  await_events "librarian.candidate.dropped" 1 || return 1
   grep '"event_type":"librarian.candidate.dropped"' "$ONLOOKER_EVENTS_LOG" \
     | jq -e 'select(.payload.reason == "retry_cap_exceeded")' >/dev/null
 }
@@ -170,6 +171,9 @@ _run_hook() {
   _run_hook
   [ "$status" -eq 0 ]
 
+  # The drop is emitted detached (ONL-225). Without waiting for it, an empty
+  # log would satisfy the count below whatever the reason turned out to be.
+  await_events "librarian.candidate.dropped" 1 || return 1
   local n
   n=$(grep -c '"reason":"filter_markers_unavailable"' "$ONLOOKER_EVENTS_LOG" || true)
   [ "$n" -eq 0 ]

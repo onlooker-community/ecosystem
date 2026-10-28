@@ -231,7 +231,9 @@ _run_scan() {
     | jq -r '.payload.memory_type' | sort | paste -sd, -)
   [ "$proposed_types" = "feedback,project" ]
 
-  # candidate.dropped fired for the marker-missing artifact.
+  # candidate.dropped fired for the marker-missing artifact. The hook emits it
+  # from a detached process (ONL-225), so wait for it to land.
+  await_events "librarian.candidate.dropped" 1
   grep '"event_type":"librarian.candidate.dropped"' "$ONLOOKER_EVENTS_LOG" \
     | jq -e 'select(.payload.reason == "filter_marker_missing")' >/dev/null
 
@@ -445,3 +447,48 @@ _scan_complete() {
     | jq -e '.payload.outcome == "ok" and .payload.candidates_proposed == 1' >/dev/null
 }
 
+
+# ONL-225. Each librarian_emit starts a node process, about 53ms in production.
+# The hook emitted one candidate.dropped per filtered artifact, up to 20, inline
+# and ahead of the watermark write, so a window of ~17 dropped artifacts was
+# enough to run past SessionEnd's 1500ms abort. The kill landed before the
+# watermark moved, so the window only grew and every later scan died the same
+# way. In this repo that was 35, 49 and 76 artifacts, all terminated.
+#
+# A node that stalls on drop events makes the cost visible without timing the
+# real one: inline, 20 drops at 0.4s each is 8s before the watermark is even
+# written.
+@test "dropped-candidate events stay off SessionEnd's critical path" {
+  local real_node slow_bin
+  real_node=$(command -v node)
+  slow_bin="${BATS_TEST_TMPDIR}/slow-node-bin"
+  mkdir -p "$slow_bin"
+  cat > "${slow_bin}/node" <<STUB
+#!/usr/bin/env bash
+params=\$(cat)
+[[ "\$params" == *'"librarian.candidate.dropped"'* ]] && sleep 0.4
+printf '%s' "\$params" | exec "$real_node" "\$@"
+STUB
+  chmod +x "${slow_bin}/node"
+
+  local i
+  for i in $(seq -w 1 25); do
+    _seed_artifact "decisions" "01DROPWINDOW00000000000${i}" \
+      "Routine session note ${i}" \
+      "Touched a few files and ran the suite again; nothing in here says why or what to keep."
+  done
+
+  local started=$SECONDS
+  PATH="${slow_bin}:${PATH}" _run_scan
+  local elapsed=$(( SECONDS - started ))
+  [ "$status" -eq 0 ] || return 1
+
+  # The decisions the next scan depends on were made before the drops landed.
+  [ "$elapsed" -lt 5 ] || { echo "hook took ${elapsed}s" >&2; return 1; }
+  jq -e '.scanned_at' "${LIBRARIAN_DIR}/last_scan.json" >/dev/null || return 1
+  grep '"event_type":"librarian.scan.complete"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e '.payload.candidates_dropped == 25' >/dev/null || return 1
+
+  # And the drops still arrive, capped at 20 as before.
+  await_events "librarian.candidate.dropped" 20
+}

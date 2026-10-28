@@ -118,3 +118,25 @@ expect_emission_rejected() {
     export ONLOOKER_TEST_REPORT_DIR="$saved"
   fi
 }
+
+# Wait until at least <want> events of <event_type> are in $ONLOOKER_EVENTS_LOG.
+#
+# For events a hook emits from a detached process, which can land after the hook
+# returns -- librarian's candidate.dropped, for one (ONL-225). Polling for the
+# event itself, rather than for the process, asserts the side effect a consumer
+# would see. Before asserting an event's ABSENCE, wait for a sibling the same
+# process emits, or an empty log passes the check without testing anything.
+#
+# Returns 1 after <timeout_s> seconds (default 30).
+#
+# Usage: await_events <event_type> <want> [timeout_s]
+await_events() {
+  local type="$1" want="$2" timeout_s="${3:-30}" i n
+  for ((i = 0; i < timeout_s * 10; i++)); do
+    n=$(grep -c "\"event_type\":\"${type}\"" "$ONLOOKER_EVENTS_LOG" 2>/dev/null || true)
+    [ "${n:-0}" -ge "$want" ] && return 0
+    sleep 0.1
+  done
+  echo "await_events: wanted ${want} ${type}, saw ${n:-0} after ${timeout_s}s" >&2
+  return 1
+}
