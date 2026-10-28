@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.8](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.26.7...librarian-v0.26.8) (2026-10-28)
+
+
+### Bug Fixes
+
+* **librarian:** say when a judged lesson never promoted :mega: ([#515](https://github.com/onlooker-community/ecosystem/issues/515)) ([3c847ed](https://github.com/onlooker-community/ecosystem/commit/3c847ed940edfd9eeacdb110aca65d5f66489c02))
+
 ## [0.26.7](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.26.6...librarian-v0.26.7) (2026-10-26)
 
 
