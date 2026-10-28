@@ -1,6 +1,6 @@
 ---
 name: librarian
-description: Review the librarian's pending memory promotion proposals and lesson candidates queued from past sessions. Walk pending entries with the user one at a time, surfacing provenance and conflict state, and route each to accept (writes the typed memory file and updates MEMORY.md), reject (writes a body-hash tombstone so the same content won't re-propose), or defer (leave in the queue). Lesson candidates route separately to confirm (with a visibility), pass, or defer, with unconfirm to take back a confirmation before the jury sees it. Use when the user types `/librarian`, `/librarian review`, `/librarian triage`, `/librarian status`, `/librarian list`, `/librarian lessons`, `/librarian lessons review`, or `/librarian lessons judge`, or asks to review librarian proposals or lesson candidates.
+description: Review the librarian's pending memory promotion proposals and lesson candidates queued from past sessions. Walk pending entries with the user one at a time, surfacing provenance and conflict state, and route each to accept (writes the typed memory file and updates MEMORY.md), reject (writes a body-hash tombstone so the same content won't re-propose), or defer (leave in the queue). Lesson candidates route separately to confirm (with a visibility), pass, or defer, with unconfirm to take back a confirmation before the jury sees it. Use when the user types `/librarian`, `/librarian review`, `/librarian triage`, `/librarian status`, `/librarian list`, `/librarian lessons`, `/librarian lessons review`, `/librarian lessons judge`, or `/librarian lessons promote <id>`, or asks to review librarian proposals or lesson candidates.
 ---
 
 # Librarian: Promotion Queue Review
@@ -24,6 +24,7 @@ Read the user's argument after `/librarian`:
 - `lessons judge` → **run the jury over confirmed candidates** (see below)
 - `lessons queue` → print held lessons and stop
 - `lessons veto <id> [reason]` → kill a held lesson before it ships
+- `lessons promote <id>` → run `librarian_cli lessons promote <id>` once, report its output, and stop. This is how a lesson judged but not promoted gets its pool entry or declined row; the SessionStart line names this verb when one is stranded
 
 If the user passes a free-form intent ("clear out the queue", "what's pending?"), map it to `review` or `list` as appropriate.
 

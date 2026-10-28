@@ -116,6 +116,16 @@ PENDING=$(librarian_storage_count_pending "$PROJECT_KEY")
 LESSON_PENDING=$(librarian_lesson_list_pending "$PROJECT_KEY" | jq 'length' 2>/dev/null) || LESSON_PENDING=0
 [[ -z "$LESSON_PENDING" || "$LESSON_PENDING" == "null" ]] && LESSON_PENDING=0
 
+# A judged lesson whose promote() refused before the pool write. The worker
+# discards promote's stderr and the jury loop only reads `confirmed`, so
+# nothing retries it; this line is the only place a person hears of it
+# (ONL-117).
+STRANDED_IDS=()
+while IFS= read -r _stranded_id; do
+	[[ -n "$_stranded_id" ]] && STRANDED_IDS+=("$_stranded_id")
+done < <(librarian_lesson_list_awaiting_promotion "$PROJECT_KEY" 2>/dev/null)
+STRANDED_COUNT=${#STRANDED_IDS[@]}
+
 # HELD and SWEPT_COUNT must count toward this gate too, not just the other two
 # queues: a lessons-only-held session (no pending memory proposals, no pending
 # lesson candidates) would otherwise hit the default skip-when-zero exit before
@@ -124,8 +134,9 @@ LESSON_PENDING=$(librarian_lesson_list_pending "$PROJECT_KEY" | jq 'length' 2>/d
 # direction: a session whose sweep just shipped the last held lesson has
 # HELD == 0 by the time it's counted (the sweep already ran), so without
 # SWEPT_COUNT here that publication would be the one thing this hook has
-# nothing to say about.
-if [[ "$PENDING" -eq 0 && "$LESSON_PENDING" -eq 0 && "${HELD:-0}" -eq 0 && "${SWEPT_COUNT:-0}" -eq 0 && "$SKIP_WHEN_ZERO" == "true" ]]; then
+# nothing to say about. STRANDED_COUNT is here for the same reason: a stranded
+# promotion is often the only news a session has.
+if [[ "$PENDING" -eq 0 && "$LESSON_PENDING" -eq 0 && "${HELD:-0}" -eq 0 && "${SWEPT_COUNT:-0}" -eq 0 && "${STRANDED_COUNT:-0}" -eq 0 && "$SKIP_WHEN_ZERO" == "true" ]]; then
 	_emit ""
 	hook_health_exit 0
 fi
@@ -198,6 +209,28 @@ if [[ -n "$SWEPT_LINE" ]]; then
 		CONTEXT="${CONTEXT}"$'\n'"${SWEPT_LINE}"
 	else
 		CONTEXT="$SWEPT_LINE"
+	fi
+fi
+
+# Composed like SWEPT_LINE: ids while they fit at a glance, since the recovery
+# verb takes one.
+STRANDED_LINE=""
+if [[ "$STRANDED_COUNT" -gt 0 ]]; then
+	if [[ "$STRANDED_COUNT" -le 5 ]]; then
+		STRANDED_IDS_JOINED=$(IFS=', '; printf '%s' "${STRANDED_IDS[*]}")
+		STRANDED_LINE=$(printf '%s lesson(s) judged but not promoted — run /librarian lessons promote <id>: %s' \
+			"$STRANDED_COUNT" "$STRANDED_IDS_JOINED")
+	else
+		STRANDED_LINE=$(printf '%s lesson(s) judged but not promoted — run /librarian lessons status, then /librarian lessons promote <id>' \
+			"$STRANDED_COUNT")
+	fi
+fi
+
+if [[ -n "$STRANDED_LINE" ]]; then
+	if [[ -n "$CONTEXT" ]]; then
+		CONTEXT="${CONTEXT}"$'\n'"${STRANDED_LINE}"
+	else
+		CONTEXT="$STRANDED_LINE"
 	fi
 fi
 

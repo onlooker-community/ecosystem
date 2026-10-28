@@ -720,14 +720,10 @@ librarian_cli_lessons_status() {
 		counts+=("$(librarian_lesson_list_by_status "$key" "$s" | jq 'length')")
 	done
 
-	# A terminal verdict whose promote() never stamped. Counted from the same
-	# per-status reads rather than a second directory walk.
-	local awaiting=0 n
-	for s in approved rejected; do
-		n=$(librarian_lesson_list_by_status "$key" "$s" \
-			| jq '[.[] | select(has("promoted_at") | not)] | length')
-		awaiting=$(( awaiting + n ))
-	done
+	# A terminal verdict whose promote() never stamped. The SessionStart line
+	# reads the same helper, so the two counts cannot drift apart.
+	local awaiting
+	awaiting=$(librarian_lesson_list_awaiting_promotion "$key" | grep -c .)
 
 	printf 'lessons pending: %s, confirmed: %s, approved: %s, rejected: %s, awaiting promotion: %s\n' \
 		"${counts[0]}" "${counts[1]}" "${counts[2]}" "${counts[3]}" "$awaiting"

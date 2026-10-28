@@ -266,3 +266,68 @@ _seed_shippable_lesson() {
 	[[ "$ctx" == *"1 lesson(s) left this machine this session"* ]] || return 1
 	[[ "$ctx" == *"1 lesson(s) will leave this machine unless vetoed"* ]] || return 1
 }
+
+# Helper: a lesson whose verdict landed but whose promote() never did — the
+# envelope carries a terminal status and no promoted_at, and nothing sits in
+# approved/ or approved_held/. That is what auto_judge_one leaves behind when
+# promote refuses before the pool write and its stderr is discarded (ONL-117).
+_seed_stranded_lesson() {
+	local id="$1" status="${2:-approved}"
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-storage.sh"
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-storage.sh"
+	librarian_lesson_storage_init "$PROJECT_KEY"
+	jq -n --arg id "$id" --arg s "$status" \
+		'{id: $id, status: $s, created_at: "2026-06-01T00:00:00Z"}' \
+		> "${LIBRARIAN_DIR}/lessons/proposals/${id}.json"
+}
+
+@test "session-start surfaces a stranded promotion, with zero pending queues on either side" {
+	# Same trap as the held and swept lines: with nothing else to say, the
+	# skip-when-zero gate would exit before this line builds, and the only
+	# place the stranded lesson shows up is `lessons status`, which nobody
+	# runs without a reason to.
+	_seed_stranded_lesson 01M3STRANDED00000000001
+
+	run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+	[ "$status" -eq 0 ]
+	local ctx
+	ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
+	[[ "$ctx" == *"1 lesson(s) judged but not promoted"* ]] || return 1
+	[[ "$ctx" == *"/librarian lessons promote <id>"* ]] || return 1
+	[[ "$ctx" == *"01M3STRANDED00000000001"* ]]
+}
+
+@test "session-start counts a rejected lesson whose declined row never landed" {
+	_seed_stranded_lesson 01M3STRANDED00000000002 rejected
+
+	run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+	[ "$status" -eq 0 ]
+	echo "$output" | jq -r '.hookSpecificOutput.additionalContext' \
+		| grep -q '1 lesson(s) judged but not promoted'
+}
+
+@test "session-start stays silent about a lesson promote already stamped" {
+	_seed_stranded_lesson 01M3STRANDED00000000003
+	local p="${LIBRARIAN_DIR}/lessons/proposals/01M3STRANDED00000000003.json"
+	jq '.promoted_at = "2026-06-01T00:00:00Z"' "$p" > "${p}.tmp" && mv "${p}.tmp" "$p"
+
+	run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+	[ "$status" -eq 0 ]
+	echo "$output" | jq -e '.hookSpecificOutput.additionalContext == ""' >/dev/null
+}
+
+@test "session-start names only the count once the stranded list is long" {
+	local i
+	for i in 1 2 3 4 5 6; do
+		_seed_stranded_lesson "01M3STRANDEDLONG0000000${i}"
+	done
+
+	run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+	[ "$status" -eq 0 ]
+	local ctx
+	ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
+	[[ "$ctx" == *"6 lesson(s) judged but not promoted"* ]] || return 1
+	[[ "$ctx" != *"01M3STRANDEDLONG00000001"* ]]
+}
