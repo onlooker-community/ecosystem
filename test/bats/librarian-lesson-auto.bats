@@ -604,3 +604,47 @@ STUB
 	[ "$status" -eq 0 ] || return 1
 	grep -q -- "--model pinned-model" "${BATS_TEST_TMPDIR}/dispatch-args.txt"
 }
+
+# ONL-220: a promote that refuses before the pool write leaves the lesson
+# judged with no pool entry. The worker used to discard promote's stderr, so
+# the reason was lost; it now lands on the envelope as promote_error. The
+# author-key failure is one of promote's real pre-write refusals, and the
+# override reaches promote because `run` inherits the shell's functions.
+@test "auto_judge_one records promote's refusal on the envelope" {
+	_auto_setup; _jury_stub
+	id=$(_seed_pending_unscoped)
+	librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	librarian_author_key() { return 1; }
+	run librarian_lesson_auto_judge_one "$PROJECT_KEY" "$id"
+	[ "$output" = "judged:${id}" ]
+	local p="${LESSONS_DIR}/proposals/${id}.json"
+	jq -e '.status == "approved" and (has("promoted_at") | not)' "$p"
+	[ ! -f "${LESSONS_DIR}/approved_held/${id}.json" ]
+	jq -e '.promote_error.reason | test("cannot derive an author key")' "$p"
+	jq -e '.promote_error.refused_at | type == "string"' "$p"
+}
+
+@test "a later successful promote clears the recorded refusal" {
+	_auto_setup; _jury_stub
+	id=$(_seed_pending_unscoped)
+	librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	librarian_author_key() { return 1; }
+	librarian_lesson_auto_judge_one "$PROJECT_KEY" "$id" >/dev/null
+	local p="${LESSONS_DIR}/proposals/${id}.json"
+	jq -e 'has("promote_error")' "$p"
+
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-author-key.sh"
+	run librarian_lesson_promote "$PROJECT_KEY" "$id"
+	[ "$status" -eq 0 ]
+	jq -e 'has("promoted_at") and (has("promote_error") | not)' "$p"
+	[ -f "${LESSONS_DIR}/approved_held/${id}.json" ]
+}
+
+@test "a promote that succeeds first time records no refusal" {
+	_auto_setup; _jury_stub
+	id=$(_seed_pending_unscoped)
+	librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	librarian_lesson_auto_judge_one "$PROJECT_KEY" "$id" >/dev/null
+	jq -e 'has("promote_error") | not' "${LESSONS_DIR}/proposals/${id}.json"
+}

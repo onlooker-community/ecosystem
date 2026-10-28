@@ -136,6 +136,25 @@ _librarian_lesson_auto_record_refusal() {
 	librarian_lesson_write_atomic "$path" "$updated" >/dev/null 2>&1 || true
 }
 
+# Record why promote refused a lesson the jury just judged (ONL-220). The
+# verdict is already on disk, so the lesson is stranded until someone runs
+# `lessons promote <id>`, and promote's stderr is the only account of why. No
+# person is present to read it, so it goes on the envelope, where `lessons
+# show` prints it. Promote's stamp clears it on a later success. Best effort,
+# like the refusal record above: a failed write leaves the lesson stranded
+# exactly as before, and still counted at SessionStart.
+#
+# Usage: _librarian_lesson_auto_record_promote_error <proposal_path> <stderr>
+_librarian_lesson_auto_record_promote_error() {
+	local path="$1" reason="${2:-}"
+	local now updated
+	now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+	updated=$(jq --arg r "$reason" --arg at "$now" \
+		'.promote_error = {reason: (if $r == "" then null else $r end), refused_at: $at}' \
+		"$path" 2>/dev/null) || return 0
+	librarian_lesson_write_atomic "$path" "$updated" >/dev/null 2>&1 || true
+}
+
 # Announce the model's answer for one parked candidate (ONL-116). On a
 # refusal, only whether a reason was given rides on the bus; the reason itself
 # is on the proposal, recorded by _librarian_lesson_auto_record_refusal.
@@ -371,8 +390,11 @@ librarian_lesson_auto_judge_one() {
 
 	librarian_lesson_judge "$key" "$lesson_id" "$verdicts" >/dev/null 2>&1
 	local rc=$?
+	local promote_err
 	case "$rc" in
-		0) librarian_lesson_promote "$key" "$lesson_id" >/dev/null 2>&1 || true
+		0) promote_err=$(librarian_lesson_promote "$key" "$lesson_id" 2>&1 >/dev/null) \
+		   	|| _librarian_lesson_auto_record_promote_error \
+		   		"$(librarian_lessons_dir "$key")/proposals/${lesson_id}.json" "$promote_err"
 		   printf 'judged:%s' "$lesson_id" ;;
 		2) printf 'skipped:unjudged' ;;
 		*) printf 'unavailable' ;;

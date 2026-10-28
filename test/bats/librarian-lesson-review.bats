@@ -1076,3 +1076,25 @@ _set_status() {
 	[[ "$output" == *"unscoped"* ]]
 	[[ "$output" == *"justification"* ]]
 }
+
+# ONL-220: the recovery for a stranded lesson is `lessons promote <id>`, and
+# show is where a person looks first, so the refusal that stranded it sits
+# next to the status that says it is stranded.
+@test "lessons show surfaces why an unattended promote refused" {
+	_cli_setup
+	id=$(_seed_pending)
+	path="${ONLOOKER_DIR}/librarian/${PROJECT_KEY}/lessons/proposals/${id}.json"
+	jq '.promote_error = {reason: "Lesson x: cannot derive an author key; nothing written.", refused_at: "2026-10-28T00:00:00Z"}' \
+		"$path" > "${path}.next" && mv "${path}.next" "$path"
+	run librarian_cli lessons show "$id" "$PROJECT_REPO"
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" == *"promote:     refused at 2026-10-28T00:00:00Z: Lesson x: cannot derive an author key; nothing written."* ]]
+}
+
+@test "lessons show prints no promote line when nothing refused" {
+	_cli_setup
+	id=$(_seed_pending)
+	run librarian_cli lessons show "$id" "$PROJECT_REPO"
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" != *"promote:"* ]]
+}
