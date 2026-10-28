@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.9](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.26.8...librarian-v0.26.9) (2026-10-28)
+
+
+### Bug Fixes
+
+* **librarian:** keep the reason an unattended promote refused :memo: ([#517](https://github.com/onlooker-community/ecosystem/issues/517)) ([2e8149e](https://github.com/onlooker-community/ecosystem/commit/2e8149e7629287ab71094abae3ce543af474d094))
+
 ## [0.26.8](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.26.7...librarian-v0.26.8) (2026-10-28)
 
 

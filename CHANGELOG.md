@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.5](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.4...ecosystem-v0.76.5) (2026-10-28)
+
+
+### Bug Fixes
+
+* **librarian:** keep the reason an unattended promote refused :memo: ([#517](https://github.com/onlooker-community/ecosystem/issues/517)) ([2e8149e](https://github.com/onlooker-community/ecosystem/commit/2e8149e7629287ab71094abae3ce543af474d094))
+
 ## [0.76.4](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.3...ecosystem-v0.76.4) (2026-10-28)
 
 
