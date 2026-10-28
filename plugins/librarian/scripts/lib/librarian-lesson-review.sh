@@ -59,6 +59,23 @@ librarian_lesson_list_pending() {
 	librarian_lesson_list_by_status "${1:-}" "pending"
 }
 
+# A terminal verdict whose promote() never stamped: the pool entry or declined
+# row has not landed, or landed without its stamp. promote() stamps
+# promoted_at LAST, so the missing stamp is exactly that state, and a held
+# lesson is stamped before it waits out its window, so it is never counted
+# here. `lessons promote <id>` reconciles every case. Shared by `lessons
+# status` and the SessionStart line so the two cannot disagree (ONL-117).
+#
+# Prints the ids, one per line, oldest first.
+#
+# Usage: librarian_lesson_list_awaiting_promotion <key>
+librarian_lesson_list_awaiting_promotion() {
+	local key="${1:-}" s
+	for s in approved rejected; do
+		librarian_lesson_list_by_status "$key" "$s"
+	done | jq -rs 'add | sort_by(.created_at) | .[] | select(has("promoted_at") | not) | .id'
+}
+
 _librarian_lesson_valid_visibility() {
 	case "${1:-}" in
 		private | org | public) return 0 ;;
