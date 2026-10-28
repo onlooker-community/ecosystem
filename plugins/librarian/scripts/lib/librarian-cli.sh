@@ -448,6 +448,11 @@ librarian_cli_lessons_show() {
 		# A person held it against the unattended stage (ONL-112).
 		(if .auto_hold then
 			"held:        by \(.auto_hold.by) at \(.auto_hold.at); the unattended stage leaves it alone"
+		 else empty end),
+		# Why an unattended promote refused after the jury ruled (ONL-220).
+		# Promote clears it on success, so its presence means still stranded.
+		(if .promote_error then
+			"promote:     refused at \(.promote_error.refused_at): \(.promote_error.reason // "(no reason given)")"
 		 else empty end)
 	' "$path"
 }

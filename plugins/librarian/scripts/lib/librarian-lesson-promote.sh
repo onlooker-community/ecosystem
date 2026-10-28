@@ -191,7 +191,10 @@ librarian_lesson_promote() {
 		# author_key, a failing entry build) must create nothing, matching
 		# this function's own doc comment and the spec's "every failure
 		# path before the terminal record lands writes NOTHING."
-		librarian_lesson_storage_init "$key" || return 1
+		librarian_lesson_storage_init "$key" || {
+			printf 'Lesson %s: cannot initialize lesson storage; nothing written.\n' "$lesson_id" >&2
+			return 1
+		}
 
 		# A model-asserted lesson is held: nobody chose to publish it, so it
 		# waits where sync cannot see it until the veto window elapses. A
@@ -275,6 +278,10 @@ librarian_lesson_promote() {
 	# is ZLesson, a strictObject, and an extra key fails ingest at sync. One jq
 	# writes both stamps, so a held lesson can never end up with promoted_at and
 	# no window.
+	#
+	# Both stamps also drop any promote_error an earlier refusal recorded
+	# (ONL-220), in the same write, so a promoted lesson never carries a stale
+	# reason for a failure it has recovered from.
 	if [[ "$asserted_by" == "model" ]]; then
 		local window shippable
 		window=$(librarian_config_get '.librarian.lesson_auto.veto_window_hours' 2>/dev/null)
@@ -288,12 +295,12 @@ librarian_lesson_promote() {
 			return 1
 		fi
 		updated=$(jq --arg t "$now" --arg s "$shippable" \
-			'.promoted_at = $t | .shippable_after = $s' "$path" 2>/dev/null) || {
+			'.promoted_at = $t | .shippable_after = $s | del(.promote_error)' "$path" 2>/dev/null) || {
 			printf '%s\n' "$stamp_fail_msg" >&2
 			return 1
 		}
 	else
-		updated=$(jq --arg t "$now" '.promoted_at = $t' "$path" 2>/dev/null) || {
+		updated=$(jq --arg t "$now" '.promoted_at = $t | del(.promote_error)' "$path" 2>/dev/null) || {
 			printf '%s\n' "$stamp_fail_msg" >&2
 			return 1
 		}
