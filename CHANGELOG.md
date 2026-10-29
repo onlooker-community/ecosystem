@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.6](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.5...ecosystem-v0.76.6) (2026-10-29)
+
+
+### Bug Fixes
+
+* **librarian:** stop drop events starving the watermark :unlock: ([#519](https://github.com/onlooker-community/ecosystem/issues/519)) ([21b41d7](https://github.com/onlooker-community/ecosystem/commit/21b41d71af0c026c035760e19126d634944714b9))
+
 ## [0.76.5](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.4...ecosystem-v0.76.5) (2026-10-28)
 
 

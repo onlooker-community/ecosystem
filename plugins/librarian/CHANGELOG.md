@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.10](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.26.9...librarian-v0.26.10) (2026-10-29)
+
+
+### Bug Fixes
+
+* **librarian:** stop drop events starving the watermark :unlock: ([#519](https://github.com/onlooker-community/ecosystem/issues/519)) ([21b41d7](https://github.com/onlooker-community/ecosystem/commit/21b41d71af0c026c035760e19126d634944714b9))
+
 ## [0.26.9](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.26.8...librarian-v0.26.9) (2026-10-28)
 
 
