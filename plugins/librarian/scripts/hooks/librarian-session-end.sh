@@ -205,20 +205,36 @@ fi
 MAX_DROPPED_EVENTS=20
 DROPPED_TOTAL=$(printf '%s' "$DROPPED" | jq 'length' 2>/dev/null) || DROPPED_TOTAL=0
 DROPPED_EMIT_COUNT=$(( DROPPED_TOTAL < MAX_DROPPED_EVENTS ? DROPPED_TOTAL : MAX_DROPPED_EVENTS ))
-for ((i = 0; i < DROPPED_EMIT_COUNT; i++)); do
-	DROP=$(printf '%s' "$DROPPED" | jq -c ".[$i]")
-	# retry_cap_exceeded REPLACES filter_markers_unavailable rather than adding
-	# a second event. Both facts are true -- the markers were missing, and the
-	# artifact is being abandoned -- but only one is terminal, and the terminal
-	# one is what a reader needs.
-	librarian_emit "librarian.candidate.dropped" "$SESSION_ID" "$(jq -cn \
-		--argjson drop "$DROP" \
-		--argjson cap_hit "$RETRY_CAP_HIT" \
-		'{ reason: (if $cap_hit == 1 and $drop.reason == "filter_markers_unavailable"
-		            then "retry_cap_exceeded" else $drop.reason end),
-		   source_artifact_id: $drop.artifact_id }
-		 | with_entries(select(.value != null))')"
-done
+
+_emit_dropped() {
+	local i drop
+	for ((i = 0; i < DROPPED_EMIT_COUNT; i++)); do
+		drop=$(printf '%s' "$DROPPED" | jq -c ".[$i]")
+		# retry_cap_exceeded REPLACES filter_markers_unavailable rather than adding
+		# a second event. Both facts are true -- the markers were missing, and the
+		# artifact is being abandoned -- but only one is terminal, and the terminal
+		# one is what a reader needs.
+		librarian_emit "librarian.candidate.dropped" "$SESSION_ID" "$(jq -cn \
+			--argjson drop "$drop" \
+			--argjson cap_hit "$RETRY_CAP_HIT" \
+			'{ reason: (if $cap_hit == 1 and $drop.reason == "filter_markers_unavailable"
+			            then "retry_cap_exceeded" else $drop.reason end),
+			   source_artifact_id: $drop.artifact_id }
+			 | with_entries(select(.value != null))')"
+	done
+}
+
+# Detached, like the classify worker below (ONL-225). Each emit starts a node
+# process, ~53ms, and this loop used to run inline ahead of the watermark write.
+# Twenty drops is over a second of SessionEnd's 1500ms, so a window with enough
+# thin artifacts was killed here every time: the watermark never moved, the
+# window only grew, and the scan never recovered. Nothing below reads these
+# events, so they need not land before the hook exits. Output and bats' fd 3 are
+# closed so neither the CLI nor a test waits on the subshell.
+if [[ "$DROPPED_EMIT_COUNT" -gt 0 ]]; then
+	_emit_dropped >/dev/null 2>&1 3>&- &
+	disown 2>/dev/null || true
+fi
 
 # ----------------------------------------------------------------------------
 # Hand the surviving window to a detached worker (ecosystem-449.72).
