@@ -94,6 +94,56 @@ lineage_tool_phrase() {
 	esac
 }
 
+# Who made a change, as a phrase that reads inside a sentence.
+#
+# An unknown record names no session at all (ONL-26). It does keep the
+# observer, in observed_by_session_id, but printing that here would put a
+# session id exactly where a reader looks for the author, which is the misread
+# this field exists to stop.
+# Usage: lineage_author_phrase <record_json>
+lineage_author_phrase() {
+	printf '%s' "${1:-}" | jq -r '
+		if .authorship == "unknown" then "an unknown session"
+		else "session " + (.session_id // "unknown") end' 2>/dev/null
+}
+
+# The sentence that explains an unknown author, or nothing for an attributed
+# record. Printed beside the answer for the same reason lineage_scope_note is:
+# an answer with no caveat reads as certain.
+# Usage: lineage_authorship_note <record_json>
+lineage_authorship_note() {
+	local reason
+	reason=$(printf '%s' "${1:-}" | jq -r '
+		if .authorship == "unknown" then (.authorship_reason // "unspecified") else "" end' 2>/dev/null)
+	[[ -z "$reason" ]] && return 0
+	case "$reason" in
+	predates_call)
+		printf 'Authorship: unknown — the file changed before the command that noticed it had started, so no session can be shown to have made this change. It may have come from an editor, a checkout, a script outside Claude, or a session without lineage.'
+		;;
+	*)
+		printf 'Authorship: unknown — no session can be shown to have made this change.'
+		;;
+	esac
+}
+
+# Resolve the prompt behind a ledger record, or nothing for one whose author is
+# unknown. An unknown record carries no session_id or transcript_path, but this
+# refuses on authorship rather than relying on their absence, so a record that
+# was hand-edited or written by a future field cannot lead it to the
+# observer's history.
+# Usage: lineage_resolve_record_prompt <project_key> <record_json> [prompt_source]
+lineage_resolve_record_prompt() {
+	local key="$1" rec="$2" source="${3:-historian_then_transcript}" sid turn tp
+	if [[ "$(printf '%s' "$rec" | jq -r '.authorship // ""' 2>/dev/null)" == "unknown" ]]; then
+		jq -nc '{prompt: "", resolved_via: "none"}'
+		return 0
+	fi
+	sid=$(printf '%s' "$rec" | jq -r '.session_id // ""' 2>/dev/null)
+	turn=$(printf '%s' "$rec" | jq -r '.turn // ""' 2>/dev/null)
+	tp=$(printf '%s' "$rec" | jq -r '.transcript_path // ""' 2>/dev/null)
+	lineage_resolve_prompt "$key" "$sid" "$turn" "$tp" "$source"
+}
+
 # The newest change whose added content contains <line_text> (substring),
 # i.e. the change that introduced that content. Echoes one record or nothing.
 # Usage: lineage_match_line <project_key> <file_path> <line_text>

@@ -14,6 +14,7 @@
       "**/yarn.lock",
       "**/bun.lockb"
     ],
-    "prompt_source": "historian_then_transcript"
+    "prompt_source": "historian_then_transcript",
+    "attribution_slack_seconds": 2
   }
 }

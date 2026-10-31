@@ -161,6 +161,56 @@ lineage_changed_files() {
 }
 
 # ---------------------------------------------------------------------------
+# Authorship
+# ---------------------------------------------------------------------------
+
+# Whole-second mtime of a file, or nothing when it cannot be read. GNU stat
+# first, then BSD: macOS ships BSD stat, but a coreutils install puts GNU first
+# on PATH, and each one rejects the other's flags.
+lineage_file_mtime() {
+	local path="$1" m
+	m=$(stat -c %Y "$path" 2>/dev/null) || m=$(stat -f %m "$path" 2>/dev/null) || m=""
+	[[ "$m" =~ ^[0-9]+$ ]] && printf '%s' "$m"
+}
+
+# The earliest second the observing command can have started, or nothing when
+# the payload carries no timing.
+#
+# The hook runs after the command finishes, so its start is no earlier than now
+# minus duration_ms. Rounding the duration up and subtracting a slack moves the
+# bound earlier still, never later: hook latency after the command ends,
+# whole-second mtimes, and clock skew on a network filesystem all push a genuine
+# edit's mtime toward the bound, and the slack absorbs them. Erring early only
+# ever lets a ghost through as today's attributed record; erring late would mark
+# a session's own edit unknown.
+# Usage: lineage_call_start_bound <now_epoch> <duration_ms> <slack_seconds>
+lineage_call_start_bound() {
+	local now="$1" duration_ms="$2" slack="${3:-0}"
+	[[ "$now" =~ ^[0-9]+$ && "$duration_ms" =~ ^[0-9]+$ && "$slack" =~ ^[0-9]+$ ]] || return 0
+	printf '%s' $(( now - (duration_ms + 999) / 1000 - slack ))
+}
+
+# Why a changed file cannot be this command's work, or nothing when it can be.
+#
+# predates_call: the file was last written before the command started, so the
+# command did not write it. Whoever did ran no lineage hook — an editor save, a
+# checkout, a script outside Claude, a session on an older plugin — and the
+# observing session is only the next one to look (ONL-26). Deliberately not
+# command parsing, for the reason this file's header gives.
+#
+# A command that preserves mtimes (cp -p, tar, rsync -a) reads as predates_call
+# too. That is the safe direction: a missing author, never a false one.
+# Usage: lineage_authorship_reason <abs_path> <start_bound>
+lineage_authorship_reason() {
+	local path="$1" bound="$2" mtime
+	[[ "$bound" =~ ^-?[0-9]+$ ]] || return 0
+	mtime=$(lineage_file_mtime "$path")
+	[[ -z "$mtime" ]] && return 0
+	(( mtime < bound )) && printf 'predates_call'
+	return 0
+}
+
+# ---------------------------------------------------------------------------
 # Record qualifiers
 # ---------------------------------------------------------------------------
 

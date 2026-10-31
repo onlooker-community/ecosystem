@@ -57,6 +57,24 @@ claim instead of staying in the ledger. Records the tool itself reported —
 `exact`: the tool said what it changed. A `Bash` record with no scope predates
 the field and is shown as `unknown`.
 
+`authorship` is the third. Git says *what* changed, not *who* changed it, and
+the shell path only learns about a change when some session next runs a
+command. A change made with no lineage hook behind it — an editor save, a
+checkout, a script outside Claude, a session still on an older plugin — would
+otherwise be credited to whichever session looked first. So when a changed
+file's mtime is older than the start of the command that noticed it, that
+command cannot have written it, and the record is marked `authorship:
+"unknown"` with `authorship_reason: "predates_call"`. It keeps the observing
+session in `observed_by_session_id` and drops `session_id`, `turn` and
+`transcript_path`, so `/lineage` names no author and resolves no prompt for it.
+
+The command's start comes from the `duration_ms` Claude Code reports, minus
+`attribution_slack_seconds`. A payload without `duration_ms` is attributed the
+old way. The check cannot see a change made by something else *during* a long
+command, and a command that preserves mtimes (`cp -p`, `tar`, `rsync -a`) reads
+as `predates_call`. Both are deliberate trade-offs: the first is the residual
+case, the second errs toward a missing author rather than a false one.
+
 ### The historian join
 
 Lineage records only `session_id` + `turn` (+ a `transcript_path` pointer) on the
@@ -93,7 +111,8 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
     "max_snippet_chars": 4000,
     "redact_secrets": true,
     "ignore_globs": ["**/.git/**", "**/node_modules/**", "**/dist/**", "**/*.lock"],
-    "prompt_source": "historian_then_transcript"
+    "prompt_source": "historian_then_transcript",
+    "attribution_slack_seconds": 2
   }
 }
 ```
@@ -104,6 +123,7 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
 | `redact_secrets` | `true` | Scrub secret-shaped substrings (AWS/GitHub/Anthropic/OpenAI keys, bearer tokens, KEY=value secrets) before storing a snippet. |
 | `ignore_globs` | `[".git", "node_modules", "dist", "*.lock"]` | Paths matching these are not recorded. Supports `**/<dir>/**` (path segment) and `**/*.<ext>` (suffix) shapes. |
 | `prompt_source` | `"historian_then_transcript"` | Prompt-resolution strategy: `historian_then_transcript`, `historian_only`, or `transcript_only`. |
+| `attribution_slack_seconds` | `2` | How far before a `Bash` command's reported start a file's mtime must be to count as predating it and be recorded with unknown authorship. Raise it on a filesystem with clock skew. |
 
 Config resolves in three layers, latest wins: plugin `config.json` →
 `~/.claude/settings.json` → `<repo>/.claude/settings.json`.
@@ -130,7 +150,9 @@ Config resolves in three layers, latest wins: plugin `config.json` →
 
 Each record: `{ change_id, ts, ts_epoch, session_id, turn?, tool, operation,
 file_path, lines_added, lines_removed, bytes, edit_count, content_sha256,
-added_snippets[], transcript_path, provenance_kind?, content_scope? }`. The added
+added_snippets[], transcript_path, provenance_kind?, content_scope? }`. A record
+with unknown authorship replaces `session_id`, `turn` and `transcript_path` with
+`authorship`, `authorship_reason` and `observed_by_session_id`. The added
 content lives only in this ledger; the bus event carries metadata and the
 `content_sha256` digest, never the content. `provenance_kind` and `content_scope`
 are set only for records the `Bash` path builds from a git diff — see [What
