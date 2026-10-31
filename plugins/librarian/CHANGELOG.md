@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.11](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.26.10...librarian-v0.26.11) (2026-10-31)
+
+
+### Bug Fixes
+
+* **librarian:** give promoted memories a recall hook :mag: ([#521](https://github.com/onlooker-community/ecosystem/issues/521)) ([570cda8](https://github.com/onlooker-community/ecosystem/commit/570cda8d9196d971e30b257699eef67884613d75))
+
 ## [0.26.10](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.26.9...librarian-v0.26.10) (2026-10-29)
 
 
