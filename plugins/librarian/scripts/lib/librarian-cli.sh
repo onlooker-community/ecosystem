@@ -85,13 +85,25 @@ _librarian_cli_write_memory() {
 	[[ -z "$mem_dir" || -z "$proposal" ]] && return 1
 	mkdir -p "$mem_dir" 2>/dev/null || return 1
 
-	local id type title body filename confidence src_session_ids src_artifact_ids now
-	id=$(printf '%s' "$proposal" | jq -r '.id // ""')
+	local type title body filename confidence description src_session_ids src_artifact_ids now
 	type=$(printf '%s' "$proposal" | jq -r '.proposed.type // ""')
 	title=$(printf '%s' "$proposal" | jq -r '.proposed.title // ""')
 	body=$(printf '%s' "$proposal" | jq -r '.proposed.body // ""')
 	filename=$(printf '%s' "$proposal" | jq -r '.proposed.filename // ""')
 	confidence=$(printf '%s' "$proposal" | jq -r '.proposed.classifier_confidence // 0')
+	# The recall hook: the frontmatter description and the MEMORY.md entry are
+	# what a later session reads to decide whether this memory is relevant
+	# (ONL-226). Proposals queued before the classifier wrote a description
+	# fall back to the body's first sentence. Either way it is one line, since
+	# both destinations are single-line, and bounded like a hand-written one.
+	description=$(printf '%s' "$proposal" | jq -r '
+		def oneline: gsub("\\s+"; " ") | ltrimstr(" ") | rtrimstr(" ");
+		((.proposed.description | strings | oneline) // "") as $d
+		| if $d != "" then $d
+		  else ((.proposed.body // "") | split("\n\n")[0] | oneline
+		        | (capture("^(?<s>.*?[.!?])(\\s|$)").s // .))
+		  end
+		| if length > 150 then .[0:147] + "..." else . end')
 	src_session_ids=$(printf '%s' "$proposal" | jq -c '.source_session_ids // []')
 	src_artifact_ids=$(printf '%s' "$proposal" | jq -c '.source_artifact_ids // []')
 	now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -112,7 +124,7 @@ _librarian_cli_write_memory() {
 	{
 		printf -- '---\n'
 		printf 'name: %s\n' "$title"
-		printf 'description: librarian-promoted from proposal %s\n' "$id"
+		printf 'description: %s\n' "$description"
 		printf 'type: %s\n' "$type"
 		printf 'source: librarian\n'
 		printf 'classifier_confidence: %s\n' "$confidence"
@@ -131,7 +143,7 @@ _librarian_cli_write_memory() {
 	# Avoid duplicate entries on repeated accepts of the same id (shouldn't
 	# happen but is cheap to guard against).
 	if ! grep -F -q "(${filename})" "$index_path"; then
-		printf -- '- [%s](%s) — %s\n' "$title" "$filename" "$type" >> "$index_path"
+		printf -- '- [%s](%s) — %s\n' "$title" "$filename" "$description" >> "$index_path"
 	fi
 
 	printf '%s' "$out_path"
@@ -219,6 +231,7 @@ librarian_cli_show() {
 		"created_at:           " + (.created_at // ""),
 		"type:                 " + (.proposed.type // ""),
 		"title:                " + (.proposed.title // ""),
+		"description:          " + ((.proposed.description | strings) // "(none; accept uses the body'"'"'s first sentence)"),
 		"filename:             " + (.proposed.filename // ""),
 		"classifier_confidence: " + ((.proposed.classifier_confidence // 0) | tostring),
 		"conflict_state:       " + (.conflict_state // "none"),
