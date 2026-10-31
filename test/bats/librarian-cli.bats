@@ -74,10 +74,12 @@ setup() {
 }
 
 # Seed a single proposal JSON file directly into the storage layer.
-# Usage: _seed_proposal <id> <type> <title> <filename> <body> [confidence] [status]
+# Usage: _seed_proposal <id> <type> <title> <filename> <body> [confidence] [status] [description]
+# An empty description seeds a proposal without the field, the shape every
+# proposal queued before ONL-226 has.
 _seed_proposal() {
   local id="$1" type="$2" title="$3" filename="$4" body="$5"
-  local confidence="${6:-0.82}" status="${7:-pending}"
+  local confidence="${6:-0.82}" status="${7:-pending}" description="${8:-}"
   local now json
   now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
   json=$(jq -cn \
@@ -90,6 +92,7 @@ _seed_proposal() {
     --arg status "$status" \
     --arg now "$now" \
     --arg project_key "$PROJECT_KEY" \
+    --arg description "$description" \
     '{
        id: $id,
        project_key: $project_key,
@@ -106,7 +109,8 @@ _seed_proposal() {
          body: $body,
          classifier_confidence: $conf
        }
-     }')
+     }
+     | if $description == "" then . else .proposed.description = $description end')
   librarian_storage_write_proposal "$PROJECT_KEY" "$id" "$json" >/dev/null
 }
 
@@ -155,6 +159,19 @@ _seed_proposal() {
   [[ "$output" == *"Body of the memory."* ]]
 }
 
+@test "show renders the description accept will write, or says it will fall back" {
+  _seed_proposal "01SHOWDESCRIPTION00000000000" \
+    "feedback" "With one" "feedback_with.md" "Body." "0.82" "pending" \
+    "when to reach for this"
+  _seed_proposal "01SHOWNODESCRIPTION000000000" \
+    "feedback" "Without one" "feedback_without.md" "Body."
+
+  run librarian_cli_show "01SHOWDESCRIPTION00000000000" "$PROJECT_REPO"
+  [[ "$output" == *"description:          when to reach for this"* ]] || return 1
+  run librarian_cli_show "01SHOWNODESCRIPTION000000000" "$PROJECT_REPO"
+  [[ "$output" == *"description:          (none; accept uses the body's first sentence)"* ]]
+}
+
 @test "show fails clean on an unknown proposal id" {
   run librarian_cli_show "01NOSUCHPROPOSAL00000000000" "$PROJECT_REPO"
   [ "$status" -eq 1 ]
@@ -199,6 +216,64 @@ _seed_proposal() {
   [ -f "${MEM_DIR}/MEMORY.md" ]
   grep -F -q "(project_auth_compliance.md)" "${MEM_DIR}/MEMORY.md"
   grep -F -q "Auth rewrite is compliance" "${MEM_DIR}/MEMORY.md"
+}
+
+# ONL-226. The frontmatter description and the MEMORY.md hook are what recall
+# reads to decide whether a memory is relevant. accept used to fill them with
+# the proposal id and the bare type, which say nothing about when it applies.
+@test "accept writes the proposal's description as the frontmatter description and the index hook" {
+  _seed_proposal "01ACCEPTDESCRIPTION000000000" \
+    "feedback" "Prefer functional patterns" "feedback_functional.md" \
+    "User prefers functional patterns." "0.82" "pending" \
+    "reach for plain functions before classes when designing new modules"
+
+  run librarian_cli_accept "01ACCEPTDESCRIPTION000000000" "$PROJECT_REPO"
+  [ "$status" -eq 0 ] || return 1
+
+  grep -F -q -x "description: reach for plain functions before classes when designing new modules" \
+    "${MEM_DIR}/feedback_functional.md" || return 1
+  grep -F -q -x -e "- [Prefer functional patterns](feedback_functional.md) — reach for plain functions before classes when designing new modules" \
+    "${MEM_DIR}/MEMORY.md"
+}
+
+@test "accept without a description falls back to the body's first sentence, never the type or the proposal id" {
+  _seed_proposal "01ACCEPTNODESCRIPTION0000000" \
+    "project" "Auth rewrite is compliance" "project_auth_compliance.md" \
+    "The auth rewrite is driven by legal,
+not tech debt. Scope follows compliance.
+
+**Why:** Legal flagged token storage."
+
+  run librarian_cli_accept "01ACCEPTNODESCRIPTION0000000" "$PROJECT_REPO"
+  [ "$status" -eq 0 ] || return 1
+
+  # The first sentence, joined onto one line: a frontmatter value and an
+  # index entry are each a single line.
+  grep -F -q -x "description: The auth rewrite is driven by legal, not tech debt." \
+    "${MEM_DIR}/project_auth_compliance.md" || return 1
+  grep -F -q -x -e "- [Auth rewrite is compliance](project_auth_compliance.md) — The auth rewrite is driven by legal, not tech debt." \
+    "${MEM_DIR}/MEMORY.md" || return 1
+  ! grep -q "librarian-promoted from proposal" "${MEM_DIR}/project_auth_compliance.md"
+}
+
+@test "accept keeps a description to one bounded line" {
+  local long
+  long=$(printf 'word %.0s' $(seq 1 60))
+  _seed_proposal "01ACCEPTLONGDESCRIPTION00000" \
+    "project" "Long one" "project_long.md" "Body." "0.82" "pending" \
+    "first line
+${long}"
+
+  run librarian_cli_accept "01ACCEPTLONGDESCRIPTION00000" "$PROJECT_REPO"
+  [ "$status" -eq 0 ] || return 1
+
+  local line
+  line=$(grep '^description: ' "${MEM_DIR}/project_long.md")
+  [[ "$line" == "description: first line word word"* ]] || return 1
+  # "description: " is 13 characters; the value itself is capped at 150.
+  [ "${#line}" -le 163 ] || return 1
+  # The newline in the classifier's text did not split the frontmatter.
+  [ "$(grep -c '^word' "${MEM_DIR}/project_long.md")" -eq 0 ]
 }
 
 @test "accept marks the proposal accepted and emits librarian.proposal.accepted" {

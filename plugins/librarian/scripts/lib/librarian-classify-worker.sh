@@ -239,6 +239,10 @@ for ((i = 0; i < KEPT_COUNT; i++)); do
 	CONFIDENCE=$(printf '%s' "$RESPONSE" | jq -r '.confidence // 0')
 	BODY=$(printf '%s' "$RESPONSE" | jq -r '.body // ""')
 	TITLE=$(printf '%s' "$RESPONSE" | jq -r '.title // ""')
+	# Optional, and not part of the response validation: a missing or
+	# non-string description costs the memory its recall hook, which accept
+	# rebuilds from the body, not the whole proposal (ONL-226).
+	DESCRIPTION=$(printf '%s' "$RESPONSE" | jq -r '(.description | strings) // ""')
 
 	BELOW_MIN=$(awk -v a="$CONFIDENCE" -v b="$MIN_CONFIDENCE" 'BEGIN { print (a < b) ? 1 : 0 }')
 
@@ -360,6 +364,7 @@ for ((i = 0; i < KEPT_COUNT; i++)); do
 		--argjson conflict_with "$CONFLICT_WITH" \
 		--arg artifact_id "$ARTIFACT_ID" \
 		--arg artifact_session "$ARTIFACT_SESSION" \
+		--arg description "$DESCRIPTION" \
 		'{
 			id: $id,
 			created_at: $created_at,
@@ -375,7 +380,8 @@ for ((i = 0; i < KEPT_COUNT; i++)); do
 			conflict_state: $conflict_state,
 			conflict_with: $conflict_with,
 			status: "pending"
-		}')
+		}
+		| if $description == "" then . else .proposed.description = $description end')
 
 	librarian_storage_write_proposal "$PROJECT_KEY" "$PROPOSAL_ID" "$PROPOSAL_JSON" >/dev/null \
 		|| continue

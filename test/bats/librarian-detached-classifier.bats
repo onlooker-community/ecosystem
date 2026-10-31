@@ -58,8 +58,10 @@ setup() {
 #!/usr/bin/env bash
 prompt=$(cat)
 [[ -n "${CLAUDE_CALL_LOG:-}" ]] && echo call >> "$CLAUDE_CALL_LOG"
-if [[ "$prompt" == *"marker-stub"* ]]; then
-  printf '%s' '{"type":"feedback","title":"Prefer explicit config","body":"Prefer explicit configuration over inference.\n\n**Why:** Stated in review.\n**How to apply:** Require a config key rather than guessing.","confidence":0.88}'
+if [[ "$prompt" == *"marker-baddesc"* ]]; then
+  printf '%s' '{"type":"feedback","title":"Bad description","body":"Body survives a malformed description.","description":42,"confidence":0.88}'
+elif [[ "$prompt" == *"marker-stub"* ]]; then
+  printf '%s' '{"type":"feedback","title":"Prefer explicit config","body":"Prefer explicit configuration over inference.\n\n**Why:** Stated in review.\n**How to apply:** Require a config key rather than guessing.","description":"require a config key instead of inferring a setting","confidence":0.88}'
 else
   printf '%s' '{"type":null,"title":"","body":"","confidence":0.2}'
 fi
@@ -206,6 +208,51 @@ _events_of() {
 	run bash "$WORKER" "$queued"
 	[ "$status" -eq 0 ] || return 1
 	[ ! -f "$queued" ]
+}
+
+# ONL-226. accept turns the proposal's description into the memory's recall
+# hook, so the classifier has to be asked for one and the worker has to keep it.
+@test "the classifier prompt asks for a one-line description" {
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-classifier.sh"
+	run librarian_classifier_build_prompt '{"kind":"decision","summary":"s","detail":"d"}'
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" == *'"description": "<'* ]]
+}
+
+@test "the worker carries the classifier's description onto the proposal" {
+	_seed_survivor
+	run _run_hook
+	local queued
+	queued=$(find "$QUEUE_DIR" -name '*.json' -type f | head -1)
+	[ -n "$queued" ] || return 1
+	run bash "$WORKER" "$queued"
+	[ "$status" -eq 0 ] || return 1
+
+	local proposal
+	proposal=$(find "${LIBRARIAN_DIR}/proposals" -name '*.json' -type f | head -1)
+	[ -n "$proposal" ] || return 1
+	jq -e '.proposed.description == "require a config key instead of inferring a setting"' "$proposal" >/dev/null
+}
+
+@test "a malformed description is dropped, not the proposal" {
+	_seed_artifact decisions "01JBXQ2K3M4N5P6Q7R8S9T0W" \
+		"marker-baddesc: prefer explicit config" \
+		"We decided to prefer explicit configuration over inference. Because the inferred path was wrong in two projects, we now require a config key."
+	run _run_hook
+	local queued
+	queued=$(find "$QUEUE_DIR" -name '*.json' -type f | head -1)
+	[ -n "$queued" ] || return 1
+	run bash "$WORKER" "$queued"
+	[ "$status" -eq 0 ] || return 1
+
+	local proposal
+	proposal=$(find "${LIBRARIAN_DIR}/proposals" -name '*.json' -type f | head -1)
+	[ -n "$proposal" ] || return 1
+	# accept falls back to the body for a proposal with no description, so a
+	# missing field is recoverable where a number would be written verbatim.
+	jq -e '.proposed.body == "Body survives a malformed description."
+	       and (.proposed | has("description") | not)' "$proposal" >/dev/null
 }
 
 @test "a queue file survives a worker that cannot classify" {

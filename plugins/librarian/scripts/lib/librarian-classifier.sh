@@ -73,7 +73,10 @@ RULES:
 - Schema: { "type": "<user|feedback|project|reference|null>",
             "title": "<<=60 chars>",
             "body": "<the memory content; structure per type>",
+            "description": "<one line, <=150 chars: when this memory applies>",
             "confidence": <float 0-1> }
+- The description is what a future session reads to decide whether to load
+  this memory. Say when it applies or what it changes, not the title again.
 - Use "type": null when the artifact is interesting but session-only (a
   specific bug fix, a one-off question that got answered, an exploration
   that didn't change anything).
