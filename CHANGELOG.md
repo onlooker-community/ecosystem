@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.7](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.6...ecosystem-v0.76.7) (2026-10-31)
+
+
+### Bug Fixes
+
+* **librarian:** give promoted memories a recall hook :mag: ([#521](https://github.com/onlooker-community/ecosystem/issues/521)) ([570cda8](https://github.com/onlooker-community/ecosystem/commit/570cda8d9196d971e30b257699eef67884613d75))
+
 ## [0.76.6](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.5...ecosystem-v0.76.6) (2026-10-29)
 
 
