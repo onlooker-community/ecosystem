@@ -59,17 +59,20 @@ count=0
 while IFS= read -r rec; do
   [[ -z "$rec" ]] && continue
   count=$((count + 1))
-  ts=$(jq -r '.ts' <<<"$rec"); sid=$(jq -r '.session_id' <<<"$rec")
+  ts=$(jq -r '.ts' <<<"$rec"); author=$(lineage_author_phrase "$rec")
   turn=$(jq -r '.turn // ""' <<<"$rec"); tool=$(jq -r '.tool' <<<"$rec")
   la=$(jq -r '.lines_added' <<<"$rec"); lr=$(jq -r '.lines_removed' <<<"$rec")
-  tp=$(jq -r '.transcript_path // ""' <<<"$rec")
   # How much of the change this record's content actually covers. Carried in
   # the header because a list of changes is scanned, not read.
   scope=$(lineage_scope_kind "$(jq -r '.content_scope // ""' <<<"$rec")" "$tool")
-  resolved=$(lineage_resolve_prompt "$PROJECT_KEY" "$sid" "$turn" "$tp" "$PROMPT_SOURCE")
+  # An unknown-author record resolves no prompt: the only session it could
+  # reach is the one that happened to observe it (ONL-26).
+  resolved=$(lineage_resolve_record_prompt "$PROJECT_KEY" "$rec" "$PROMPT_SOURCE")
   prompt=$(jq -r '.prompt' <<<"$resolved"); via=$(jq -r '.resolved_via' <<<"$resolved")
+  note=$(lineage_authorship_note "$rec")
   echo ""
-  echo "### ${ts} · ${tool} (+${la}/-${lr}) · scope ${scope} · session ${sid}${turn:+ · turn ${turn}}"
+  echo "### ${ts} · ${tool} (+${la}/-${lr}) · scope ${scope} · ${author}${turn:+ · turn ${turn}}"
+  [[ -n "$note" ]] && echo "_${note}_"
   if [[ -n "$prompt" ]]; then
     echo "Prompt context (${via}):"; echo ""
     printf '%s\n' "$prompt" | head -c 600 | sed 's/^/> /'
@@ -111,18 +114,21 @@ if [[ -z "$rec" ]]; then
   echo "No recorded change introduced this content (it may predate lineage, or the line moved since it was written)."
 else
   matches=1
-  ts=$(jq -r '.ts' <<<"$rec"); sid=$(jq -r '.session_id' <<<"$rec")
+  ts=$(jq -r '.ts' <<<"$rec"); author=$(lineage_author_phrase "$rec")
   turn=$(jq -r '.turn // ""' <<<"$rec"); tool=$(jq -r '.tool' <<<"$rec")
-  tp=$(jq -r '.transcript_path // ""' <<<"$rec")
   scope_raw=$(jq -r '.content_scope // ""' <<<"$rec")
-  resolved=$(lineage_resolve_prompt "$PROJECT_KEY" "$sid" "$turn" "$tp" "$PROMPT_SOURCE")
+  # An unknown-author record resolves no prompt: the only session it could
+  # reach is the one that happened to observe it (ONL-26).
+  resolved=$(lineage_resolve_record_prompt "$PROJECT_KEY" "$rec" "$PROMPT_SOURCE")
   prompt=$(jq -r '.prompt' <<<"$resolved"); via=$(jq -r '.resolved_via' <<<"$resolved")
+  note=$(lineage_authorship_note "$rec")
   echo ""
-  echo "Introduced ${ts} by $(lineage_tool_phrase "$tool") in session ${sid}${turn:+ (turn ${turn})}."
+  echo "Introduced ${ts} by $(lineage_tool_phrase "$tool") in ${author}${turn:+ (turn ${turn})}."
   # Always printed. A single-line answer is the one most likely to be quoted
   # back as fact, so it is the one that most needs to say what it is worth.
   echo ""
   echo "_$(lineage_scope_note "$scope_raw" "$tool")_"
+  [[ -n "$note" ]] && { echo ""; echo "_${note}_"; }
   if [[ -n "$prompt" ]]; then
     echo ""; echo "Prompt context (${via}):"; echo ""
     printf '%s\n' "$prompt" | sed 's/^/> /'
@@ -178,5 +184,9 @@ fi
 - The prompt is resolved lazily: historian's preserved per-session chunks first
   (durable across transcript cleanup), then the live `transcript_path`, then
   "unavailable." Install and enable historian for the most reliable prompts.
+- A change can have **unknown authorship**. When a file changed before the shell
+  command that noticed it had started, no session can be shown to have made it:
+  an editor save, a checkout, or a session without lineage. The record says so,
+  names no session, and resolves no prompt rather than crediting whoever looked.
 - Storage, project keying, and event emission match the other ecosystem plugins;
   everything is scoped by project key and honors `$ONLOOKER_DIR`.

@@ -10,6 +10,13 @@
 # provenance_kind/content_scope are set only for the Bash path (see
 # lineage-baseline.sh) — omitted entirely for Edit/Write/MultiEdit records.
 #
+# A record whose authorship is unknown (ONL-26) replaces session_id, turn and
+# transcript_path with authorship: "unknown", authorship_reason and
+# observed_by_session_id. Those three fields are what /lineage joins on to
+# resolve a prompt, and for an unknown record every one of them would point at
+# the observer, so they are left out rather than kept beside a flag a reader
+# could miss.
+#
 # The bus event (lineage.change.recorded) carries metadata + content_sha256
 # only; the added content lives here in the per-project ledger, where the
 # /lineage query content-anchors a line back to the change that introduced it.
@@ -107,7 +114,10 @@ _lineage_removed() {
 # Usage: lineage_build_record <change_id> <ts> <ts_epoch> <session_id> <turn>
 #          <tool> <file_path> <tool_input_json> <max_chars> <do_redact>
 #          <transcript_path> [added_override] [provenance_kind] [content_scope]
-#          [removed_override]
+#          [removed_override] [authorship_reason]
+#
+# A non-empty authorship_reason marks the record unknown: session_id moves to
+# observed_by_session_id, and turn and transcript_path are dropped.
 #
 # added_override/removed_override carry content git found for a shell-shaped
 # edit, where tool_input says nothing about what changed. Either one alone is
@@ -121,7 +131,7 @@ lineage_build_record() {
 	local change_id="$1" ts="$2" ts_epoch="$3" session_id="$4" turn="$5"
 	local tool="$6" file_path="$7" ti="$8" max_chars="$9" do_redact="${10}" transcript_path="${11}"
 	local added_override="${12:-}" prov_kind="${13:-}" content_scope="${14:-}"
-	local removed_override="${15:-}"
+	local removed_override="${15:-}" authorship_reason="${16:-}"
 
 	local added removed added_red lines_added lines_removed bytes digest op edit_count
 	if [[ -n "$added_override" || -n "$removed_override" ]]; then
@@ -146,7 +156,7 @@ lineage_build_record() {
 		--argjson la "${lines_added:-0}" --argjson lr "${lines_removed:-0}" \
 		--argjson by "${bytes:-0}" --arg digest "$digest" \
 		--argjson ec "${edit_count:-1}" --arg turn "$turn" \
-		--arg pk "$prov_kind" --arg cs "$content_scope" \
+		--arg pk "$prov_kind" --arg cs "$content_scope" --arg ar "$authorship_reason" \
 		'{
 			change_id: $cid, ts: $ts, ts_epoch: $te,
 			session_id: $sid, tool: $tool, operation: $op, file_path: $fp,
@@ -156,7 +166,11 @@ lineage_build_record() {
 		}
 		+ (if $turn != "" then {turn: ($turn | tonumber)} else {} end)
 		+ (if $pk != "" then {provenance_kind: $pk} else {} end)
-		+ (if $cs != "" then {content_scope: $cs} else {} end)' 2>/dev/null
+		+ (if $cs != "" then {content_scope: $cs} else {} end)
+		| if $ar == "" then .
+		  else del(.session_id, .turn, .transcript_path)
+		       + {authorship: "unknown", authorship_reason: $ar, observed_by_session_id: $sid}
+		  end' 2>/dev/null
 }
 
 # Append a record to the project ledger under its write lock.

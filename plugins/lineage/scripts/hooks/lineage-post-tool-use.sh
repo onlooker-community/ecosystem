@@ -90,6 +90,7 @@ done < <(printf '%s' "$INPUT" | jq -j '
 	, (.tool_input.file_path // .tool_input.edits[0].file_path // "")
 	, ([.tool_input.edits[]?.file_path // empty] | unique | length | tostring)
 	, (.tool_input.file_path // .tool_input.path // "")
+	, (.duration_ms // "" | tostring)
 	] | .[] | . + "\u0000"' 2>/dev/null)
 
 # Defaults cover a jq that failed outright, matching the old per-line `|| VAR=""`.
@@ -105,6 +106,7 @@ _TI_COMMAND=${_LINEAGE_FIELDS[6]:-}
 _TI_MULTIEDIT_PATH=${_LINEAGE_FIELDS[7]:-}
 _TI_MULTIEDIT_UNIQUE=${_LINEAGE_FIELDS[8]:-0}
 _TI_FILE_PATH=${_LINEAGE_FIELDS[9]:-}
+DURATION_MS=${_LINEAGE_FIELDS[10]:-}
 [[ -z "$TOOL_INPUT" ]] && TOOL_INPUT="{}"
 
 case "$TOOL" in
@@ -257,6 +259,14 @@ if [[ "$TOOL" == "Bash" ]]; then
 	TRACKER="${ONLOOKER_DIR:-$HOME/.onlooker}/session-trackers/${SESSION_ID}"
 	[[ -n "$SESSION_ID" && -f "$TRACKER" ]] && TURN=$(jq -r '.turn_number // empty' "$TRACKER" 2>/dev/null)
 
+	# The earliest this command can have started. A file last written before
+	# it was already on disk when the command ran, so this session's command
+	# did not write it, and the record says authorship is unknown instead of
+	# naming the observer (ONL-26). Empty when Claude Code sent no duration_ms,
+	# which keeps the old attribution: with no bound there is nothing to test.
+	CALL_START_BOUND=$(lineage_call_start_bound "$(lineage_now_epoch)" "$DURATION_MS" \
+		"$(lineage_config_attribution_slack_seconds)")
+
 	while IFS= read -r REL; do
 		[[ -z "$REL" ]] && continue
 		_lineage_ignored "$REL" && continue
@@ -269,23 +279,37 @@ if [[ "$TOOL" == "Bash" ]]; then
 		# good, since the baseline advances either way.
 		[[ -z "$ADDED" && -z "$REMOVED" ]] && continue
 
+		AUTHORSHIP_REASON=$(lineage_authorship_reason "${WORKTREE_ROOT}/${REL}" "$CALL_START_BOUND")
+
 		REC=$(lineage_build_record "$(lineage_ulid)" "$(lineage_now_iso)" \
 			"$(lineage_now_epoch)" "$SESSION_ID" "$TURN" "Bash" \
 			"${WORKTREE_ROOT}/${REL}" '{}' "$MAX_CHARS" "$DO_REDACT" \
-			"$TRANSCRIPT_PATH" "$ADDED" "$PROV_KIND" "$SCOPE" "$REMOVED")
+			"$TRANSCRIPT_PATH" "$ADDED" "$PROV_KIND" "$SCOPE" "$REMOVED" \
+			"$AUTHORSHIP_REASON")
 		[[ -z "$REC" ]] && continue
 
 		if lineage_append "$PROJECT_KEY" "$REC"; then
+			# The payload mirrors the record's authorship. For an unknown
+			# change it carries the observer in observed_by_session_id and no
+			# session_id, which the schema forbids beside authorship "unknown".
+			# tool_use_id is the observing call, so it goes too. The envelope's
+			# session_id is still the observer: it says who emitted the event,
+			# not who made the change.
 			EV=$(printf '%s' "$REC" | jq -c --arg pk "$PROJECT_KEY" --arg tuid "$TOOL_USE_ID" '
 				{
-					project_key: $pk, session_id: .session_id, file_path: .file_path,
+					project_key: $pk, file_path: .file_path,
 					tool: .tool, operation: .operation, change_id: .change_id,
 					lines_added: .lines_added, lines_removed: .lines_removed,
 					bytes: .bytes, edit_count: .edit_count, content_sha256: .content_sha256,
 					provenance_kind: .provenance_kind, content_scope: .content_scope
 				}
+				+ (if .authorship == "unknown"
+				   then {authorship: .authorship, authorship_reason: .authorship_reason,
+				         observed_by_session_id: .observed_by_session_id}
+				   else {session_id: .session_id}
+				        + (if $tuid != "" then {tool_use_id: $tuid} else {} end)
+				   end)
 				+ (if .turn != null then {turn: .turn} else {} end)
-				+ (if $tuid != "" then {tool_use_id: $tuid} else {} end)
 			' 2>/dev/null)
 			[[ -n "$EV" ]] && lineage_emit_event "lineage.change.recorded" "$EV" "$SESSION_ID" || true
 		fi

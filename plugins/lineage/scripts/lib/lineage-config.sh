@@ -64,6 +64,13 @@ lineage_config_redact_enabled() {
 	[[ "$v" != "false" ]]
 }
 
+# Seconds subtracted from a Bash call's start bound before an mtime counts as
+# predating it (lineage_call_start_bound). A non-integer override falls back
+# to the default rather than reaching arithmetic.
+lineage_config_attribution_slack_seconds() {
+	config_get_int "_lineage_CONFIG" '.lineage.attribution_slack_seconds' 2
+}
+
 lineage_config_prompt_source() {
 	local v
 	v=$(lineage_config_get '.lineage.prompt_source')
