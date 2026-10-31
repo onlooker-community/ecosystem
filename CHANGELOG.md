@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.8](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.7...ecosystem-v0.76.8) (2026-10-31)
+
+
+### Bug Fixes
+
+* **lineage:** stop crediting unhooked changes to the observer :ghost: ([#523](https://github.com/onlooker-community/ecosystem/issues/523)) ([7b314b7](https://github.com/onlooker-community/ecosystem/commit/7b314b7542d091f41eac62ba0d4954a9dee61179))
+
 ## [0.76.7](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.6...ecosystem-v0.76.7) (2026-10-31)
 
 
