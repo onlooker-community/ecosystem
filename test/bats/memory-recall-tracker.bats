@@ -278,3 +278,88 @@ _seed_memory() {
   ! grep '"event_type":"memory.recalled"' "$ONLOOKER_EVENTS_LOG" 2>/dev/null \
     | jq -e 'select(.payload.memory_file == "nodetype-only.md")' >/dev/null
 }
+
+# Wraps the real node so a test can count how many processes the hook starts.
+_shim_node() {
+  local real_node shim_dir
+  real_node=$(command -v node)
+  shim_dir="${BATS_TEST_TMPDIR}/shim"
+  NODE_CALLS="${BATS_TEST_TMPDIR}/node-calls"
+  mkdir -p "$shim_dir"
+  printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >> "%s"\nexec "%s" "$@"\n' \
+    "$NODE_CALLS" "$real_node" > "${shim_dir}/node"
+  chmod +x "${shim_dir}/node"
+  export PATH="${shim_dir}:${PATH}"
+}
+
+# One node process per memory is what made this hook cost 66ms a file: 2445ms
+# at 37 memories, on every SessionStart (ONL-113).
+@test "the emitter starts once however many memories there are" {
+  local i
+  for i in 1 2 3 4 5 6 7 8; do
+    _seed_memory "project_${i}.md" "project"
+  done
+  _shim_node
+
+  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  [ "$status" -eq 0 ] || return 1
+
+  [ "$(grep -c '"event_type":"memory.recalled"' "$ONLOOKER_EVENTS_LOG")" -eq 8 ]
+  [ "$(grep -c 'onlooker-event.mjs' "$NODE_CALLS")" -eq 1 ]
+}
+
+@test "recall_position counts emitted memories, not files walked" {
+  _seed_memory "a.md" "project"
+  printf -- '---\nname: untyped\n---\n\nBody.\n' > "${MEM_DIR}/b.md"
+  _seed_memory "c with space.md" "feedback"
+
+  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  [ "$status" -eq 0 ] || return 1
+
+  run jq -rs 'map(select(.event_type == "memory.recalled"))
+    | map("\(.payload.recall_position) \(.payload.memory_file)") | join(",")' \
+    "$ONLOOKER_EVENTS_LOG"
+  [ "$output" = "0 a.md,1 c with space.md" ]
+}
+
+@test "every recalled event carries the project envelope" {
+  _seed_memory "a.md" "project"
+  _seed_memory "b.md" "user"
+
+  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  [ "$status" -eq 0 ] || return 1
+
+  run jq -rs 'map(select(.event_type == "memory.recalled"))
+    | map(select(.project == .payload.project_key and .project_basis == "remote")) | length' \
+    "$ONLOOKER_EVENTS_LOG"
+  [ "$output" = "2" ]
+}
+
+@test "the first type in frontmatter wins and the body is never read" {
+  printf -- '---\nname: x\ntype: "user"\ntype: project\n---\n\ntype: reference\n' \
+    > "${MEM_DIR}/first.md"
+  printf -- 'no frontmatter\ntype: user\n' > "${MEM_DIR}/plain.md"
+  printf -- '---\nname: x\n---\n\ntype: user\n' > "${MEM_DIR}/body-only.md"
+
+  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  [ "$status" -eq 0 ] || return 1
+
+  run jq -rs 'map(select(.event_type == "memory.recalled"))
+    | map("\(.payload.memory_file)=\(.payload.memory_type)") | join(",")' \
+    "$ONLOOKER_EVENTS_LOG"
+  [ "$output" = "first.md=user" ]
+}
+
+@test "emit-batch drops a bad line without losing its neighbors" {
+  local good bad
+  good='{"plugin":"onlooker","session_id":"s","event_type":"memory.recalled","payload":{"project_key":"abcdefabcdef","memory_file":"a.md","memory_type":"user","recall_position":0}}'
+  bad='{"plugin":"onlooker","session_id":"s","event_type":"memory.recalled","payload":{"memory_type":"nonsense"}}'
+
+  run --separate-stderr bash -c "printf '%s\n%s\nnot json\n\n%s\n' '$good' '$bad' '$good' \
+    | ONLOOKER_VALIDATE=1 ONLOOKER_TEST_REPORT_DIR='${BATS_TEST_TMPDIR}/report' \
+      node '${REPO_ROOT}/scripts/lib/onlooker-event.mjs' emit-batch"
+
+  [ "$status" -eq 1 ] || return 1
+  [ "$(printf '%s\n' "$output" | grep -c '"event_type":"memory.recalled"')" -eq 2 ]
+  printf '%s\n' "$output" | jq -es 'map(.sequence) | .[0] < .[1]' >/dev/null
+}

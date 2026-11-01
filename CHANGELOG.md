@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.9](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.8...ecosystem-v0.76.9) (2026-11-01)
+
+
+### Bug Fixes
+
+* **hooks:** stop paying process starts per memory at startup :hourglass_flowing_sand: ([#525](https://github.com/onlooker-community/ecosystem/issues/525)) ([a459fbb](https://github.com/onlooker-community/ecosystem/commit/a459fbb60cce9e9978104423c77d31c509978136))
+
 ## [0.76.8](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.7...ecosystem-v0.76.8) (2026-10-31)
 
 
