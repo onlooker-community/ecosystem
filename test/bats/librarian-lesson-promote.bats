@@ -548,7 +548,7 @@ _promote_refuses_shape() {
 		# only the `source` lines that follow are parsed out of SKILL.md.
 		printf 'PLUGIN_ROOT=%q\n' "$PLUGIN_ROOT"
 		printf 'export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"\n'
-		grep -E '^source "\$CLAUDE_PLUGIN_ROOT/' "$skill"
+		grep -E '^source "\$\{CLAUDE_PLUGIN_ROOT\}/' "$skill"
 		printf 'librarian_lesson_promote %q %q\n' "$PROJECT_KEY" "skill01"
 	} > "$script"
 

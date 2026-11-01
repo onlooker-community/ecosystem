@@ -20,6 +20,13 @@
 #   warden_config_get_json <jq-path>  # echoes JSON value (null if unset)
 #   warden_config_int <jq-path> <default>  # echoes a non-negative integer
 
+# BASH_SOURCE is empty outside bash, which would point the loader lookup at the
+# working directory and blame the package. Say what is actually wrong (ONL-230).
+if [ -z "${BASH_VERSION:-}" ]; then
+	printf 'warden: needs bash, but this shell is not bash; run it with bash\n' >&2
+	exit 1
+fi
+
 # Resolve the vendored loader from this file's own location. $PLUGIN_ROOT is
 # whatever the sourcing scope happened to set, so a sub-shell that inherits
 # CLAUDE_PLUGIN_ROOT but not PLUGIN_ROOT would lose every accessor silently.
