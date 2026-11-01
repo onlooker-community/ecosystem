@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/onlooker-community/ecosystem/compare/lineage-v0.9.0...lineage-v0.9.1) (2026-10-31)
+
+
+### Bug Fixes
+
+* **lineage:** stop crediting unhooked changes to the observer :ghost: ([#523](https://github.com/onlooker-community/ecosystem/issues/523)) ([7b314b7](https://github.com/onlooker-community/ecosystem/commit/7b314b7542d091f41eac62ba0d4954a9dee61179))
+
 ## [0.9.0](https://github.com/onlooker-community/ecosystem/compare/lineage-v0.8.2...lineage-v0.9.0) (2026-10-26)
 
 
