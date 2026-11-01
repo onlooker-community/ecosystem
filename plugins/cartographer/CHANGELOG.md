@@ -2,6 +2,13 @@
 
 All notable changes to the Cartographer plugin are documented here.
 
+## [0.12.3](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.12.2...cartographer-v0.12.3) (2026-11-01)
+
+
+### Bug Fixes
+
+* **skills:** make skill shell blocks run from the tool shell :shell: ([#527](https://github.com/onlooker-community/ecosystem/issues/527)) ([dbbaee2](https://github.com/onlooker-community/ecosystem/commit/dbbaee23a28e1d6c3853b6b4d44ff00410503388))
+
 ## [0.12.2](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.12.1...cartographer-v0.12.2) (2026-10-25)
 
 
