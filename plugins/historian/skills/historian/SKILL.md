@@ -24,7 +24,7 @@ session's cwd. Run it from the project directory.
 1. **Always dry-run first**, so the user sees the size before anything runs:
 
    ```bash
-   bash "${CLAUDE_PLUGIN_ROOT}/scripts/backfill.sh" --dry-run
+   CLAUDE_SESSION_ID="${CLAUDE_SESSION_ID}" bash "${CLAUDE_PLUGIN_ROOT}/scripts/backfill.sh" --dry-run
    ```
 
    Report the line it prints. If the user only asked for a count, stop here.
@@ -38,7 +38,7 @@ session's cwd. Run it from the project directory.
    the tool timeout:
 
    ```bash
-   bash "${CLAUDE_PLUGIN_ROOT}/scripts/backfill.sh"
+   CLAUDE_SESSION_ID="${CLAUDE_SESSION_ID}" bash "${CLAUDE_PLUGIN_ROOT}/scripts/backfill.sh"
    ```
 
 3. **Report the final summary line verbatim** — embedded, failed (with the most

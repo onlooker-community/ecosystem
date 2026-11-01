@@ -20,6 +20,7 @@ ONLOOKER_SKILL
 
 ```bash
 set -uo pipefail
+export CLAUDE_SESSION_ID="${CLAUDE_SESSION_ID}"
 export CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
 source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/tribunal-config.sh"
 source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/tribunal-rubric.sh"

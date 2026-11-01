@@ -12,10 +12,15 @@
 # only the exact `${CLAUDE_PLUGIN_ROOT}` spelling into skill text, so
 # `$CLAUDE_PLUGIN_ROOT` and `${CLAUDE_PLUGIN_ROOT:-...}` both arrive empty, and
 # a BASH_SOURCE fallback has no file to locate from a pasted block (ONL-230).
+# CLAUDE_SESSION_ID behaves the same way, so Setup exports the substituted value
+# for the libs that read it from the environment (ONL-233).
+
+RENDERED_SESSION_ID="rendered-session-id"
 
 setup() {
   source "${BATS_TEST_DIRNAME}/../helpers/setup.bash"
   setup_test_env
+  unset CLAUDE_SESSION_ID
 }
 
 # Skipping in CI would pass these over nothing, so a missing zsh only skips on
@@ -38,8 +43,8 @@ _config_libs() {
 }
 
 # The first ```bash fence that sources a lib, as Claude Code renders it: the
-# plugin root substituted in, and the sample CLI call that needs real arguments
-# dropped.
+# plugin root and session ID substituted in, and the sample CLI call that needs
+# real arguments dropped.
 _render_setup_block() {
   local skill="$1" plugin_root
   plugin_root="${skill%/skills/*}"
@@ -53,7 +58,8 @@ _render_setup_block() {
     in_block { buf = buf $0 "\n" }
   ' "$skill" |
     grep -v '_cli "<action>"' |
-    sed "s|\${CLAUDE_PLUGIN_ROOT}|${plugin_root}|g"
+    sed -e "s|\${CLAUDE_PLUGIN_ROOT}|${plugin_root}|g" \
+      -e "s|\${CLAUDE_SESSION_ID}|${RENDERED_SESSION_ID}|g"
 }
 
 @test "the skill glob matches the skills that source libs" {
@@ -70,6 +76,41 @@ _render_setup_block() {
     printf 'unsubstituted plugin root:\n%s\n' "$offenders" >&2
     return 1
   }
+}
+
+@test "no skill spells the session ID in a form Claude Code will not substitute" {
+  local offenders
+  offenders=$(grep -nE '\$CLAUDE_SESSION_ID|\$\{CLAUDE_SESSION_ID:' \
+    "${REPO_ROOT}"/plugins/*/skills/*/SKILL.md "${REPO_ROOT}"/skills/*/SKILL.md || true)
+  [ -z "$offenders" ] || {
+    printf 'unsubstituted session ID:\n%s\n' "$offenders" >&2
+    return 1
+  }
+}
+
+@test "the libs a skill loads see the session ID Claude Code substituted" {
+  cd "$REPO_ROOT"
+
+  local skill failures=""
+  while IFS= read -r skill; do
+    run bash -c "$(_render_setup_block "$skill")"$'\n''printf "session=%s\n" "${CLAUDE_SESSION_ID:-}"'
+    [[ "$output" == *"session=${RENDERED_SESSION_ID}"* ]] ||
+      failures+="${skill#"${REPO_ROOT}/"} (status ${status}): ${output}"$'\n'
+  done < <(_skills_with_setup)
+
+  [ -z "$failures" ] || {
+    printf 'skills whose libs miss the session ID:\n%s' "$failures" >&2
+    return 1
+  }
+}
+
+@test "historian backfill events carry the session ID" {
+  local skill="${REPO_ROOT}/plugins/historian/skills/historian/SKILL.md"
+  local runs passed
+  runs=$(grep -c 'scripts/backfill.sh"' "$skill")
+  passed=$(grep -cF 'CLAUDE_SESSION_ID="${CLAUDE_SESSION_ID}" bash "${CLAUDE_PLUGIN_ROOT}/scripts/backfill.sh"' "$skill")
+  [ "$runs" -gt 0 ]
+  [ "$runs" -eq "$passed" ]
 }
 
 @test "every skill that sources libs documents the bash wrapper" {
