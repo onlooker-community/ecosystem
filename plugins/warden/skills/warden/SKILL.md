@@ -30,6 +30,7 @@ ONLOOKER_SKILL
 
 ```bash
 set -uo pipefail
+export CLAUDE_SESSION_ID="${CLAUDE_SESSION_ID}"
 export CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
 source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/warden-config.sh"
 source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/warden-events.sh"
@@ -40,7 +41,7 @@ source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/warden-cli.sh"
 warden_cli "<action>" "${SESSION_ID_ARG:-}"
 ```
 
-`warden_cli` resolves the session automatically: it prefers `$CLAUDE_SESSION_ID`, falls back to the single closed gate if exactly one exists, and reports ambiguity if several sessions have closed gates (re-run with an explicit session id in that case).
+`warden_cli` resolves the session automatically: it prefers the current session, falls back to the single closed gate if exactly one exists, and reports ambiguity if several sessions have closed gates (re-run with an explicit session id in that case).
 
 ## Behavior
 

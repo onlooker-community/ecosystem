@@ -40,6 +40,7 @@ ONLOOKER_SKILL
 
 ```bash
 set -uo pipefail
+export CLAUDE_SESSION_ID="${CLAUDE_SESSION_ID}"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
 export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/librarian-config.sh"

@@ -24,6 +24,7 @@ ONLOOKER_SKILL
 
 ```bash
 set -uo pipefail
+export CLAUDE_SESSION_ID="${CLAUDE_SESSION_ID}"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
 export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 
@@ -58,7 +59,7 @@ week overwrites that week's brief in place. (`$ONLOOKER_DIR` overrides the
 storage root; the test suite and non-default installs rely on it.)
 
 ```bash
-SESSION_ID="${CLAUDE_SESSION_ID:-$(counsel_ulid)}"
+SESSION_ID="${CLAUDE_SESSION_ID}"
 export _HOOK_SESSION_ID="$SESSION_ID"
 
 LOOKBACK=$(counsel_config_get '.counsel.lookback_days'); LOOKBACK="${LOOKBACK:-30}"

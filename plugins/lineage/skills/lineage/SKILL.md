@@ -24,6 +24,7 @@ ONLOOKER_SKILL
 
 ```bash
 set -uo pipefail
+export CLAUDE_SESSION_ID="${CLAUDE_SESSION_ID}"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
 export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 
@@ -44,7 +45,7 @@ if [[ -z "$PROJECT_KEY" ]]; then
   exit 0
 fi
 PROMPT_SOURCE=$(lineage_config_prompt_source)
-QSID="${CLAUDE_SESSION_ID:-lineage-query}"
+QSID="${CLAUDE_SESSION_ID}"
 ```
 
 ## Invocation Modes
