@@ -635,15 +635,8 @@ async function main() {
     return;
   }
 
-  if (command === 'emit') {
-    let params;
-    const fileArg = args.find((a) => a.startsWith('--params='));
-    if (fileArg) {
-      params = JSON.parse(readFileSync(fileArg.slice(9), 'utf8'));
-    } else {
-      params = JSON.parse(await readStdin());
-    }
-    const event = buildCanonicalEvent({
+  const eventFromParams = (params) =>
+    buildCanonicalEvent({
       onlookerDir,
       plugin: params.plugin ?? plugin,
       runtime: params.runtime ?? 'claude-code',
@@ -654,6 +647,43 @@ async function main() {
       event_type: params.event_type,
       payload: params.payload,
     });
+
+  // One params object per stdin line, one event per stdout line, for a hook
+  // that would otherwise start a process per event (ONL-113). A bad line drops
+  // alone, as it would have with one `emit` per event, and the exit is non-zero
+  // so a caller can tell; the events on stdout are good either way.
+  if (command === 'emit-batch') {
+    let failed = false;
+    for (const line of (await readStdin()).split('\n')) {
+      if (!line.trim()) continue;
+      try {
+        const event = eventFromParams(JSON.parse(line));
+        const check = await tryValidate(event);
+        recordEmission(event, check);
+        if (check.available && !check.valid) {
+          console.error(JSON.stringify(check.errors, null, 2));
+          failed = true;
+          continue;
+        }
+        console.log(JSON.stringify(event));
+      } catch (err) {
+        console.error(err);
+        failed = true;
+      }
+    }
+    process.exitCode = failed ? 1 : 0;
+    return;
+  }
+
+  if (command === 'emit') {
+    let params;
+    const fileArg = args.find((a) => a.startsWith('--params='));
+    if (fileArg) {
+      params = JSON.parse(readFileSync(fileArg.slice(9), 'utf8'));
+    } else {
+      params = JSON.parse(await readStdin());
+    }
+    const event = eventFromParams(params);
     // Best-effort: reject when a validator is present (dev/CI), fail open in
     // installed plugins so the event is still emitted.
     const check = await tryValidate(event);
@@ -666,7 +696,7 @@ async function main() {
     return;
   }
 
-  console.error(`Usage: onlooker-event.mjs <validate|emit-from-hook|emit>`);
+  console.error(`Usage: onlooker-event.mjs <validate|emit-from-hook|emit|emit-batch>`);
   process.exit(2);
 }
 

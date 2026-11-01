@@ -134,94 +134,100 @@ if [[ -z "$ENCODED" || ! -d "$MEMORY_DIR" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Walk every *.md file (excluding MEMORY.md itself, which is the index, not
-# a memory). For each, parse the YAML frontmatter's `type` field. Skip
-# files whose type isn't one of the four valid enum values — emitting
-# anything else would fail schema validation and the event would be
-# silently dropped.
+# Read the YAML frontmatter `type` of every *.md file (excluding MEMORY.md
+# itself, which is the index, not a memory). Skip files whose type isn't one
+# of the four valid enum values — emitting anything else would fail schema
+# validation and the event would be silently dropped.
+#
+# All of it runs as one awk, one jq and one node, whatever the file count.
+# Walking the files in shell cost 66ms each in process starts: 2445ms at 37
+# memories, on every SessionStart, growing with the store (ONL-113).
 # ---------------------------------------------------------------------------
 
-_extract_type() {
-	local path="$1"
-	[[ -f "$path" ]] || return 0
-	# Parse frontmatter type via awk + sed (no python dep, no yq dep).
-	#
-	# The pattern allows leading whitespace because Claude Code nests the
-	# field under `metadata:`, indented — anchoring on `^type:` matched only
-	# the shape these tests used to seed and nothing real, so every actual
-	# memory scored an empty type and was skipped (ecosystem-449.12).
-	#
-	# `node_type:` sits directly above `type:` in real frontmatter and must
-	# not match; requiring `type:` immediately after the indent keeps it out.
-	awk '
-		NR == 1 && /^---/ { in_fm = 1; next }
-		in_fm && /^---/ { exit }
-		in_fm
-	' "$path" 2>/dev/null \
-		| sed -nE 's/^[[:space:]]*type:[[:space:]]*(.*)$/\1/p' \
-		| head -1 \
-		| tr -d '"' \
-		| tr -d "'"
-}
-
-position=0
+memory_files=()
 for file in "$MEMORY_DIR"/*.md; do
 	[[ -f "$file" ]] || continue
-	fname=$(basename "$file")
-	[[ "$fname" == "MEMORY.md" ]] && continue
-
-	memory_type=$(_extract_type "$file")
-	case "$memory_type" in
-		user|feedback|project|reference)
-			;;
-		*)
-			# Untyped or unknown-typed memories don't fit the schema's
-			# enum. Skip silently rather than tank schema validation.
-			continue
-			;;
-	esac
-
-	payload=$(jq -cn \
-		--arg project_key "$PROJECT_KEY" \
-		--arg memory_file "$fname" \
-		--arg memory_type "$memory_type" \
-		--argjson recall_position "$position" \
-		'{
-			project_key: $project_key,
-			memory_file: $memory_file,
-			memory_type: $memory_type,
-			recall_position: $recall_position
-		}')
-
-	# Use the canonical ecosystem plugin name (matches the
-	# `${ONLOOKER_PLUGIN_NAME:-onlooker}` default that scripts/lib/
-	# onlooker-emit.sh and onlooker-event.mjs both fall back to). Other
-	# substrate-level emissions land under "onlooker" too, so this stays
-	# consistent with the existing event stream.
-	local_plugin="${ONLOOKER_PLUGIN_NAME:-onlooker}"
-
-	params=$(jq -cn \
-		--arg plugin "$local_plugin" \
-		--arg sid "$SESSION_ID" \
-		--arg type "memory.recalled" \
-		--argjson payload "$payload" \
-		'{ plugin: $plugin, session_id: $sid, event_type: $type, payload: $payload }')
-
-	# The envelope dimension, alongside the payload project_key this hook has
-	# always carried. Both are derived from the same CWD and were verified to
-	# agree on all three cases (remote, root, non-repo) — this hook predates the
-	# canonical lib and still hand-rolls the derivation above, which is a
-	# maintenance risk tracked separately, not a divergence today.
-	onlooker_project_resolve_cached "$CWD"
-
-	event_json=$(printf '%s' "$params" \
-		| ONLOOKER_DIR="$ONLOOKER_DIR" ONLOOKER_PLUGIN_NAME="$local_plugin" \
-		  node "$_ONLOOKER_EVENT_JS" emit 2>/dev/null) || event_json=""
-	[[ -z "$event_json" ]] && continue
-
-	onlooker_append_event "$event_json" || true
-	position=$((position + 1))
+	[[ "${file##*/}" == "MEMORY.md" ]] && continue
+	memory_files+=("$file")
 done
+
+if [[ ${#memory_files[@]} -eq 0 ]]; then
+	hook_success
+	exit 0
+fi
+
+# Prints `<filename>\t<type>` for the first type in each file's frontmatter.
+# Parsed with awk (no python dep, no yq dep).
+#
+# The pattern allows leading whitespace because Claude Code nests the field
+# under `metadata:`, indented — anchoring on `^type:` matched only the shape
+# these tests used to seed and nothing real, so every actual memory scored an
+# empty type and was skipped (ecosystem-449.12).
+#
+# `node_type:` sits directly above `type:` in real frontmatter and must not
+# match; requiring `type:` immediately after the indent keeps it out.
+_extract_types() {
+	awk '
+		FNR == 1 { in_fm = /^---/; found = 0; next }
+		in_fm && /^---/ { in_fm = 0; next }
+		in_fm && !found && /^[[:space:]]*type:/ {
+			found = 1
+			value = $0
+			sub(/^[[:space:]]*type:[[:space:]]*/, "", value)
+			gsub(/["\047]/, "", value)
+			name = FILENAME
+			sub(/.*\//, "", name)
+			printf "%s\t%s\n", name, value
+		}
+	' "$@" 2>/dev/null
+}
+
+# Use the canonical ecosystem plugin name (matches the
+# `${ONLOOKER_PLUGIN_NAME:-onlooker}` default that scripts/lib/
+# onlooker-emit.sh and onlooker-event.mjs both fall back to). Other
+# substrate-level emissions land under "onlooker" too, so this stays
+# consistent with the existing event stream.
+local_plugin="${ONLOOKER_PLUGIN_NAME:-onlooker}"
+
+# Untyped or unknown-typed memories don't fit the schema's enum, so they are
+# filtered out before recall_position is assigned.
+params=$(_extract_types "${memory_files[@]}" | jq -Rrn \
+	--arg project_key "$PROJECT_KEY" \
+	--arg plugin "$local_plugin" \
+	--arg sid "$SESSION_ID" \
+	'[inputs | split("\t") | select(.[1] as $t | ["user","feedback","project","reference"] | index($t))]
+	| to_entries[]
+	| {
+		plugin: $plugin,
+		session_id: $sid,
+		event_type: "memory.recalled",
+		payload: {
+			project_key: $project_key,
+			memory_file: .value[0],
+			memory_type: .value[1],
+			recall_position: .key
+		}
+	}
+	| tojson') || params=""
+
+if [[ -z "$params" ]]; then
+	hook_success
+	exit 0
+fi
+
+# The envelope dimension, alongside the payload project_key this hook has
+# always carried. Both are derived from the same CWD and were verified to
+# agree on all three cases (remote, root, non-repo) — this hook predates the
+# canonical lib and still hand-rolls the derivation above, which is a
+# maintenance risk tracked separately, not a divergence today.
+onlooker_project_resolve_cached "$CWD"
+
+# A non-zero exit means a line was dropped; the rest of stdout is still good.
+event_json=$(printf '%s\n' "$params" \
+	| ONLOOKER_DIR="$ONLOOKER_DIR" ONLOOKER_PLUGIN_NAME="$local_plugin" \
+	  node "$_ONLOOKER_EVENT_JS" emit-batch 2>/dev/null) || true
+
+onlooker_append_event "$event_json" || true
 
 hook_success
 exit 0
