@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.12](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.26.11...librarian-v0.26.12) (2026-11-01)
+
+
+### Bug Fixes
+
+* **skills:** make skill shell blocks run from the tool shell :shell: ([#527](https://github.com/onlooker-community/ecosystem/issues/527)) ([dbbaee2](https://github.com/onlooker-community/ecosystem/commit/dbbaee23a28e1d6c3853b6b4d44ff00410503388))
+
 ## [0.26.11](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.26.10...librarian-v0.26.11) (2026-10-31)
 
 

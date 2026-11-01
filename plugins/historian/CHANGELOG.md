@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.3](https://github.com/onlooker-community/ecosystem/compare/historian-v0.11.2...historian-v0.11.3) (2026-11-01)
+
+
+### Bug Fixes
+
+* **skills:** make skill shell blocks run from the tool shell :shell: ([#527](https://github.com/onlooker-community/ecosystem/issues/527)) ([dbbaee2](https://github.com/onlooker-community/ecosystem/commit/dbbaee23a28e1d6c3853b6b4d44ff00410503388))
+
 ## [0.11.2](https://github.com/onlooker-community/ecosystem/compare/historian-v0.11.1...historian-v0.11.2) (2026-10-27)
 
 
