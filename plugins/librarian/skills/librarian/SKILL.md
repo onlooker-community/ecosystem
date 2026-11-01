@@ -30,24 +30,30 @@ If the user passes a free-form intent ("clear out the queue", "what's pending?")
 
 ## Run the control surface
 
-Source the plugin helpers and invoke `librarian_cli`. Run this in a single bash call when you need state:
+Source the plugin helpers and invoke `librarian_cli`. The Bash tool may be zsh and keeps no functions between calls, so send this block inside `bash`, in one call:
+
+```text
+bash <<'ONLOOKER_SKILL'
+<this block, with the action filled in>
+ONLOOKER_SKILL
+```
 
 ```bash
 set -uo pipefail
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
 export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
-source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-config.sh"
-source "$CLAUDE_PLUGIN_ROOT/scripts/lib/onlooker-project-key.sh"
-source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-storage.sh"
-source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-emit.sh"
-source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-lesson-storage.sh"
-source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-lesson-validate.sh"
-source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-lesson-review.sh"
-source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-lesson-rubric.sh"
-source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-lesson-judge.sh"
-source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-author-key.sh"
-source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-lesson-promote.sh"
-source "$CLAUDE_PLUGIN_ROOT/scripts/lib/librarian-cli.sh"
+source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/librarian-config.sh"
+source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
+source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/librarian-storage.sh"
+source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/librarian-emit.sh"
+source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/librarian-lesson-storage.sh"
+source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/librarian-lesson-validate.sh"
+source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/librarian-lesson-review.sh"
+source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/librarian-lesson-rubric.sh"
+source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/librarian-lesson-judge.sh"
+source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/librarian-author-key.sh"
+source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/librarian-lesson-promote.sh"
+source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/librarian-cli.sh"
 
 # action is one of: list | show <id> | accept <id> | reject <id> [reason] | defer <id> | status
 # or: lessons <list [--confirmed]|show <id>|confirm <id> <visibility> [--justification TEXT]|pass <id> [reason]|unconfirm <id>|defer <id>|status>

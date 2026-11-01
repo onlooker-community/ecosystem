@@ -17,14 +17,14 @@ nothing comes back for them later. `/historian backfill` is that later pass.
 
 ## Run it
 
-The script lives at `$CLAUDE_PLUGIN_ROOT/scripts/backfill.sh` and reads config
+The script lives at `${CLAUDE_PLUGIN_ROOT}/scripts/backfill.sh` and reads config
 from the current directory, the same way the SessionEnd hook reads it from the
 session's cwd. Run it from the project directory.
 
 1. **Always dry-run first**, so the user sees the size before anything runs:
 
    ```bash
-   bash "$CLAUDE_PLUGIN_ROOT/scripts/backfill.sh" --dry-run
+   bash "${CLAUDE_PLUGIN_ROOT}/scripts/backfill.sh" --dry-run
    ```
 
    Report the line it prints. If the user only asked for a count, stop here.
@@ -38,7 +38,7 @@ session's cwd. Run it from the project directory.
    the tool timeout:
 
    ```bash
-   bash "$CLAUDE_PLUGIN_ROOT/scripts/backfill.sh"
+   bash "${CLAUDE_PLUGIN_ROOT}/scripts/backfill.sh"
    ```
 
 3. **Report the final summary line verbatim** — embedded, failed (with the most

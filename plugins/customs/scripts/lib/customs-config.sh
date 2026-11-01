@@ -15,6 +15,12 @@
 #   customs_config_get <jq-path>        # echoes string value (empty if unset)
 #   customs_config_get_json <jq-path>   # echoes JSON value (null if unset)
 
+# BASH_SOURCE is empty outside bash, which would point the loader lookup at the
+# working directory and blame the package. Say what is actually wrong (ONL-230).
+if [ -z "${BASH_VERSION:-}" ]; then
+	printf 'customs: needs bash, but this shell is not bash; run it with bash\n' >&2
+	exit 1
+fi
 _CUSTOMS_CONFIG_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _CUSTOMS_CONFIG_LOADER="${_CUSTOMS_CONFIG_LIB_DIR}/config-loader.sh"
 if [[ ! -f "$_CUSTOMS_CONFIG_LOADER" ]]; then

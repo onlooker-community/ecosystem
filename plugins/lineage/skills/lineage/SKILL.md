@@ -12,11 +12,19 @@ session transcripts (falling back to the live transcript). It answers
 
 ## Setup
 
-Run once. Sources the plugin helpers, loads config, and resolves project context.
+Every block below needs this one: it sources the plugin helpers, loads config, and
+resolves project context. The Bash tool may be zsh and keeps no functions between calls, so send this block inside `bash`, in one call:
+
+```text
+bash <<'ONLOOKER_SKILL'
+<this Setup block>
+<the block for this mode>
+ONLOOKER_SKILL
+```
 
 ```bash
 set -uo pipefail
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
 export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 
 source "$PLUGIN_ROOT/scripts/lib/portable-lock.sh"

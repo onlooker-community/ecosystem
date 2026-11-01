@@ -9,19 +9,27 @@ You are orchestrating a **Tribunal** evaluation loop. A user task gets wrapped i
 
 ## Setup
 
-Before the loop, source the plugin's bash helpers and load config. Run this once at the start:
+Every block below needs the plugin's bash helpers and config. The Bash tool may be zsh and keeps no functions between calls, so send this block inside `bash`, in one call:
+
+```text
+bash <<'ONLOOKER_SKILL'
+<this Setup block>
+<the block you are running>
+ONLOOKER_SKILL
+```
 
 ```bash
 set -uo pipefail
-source "$CLAUDE_PLUGIN_ROOT/scripts/lib/tribunal-config.sh"
-source "$CLAUDE_PLUGIN_ROOT/scripts/lib/tribunal-rubric.sh"
-source "$CLAUDE_PLUGIN_ROOT/scripts/lib/tribunal-jury.sh"
-source "$CLAUDE_PLUGIN_ROOT/scripts/lib/tribunal-aggregate.sh"
-source "$CLAUDE_PLUGIN_ROOT/scripts/lib/tribunal-gate.sh"
-source "$CLAUDE_PLUGIN_ROOT/scripts/lib/tribunal-events.sh"
-source "$CLAUDE_PLUGIN_ROOT/scripts/lib/tribunal-verdict.sh"
-source "$CLAUDE_PLUGIN_ROOT/scripts/lib/onlooker-project-key.sh"
-source "$CLAUDE_PLUGIN_ROOT/scripts/lib/tribunal-ulid.sh"
+export CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
+source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/tribunal-config.sh"
+source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/tribunal-rubric.sh"
+source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/tribunal-jury.sh"
+source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/tribunal-aggregate.sh"
+source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/tribunal-gate.sh"
+source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/tribunal-events.sh"
+source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/tribunal-verdict.sh"
+source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
+source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/tribunal-ulid.sh"
 
 tribunal_config_load "$(pwd)"
 tribunal_rubric_load "$(pwd)"

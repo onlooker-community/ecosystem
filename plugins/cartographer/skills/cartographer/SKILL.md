@@ -9,9 +9,19 @@ Cartographer audits the persistent instruction layer of the current project and 
 
 ## Setup
 
+The Bash tool may be zsh and keeps no functions between calls, so send this block inside `bash`, in one call:
+
+```text
+bash <<'ONLOOKER_SKILL'
+<the two Setup blocks>
+<the block for this mode>
+ONLOOKER_SKILL
+```
+
 ```bash
 set -uo pipefail
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
+export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 source "$PLUGIN_ROOT/scripts/lib/cartographer-config.sh"
 source "$PLUGIN_ROOT/scripts/lib/onlooker-project-key.sh"
 source "$PLUGIN_ROOT/scripts/lib/cartographer-lock.sh"

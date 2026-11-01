@@ -32,7 +32,7 @@ setup() {
 	SKILL_CLI="${BATS_TEST_TMPDIR}/skill-cli.sh"
 	{
 		printf '%s\n' '#!/usr/bin/env bash' 'set -uo pipefail'
-		grep -E '^source "\$CLAUDE_PLUGIN_ROOT/scripts/lib/' \
+		grep -E '^source "\$\{CLAUDE_PLUGIN_ROOT\}/scripts/lib/' \
 			"${PLUGIN_ROOT}/skills/librarian/SKILL.md"
 		printf '%s\n' 'librarian_cli "$@"'
 	} > "$SKILL_CLI"

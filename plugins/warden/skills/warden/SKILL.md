@@ -20,14 +20,21 @@ If the user passed a session id explicitly (rare), capture it as the optional se
 
 ## Run the control surface
 
-Source the plugin helpers and invoke `warden_cli`. Run this in a single bash call:
+Source the plugin helpers and invoke `warden_cli`. The Bash tool may be zsh and keeps no functions between calls, so send this block inside `bash`, in one call:
+
+```text
+bash <<'ONLOOKER_SKILL'
+<this block, with the action filled in>
+ONLOOKER_SKILL
+```
 
 ```bash
 set -uo pipefail
-source "$CLAUDE_PLUGIN_ROOT/scripts/lib/warden-config.sh"
-source "$CLAUDE_PLUGIN_ROOT/scripts/lib/warden-events.sh"
-source "$CLAUDE_PLUGIN_ROOT/scripts/lib/warden-gate-state.sh"
-source "$CLAUDE_PLUGIN_ROOT/scripts/lib/warden-cli.sh"
+export CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
+source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/warden-config.sh"
+source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/warden-events.sh"
+source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/warden-gate-state.sh"
+source "${CLAUDE_PLUGIN_ROOT}/scripts/lib/warden-cli.sh"
 
 # action is "status" or "clear"; SESSION_ID_ARG is optional and usually empty.
 warden_cli "<action>" "${SESSION_ID_ARG:-}"
