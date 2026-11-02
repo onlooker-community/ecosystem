@@ -33,6 +33,7 @@
       "contradiction_similarity_threshold": 0.4
     },
     "surfacer": {
+      "enabled": false,
       "max_pointer_chars": 200,
       "skip_when_zero": true
     }

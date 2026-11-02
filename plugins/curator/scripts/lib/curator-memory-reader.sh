@@ -77,87 +77,13 @@ curator_memory_resolve_path() {
 	printf '%s' "$resolved"
 }
 
-# Parse a single memory file. Returns a JSON object on stdout.
-# Usage: curator_memory_parse_file <abs_path> <referenced_bool>
-curator_memory_parse_file() {
-	local path="$1"
-	local referenced="${2:-true}"
-	[[ -z "$path" ]] && return 0
-
-	local filename
-	filename="$(basename "$path")"
-
-	if [[ ! -f "$path" ]]; then
-		jq -cn \
-			--arg filename "$filename" \
-			--argjson referenced "$referenced" \
-			'{
-				filename: $filename,
-				title: null, type: null, body: "",
-				exists: false, referenced: $referenced,
-				frontmatter_parsed: false
-			}'
-		return 0
-	fi
-
-	local raw
-	raw=$(cat "$path" 2>/dev/null || true)
-	[[ -z "$raw" ]] && raw=""
-
-	local has_fm name desc type body fm_parsed="false"
-	if [[ "$raw" == "---"* ]]; then
-		# YAML frontmatter present. Extract simple `key: value` lines until
-		# the closing `---`. Fancier YAML (nested, lists) isn't expected in
-		# the auto-memory format.
-		local fm_block
-		fm_block=$(printf '%s' "$raw" | awk '
-			NR == 1 && /^---/ { in_fm = 1; next }
-			in_fm && /^---/ { in_fm = 0; exit }
-			in_fm { print }
-		')
-		name=$(printf '%s' "$fm_block" | sed -nE 's/^name:[[:space:]]*(.*)$/\1/p' | head -1)
-		desc=$(printf '%s' "$fm_block" | sed -nE 's/^description:[[:space:]]*(.*)$/\1/p' | head -1)
-		type=$(printf '%s' "$fm_block" | sed -nE 's/^type:[[:space:]]*(.*)$/\1/p' | head -1)
-		body=$(printf '%s' "$raw" | awk '
-			BEGIN { in_fm = 0; seen_close = 0 }
-			NR == 1 && /^---/ { in_fm = 1; next }
-			in_fm && /^---/ { in_fm = 0; seen_close = 1; next }
-			seen_close { print }
-		')
-		fm_parsed="true"
-		has_fm="true"
-	else
-		# No frontmatter — treat the whole body as content; type unknown.
-		name=""
-		desc=""
-		type=""
-		body="$raw"
-		fm_parsed="false"
-		has_fm="false"
-	fi
-
-	jq -cn \
-		--arg filename "$filename" \
-		--arg name "$name" \
-		--arg desc "$desc" \
-		--arg type "$type" \
-		--arg body "$body" \
-		--argjson referenced "$referenced" \
-		--argjson fm_parsed "$fm_parsed" \
-		'{
-			filename: $filename,
-			title: (if $name == "" then null else $name end),
-			description: (if $desc == "" then null else $desc end),
-			type: (if $type == "" then null else $type end),
-			body: $body,
-			exists: true,
-			referenced: $referenced,
-			frontmatter_parsed: $fm_parsed
-		}'
-}
-
 # Load every memory file referenced by MEMORY.md plus every file in the dir.
 # Output: JSON array of memory records (as defined at the top of this file).
+#
+# One jq reads every file, whatever the store size. Parsing each file in its own
+# processes cost 2.5s at 51 memories, which spent the scan budget before any
+# check could run (ONL-235). --rawfile rather than `jq -R` over the files,
+# because -R runs a last line with no newline into the next file.
 #
 # Usage: curator_memory_load_all <memory_dir_abs>
 curator_memory_load_all() {
@@ -175,17 +101,22 @@ curator_memory_load_all() {
 			| sed -E 's/.*\(([^)]+)\)/\1/' | awk '{ print }')
 	fi
 
-	# 2. Build the canonical set of referenced filenames.
-	local referenced_json='[]'
-	if [[ ${#referenced_list[@]} -gt 0 ]]; then
-		referenced_json=$(printf '%s\n' "${referenced_list[@]}" | jq -R . | jq -s .)
-	fi
+	# 2. Plan one `<kind>\t<file index>\t<filename>` row per record, and bind
+	#    each file that exists to $ARGS.named.
+	local plan="" seen=$'\n' fname file slot
+	local tab=$'\t' nl=$'\n'
+	local rawfiles=() file_count=0
 
-	# 3. Visit each referenced filename (broken or not) plus every *.md
-	#    on disk that wasn't referenced.
-	local all='[]'
-	local fname rec
-	local seen_json='{}'
+	_curator_memory_plan() {
+		local kind="$1" path="$2"
+		slot=""
+		if [[ -f "$path" ]]; then
+			slot="f${file_count}"
+			file_count=$((file_count + 1))
+			rawfiles+=(--rawfile "$slot" "$path")
+		fi
+		plan+="${kind}${tab}${slot}${tab}${fname}${nl}"
+	}
 
 	# Referenced first — preserves MEMORY.md ordering for downstream display.
 	# Filename sanitization: anything with a path separator, parent-dir
@@ -193,51 +124,92 @@ curator_memory_load_all() {
 	# index entry and NEVER passed to the parser. Without this guard a
 	# MEMORY.md entry like `[X](../../etc/passwd)` would read outside the
 	# memory dir.
-	local refcount
-	refcount=$(printf '%s' "$referenced_json" | jq 'length')
-	local i
-	for ((i = 0; i < refcount; i++)); do
-		fname=$(printf '%s' "$referenced_json" | jq -r ".[$i]")
-		[[ -z "$fname" || "$fname" == "null" ]] && continue
-		# Skip MEMORY.md itself if it self-references.
-		[[ "$fname" == "MEMORY.md" ]] && continue
+	if [[ ${#referenced_list[@]} -gt 0 ]]; then
+		for fname in "${referenced_list[@]}"; do
+			[[ -z "$fname" || "$fname" == "null" ]] && continue
+			# Skip MEMORY.md itself if it self-references.
+			[[ "$fname" == "MEMORY.md" ]] && continue
 
-		if _curator_memory_unsafe_filename "$fname"; then
-			# Record as a broken/unsafe index entry so the broken_index
-			# check surfaces it. The parser is bypassed, so no read
-			# happens outside the memory dir.
-			rec=$(jq -cn \
-				--arg filename "$fname" \
-				'{
+			if _curator_memory_unsafe_filename "$fname"; then
+				plan+="unsafe${tab}${tab}${fname}${nl}"
+			else
+				_curator_memory_plan referenced "${mem_dir}/${fname}"
+			fi
+			seen+="${fname}${nl}"
+		done
+	fi
+
+	# Then any orphans (files on disk not referenced from MEMORY.md).
+	for file in "$mem_dir"/*.md; do
+		[[ -f "$file" ]] || continue
+		fname="${file##*/}"
+		[[ "$fname" == "MEMORY.md" ]] && continue
+		case "$seen" in *"${nl}${fname}${nl}"*) continue ;; esac
+		_curator_memory_plan orphan "$file"
+	done
+	unset -f _curator_memory_plan
+
+	# 3. Build the records. Extract simple `key: value` lines until the closing
+	#    `---`. Fancier YAML (nested, lists) isn't expected in the auto-memory
+	#    format.
+	jq -cn --arg plan "$plan" "${rawfiles[@]+"${rawfiles[@]}"}" '
+		def field($lines; $key):
+			first(
+				($lines[] | select(startswith($key + ":"))
+					| sub("^" + $key + ":[[:space:]]*"; "")),
+				""
+			)
+			| if . == "" then null else . end;
+
+		def drop_trailing_blanks:
+			until(length == 0 or .[-1] != ""; .[:-1]);
+
+		def parsed($filename; $referenced; $raw):
+			($raw | split("\n") | drop_trailing_blanks) as $lines
+			| if ($lines | length) > 0 and ($lines[0] | startswith("---")) then
+				($lines[1:] | map(startswith("---")) | index(true)) as $close
+				| (if $close == null then $lines[1:] else $lines[1:$close + 1] end) as $fm
+				| {
+					filename: $filename,
+					title: field($fm; "name"),
+					description: field($fm; "description"),
+					type: field($fm; "type"),
+					body: (if $close == null then "" else $lines[$close + 2:] | join("\n") end),
+					exists: true,
+					referenced: $referenced,
+					frontmatter_parsed: true
+				}
+			else
+				{
+					filename: $filename,
+					title: null, description: null, type: null,
+					body: ($lines | join("\n")),
+					exists: true,
+					referenced: $referenced,
+					frontmatter_parsed: false
+				}
+			end;
+
+		[
+			$plan | split("\n")[] | select(. != "") | split("\t")
+			| .[0] as $kind | .[1] as $slot | (.[2:] | join("\t")) as $filename
+			| if $kind == "unsafe" then
+				{
 					filename: $filename,
 					title: null, description: null, type: null, body: "",
 					exists: false, referenced: true,
 					frontmatter_parsed: false, unsafe: true
-				}')
-			all=$(printf '%s' "$all" | jq --argjson rec "$rec" '. + [$rec]')
-			seen_json=$(printf '%s' "$seen_json" | jq --arg f "$fname" '. + {($f): true}')
-			continue
-		fi
-
-		rec=$(curator_memory_parse_file "${mem_dir}/${fname}" true)
-		[[ -z "$rec" ]] && continue
-		all=$(printf '%s' "$all" | jq --argjson rec "$rec" '. + [$rec]')
-		seen_json=$(printf '%s' "$seen_json" | jq --arg f "$fname" '. + {($f): true}')
-	done
-
-	# Then any orphans (files on disk not referenced from MEMORY.md).
-	local file
-	for file in "$mem_dir"/*.md; do
-		[[ -f "$file" ]] || continue
-		fname="$(basename "$file")"
-		[[ "$fname" == "MEMORY.md" ]] && continue
-		local already_seen
-		already_seen=$(printf '%s' "$seen_json" | jq -r --arg f "$fname" '.[$f] // false')
-		[[ "$already_seen" == "true" ]] && continue
-		rec=$(curator_memory_parse_file "$file" false)
-		[[ -z "$rec" ]] && continue
-		all=$(printf '%s' "$all" | jq --argjson rec "$rec" '. + [$rec]')
-	done
-
-	printf '%s' "$all"
+				}
+			elif $slot == "" then
+				{
+					filename: $filename,
+					title: null, type: null, body: "",
+					exists: false, referenced: ($kind == "referenced"),
+					frontmatter_parsed: false
+				}
+			else
+				parsed($filename; $kind == "referenced"; $ARGS.named[$slot])
+			end
+		]
+	'
 }

@@ -138,11 +138,20 @@ STUB
   [ "$(printf '%s' "$all" | jq 'length')" -eq 4 ]
 }
 
-@test "has_finding_with_hash still matches an open finding after the batch read" {
+@test "open_hashes lists open findings and leaves out resolved ones" {
   _seed_finding "$KEY" "01FIND$(printf '%019d' 1)" "deadbeef" open
   _seed_finding "$KEY" "01FIND$(printf '%019d' 2)" "cafebabe" resolved
 
-  curator_storage_has_finding_with_hash "$KEY" "deadbeef" || return 1
-  ! curator_storage_has_finding_with_hash "$KEY" "cafebabe" || return 1
-  ! curator_storage_has_finding_with_hash "$KEY" "nomatch00"
+  [ "$(curator_storage_open_hashes "$KEY")" = "deadbeef" ]
+}
+
+@test "finding hashes keep their published values, one per input line" {
+  # A changed value reopens every finding already on disk as a new one.
+  run curator_finding_hashes <<'EOF'
+date_decayed|{"days_past":3,"matched_phrase":"2026-01-01","memory_file":"a.md"}
+p|{"memory_file":"café.md","x":"é"}
+EOF
+  [ "$status" -eq 0 ]
+  [ "${lines[0]}" = "2aa11af6dcc773aa" ]
+  [ "${lines[1]}" = "1ee21909961fa3e3" ]
 }
