@@ -156,16 +156,15 @@ curator_storage_load_findings() {
 	printf '%s' "$all"
 }
 
-# Return 0 if a finding with the given dedup hash already exists (open).
-curator_storage_has_finding_with_hash() {
+# Print the dedup hash of every open finding, one per line.
+#
+# Usage: curator_storage_open_hashes <key>
+curator_storage_open_hashes() {
 	local key="$1"
-	local hash="$2"
-	[[ -z "$key" || -z "$hash" ]] && return 1
-	local existing
-	existing=$(curator_storage_load_findings "$key")
-	printf '%s' "$existing" | jq -e --arg h "$hash" '
-		any(.[]; (.deduped_hash // "") == $h and (.status // "open") == "open")
-	' >/dev/null 2>&1
+	[[ -z "$key" ]] && return 0
+	curator_storage_load_findings "$key" | jq -r '
+		.[] | select((.status // "open") == "open") | .deduped_hash // empty
+	' 2>/dev/null
 }
 
 curator_storage_count_open() {
@@ -196,14 +195,14 @@ curator_storage_open_counts_by_kind() {
 
 # Hash a finding's identity-relevant fields. Two findings with the same
 # kind + memory_file + matched_phrase (where applicable) share a hash.
-# Plain shasum input — no expensive normalization needed.
-curator_finding_hash() {
-	local raw="$1"
-	if command -v shasum >/dev/null 2>&1; then
-		printf '%s' "$raw" | shasum -a 256 2>/dev/null | cut -c1-16
-	elif command -v sha256sum >/dev/null 2>&1; then
-		printf '%s' "$raw" | sha256sum 2>/dev/null | cut -c1-16
-	else
-		return 1
-	fi
+#
+# Reads one input per line and prints one hash per line, in order. It runs once
+# per scan rather than once per finding, because a store's findings are all
+# re-hashed on every session to find they already exist (ONL-235).
+curator_finding_hashes() {
+	python3 -c '
+import hashlib, sys
+for line in sys.stdin.buffer:
+    print(hashlib.sha256(line.rstrip(b"\n")).hexdigest()[:16])
+'
 }

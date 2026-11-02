@@ -253,16 +253,7 @@ NOW_TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 _write_finding() {
 	local kind="$1"
 	local payload="$2"
-	local hash_input
-	hash_input="${kind}|$(printf '%s' "$payload" | jq -cS '.')"
-	local hash
-	hash=$(curator_finding_hash "$hash_input") || hash=""
-	[[ -z "$hash" ]] && return 0
-
-	# Dedup: skip if an open finding with the same hash already exists.
-	if curator_storage_has_finding_with_hash "$PROJECT_KEY" "$hash"; then
-		return 0
-	fi
+	local hash="$3"
 
 	local id record
 	id=$(curator_ulid)
@@ -287,24 +278,50 @@ _write_finding() {
 	curator_emit "$event_type" "$SESSION_ID" "$event_payload"
 }
 
-# Convert each finding-array entry into a stored + emitted finding.
-_emit_kind_findings() {
-	local kind="$1" findings_json="$2"
-	local n
-	n=$(printf '%s' "$findings_json" | jq 'length' 2>/dev/null) || n=0
-	local i payload
-	for ((i = 0; i < n; i++)); do
-		payload=$(printf '%s' "$findings_json" | jq -c ".[$i]")
+FINDING_KINDS=()
+FINDING_PAYLOADS=()
+
+# jq -cS is part of the hash input, so changing it reopens every finding.
+_collect_findings() {
+	local kind="$1" findings_json="$2" payload
+	while IFS= read -r payload; do
 		[[ -z "$payload" || "$payload" == "null" ]] && continue
-		_write_finding "$kind" "$payload"
+		FINDING_KINDS+=("$kind")
+		FINDING_PAYLOADS+=("$payload")
+	done < <(printf '%s' "$findings_json" | jq -cS '.[]' 2>/dev/null)
+}
+
+# Every finding is re-checked on every session and nearly all already exist, so
+# the check has to cost the same at 30 findings as at 3. Loading the findings
+# directory and hashing per finding cost 1300ms at 28, on a 500ms budget
+# (ONL-235).
+_write_new_findings() {
+	[[ ${#FINDING_KINDS[@]} -eq 0 ]] && return 0
+
+	local hashes=() hash i
+	while IFS= read -r hash; do
+		hashes+=("$hash")
+	done < <(for ((i = 0; i < ${#FINDING_KINDS[@]}; i++)); do
+		printf '%s|%s\n' "${FINDING_KINDS[$i]}" "${FINDING_PAYLOADS[$i]}"
+	done | curator_finding_hashes)
+	[[ ${#hashes[@]} -eq ${#FINDING_KINDS[@]} ]] || return 0
+
+	local seen
+	seen=$'\n'"$(curator_storage_open_hashes "$PROJECT_KEY")"$'\n'
+	for ((i = 0; i < ${#FINDING_KINDS[@]}; i++)); do
+		hash="${hashes[$i]}"
+		case "$seen" in *$'\n'"$hash"$'\n'*) continue ;; esac
+		seen+="${hash}"$'\n'
+		_write_finding "${FINDING_KINDS[$i]}" "${FINDING_PAYLOADS[$i]}" "$hash"
 	done
 }
 
 if [[ "$CHEAP_ENABLED" != "false" ]]; then
-	_emit_kind_findings "date_decayed" "$DATE_FINDINGS"
-	_emit_kind_findings "path_broken" "$PATH_FINDINGS"
-	_emit_kind_findings "broken_index" "$BROKEN_INDEX"
-	_emit_kind_findings "orphaned_memory" "$ORPHANED"
+	_collect_findings "date_decayed" "$DATE_FINDINGS"
+	_collect_findings "path_broken" "$PATH_FINDINGS"
+	_collect_findings "broken_index" "$BROKEN_INDEX"
+	_collect_findings "orphaned_memory" "$ORPHANED"
+	_write_new_findings
 fi
 
 # ----------------------------------------------------------------------------

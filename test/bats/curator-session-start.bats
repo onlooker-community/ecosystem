@@ -166,6 +166,52 @@ _write_index() {
     | jq -e '.payload.findings_new == 0' >/dev/null
 }
 
+@test "the same finding twice in one scan is written once" {
+  _seed_memory "project_freeze.md" "project" "Date 2025-01-01, and again 2025-01-01."
+  _write_index '- [Freeze](project_freeze.md) — old date'
+
+  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  [ "$status" -eq 0 ]
+  [ "$(ls "${CURATOR_DIR}/findings"/*.json | wc -l | tr -d ' ')" -eq 1 ]
+}
+
+@test "a dedup pass costs the same however many findings exist" {
+  local shim="${BATS_TEST_TMPDIR}/shim" real starts="${BATS_TEST_TMPDIR}/jq-starts"
+  real=$(command -v jq)
+  mkdir -p "$shim"
+  cat >"${shim}/jq" <<EOF
+#!/usr/bin/env bash
+printf 'x\n' >>"$starts"
+exec "$real" "\$@"
+EOF
+  chmod +x "${shim}/jq"
+
+  _seed_many() {
+    local i
+    for i in $(seq "$1" "$2"); do
+      _seed_memory "project_m${i}.md" "project" "Date 2025-01-$(printf '%02d' "$i") in the past."
+    done
+    run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  }
+  _rescan_starts() {
+    rm -f "$starts"
+    run bash -c "printf '%s' '$(_input)' | PATH='${shim}':\"\$PATH\" '$HOOK'"
+    [ "$status" -eq 0 ]
+    wc -l <"$starts" | tr -d ' '
+  }
+
+  _seed_many 1 3
+  local few
+  few=$(_rescan_starts)
+
+  _seed_many 4 12
+  local many
+  many=$(_rescan_starts)
+
+  [ "$(ls "${CURATOR_DIR}/findings"/*.json | wc -l | tr -d ' ')" -ge 12 ]
+  [ "$few" -eq "$many" ]
+}
+
 @test "surfacer pluralizes finding count" {
   _seed_memory "project_a.md" "project" "Date 2025-01-01"
   _seed_memory "project_b.md" "project" "Date 2024-06-30"
