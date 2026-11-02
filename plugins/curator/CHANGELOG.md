@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.4](https://github.com/onlooker-community/ecosystem/compare/curator-v0.7.3...curator-v0.7.4) (2026-11-02)
+
+
+### Bug Fixes
+
+* **curator:** run the checks and quiet the noise :mute: ([#531](https://github.com/onlooker-community/ecosystem/issues/531)) ([7e8aa20](https://github.com/onlooker-community/ecosystem/commit/7e8aa20b44f8b53fa4be6f9580bf29cce8c332d5))
+
 ## [0.7.3](https://github.com/onlooker-community/ecosystem/compare/curator-v0.7.2...curator-v0.7.3) (2026-11-01)
 
 
