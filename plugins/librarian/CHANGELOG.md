@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.13](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.26.12...librarian-v0.26.13) (2026-11-01)
+
+
+### Bug Fixes
+
+* **skills:** give skill runs their real session ID :label: ([#529](https://github.com/onlooker-community/ecosystem/issues/529)) ([39a435c](https://github.com/onlooker-community/ecosystem/commit/39a435cc5f6f2d6e6897f0bb049aab4914e3d61f))
+
 ## [0.26.12](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.26.11...librarian-v0.26.12) (2026-11-01)
 
 

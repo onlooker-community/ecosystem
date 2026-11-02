@@ -2,6 +2,13 @@
 
 All notable changes to the Cartographer plugin are documented here.
 
+## [0.12.4](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.12.3...cartographer-v0.12.4) (2026-11-01)
+
+
+### Bug Fixes
+
+* **skills:** give skill runs their real session ID :label: ([#529](https://github.com/onlooker-community/ecosystem/issues/529)) ([39a435c](https://github.com/onlooker-community/ecosystem/commit/39a435cc5f6f2d6e6897f0bb049aab4914e3d61f))
+
 ## [0.12.3](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.12.2...cartographer-v0.12.3) (2026-11-01)
 
 
