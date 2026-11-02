@@ -9,10 +9,14 @@
 # All checks are intentionally cheap — string scans and file-exists
 # probes only. The LLM contradiction sweep lives in its own module.
 
-# Date check. Scans memory bodies for ISO-8601 dates (YYYY-MM-DD) and
-# flags any that are more than <grace_period_days> in the past, on the
-# theory that those are most likely decayed deadlines or stale "by date"
-# references the body never updated.
+# Date check. Scans memory bodies for ISO-8601 dates (YYYY-MM-DD) that follow a
+# word marking them as something the memory is waiting on, and flags any more
+# than <grace_period_days> in the past: a decayed deadline or a stale "by date"
+# the body never updated.
+#
+# The cue is what makes it decayed. A bare old date is usually a citation, like
+# "Confirmed 2026-09-20", and memories are told to record exactly that, so every
+# one that cited its evidence tripped this two weeks later (ONL-236).
 #
 # Usage: curator_check_dates <memories_json> <grace_period_days>
 # Output: JSON array of date_decayed finding payload candidates.
@@ -32,8 +36,8 @@ curator_check_dates() {
 	candidates=$(printf '%s' "$memories" | jq -c '
 		[ .[] | select(.exists and .body != null and .body != "")
 			| .filename as $fname
-			| (.body | [scan("[0-9]{4}-[0-9]{2}-[0-9]{2}")])
-			| .[]
+			| (.body | [scan("(?i)\\b(?:due|deadline|until|by|before|expires?|expiring|freeze|frozen|begins?|starts?|ships?|launch(?:es)?|scheduled|planned|targets?|targeting|revisit|sunset|cutoff|ends?)\\b[^.\\n0-9]{0,30}?([0-9]{4}-[0-9]{2}-[0-9]{2})")])
+			| .[][]
 			| { memory_file: $fname, matched_phrase: . }
 		]
 	')
@@ -73,6 +77,12 @@ PY
 #     host segment is preceded by `:`, the path segment is preceded by `/`.
 #   - Absolute paths ("/usr/bin/python3.11") don't match — the first
 #     segment is preceded by `/`.
+#   - "$ONLOOKER_DIR/logs/x.jsonl" and "~/x/y.md" aren't repo-relative.
+# The extension must start with a letter, so version lists like
+# 0.61.1/0.61.2 aren't paths. A candidate containing `..` is a git range, and
+# one whose top-level directory is absent here belongs to another repo: a store
+# describes neighboring repos too, and those read as broken paths (ONL-236).
+# A deleted top-level directory goes unflagged as a result.
 # That preserves the conservative "rename detection" target (in-repo
 # relative paths like scripts/legacy_ingest.py) without the URL and
 # absolute-path false positives Copilot review caught.
@@ -94,7 +104,7 @@ curator_check_paths() {
 	candidates=$(printf '%s' "$memories" | jq -c '
 		[ .[] | select(.exists and .body != null and .body != "")
 			| .filename as $fname
-			| (.body | [scan("(?<![A-Za-z0-9._/:-])[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)+\\.[A-Za-z0-9]+")])
+			| (.body | [scan("(?<![A-Za-z0-9._/:$~-])[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)+\\.[A-Za-z][A-Za-z0-9]*")])
 			| unique
 			| .[]
 			| { memory_file: $fname, candidate: . }
@@ -113,6 +123,10 @@ data = json.loads(sys.argv[2] or "[]")
 out = []
 for entry in data:
     candidate = entry["candidate"]
+    if ".." in candidate:
+        continue
+    if not os.path.exists(os.path.join(repo_root, candidate.split("/", 1)[0])):
+        continue
     abs_candidate = candidate if candidate.startswith("/") else os.path.join(repo_root, candidate)
     if os.path.exists(abs_candidate):
         continue

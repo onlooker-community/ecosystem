@@ -46,6 +46,7 @@ setup() {
       curator: {
         memory_store_path: $path,
         cheap_checks: { wall_clock_budget_ms: 600000 },
+        surfacer: { enabled: true },
         date_check: { date_grace_period_days: 7 }
       }
     }' > "${PROJECT_REPO}/.claude/settings.json"
@@ -144,7 +145,7 @@ _write_index() {
 }
 
 @test "session-start dedupes findings on repeated scans" {
-  _seed_memory "project_freeze.md" "project" "Date 2025-01-01 in the past."
+  _seed_memory "project_freeze.md" "project" "Due 2025-01-01, now in the past."
   _write_index '- [Freeze](project_freeze.md) — old date'
 
   run bash -c "printf '%s' '$(_input)' | '$HOOK'"
@@ -167,7 +168,7 @@ _write_index() {
 }
 
 @test "the same finding twice in one scan is written once" {
-  _seed_memory "project_freeze.md" "project" "Date 2025-01-01, and again 2025-01-01."
+  _seed_memory "project_freeze.md" "project" "Due 2025-01-01, and again due 2025-01-01."
   _write_index '- [Freeze](project_freeze.md) — old date'
 
   run bash -c "printf '%s' '$(_input)' | '$HOOK'"
@@ -189,7 +190,7 @@ EOF
   _seed_many() {
     local i
     for i in $(seq "$1" "$2"); do
-      _seed_memory "project_m${i}.md" "project" "Date 2025-01-$(printf '%02d' "$i") in the past."
+      _seed_memory "project_m${i}.md" "project" "Due 2025-01-$(printf '%02d' "$i"), now in the past."
     done
     run bash -c "printf '%s' '$(_input)' | '$HOOK'"
   }
@@ -212,9 +213,52 @@ EOF
   [ "$few" -eq "$many" ]
 }
 
+@test "the surfacer stays quiet by default while findings still land" {
+  jq 'del(.curator.surfacer)' "${PROJECT_REPO}/.claude/settings.json" >"${BATS_TEST_TMPDIR}/s.json"
+  cp "${BATS_TEST_TMPDIR}/s.json" "${PROJECT_REPO}/.claude/settings.json"
+  _seed_memory "project_freeze.md" "project" "Merge freeze begins 2026-03-05."
+  _write_index '- [Freeze](project_freeze.md) — freeze'
+
+  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  [ "$status" -eq 0 ]
+  ls "${CURATOR_DIR}/findings"/*.json | grep -q '\.json$'
+  grep -q '"curator.finding.date_decayed"' "$ONLOOKER_EVENTS_LOG"
+  [ "$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext // ""')" = "" ]
+}
+
+@test "dates that record when something happened are not findings" {
+  _seed_memory "project_measured.md" "project" \
+    "Confirmed 2025-01-01. Measured 2025-01-02, since 2025-01-03 and after 2025-01-04."
+  _write_index '- [M](project_measured.md) — measured'
+
+  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  [ "$status" -eq 0 ]
+  ! grep -q '"curator.finding.date_decayed"' "$ONLOOKER_EVENTS_LOG"
+}
+
+@test "dates a memory is waiting on are findings, in any case" {
+  _seed_memory "project_wait.md" "project" \
+    "Deadline: 2025-01-01. Revisit by 2025-01-02. Blocked until 2025-01-03."
+  _write_index '- [W](project_wait.md) — waiting'
+
+  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  [ "$status" -eq 0 ]
+  [ "$(grep -c '"curator.finding.date_decayed"' "$ONLOOKER_EVENTS_LOG")" -eq 3 ]
+}
+
+@test "path_broken leaves alone what is not a path in this repo" {
+  _seed_memory "reference_mixed.md" "reference" \
+    'Versions 0.61.1/0.61.2/0.61.3, range origin/main..HEAD, compare/v0.9.0...v0.9.1, $ONLOOKER_DIR/logs/hook-health.jsonl, and other-repo-only/db/orgs.ts.'
+  _write_index '- [Mixed](reference_mixed.md) — mixed'
+
+  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  [ "$status" -eq 0 ]
+  ! grep -q '"curator.finding.path_broken"' "$ONLOOKER_EVENTS_LOG"
+}
+
 @test "surfacer pluralizes finding count" {
-  _seed_memory "project_a.md" "project" "Date 2025-01-01"
-  _seed_memory "project_b.md" "project" "Date 2024-06-30"
+  _seed_memory "project_a.md" "project" "Due 2025-01-01"
+  _seed_memory "project_b.md" "project" "Due 2024-06-30"
   _write_index "$(printf '%s\n%s' \
     '- [A](project_a.md) — a' \
     '- [B](project_b.md) — b')"
@@ -302,8 +346,8 @@ BODY
   # summary would render as "1 date-decayed, 1 date-decayed" because
   # ULID-ordered findings can interleave kinds. The sort_by(.kind) fix
   # makes the summary aggregate correctly to "2 date-decayed".
-  _seed_memory "project_a.md" "project" "Stale date 2025-01-01"
-  _seed_memory "project_b.md" "project" "Older date 2024-06-30"
+  _seed_memory "project_a.md" "project" "Stale, due 2025-01-01"
+  _seed_memory "project_b.md" "project" "Older, due 2024-06-30"
   _write_index "$(printf '%s\n%s' \
     '- [A](project_a.md) — a' \
     '- [B](project_b.md) — b')"
@@ -348,11 +392,11 @@ BODY
   # too short to need truncating, and the ellipsis assertion failed.
   # This test is about truncation, not about how fast the host is.
   printf '%s\n' \
-    '{"curator":{"memory_store_path":"'"$MEM_DIR"'","cheap_checks":{"wall_clock_budget_ms":600000},"surfacer":{"max_pointer_chars":40}}}' \
+    '{"curator":{"memory_store_path":"'"$MEM_DIR"'","cheap_checks":{"wall_clock_budget_ms":600000},"surfacer":{"enabled":true,"max_pointer_chars":40}}}' \
     > "${PROJECT_REPO}/.claude/settings.json"
 
-  _seed_memory "project_a.md" "project" "Date 2025-01-01"
-  _seed_memory "project_b.md" "project" "Date 2024-06-30"
+  _seed_memory "project_a.md" "project" "Due 2025-01-01"
+  _seed_memory "project_b.md" "project" "Due 2024-06-30"
   _write_index "$(printf '%s\n%s' \
     '- [A](project_a.md) — a' \
     '- [B](project_b.md) — b')"
@@ -426,8 +470,9 @@ BODY
       curator: {
         memory_store_path: $path,
         cheap_checks: { wall_clock_budget_ms: 600000 },
+        surfacer: { enabled: true },
         date_check: { date_grace_period_days: 7 },
-        surfacer: { max_pointer_chars: "200 chars" }
+        surfacer: { enabled: true, max_pointer_chars: "200 chars" }
       }
     }' > "${PROJECT_REPO}/.claude/settings.json"
 

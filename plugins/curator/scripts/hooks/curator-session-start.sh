@@ -362,6 +362,13 @@ fi
 # Surfacer.
 # ----------------------------------------------------------------------------
 
+# Off until /curator review exists: the pointer would name a command nobody can
+# run, in every session, for findings nothing can clear (ONL-236).
+if [[ "$(curator_config_get '.curator.surfacer.enabled')" != "true" ]]; then
+	_emit ""
+	hook_health_exit 0
+fi
+
 SKIP_WHEN_ZERO=$(curator_config_get '.curator.surfacer.skip_when_zero')
 [[ -z "$SKIP_WHEN_ZERO" || "$SKIP_WHEN_ZERO" == "null" ]] && SKIP_WHEN_ZERO="true"
 

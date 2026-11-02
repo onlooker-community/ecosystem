@@ -2,7 +2,7 @@
 
 Maintenance layer for the user's typed auto-memory store.
 
-At every `SessionStart`, Curator runs cheap heuristic checks against the memories at `~/.claude/projects/<encoded-project>/memory/` — stale ISO-8601 dates past the grace period, broken path references, broken `MEMORY.md` index entries, and orphaned memory files — and surfaces findings as a one-line pointer to `/curator review`. Curator never edits the memory store directly.
+At every `SessionStart`, Curator runs cheap heuristic checks against the memories at `~/.claude/projects/<encoded-project>/memory/` — deadlines past the grace period, broken path references, broken `MEMORY.md` index entries, and orphaned memory files — and records findings. The one-line SessionStart pointer stays off (`surfacer.enabled`) until `/curator review` ships. Curator never edits the memory store directly.
 
 The weekly LLM-backed contradiction sweep described in [`docs/design.md`](docs/design.md) is a future capability — see the **Status** section below for what's actually shipped today.
 
@@ -12,7 +12,7 @@ Curator is a sibling plugin to [`ecosystem`](../../) and assumes the Onlooker ob
 
 | Hook | What Curator does |
 |------|---------------------|
-| `SessionStart` | Runs the four cheap-tier checks (date_decayed, path_broken, broken_index, orphaned_memory) against the memory store, inside a wall-clock budget (`cheap_checks.wall_clock_budget_ms`, default 500ms). Writes new findings under `~/.onlooker/curator/<project-key>/findings/` keyed by ULID, deduping repeat findings via `deduped_hash`. Injects a one-line `additionalContext` pointer when open findings exist. |
+| `SessionStart` | Runs the four cheap-tier checks (date_decayed, path_broken, broken_index, orphaned_memory) against the memory store, inside a wall-clock budget (`cheap_checks.wall_clock_budget_ms`, default 500ms). Writes new findings under `~/.onlooker/curator/<project-key>/findings/` keyed by ULID, deduping repeat findings via `deduped_hash`. Injects a one-line `additionalContext` pointer when open findings exist and `surfacer.enabled` is true. |
 
 ## Activation
 
