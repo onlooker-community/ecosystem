@@ -12,7 +12,7 @@ Curator is a sibling plugin to [`ecosystem`](../../) and assumes the Onlooker ob
 
 | Hook | What Curator does |
 |------|---------------------|
-| `SessionStart` | Runs the four cheap-tier checks (date_decayed, path_broken, broken_index, orphaned_memory) against the memory store, inside a wall-clock budget (`cheap_checks.wall_clock_budget_ms`, default 500ms). Writes new findings under `~/.onlooker/curator/<project-key>/findings/` keyed by ULID, deduping repeat findings via `deduped_hash`. Injects a one-line `additionalContext` pointer when open findings exist and `surfacer.enabled` is true. |
+| `SessionStart` | Runs the four cheap-tier checks (date_decayed, path_broken, broken_index, orphaned_memory) against the memory store, inside a wall-clock budget (`cheap_checks.wall_clock_budget_ms`, default 500ms). Writes new findings under `~/.onlooker/curator/<project-key>/findings/` keyed by ULID, deduping repeat findings via `deduped_hash`. Injects a one-line `additionalContext` pointer when open findings exist and `surfacer.enabled` is true. With the surfacer off, the hook returns at once and the scan runs in the background, so it adds nothing to session startup; its duration is on `curator.scan.complete`. |
 
 ## Activation
 

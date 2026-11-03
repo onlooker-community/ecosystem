@@ -20,7 +20,13 @@ PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 # shellcheck source=../lib/hook-health.sh
 source "${PLUGIN_ROOT}/scripts/lib/hook-health.sh"
-hook_health_register "curator-session-start"
+# The background scan re-runs this script, but it is not a SessionStart hook
+# run, so it writes no hook-health record: one would put the scan's time back
+# into the SessionStart span this detach exists to shorten (ONL-241). Its
+# duration is on curator.scan.complete instead.
+if [[ -z "${CURATOR_SCAN_DETACHED:-}" ]]; then
+	hook_health_register "curator-session-start"
+fi
 
 # Ecosystem substrate (validate-path.sh) lives in the sibling ecosystem plugin.
 # Resolution is shared rather than repeated: fourteen hooks each carried a
@@ -68,8 +74,22 @@ SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SE
 [[ -z "$CWD" ]] && CWD="$(pwd)"
 [[ -z "$SESSION_ID" ]] && SESSION_ID="unknown"
 
-REPO_ROOT=$(onlooker_project_repo_root "$CWD")
 curator_config_load "$CWD"
+
+# With the surfacer off, this hook's output is empty whatever the scan finds,
+# so nothing at SessionStart waits on it. The scan runs in the background, the
+# way cartographer's audit does, and the hook returns at once: it cost ~950ms
+# of every SessionStart for a result read only later (ONL-241). The child
+# re-runs this script with the same input. stdout and stderr go to /dev/null
+# because Claude Code waits for the hook's output to close.
+if [[ -z "${CURATOR_SCAN_DETACHED:-}" && "$(curator_config_get '.curator.surfacer.enabled')" != "true" ]]; then
+	CURATOR_SCAN_DETACHED=1 nohup bash "${BASH_SOURCE[0]}" <<<"$INPUT" >/dev/null 2>&1 &
+	disown 2>/dev/null || true
+	_emit ""
+	hook_health_exit 0
+fi
+
+REPO_ROOT=$(onlooker_project_repo_root "$CWD")
 
 onlooker_project_resolve "$CWD"
 PROJECT_KEY="$ONLOOKER_PROJECT_KEY"

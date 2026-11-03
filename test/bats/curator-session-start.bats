@@ -66,6 +66,22 @@ _seed_memory() {
     "$name" "$type" "$body" > "$file"
 }
 
+_surfacer_off() {
+  jq 'del(.curator.surfacer)' "${PROJECT_REPO}/.claude/settings.json" >"${BATS_TEST_TMPDIR}/s.json"
+  cp "${BATS_TEST_TMPDIR}/s.json" "${PROJECT_REPO}/.claude/settings.json"
+}
+
+# Every scan that gets past the project-key gate ends in scan.complete or
+# scan.errored, so that event is how a test knows the background scan is done.
+_wait_for_scan_end() {
+  local limit="${1:-15}" waited=0
+  until grep -qE '"event_type":"curator\.scan\.(complete|errored)"' "$ONLOOKER_EVENTS_LOG" 2>/dev/null; do
+    ((waited >= limit * 10)) && { echo "scan did not finish in ${limit}s" >&2; return 1; }
+    sleep 0.1
+    waited=$((waited + 1))
+  done
+}
+
 _write_index() {
   local entries="$1"   # newline-separated `- [Title](file.md) — hook` lines
   printf '%b\n' "$entries" > "${MEM_DIR}/MEMORY.md"
@@ -214,16 +230,51 @@ EOF
 }
 
 @test "the surfacer stays quiet by default while findings still land" {
-  jq 'del(.curator.surfacer)' "${PROJECT_REPO}/.claude/settings.json" >"${BATS_TEST_TMPDIR}/s.json"
-  cp "${BATS_TEST_TMPDIR}/s.json" "${PROJECT_REPO}/.claude/settings.json"
+  _surfacer_off
   _seed_memory "project_freeze.md" "project" "Merge freeze begins 2026-03-05."
   _write_index '- [Freeze](project_freeze.md) — freeze'
 
   run bash -c "printf '%s' '$(_input)' | '$HOOK'"
   [ "$status" -eq 0 ]
+  [ "$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext // ""')" = "" ]
+  _wait_for_scan_end
   ls "${CURATOR_DIR}/findings"/*.json | grep -q '\.json$'
   grep -q '"curator.finding.date_decayed"' "$ONLOOKER_EVENTS_LOG"
-  [ "$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext // ""')" = "" ]
+}
+
+# With the surfacer off nothing at SessionStart reads the scan, so the hook
+# returns without waiting on it (ONL-241). A clock that takes 3s per read makes
+# a scan that runs in the foreground take far longer than the bound below.
+@test "with the surfacer off the hook returns without waiting on the scan" {
+  _surfacer_off
+  _seed_memory "project_freeze.md" "project" "Merge freeze begins 2026-03-05."
+  _write_index '- [Freeze](project_freeze.md) — freeze'
+  local shim="${BATS_TEST_TMPDIR}/slow-clock"
+  mkdir -p "$shim"
+  printf '#!/usr/bin/env bash\nsleep 3\nexec %s "$@"\n' "$(command -v python3)" >"${shim}/python3"
+  chmod +x "${shim}/python3"
+
+  local started=$SECONDS
+  run bash -c "printf '%s' '$(_input)' | PATH='${shim}':\"\$PATH\" '$HOOK'"
+  [ "$status" -eq 0 ]
+  [ $((SECONDS - started)) -lt 3 ]
+  [ "$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')" = "" ]
+
+  _wait_for_scan_end 30
+  grep -q '"curator.finding.date_decayed"' "$ONLOOKER_EVENTS_LOG"
+}
+
+# The background scan is not a SessionStart hook run. A second record under
+# the same hook would put scan time back into the SessionStart span.
+@test "the background scan writes no hook-health record of its own" {
+  _surfacer_off
+  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  [ "$status" -eq 0 ]
+  _wait_for_scan_end
+
+  local health="${ONLOOKER_DIR}/logs/hook-health.jsonl"
+  [ "$(jq -s '[.[] | select(.hook == "curator-session-start" and .status != "started")] | length' "$health")" = "1" ]
+  [ "$(jq -s '[.[] | select(.hook == "curator-session-start" and .status == "started")] | length' "$health")" = "1" ]
 }
 
 @test "dates that record when something happened are not findings" {
@@ -371,6 +422,8 @@ BODY
 
   run bash -c "printf '%s' '$(_input)' | '$HOOK'"
   [ "$status" -eq 0 ]
+  # No surfacer in these settings, so the scan runs in the background.
+  _wait_for_scan_end
 
   # scan.complete uses skip_reason: disabled.
   grep '"event_type":"curator.scan.complete"' "$ONLOOKER_EVENTS_LOG" \
@@ -447,6 +500,8 @@ BODY
 
   run bash -c "printf '%s' '$(_input)' | '$HOOK'"
   [ "$status" -eq 0 ] || return 1
+  # No surfacer in these settings, so the scan runs in the background.
+  _wait_for_scan_end || return 1
 
   grep -q '"event_type":"curator.scan.started"' "$ONLOOKER_EVENTS_LOG" || return 1
   # Counted first: `grep | jq -e` on an empty match fails the same way a wrong
