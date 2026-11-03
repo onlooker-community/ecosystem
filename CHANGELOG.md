@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.15](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.14...ecosystem-v0.76.15) (2026-11-03)
+
+
+### Bug Fixes
+
+* **curator:** scan in the background while the surfacer is off :zap: ([#537](https://github.com/onlooker-community/ecosystem/issues/537)) ([7abe2b1](https://github.com/onlooker-community/ecosystem/commit/7abe2b175696f6c40a2101bc74450acd7cb34330))
+
 ## [0.76.14](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.13...ecosystem-v0.76.14) (2026-11-03)
 
 
