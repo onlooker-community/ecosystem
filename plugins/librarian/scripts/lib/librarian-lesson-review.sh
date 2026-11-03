@@ -26,6 +26,12 @@ librarian_lesson_passed_path() {
 # ...)` folds the parse guard and the status check into a single read of
 # each file, the same shape librarian_lesson_seen uses for the same reason.
 #
+# One jq reads every file, because SessionStart lists three statuses and one jq
+# per file cost ~2s at 82 lessons (ONL-238). jq reads each file as text and
+# parses it under `try`, since a parse error in an input would end the run. The
+# one failure that can't be caught there is a file jq can't open, which fails
+# the whole call before the filter runs, so that case re-reads file by file.
+#
 # Usage: librarian_lesson_list_by_status <key> <status>
 librarian_lesson_list_by_status() {
 	local key="$1"
@@ -36,20 +42,24 @@ librarian_lesson_list_by_status() {
 	dir="$(librarian_lessons_dir "$key")/proposals"
 	[[ -d "$dir" ]] || { printf '[]'; return 0; }
 
-	local f out entry merged
-	out='[]'
+	local f n=0 rawfiles=() files=()
 	for f in "$dir"/*.json; do
 		[[ -f "$f" ]] || continue
-		entry=$(jq -c --arg s "$status" 'select(type == "object" and .status == $s)' "$f" 2>/dev/null)
-		[[ -z "$entry" ]] && continue
-		# Merge into a separate variable, not directly into $out: `out=$(cmd)
-		# || continue` still assigns $out to cmd's (possibly empty) stdout
-		# before the `||` is ever evaluated, so a failed merge would silently
-		# wipe everything already gathered even with `continue` guarding it.
-		merged=$(jq -c --argjson e "$entry" '. + [$e]' <<<"$out" 2>/dev/null) || continue
-		out="$merged"
+		files+=("$f")
+		rawfiles+=(--rawfile "f${n}" "$f")
+		n=$((n + 1))
 	done
-	printf '%s' "$(jq -c 'sort_by(.created_at)' <<<"$out")"
+	[[ "$n" -eq 0 ]] && { printf '[]'; return 0; }
+
+	jq -cn --arg s "$status" --argjson n "$n" "${rawfiles[@]}" '
+		[range($n) as $i | $ARGS.named["f\($i)"] | try fromjson catch empty
+			| select(type == "object" and .status == $s)]
+		| sort_by(.created_at)
+	' 2>/dev/null && return 0
+
+	for f in "${files[@]}"; do
+		jq -cRs --arg s "$status" 'try fromjson catch empty | select(type == "object" and .status == $s)' "$f" 2>/dev/null
+	done | jq -cs 'sort_by(.created_at)'
 }
 
 # Pending is the queue the review walk drives, so it keeps its own name.
