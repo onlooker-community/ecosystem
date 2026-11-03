@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.14](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.13...ecosystem-v0.76.14) (2026-11-03)
+
+
+### Bug Fixes
+
+* **archivist:** parse the corpus once per injection :zap: ([#535](https://github.com/onlooker-community/ecosystem/issues/535)) ([7109996](https://github.com/onlooker-community/ecosystem/commit/7109996b6d31dd2a2a0f2e988414b1f226906698))
+
 ## [0.76.13](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.12...ecosystem-v0.76.13) (2026-11-03)
 
 
