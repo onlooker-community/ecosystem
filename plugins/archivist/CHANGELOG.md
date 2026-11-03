@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.7](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.9.6...archivist-v0.9.7) (2026-11-03)
+
+
+### Bug Fixes
+
+* **archivist:** parse the corpus once per injection :zap: ([#535](https://github.com/onlooker-community/ecosystem/issues/535)) ([7109996](https://github.com/onlooker-community/ecosystem/commit/7109996b6d31dd2a2a0f2e988414b1f226906698))
+
 ## [0.9.6](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.9.5...archivist-v0.9.6) (2026-11-01)
 
 
