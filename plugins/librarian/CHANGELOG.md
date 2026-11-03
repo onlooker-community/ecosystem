@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.14](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.26.13...librarian-v0.26.14) (2026-11-03)
+
+
+### Bug Fixes
+
+* **librarian:** list lessons in one read, not one per file :zap: ([#533](https://github.com/onlooker-community/ecosystem/issues/533)) ([4513084](https://github.com/onlooker-community/ecosystem/commit/45130847a6f1fe69101fcfb2f7d65163b928377b))
+
 ## [0.26.13](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.26.12...librarian-v0.26.13) (2026-11-01)
 
 

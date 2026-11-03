@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.13](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.12...ecosystem-v0.76.13) (2026-11-03)
+
+
+### Bug Fixes
+
+* **librarian:** list lessons in one read, not one per file :zap: ([#533](https://github.com/onlooker-community/ecosystem/issues/533)) ([4513084](https://github.com/onlooker-community/ecosystem/commit/45130847a6f1fe69101fcfb2f7d65163b928377b))
+
 ## [0.76.12](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.11...ecosystem-v0.76.12) (2026-11-02)
 
 
