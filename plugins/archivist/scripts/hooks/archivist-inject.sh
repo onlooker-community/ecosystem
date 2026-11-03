@@ -81,79 +81,67 @@ MAX_CHARS=$(archivist_config_int '.archivist.injection.max_chars' 2400)
 INCLUDE_DEAD_ENDS=$(archivist_config_get '.archivist.injection.include_dead_ends')
 INCLUDE_OPEN_QUESTIONS=$(archivist_config_get '.archivist.injection.include_open_questions')
 
-RANKED=$(archivist_storage_load_ranked "$PROJECT_KEY")
-TOTAL_ITEMS=$(printf '%s' "$RANKED" | jq 'length' 2>/dev/null) || TOTAL_ITEMS=0
+# The whole render is one jq over the ranked list. It used to run several jq
+# calls per rendered item, each re-parsing every artifact the project has:
+# ~780ms for 8 items at 1,221 artifacts (ONL-114). It runs inside the jq that
+# reads the artifacts, so the corpus is parsed once. The budgets count
+# characters, as ${#LINE} did under the UTF-8 locale sessions run in.
+OUTPUT=$(archivist_storage_load_ranked "$PROJECT_KEY" "$(cat <<'JQ'
+	def text: if . == null or . == false then "" elif type == "string" then . else tojson end;
 
-if [[ "$TOTAL_ITEMS" -eq 0 ]]; then
+	def kind_label:
+		if . == "decisions" then "decision"
+		elif . == "dead_ends" then "dead-end"
+		elif . == "open_questions" then "open-question"
+		else . end;
+	# null when the item has no summary, which skips it without counting.
+	def line:
+		((.summary // "") | text) as $summary
+		| if $summary == "" then null else
+			((.detail // "") | text) as $detail
+			| ((try ((.files // []) | join(", ")) catch "") // "") as $files
+			| (if .pinned == true then "- [pinned \((.kind // "" | text) | kind_label)] " else "- [\((.kind // "" | text) | kind_label)] " end)
+				+ $summary
+				+ (if $detail != "" and $detail != "null" then "\n  " + $detail else "" end)
+				+ (if $files != "" then "\n  files: " + $files else "" end)
+		end;
+
+	"Archivist — carried over from prior sessions in this repo (kind | summary):" as $header
+	| length as $total
+	| map(select(
+		($include_dead_ends == "true" or .kind != "dead_ends")
+		and ($include_open_questions == "true" or .kind != "open_questions")))
+	| reduce .[] as $item ({text: $header, chars: ($header | length), n: 0, done: false};
+		if .done then .
+		elif .n >= $max_items then .done = true
+		else ($item | line) as $line
+			| if $line == null then .
+			elif .chars + ($line | length) + 1 > $max_chars then .done = true
+			else .text += "\n" + $line | .chars += ($line | length) + 1 | .n += 1
+			end
+		end)
+	| {
+		hookSpecificOutput: {
+			hookEventName: "SessionStart",
+			additionalContext: (if .n == 0 then "" else
+				.text + "\n\n(Archivist injected \(.n)/\($total) items for project key \($project_key). Source: \($source).)"
+			end)
+		}
+	}
+	| tojson
+JQ
+)" -r \
+	--argjson max_items "$MAX_ITEMS" \
+	--argjson max_chars "$MAX_CHARS" \
+	--arg include_dead_ends "$INCLUDE_DEAD_ENDS" \
+	--arg include_open_questions "$INCLUDE_OPEN_QUESTIONS" \
+	--arg project_key "$PROJECT_KEY" \
+	--arg source "$SOURCE" 2>/dev/null) || OUTPUT=""
+
+if [[ -z "$OUTPUT" ]]; then
 	_emit ""
 	hook_health_exit 0
 fi
 
-# Filter out kinds the user disabled.
-if [[ "$INCLUDE_DEAD_ENDS" != "true" ]]; then
-	RANKED=$(printf '%s' "$RANKED" | jq 'map(select(.kind != "dead_ends"))')
-fi
-if [[ "$INCLUDE_OPEN_QUESTIONS" != "true" ]]; then
-	RANKED=$(printf '%s' "$RANKED" | jq 'map(select(.kind != "open_questions"))')
-fi
-
-# Build the rendered context one item at a time, respecting both budgets.
-HEADER="Archivist — carried over from prior sessions in this repo (kind | summary):"
-RENDERED="$HEADER"
-RUNNING_CHARS=${#HEADER}
-EMITTED=0
-
-COUNT=$(printf '%s' "$RANKED" | jq 'length')
-for ((i = 0; i < COUNT; i++)); do
-	[[ "$EMITTED" -ge "$MAX_ITEMS" ]] && break
-
-	ITEM=$(printf '%s' "$RANKED" | jq ".[$i]")
-	KIND=$(printf '%s' "$ITEM" | jq -r '.kind // ""')
-	SUMMARY=$(printf '%s' "$ITEM" | jq -r '.summary // ""')
-	DETAIL=$(printf '%s' "$ITEM" | jq -r '.detail // ""')
-	PINNED=$(printf '%s' "$ITEM" | jq -r '.pinned // false')
-	FILES=$(printf '%s' "$ITEM" | jq -r '(.files // []) | join(", ")')
-
-	[[ -z "$SUMMARY" ]] && continue
-
-	# Map directory-style kinds to human-readable labels.
-	LABEL="$KIND"
-	case "$KIND" in
-		decisions) LABEL="decision" ;;
-		dead_ends) LABEL="dead-end" ;;
-		open_questions) LABEL="open-question" ;;
-	esac
-
-	LINE=""
-	if [[ "$PINNED" == "true" ]]; then
-		LINE="- [pinned ${LABEL}] ${SUMMARY}"
-	else
-		LINE="- [${LABEL}] ${SUMMARY}"
-	fi
-	if [[ -n "$DETAIL" && "$DETAIL" != "null" ]]; then
-		LINE="${LINE}"$'\n'"  ${DETAIL}"
-	fi
-	if [[ -n "$FILES" ]]; then
-		LINE="${LINE}"$'\n'"  files: ${FILES}"
-	fi
-
-	LINE_LEN=$((${#LINE} + 1))
-	if (( RUNNING_CHARS + LINE_LEN > MAX_CHARS )); then
-		break
-	fi
-
-	RENDERED="${RENDERED}"$'\n'"${LINE}"
-	RUNNING_CHARS=$((RUNNING_CHARS + LINE_LEN))
-	EMITTED=$((EMITTED + 1))
-done
-
-if [[ "$EMITTED" -eq 0 ]]; then
-	_emit ""
-	hook_health_exit 0
-fi
-
-# Trailer with provenance + how to disable (helps future-you debug).
-RENDERED="${RENDERED}"$'\n\n'"(Archivist injected ${EMITTED}/${TOTAL_ITEMS} items for project key ${PROJECT_KEY}. Source: ${SOURCE}.)"
-
-_emit "$RENDERED"
+printf '%s\n' "$OUTPUT"
 hook_health_exit 0

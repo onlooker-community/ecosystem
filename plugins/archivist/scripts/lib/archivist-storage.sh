@@ -185,18 +185,40 @@ archivist_storage_write_artifact() {
 # Artifact read (for injection)
 # ============================================================================
 
+# Pinned artifacts first, then newest first. Shared by the single-pass read and
+# its per-kind fallback so the two cannot rank apart.
+_ARCHIVIST_RANK_JQ='
+	def rank($pinned):
+		($pinned.ids // []) as $pids
+		| map(. + { pinned: (.id as $id | $pids | index($id) != null) })
+		| sort_by([
+			(if .pinned then 0 else 1 end),
+			-((.updated_at // .created_at // "") | sub("[^0-9]"; ""; "g") | tonumber? // 0)
+		]);
+'
+
 # Read all artifacts for a given project key as a single JSON array, with each
 # entry augmented with a `kind` field. Output is sorted by `updated_at`
 # descending. Pinned IDs (from pinned.json) come first regardless of recency.
 #
-# Usage: items=$(archivist_storage_load_ranked <key>)
+# An optional jq filter runs on the ranked array in the same jq, with any
+# further arguments passed to jq before it (--arg and the like). That lets a
+# caller reduce the corpus without it being written out and parsed again,
+# which was ~90ms of archivist-inject at 1,221 artifacts (ONL-114). The filter
+# also runs on the empty array when there is nothing to read.
+#
+# Usage: items=$(archivist_storage_load_ranked <key> [filter [jq-args...]])
 archivist_storage_load_ranked() {
-	local key="$1"
-	[[ -z "$key" ]] && { echo '[]'; return 0; }
+	local key="${1:-}"
+	local then="${2:-.}"
+	local jq_args=("${@:3}")
+
+	_archivist_empty_ranked() { jq -n "${jq_args[@]+"${jq_args[@]}"}" "[] | ${then}"; }
+	[[ -z "$key" ]] && { _archivist_empty_ranked; return 0; }
 
 	local project_dir
 	project_dir=$(archivist_project_dir "$key")
-	[[ ! -d "$project_dir" ]] && { echo '[]'; return 0; }
+	[[ ! -d "$project_dir" ]] && { _archivist_empty_ranked; return 0; }
 
 	local pinned_file="$project_dir/pinned.json"
 	local pinned_json='{"ids":[]}'
@@ -218,9 +240,25 @@ archivist_storage_load_ranked() {
 	# at roughly 5s. It is also the same defect ecosystem-449.68 fixed one layer
 	# up in librarian's reader — this is the copy nobody re-grepped.
 	#
-	# Per kind rather than one call for everything: the kind comes from the
-	# directory, not the file, so batching across kinds would lose it.
-	local kind file
+	# One jq for every kind, which takes the kind from each file's directory.
+	# The per-kind reads below joined three arrays in a fourth jq, re-parsing
+	# the whole corpus to combine it: ~380ms at 1,221 artifacts against ~120ms
+	# for one pass (ONL-114). Files go in kind order, so ties sort as before.
+	local kind file all_files=()
+	for kind in decisions dead_ends open_questions; do
+		for file in "$project_dir/$kind"/*.json; do
+			[[ -f "$file" ]] && all_files+=("$file")
+		done
+	done
+	[[ ${#all_files[@]} -eq 0 ]] && { _archivist_empty_ranked; return 0; }
+
+	jq -n --argjson pinned "$pinned_json" "${jq_args[@]+"${jq_args[@]}"}" "${_ARCHIVIST_RANK_JQ}"'
+		[inputs | select(type == "object") | . + {kind: (input_filename | split("/") | .[-2])}]
+		| rank($pinned) | '"${then}" "${all_files[@]}" 2>/dev/null && return 0
+
+	# Per kind, as the fallback when the single pass fails: a malformed file
+	# aborts a batch read, and this narrows the loss to one kind before the
+	# per-file read below narrows it to the file.
 	local decisions_json='[]' dead_ends_json='[]' open_questions_json='[]'
 	for kind in decisions dead_ends open_questions; do
 		[[ -d "$project_dir/$kind" ]] || continue
@@ -262,13 +300,5 @@ archivist_storage_load_ranked() {
 	# and silently wrong, which is worse than slow. $pinned_json is a short id
 	# list and stays an argument.
 	printf '%s\n' "$decisions_json" "$dead_ends_json" "$open_questions_json" \
-		| jq -s --argjson pinned "$pinned_json" '
-		add
-		| ($pinned.ids // []) as $pids
-		| map(. + { pinned: (.id as $id | $pids | index($id) != null) })
-		| sort_by([
-			(if .pinned then 0 else 1 end),
-			-((.updated_at // .created_at // "") | sub("[^0-9]"; ""; "g") | tonumber? // 0)
-		])
-	'
+		| jq -s --argjson pinned "$pinned_json" "${jq_args[@]+"${jq_args[@]}"}" "${_ARCHIVIST_RANK_JQ}"' add | rank($pinned) | '"${then}"
 }
