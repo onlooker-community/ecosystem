@@ -1098,3 +1098,76 @@ _set_status() {
 	[ "$status" -eq 0 ] || return 1
 	[[ "$output" != *"promote:"* ]]
 }
+
+# Counts jq starts while still running the real jq.
+_count_list_jq_starts() {
+	local shim="${BATS_TEST_TMPDIR}/shim" real
+	real=$(command -v jq)
+	mkdir -p "$shim"
+	cat >"${shim}/jq" <<SHIM
+#!/usr/bin/env bash
+printf 'x\n' >>"${BATS_TEST_TMPDIR}/jq-starts"
+exec "$real" "\$@"
+SHIM
+	chmod +x "${shim}/jq"
+	rm -f "${BATS_TEST_TMPDIR}/jq-starts"
+	PATH="${shim}:${PATH}" librarian_lesson_list_pending "$PROJECT_KEY" >"${BATS_TEST_TMPDIR}/listed"
+	wc -l <"${BATS_TEST_TMPDIR}/jq-starts" | tr -d ' '
+}
+
+_seed_files() {
+	local i
+	for i in $(seq "$1" "$2"); do
+		printf '{"id":"l%s","status":"pending","created_at":"2026-01-01T00:00:%02dZ"}\n' "$i" "$i" \
+			>"${LESSONS_DIR}/proposals/l${i}.json"
+	done
+}
+
+# The hook lists three statuses on every SessionStart: one jq per proposal cost
+# ~2s at 82 lessons (ONL-238).
+@test "listing starts the same number of jq processes however many lessons exist" {
+	_review_setup
+	_seed_files 1 3
+	local small large
+	small=$(_count_list_jq_starts)
+	_seed_files 4 40
+	large=$(_count_list_jq_starts)
+
+	[ "$small" -eq "$large" ]
+	[ "$(jq length "${BATS_TEST_TMPDIR}/listed")" -eq 40 ]
+}
+
+@test "listing keeps the rest when jq cannot open one of the files" {
+	[[ "$(id -u)" -ne 0 ]] || skip "root reads through file modes"
+	_review_setup
+	_seed_files 1 3
+	chmod 000 "${LESSONS_DIR}/proposals/l2.json"
+
+	run librarian_lesson_list_pending "$PROJECT_KEY"
+	chmod 644 "${LESSONS_DIR}/proposals/l2.json"
+
+	[ "$status" -eq 0 ]
+	[ "$(jq -c 'map(.id)' <<<"$output")" = '["l1","l3"]' ]
+}
+
+@test "a file holding two documents is dropped, not half-read" {
+	_review_setup
+	_seed_files 1 2
+	printf '{"id":"a","status":"pending"}\n{"id":"b","status":"pending"}\n' \
+		>"${LESSONS_DIR}/proposals/two.json"
+
+	run librarian_lesson_list_pending "$PROJECT_KEY"
+	[ "$(jq -c 'map(.id)' <<<"$output")" = '["l1","l2"]' ]
+}
+
+@test "lessons with the same created_at keep filename order" {
+	_review_setup
+	local n
+	for n in 1 2 10; do
+		printf '{"id":"s%s","status":"pending","created_at":"2026-01-01T00:00:00Z"}\n' "$n" \
+			>"${LESSONS_DIR}/proposals/s${n}.json"
+	done
+
+	run librarian_lesson_list_pending "$PROJECT_KEY"
+	[ "$(jq -c 'map(.id)' <<<"$output")" = '["s1","s10","s2"]' ]
+}
