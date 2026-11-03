@@ -65,6 +65,18 @@ _repo_at() {
   MEM_DIR="${TEST_HOME}/.claude/projects/$(printf '%s' "$abs" | sed -E 's#[/.]#-#g')/memory"
 }
 
+# The surfacer is off in these tests, so the scan runs in the background
+# (ONL-241). Every scan past the project-key gate ends in scan.complete or
+# scan.errored.
+_wait_for_scan_end() {
+  local waited=0
+  until grep -qE '"event_type":"curator\.scan\.(complete|errored)"' "$ONLOOKER_EVENTS_LOG" 2>/dev/null; do
+    ((waited >= 150)) && { echo "scan did not finish in 15s" >&2; return 1; }
+    sleep 0.1
+    waited=$((waited + 1))
+  done
+}
+
 _input() {
   jq -cn --arg cwd "$REPO" --arg sid "sess-curator-encoding" \
     '{cwd: $cwd, source: "startup", session_id: $sid}'
@@ -83,6 +95,7 @@ _seed_orphan() {
   _seed_orphan
 
   run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  _wait_for_scan_end
   [ "$status" -eq 0 ] || return 1
 
   # Proof the store was found and read, not skipped.
@@ -96,6 +109,7 @@ _seed_orphan() {
   _seed_orphan
 
   run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  _wait_for_scan_end
   [ "$status" -eq 0 ] || return 1
 
   grep '"event_type":"curator.finding.orphaned_memory"' "$ONLOOKER_EVENTS_LOG" \
@@ -115,6 +129,7 @@ _seed_orphan() {
   [ ! -d "$MEM_DIR" ] || return 1
 
   run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  _wait_for_scan_end
   [ "$status" -eq 0 ] || return 1
 
   grep '"event_type":"curator.scan.complete"' "$ONLOOKER_EVENTS_LOG" \
