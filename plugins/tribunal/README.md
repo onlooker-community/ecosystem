@@ -21,7 +21,7 @@ Tribunal is a sibling plugin to [`ecosystem`](../../) and assumes the Onlooker o
 | Surface | What tribunal does |
 |---|---|
 | `/tribunal <task>` skill | Orchestrates a full Actor → Jury → Meta → Gate loop, retrying the Actor with Judge critiques until the gate passes or `max_iterations` is reached. Emits the full canonical event stream. |
-| `Stop` hook (opt-in) | When `tribunal.stop_hook.enabled` is true, runs a single advisory pass on the just-finished turn's output and writes a verdict for review on the next session. No retry — the main session has already ended. |
+| `Stop` hook (opt-in) | When `tribunal.stop_hook.enabled` is true, runs a single advisory pass on the just-finished turn's output and writes a verdict for review on the next session. No retry — the main session has already ended. The judge sees only the files this session's transcript shows it editing (Edit, Write, MultiEdit, NotebookEdit) that are still uncommitted, never another session's work in the same checkout; with `skip_if_no_file_changes` (default true), a session with none spends no model call. A file changed only through Bash is not attributed. |
 
 ## Default jury
 

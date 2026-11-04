@@ -7,7 +7,9 @@
 # Hook contract:
 #   - Always exits 0. Never blocks Stop.
 #   - Skips silently if disabled, no git context, no transcript, or skip_if_no_file_changes
-#     is true and the last turn did not modify files.
+#     is true and this session left no changed files in the worktree.
+#   - Judges only this session's files, taken from its transcript, never the
+#     whole worktree's diff (ecosystem-449.42).
 #   - Errors from `claude -p` are swallowed; worst case is "no verdict for this stop".
 #   - Recursion guard: exits immediately if TRIBUNAL_NESTED=1. This hook runs
 #     `claude` below, and that nested session's own Stop re-enters this hook —
@@ -62,6 +64,8 @@ source "${PLUGIN_ROOT}/scripts/lib/tribunal-ulid.sh"
 source "${PLUGIN_ROOT}/scripts/lib/tribunal-events.sh"
 # shellcheck source=../lib/tribunal-verdict.sh
 source "${PLUGIN_ROOT}/scripts/lib/tribunal-verdict.sh"
+# shellcheck source=../lib/tribunal-session-files.sh
+source "${PLUGIN_ROOT}/scripts/lib/tribunal-session-files.sh"
 
 INPUT=$(cat)
 hook_health_context "$INPUT"
@@ -148,12 +152,28 @@ if [[ -z "$TRANSCRIPT_PATH" || ! -f "$TRANSCRIPT_PATH" ]]; then
 	_done "no_transcript"
 fi
 
-# Skip if no files were modified since the last commit AND skip_if_no_file_changes is true.
+# This session's changes: the files its transcript shows it editing that are
+# still dirty in this worktree. The worktree can also hold another session's
+# work, and the whole-tree diff used to decide both whether the gate ran and
+# what the judge saw, so a session could be judged on its neighbor's code and an
+# idle one paid for a judge on every Stop (ecosystem-449.42).
+SESSION_FILES=()
+_EDITED_FILES=()
+while IFS= read -r _f; do
+	[[ -n "$_f" ]] && _EDITED_FILES+=("$_f")
+done < <(tribunal_session_edited_files "$TRANSCRIPT_PATH" "$WORKTREE_ROOT")
+if [[ ${#_EDITED_FILES[@]} -gt 0 ]]; then
+	while IFS= read -r _f; do
+		[[ -n "$_f" ]] && SESSION_FILES+=("$_f")
+	done < <(tribunal_dirty_files "$WORKTREE_ROOT" "${_EDITED_FILES[@]}")
+fi
+_ALL_DIRTY=$(tribunal_dirty_files "$WORKTREE_ROOT" | grep -c .) || _ALL_DIRTY=0
+FOREIGN_DIRTY=$((_ALL_DIRTY - ${#SESSION_FILES[@]}))
+[[ "$FOREIGN_DIRTY" -lt 0 ]] && FOREIGN_DIRTY=0
+
 SKIP_IF_CLEAN=$(tribunal_config_get '.tribunal.stop_hook.skip_if_no_file_changes')
-if [[ "$SKIP_IF_CLEAN" == "true" ]]; then
-	if git -C "$WORKTREE_ROOT" diff --quiet 2>/dev/null && git -C "$WORKTREE_ROOT" diff --cached --quiet 2>/dev/null; then
-		_done "no_file_changes"
-	fi
+if [[ "$SKIP_IF_CLEAN" == "true" && ${#SESSION_FILES[@]} -eq 0 ]]; then
+	_done "no_file_changes"
 fi
 
 if ! command -v claude >/dev/null 2>&1; then
@@ -173,7 +193,10 @@ SCORE_THRESHOLD=$(tribunal_config_get '.tribunal.session.score_threshold')
 TRANSCRIPT_TAIL=$(tail -c 30000 "$TRANSCRIPT_PATH" 2>/dev/null) || TRANSCRIPT_TAIL=""
 [[ -z "$TRANSCRIPT_TAIL" ]] && _done "empty_transcript"
 
-DIFF_SUMMARY=$(git -C "$WORKTREE_ROOT" diff --stat 2>/dev/null | tail -c 4000) || DIFF_SUMMARY=""
+DIFF_SUMMARY=""
+if [[ ${#SESSION_FILES[@]} -gt 0 ]]; then
+	DIFF_SUMMARY=$(tribunal_diff_summary "$WORKTREE_ROOT" "${SESSION_FILES[@]}" | tail -c 4000) || DIFF_SUMMARY=""
+fi
 
 PROMPT_FILE=$(mktemp -t tribunal-stop-prompt.XXXXXX 2>/dev/null) || PROMPT_FILE="/tmp/tribunal-stop-prompt.$$"
 
@@ -193,7 +216,7 @@ PROMPT_FILE=$(mktemp -t tribunal-stop-prompt.XXXXXX 2>/dev/null) || PROMPT_FILE=
 	printf '%s\n' 'This is advisory — the main session has already ended, no retry will happen. Be concise.'
 	printf '\n'
 	if [[ -n "$DIFF_SUMMARY" ]]; then
-		printf '%s\n' '---WORKING-TREE DIFF STAT---'
+		printf '%s\n' '---THIS SESSION DIFF STAT---'
 		printf '%s\n' "$DIFF_SUMMARY"
 		printf '%s\n' '---END DIFF STAT---'
 		printf '\n'
@@ -341,12 +364,16 @@ jq -n \
 	--arg session_id "$SESSION_ID" \
 	--arg outcome "$OUTCOME" \
 	--argjson verdict "$VERDICT_PAYLOAD" \
+	--argjson session_files "${#SESSION_FILES[@]}" \
+	--argjson foreign_dirty "$FOREIGN_DIRTY" \
 	'{
 		task_id: $task_id,
 		session_id: $session_id,
 		outcome: $outcome,
 		verdict: $verdict,
-		mode: "stop-advisory"
+		mode: "stop-advisory",
+		session_files: $session_files,
+		foreign_dirty_files: $foreign_dirty
 	}' > "${STOP_DIR}/stop-${SAFE_SESSION_ID}.json" 2>/dev/null || true
 
 _done
