@@ -65,6 +65,15 @@ STUB
 	cp "${MAIN}/.claude/settings.json" "${WT}/.claude/settings.json"
 }
 
+# The gate judges only files this session's transcript shows it editing
+# (ecosystem-449.42), so a change made here also has to be recorded there.
+_edited() {
+	jq -cn --arg p "$1" \
+		'{type: "assistant", message: {role: "assistant", content: [
+			{type: "tool_use", id: "toolu_1", name: "Edit", input: {file_path: $p}}
+		]}}' >> "$TRANSCRIPT"
+}
+
 _run_from() {
 	local input
 	input=$(jq -n --arg cwd "$1" --arg tp "$TRANSCRIPT" --arg sid "sess-wt-1" \
@@ -74,6 +83,7 @@ _run_from() {
 
 @test "a dirty worktree is judged even when the parent checkout is clean" {
 	printf 'work done in the worktree\n' >> "${WT}/README.md"
+	_edited "${WT}/README.md"
 	_run_from "$WT"
 	[ "$status" -eq 0 ] || return 1
 	[ -f "$CLAUDE_MARKER" ]
@@ -81,6 +91,7 @@ _run_from() {
 
 @test "the judge sees the worktree's diff, not the parent's" {
 	printf 'work done in the worktree\n' >> "${WT}/README.md"
+	_edited "${WT}/README.md"
 	_run_from "$WT"
 	[ -f "$CLAUDE_PROMPT" ] || return 1
 	# The diff stat names the file that actually changed.
