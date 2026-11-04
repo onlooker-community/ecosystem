@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.5](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.8.4...tribunal-v1.8.5) (2026-11-04)
+
+
+### Bug Fixes
+
+* **tribunal:** judge only this session's files at Stop :dart: ([#539](https://github.com/onlooker-community/ecosystem/issues/539)) ([b126c8a](https://github.com/onlooker-community/ecosystem/commit/b126c8acc471410b906ad3b1b3427273a2d8ab6b))
+
 ## [1.8.4](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.8.3...tribunal-v1.8.4) (2026-11-01)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.16](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.15...ecosystem-v0.76.16) (2026-11-04)
+
+
+### Bug Fixes
+
+* **tribunal:** judge only this session's files at Stop :dart: ([#539](https://github.com/onlooker-community/ecosystem/issues/539)) ([b126c8a](https://github.com/onlooker-community/ecosystem/commit/b126c8acc471410b906ad3b1b3427273a2d8ab6b))
+
 ## [0.76.15](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.14...ecosystem-v0.76.15) (2026-11-03)
 
 
