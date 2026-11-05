@@ -68,6 +68,18 @@ for ((i = 0; i < ${#targets[@]}; i++)); do
 	done
 done
 
+# A tree that disagrees with the lockfile fails tests in whichever component
+# uses the stale package, and the failure reads like a defect there: a stale
+# @onlooker-community/schema once read as "the schema refuses this reason" and
+# cost a wrongly filed bead (ONL-62). Say so before the suite runs. It's a
+# warning, not a gate: CI always runs npm ci and cannot drift, and a local run
+# should still run.
+if command -v node >/dev/null 2>&1 &&
+	! drift=$(node "${REPO_ROOT}/scripts/lint/check-dep-drift.mjs" --root "$REPO_ROOT" 2>&1); then
+	printf '%s\n' "$drift" >&2
+	echo "run-bats: warning: node_modules does not match package-lock.json; failures below may be stale dependencies. Run npm ci." >&2
+fi
+
 # Distinct per run, which is all the gate compares. Not an event id, so the
 # repo's ULID convention does not apply; the PID keeps concurrent runs apart.
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
