@@ -135,3 +135,27 @@ _seed_orphan() {
   grep '"event_type":"curator.scan.complete"' "$ONLOOKER_EVENTS_LOG" \
     | jq -e '.payload.outcome == "ok" and .payload.findings_new == 0' >/dev/null
 }
+
+@test "the fallback template follows CLAUDE_CONFIG_DIR when memory_store_path is unset" {
+  # The hook's own fallback fires only when config yields no template. It used
+  # to hardcode ${HOME}/.claude, so on a machine whose config dir is elsewhere
+  # (~/.claude-personal) a config-loading failure would audit the vestigial
+  # store and report it clean. An empty override is how config yields
+  # nothing: the merge drops a null one and keeps the shipped template.
+  _repo_at "${BATS_TEST_TMPDIR}/config-dir-repo"
+  jq -n '{ curator: { memory_store_path: "", cheap_checks: { wall_clock_budget_ms: 600000 } } }' \
+    > "${REPO}/.claude/settings.json"
+
+  local abs
+  abs=$(cd "$REPO" && pwd -P)
+  export CLAUDE_CONFIG_DIR="${TEST_HOME}/.claude-personal"
+  MEM_DIR="${CLAUDE_CONFIG_DIR}/projects/$(printf '%s' "$abs" | sed -E 's#[/.]#-#g')/memory"
+  _seed_orphan
+
+  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  _wait_for_scan_end
+  [ "$status" -eq 0 ] || return 1
+
+  grep '"event_type":"curator.finding.orphaned_memory"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e '.payload.memory_file == "user_orphan.md"' >/dev/null
+}
