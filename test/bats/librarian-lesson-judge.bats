@@ -108,7 +108,7 @@ STUB
 	# unnormalized set would silently mis-score the moment ecosystem-pht
 	# implements real weighted_mean.
 	local r
-	for r in lesson-promotion lesson-promotion-public; do
+	for r in lesson-promotion lesson-promotion-public lesson-promotion-public-auto; do
 		local sum
 		sum=$(librarian_lesson_rubric_get "$r" | jq '[.criteria[].weight] | add | . * 100 | round')
 		[ "$sum" -eq 100 ]
@@ -173,8 +173,8 @@ _LESSON_RUBRICS=(lesson-promotion lesson-promotion-public lesson-promotion-publi
 	run librarian_lesson_rubric_render_criteria "$(librarian_lesson_rubric_get lesson-promotion-public)"
 	[ "$status" -eq 0 ] || return 1
 	[ "$(printf '%s\n' "$output" | wc -l | tr -d ' ')" -eq 4 ] || return 1
-	[[ "$output" == *"- disclosure (weight 0.3, min_pass 0.9): "*"leak"* ]] || return 1
-	[[ "$output" == *"- grounding (weight 0.32, min_pass 0.7): "?* ]]
+	[[ "$output" == *"- disclosure (weight 0, min_pass 0.9): "*"leak"* ]] || return 1
+	[[ "$output" == *"- grounding (weight 0.45, min_pass 0.7): "?* ]]
 }
 
 @test "the criteria renderer still names a criterion a user rubric left undefined" {
@@ -821,6 +821,59 @@ PUBLIC_RUBRIC='{"id":"lesson-promotion-public","criteria":[
 		| .criteria[] | select(.name == "disclosure") | .min_pass' \
 		"${REPO_ROOT}/plugins/librarian/config.json")
 	[ "$floor" = "0.9" ]
+}
+
+# ONL-250. disclosure is a leak check that scores 1.0 whenever nothing leaks,
+# so at weight 0.30 it lifted every clean lesson's aggregate by 0.30 and the
+# threshold stopped measuring the lesson. Re-scoring the stored verdicts showed
+# every approval the unattended path ever made cleared its 0.85 only on that
+# lift. The floor alone carries the leak check; the weight is gone.
+_shipped_rubric() {
+	jq -c --arg id "$1" '.librarian.lesson_judging.rubrics[] | select(.id == $id)' \
+		"${REPO_ROOT}/plugins/librarian/config.json"
+}
+
+@test "disclosure keeps its floor but carries no weight in any shipped rubric" {
+	local rows
+	rows=$(jq -c '[.librarian.lesson_judging.rubrics[]
+		| {id, d: (.criteria[] | select(.name == "disclosure"))}]' \
+		"${REPO_ROOT}/plugins/librarian/config.json")
+	# Both public rubrics carry it; an empty list would pass vacuously.
+	[ "$(printf '%s' "$rows" | jq 'length')" -ge 2 ] || return 1
+	printf '%s' "$rows" | jq -e 'all(.d.weight == 0)' >/dev/null || return 1
+	printf '%s' "$rows" | jq -e 'all(.d.min_pass >= 0.9)' >/dev/null
+}
+
+@test "a clean lesson is judged on its substance under the shipped auto rubric" {
+	# The criterion scores the 2026-11-03 jury gave lesson 01M6FJ2S6P2M9EAAEB2VD8SWMG,
+	# approved at an aggregate of 0.874 and vetoed by hand for a wrong scope.
+	# On grounding, scope and generality alone it scores about 0.82.
+	local rubric verdicts agg out
+	rubric=$(_shipped_rubric lesson-promotion-public-auto)
+	[ -n "$rubric" ] || return 1
+	verdicts='[
+	  {"judge_type":"standard","score":0.87,"passed":true,"criterion_scores":{"grounding":0.82,"scope_accuracy":0.82,"generality":0.76,"disclosure":1.0}},
+	  {"judge_type":"adversarial","score":0.88,"passed":true,"criterion_scores":{"grounding":0.88,"scope_accuracy":0.82,"generality":0.74,"disclosure":1.0}}
+	]'
+	agg=$(librarian_lesson_aggregate "$verdicts" "$rubric")
+	awk -v a="$agg" 'BEGIN { exit !(a > 0.81 && a < 0.83) }' || return 1
+	out=$(librarian_lesson_gate "majority" "$verdicts" "$agg" \
+		"$(printf '%s' "$rubric" | jq -r .score_threshold)" "$rubric")
+	printf '%s' "$out" | jq -e '.passed == false and .reason == "below_threshold"' >/dev/null
+}
+
+@test "a leak still blocks under the shipped public rubric once disclosure has no weight" {
+	local rubric verdicts agg out
+	rubric=$(_shipped_rubric lesson-promotion-public)
+	verdicts='[
+	  {"judge_type":"standard","score":0.9,"passed":true,"criterion_scores":{"grounding":0.95,"scope_accuracy":0.95,"generality":0.9,"disclosure":0.4}},
+	  {"judge_type":"adversarial","score":0.9,"passed":true,"criterion_scores":{"grounding":0.95,"scope_accuracy":0.95,"generality":0.9,"disclosure":0.4}}
+	]'
+	agg=$(librarian_lesson_aggregate "$verdicts" "$rubric")
+	out=$(librarian_lesson_gate "majority" "$verdicts" "$agg" \
+		"$(printf '%s' "$rubric" | jq -r .score_threshold)" "$rubric")
+	printf '%s' "$out" | jq -e '.passed == false and .reason == "criterion_floor"' >/dev/null || return 1
+	printf '%s' "$out" | jq -e '.failed_criterion == "disclosure"' >/dev/null
 }
 
 @test "org and public rubrics differ by more than their gate policy" {
