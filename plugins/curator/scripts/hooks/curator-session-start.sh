@@ -108,7 +108,9 @@ curator_storage_write_manifest "$PROJECT_KEY" "$REMOTE_URL" "$REPO_ROOT" || true
 
 MEM_PATH_TEMPLATE=$(curator_config_get '.curator.memory_store_path')
 if [[ -z "$MEM_PATH_TEMPLATE" || "$MEM_PATH_TEMPLATE" == "null" ]]; then
-	MEM_PATH_TEMPLATE='${HOME}/.claude/projects/${CLAUDE_PROJECT_ENCODED}/memory'
+	# Same template config.json ships. curator_memory_resolve_path falls back
+	# to $HOME/.claude only when CLAUDE_CONFIG_DIR is unset.
+	MEM_PATH_TEMPLATE='${CLAUDE_CONFIG_DIR}/projects/${CLAUDE_PROJECT_ENCODED}/memory'
 fi
 # Claude Code exports CLAUDE_PROJECT_ENCODED to hook processes, but not
 # always, and curator_memory_resolve_path bails to empty rather than
