@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.17](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.16...ecosystem-v0.76.17) (2026-11-05)
+
+
+### Bug Fixes
+
+* **curator:** resolve the fallback store under CLAUDE_CONFIG_DIR :compass: ([#542](https://github.com/onlooker-community/ecosystem/issues/542)) ([ca807c1](https://github.com/onlooker-community/ecosystem/commit/ca807c1aa27cbc794d2f513de0437abaa045af24))
+
 ## [0.76.16](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.15...ecosystem-v0.76.16) (2026-11-04)
 
 
