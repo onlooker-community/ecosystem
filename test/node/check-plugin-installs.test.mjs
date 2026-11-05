@@ -216,8 +216,19 @@ function writeMarketplace(configDir, market, versions) {
   return root;
 }
 
+/**
+ * Git for the fixture repos only, severed from the developer's own config.
+ *
+ * Otherwise a developer's `commit.gpgsign = true` reaches these throwaway
+ * commits, and they fail whenever the signing agent is locked (ONL-135). Same
+ * isolation test/helpers/setup.bash gives the bats suite, scoped to these
+ * calls rather than the process, so the linter under test still sees the
+ * real environment.
+ */
 function git(cwd, ...args) {
-  const r = spawnSync('git', args, { cwd, encoding: 'utf8' });
+  const env = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null' };
+  delete env.XDG_CONFIG_HOME;
+  const r = spawnSync('git', args, { cwd, encoding: 'utf8', env });
   if (r.status !== 0) throw new Error(`git ${args.join(' ')}: ${r.stderr}`);
   return r.stdout.trim();
 }
@@ -593,5 +604,49 @@ describe('check-plugin-installs --marketplace scope filter (ecosystem-449.59)', 
     assert.equal(r.code, 1);
     assert.match(r.stderr, /lineage@onlooker-community/);
     assert.match(r.stderr, /mise@meaganewaller-marketplace/);
+  });
+});
+
+// ONL-135. CI has no signing configured, so only a developer who signs ever
+// saw the fixture commits fail - and then only while their signing agent was
+// locked. This builds that developer's config on purpose, so CI sees it too.
+describe('check-plugin-installs fixture repos', () => {
+  it("commit without the developer's signing config", () => {
+    const home = mkdtempSync(join(tmpdir(), 'check-plugin-installs-home-'));
+    writeFileSync(
+      join(home, '.gitconfig'),
+      [
+        '[user]',
+        '\tsigningkey = ssh-ed25519 AAAAnot-a-key',
+        '[gpg]',
+        '\tformat = ssh',
+        // A signer that always refuses, the way a locked 1Password agent does.
+        '[gpg "ssh"]',
+        '\tprogram = /usr/bin/false',
+        '[commit]',
+        '\tgpgsign = true',
+        '',
+      ].join('\n'),
+    );
+
+    const saved = {};
+    const ambient = { HOME: home, XDG_CONFIG_HOME: undefined, GIT_CONFIG_GLOBAL: undefined };
+    for (const [key, value] of Object.entries(ambient)) {
+      saved[key] = process.env[key];
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    try {
+      const s = scaffold();
+      const clone = join(s.root, 'clone');
+      mkdirSync(clone);
+      const origin = makeClone(clone, join(s.root, 'origin'));
+      assert.doesNotThrow(() => advanceOrigin(origin));
+    } finally {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
   });
 });
