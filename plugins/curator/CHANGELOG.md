@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.6](https://github.com/onlooker-community/ecosystem/compare/curator-v0.7.5...curator-v0.7.6) (2026-11-05)
+
+
+### Bug Fixes
+
+* **curator:** resolve the fallback store under CLAUDE_CONFIG_DIR :compass: ([#542](https://github.com/onlooker-community/ecosystem/issues/542)) ([ca807c1](https://github.com/onlooker-community/ecosystem/commit/ca807c1aa27cbc794d2f513de0437abaa045af24))
+
 ## [0.7.5](https://github.com/onlooker-community/ecosystem/compare/curator-v0.7.4...curator-v0.7.5) (2026-11-03)
 
 
