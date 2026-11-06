@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.7](https://github.com/onlooker-community/ecosystem/compare/curator-v0.7.6...curator-v0.7.7) (2026-11-06)
+
+
+### Performance Improvements
+
+* **curator:** stop the scan budget paying to read its own clock :stopwatch: ([#550](https://github.com/onlooker-community/ecosystem/issues/550)) ([fd6222c](https://github.com/onlooker-community/ecosystem/commit/fd6222cb6fcfd750bfa05bf990ab05f5221092cd))
+
 ## [0.7.6](https://github.com/onlooker-community/ecosystem/compare/curator-v0.7.5...curator-v0.7.6) (2026-11-05)
 
 

@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.76.19](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.18...ecosystem-v0.76.19) (2026-11-06)
+
+
+### Bug Fixes
+
+* **scribe:** stop stamping local time with a UTC suffix :clock3: ([#552](https://github.com/onlooker-community/ecosystem/issues/552)) ([15df6a7](https://github.com/onlooker-community/ecosystem/commit/15df6a71a673c20cffd876cef31d5c71cc2ab246))
+
+
+### Performance Improvements
+
+* **curator:** stop the scan budget paying to read its own clock :stopwatch: ([#550](https://github.com/onlooker-community/ecosystem/issues/550)) ([fd6222c](https://github.com/onlooker-community/ecosystem/commit/fd6222cb6fcfd750bfa05bf990ab05f5221092cd))
+
 ## [0.76.18](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.17...ecosystem-v0.76.18) (2026-11-06)
 
 

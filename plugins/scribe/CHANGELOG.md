@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.4](https://github.com/onlooker-community/ecosystem/compare/scribe-v0.10.3...scribe-v0.10.4) (2026-11-06)
+
+
+### Bug Fixes
+
+* **scribe:** stop stamping local time with a UTC suffix :clock3: ([#552](https://github.com/onlooker-community/ecosystem/issues/552)) ([15df6a7](https://github.com/onlooker-community/ecosystem/commit/15df6a71a673c20cffd876cef31d5c71cc2ab246))
+
 ## [0.10.3](https://github.com/onlooker-community/ecosystem/compare/scribe-v0.10.2...scribe-v0.10.3) (2026-11-01)
 
 
