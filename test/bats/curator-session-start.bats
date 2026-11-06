@@ -242,9 +242,35 @@ EOF
   grep -q '"curator.finding.date_decayed"' "$ONLOOKER_EVENTS_LOG"
 }
 
+# The budget gate reads the clock before every phase. Reading it by starting
+# python3 cost ~20ms a read, ~100ms of a ~350ms scan, so the budget was mostly
+# spent measuring itself (ONL-244). A python3 that is slow only when asked the
+# time trips a 2s budget by the fourth gate if the clock still runs it.
+@test "reading the budget clock does not start python3" {
+  _seed_memory "project_freeze.md" "project" "Merge freeze begins 2026-03-05."
+  _write_index '- [Freeze](project_freeze.md) — freeze'
+  jq '.curator.cheap_checks.wall_clock_budget_ms = 2000' "${PROJECT_REPO}/.claude/settings.json" >"${BATS_TEST_TMPDIR}/s.json"
+  cp "${BATS_TEST_TMPDIR}/s.json" "${PROJECT_REPO}/.claude/settings.json"
+  local shim="${BATS_TEST_TMPDIR}/slow-clock" real
+  real=$(command -v python3)
+  mkdir -p "$shim"
+  cat >"${shim}/python3" <<EOF
+#!/usr/bin/env bash
+case "\$*" in *time.time*) sleep 0.6 ;; esac
+exec "$real" "\$@"
+EOF
+  chmod +x "${shim}/python3"
+
+  run bash -c "printf '%s' '$(_input)' | PATH='${shim}':\"\$PATH\" '$HOOK'"
+  [ "$status" -eq 0 ]
+  grep '"event_type":"curator.scan.complete"' "$ONLOOKER_EVENTS_LOG" \
+    | jq -e '.payload.outcome == "ok"' >/dev/null
+  grep -q '"curator.finding.date_decayed"' "$ONLOOKER_EVENTS_LOG"
+}
+
 # With the surfacer off nothing at SessionStart reads the scan, so the hook
-# returns without waiting on it (ONL-241). A clock that takes 3s per read makes
-# a scan that runs in the foreground take far longer than the bound below.
+# returns without waiting on it (ONL-241). A python3 that takes 3s per start
+# makes a scan that runs in the foreground take far longer than the bound below.
 @test "with the surfacer off the hook returns without waiting on the scan" {
   _surfacer_off
   _seed_memory "project_freeze.md" "project" "Merge freeze begins 2026-03-05."

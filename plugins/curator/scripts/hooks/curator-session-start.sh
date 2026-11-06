@@ -171,11 +171,19 @@ fi
 # ----------------------------------------------------------------------------
 
 CHEAP_ENABLED=$(curator_config_get '.curator.cheap_checks.enabled')
-SCAN_START_MS=$(python3 -c 'import time; print(int(time.time() * 1000))' 2>/dev/null) \
-	|| SCAN_START_MS=$(($(date +%s) * 1000))
-SCAN_START_S=$((SCAN_START_MS / 1000))
+
+# The budget gate reads this before every phase. It used to start python3 for
+# each read, ~20ms apiece and ~100ms of a ~350ms scan (ONL-244). hook-health.sh
+# is always sourced above and carries the cheapest clock the shell has.
+_curator_now_ms() {
+	_hook_health_now_ms
+}
 
 curator_emit "curator.scan.started" "$SESSION_ID" "$(jq -cn '{ mode: "cheap" }')"
+
+# Started after scan.started, not before: that emit starts node, ~43ms the
+# budget is not meant to bound and that the checks cannot spend (ONL-244).
+SCAN_START_MS=$(_curator_now_ms)
 
 if [[ "$CHEAP_ENABLED" == "false" ]]; then
 	# Cheap tier explicitly off — emit scan.complete with skip_reason
@@ -202,11 +210,6 @@ fi
 # under set -u) or, for a digit-leading value like "600000ms", leaving
 # _curator_over_budget answering "not over budget" forever (ONL-132).
 BUDGET_MS=$(curator_config_int '.curator.cheap_checks.wall_clock_budget_ms' 500)
-
-_curator_now_ms() {
-	python3 -c 'import time; print(int(time.time() * 1000))' 2>/dev/null \
-		|| echo "$(( $(date +%s) * 1000 ))"
-}
 
 _curator_over_budget() {
 	local now elapsed
