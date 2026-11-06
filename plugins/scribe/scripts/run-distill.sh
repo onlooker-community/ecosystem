@@ -85,6 +85,12 @@ trap 'lock_release "$LOCK_FILE"' EXIT
 
 scribe_config_load "$CWD"
 
+# UTC, so a line here can be matched against the event log's envelope without a
+# mental offset. Without -u the Z was a literal on local time (ONL-122).
+_scribe_log_stamp() {
+	date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || printf 'unknown'
+}
+
 _rc=0
 output_path=$(scribe_distill "$SESSION_ID" "$CWD" "$TRANSCRIPT_PATH") || _rc=$?
 
@@ -94,13 +100,13 @@ if [[ $_rc -ne 0 ]]; then
 	# reports itself as scribe.distill.skipped before returning.
 	if [[ $_rc -ne 2 && $_rc -ne 3 ]]; then
 		printf '%s scribe: distillation failed for session %s (rc=%s)\n' \
-			"$(date '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || printf 'unknown')" \
+			"$(_scribe_log_stamp)" \
 			"$SESSION_ID" "$_rc" >&2
 	fi
 	exit 0
 fi
 
 [[ -n "$output_path" ]] && printf '%s scribe: intent document written -> %s\n' \
-	"$(date '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || printf 'unknown')" "$output_path" >&2
+	"$(_scribe_log_stamp)" "$output_path" >&2
 
 exit 0

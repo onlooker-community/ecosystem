@@ -99,8 +99,11 @@ _scribe_format_document() {
 	local captured_prompt="${4:-}"
 	local date_str
 	date_str=$(date '+%Y-%m-%d' 2>/dev/null) || date_str="unknown"
+	# Local time for a person reading the document, on the same clock as the
+	# date above. %z names the offset; the literal Z this used to end in claimed
+	# UTC for a local value (ONL-122).
 	local timestamp
-	timestamp=$(date '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null) || timestamp="unknown"
+	timestamp=$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null) || timestamp="unknown"
 
 	local summary problem decisions_json tradeoffs_json constraints_json out_of_scope_json
 	summary=$(printf '%s' "$intent_json" | jq -r '.summary // ""' 2>/dev/null) || summary=""
