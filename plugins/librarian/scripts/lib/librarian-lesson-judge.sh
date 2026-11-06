@@ -86,10 +86,11 @@ librarian_lesson_gate() {
 
 	# Per-criterion floors, computed up front. The precedence below is unchanged
 	# — jury, then aggregate, then floor — but a violated floor now names itself
-	# on whichever reason wins. `disclosure` carries weight 0.30, so the *worst*
-	# leaks drag the aggregate under the threshold and used to land as a bare
-	# `below_threshold`, while borderline ones got named: the diagnostic was
-	# absent exactly where it mattered most.
+	# on whichever reason wins. `disclosure` used to carry weight 0.30, so the
+	# *worst* leaks dragged the aggregate under the threshold and landed as a
+	# bare `below_threshold`, while borderline ones got named: the diagnostic
+	# was absent exactly where it mattered most. It carries no weight now
+	# (ONL-250), but a rubric that weights a floored criterion still can.
 	#
 	# The floor is the *lowest* score among the judges that scored it, not their
 	# mean. A floor means nobody may be below it; using the mean let one judge's

@@ -142,11 +142,18 @@ For `public`, add the disclosure lens using the already-shipped
 
 | criterion | weight | `min_pass` | asks |
 |---|---|---|---|
-| `disclosure` | 0.30 | **0.9** | leaks a secret or identity, or advocates a harmful practice? |
+| `disclosure` | 0 | **0.9** | leaks a secret or identity, or advocates a harmful practice? |
 
 The high floor is deliberate. Correctness rots and `applies_to` retires it;
 harm does not. A leaked credential never expires on its own, so disclosure gets
 a floor a strong weighted mean cannot average away.
+
+It carries no weight, because the floor is the whole check (ONL-250). The
+criterion scores 1.0 whenever nothing leaks, so a weight only lifted every
+clean lesson's aggregate, by 0.30 at the original weight. Re-scoring the stored
+verdicts showed that every approval the unattended path had made cleared its
+0.85 threshold only on that lift. So `public` scores a lesson with the same
+weights as `org`, and what makes it stricter is the disclosure floor.
 
 **State layout**, under librarian's existing project key:
 
