@@ -58,7 +58,11 @@ setup() {
 #!/usr/bin/env bash
 prompt=$(cat)
 [[ -n "${CLAUDE_CALL_LOG:-}" ]] && echo call >> "$CLAUDE_CALL_LOG"
-if [[ "$prompt" == *"marker-baddesc"* ]]; then
+[[ -n "${CLAUDE_PROMPT_LOG:-}" ]] && printf '%s\n' "$prompt" >> "$CLAUDE_PROMPT_LOG"
+if [[ "$prompt" =~ marker-rel-([a-z]+)-([a-z_]+) ]]; then
+  printf '{"type":"feedback","title":"Related %s","body":"Body for %s.","confidence":0.88,"relation":{"file":"%s.md","kind":"%s"}}' \
+    "${BASH_REMATCH[1]}" "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[1]}"
+elif [[ "$prompt" == *"marker-baddesc"* ]]; then
   printf '%s' '{"type":"feedback","title":"Bad description","body":"Body survives a malformed description.","description":42,"confidence":0.88}'
 elif [[ "$prompt" == *"marker-stub"* ]]; then
   printf '%s' '{"type":"feedback","title":"Prefer explicit config","body":"Prefer explicit configuration over inference.\n\n**Why:** Stated in review.\n**How to apply:** Require a config key rather than guessing.","description":"require a config key instead of inferring a setting","confidence":0.88}'
@@ -505,4 +509,103 @@ STUB
 	[ "$status" -eq 0 ] || return 1
 	[ "$(wc -l < "$CLAUDE_CALL_LOG" | tr -d ' ')" -ge 1 ] || return 1
 	[ ! -f "$queued" ]
+}
+
+# ---------------------------------------------------------------------------
+# The classifier's reading of the memory index (ONL-252)
+# ---------------------------------------------------------------------------
+
+# The token scan cannot see a memory restated in other words: the classifier
+# rewrites every artifact, and two proposals that repeated an existing memory
+# scored 0.19 and 0.23 against a 0.45 merge threshold. So the classifier is
+# shown MEMORY.md and names the memory itself.
+_seed_store() {
+	export CLAUDE_CONFIG_DIR="${BATS_TEST_TMPDIR}/config"
+	export CLAUDE_PROJECT_ENCODED="-onl252-project"
+	MEM_DIR="${CLAUDE_CONFIG_DIR}/projects/${CLAUDE_PROJECT_ENCODED}/memory"
+	mkdir -p "$MEM_DIR"
+	printf -- '---\nname: existing\n---\n\nUnrelated words entirely.\n' > "${MEM_DIR}/existing.md"
+	printf '# Memory\n\n- [Existing rule](existing.md) — what the store already holds\n' \
+		> "${MEM_DIR}/MEMORY.md"
+}
+
+# Seeds an artifact whose summary steers the stub to a relation, then runs the
+# worker over the queued window.
+_classify_with_relation() {
+	_seed_artifact decisions "01JBXQ2K3M4N5P6Q7R8S9T0X" "marker-rel-${1}-${2}: a rule" \
+		"We decided on a rule. Because the earlier path failed twice, we now require it."
+	run _run_hook
+	local queued
+	queued=$(find "$QUEUE_DIR" -name '*.json' -type f | head -1)
+	[ -n "$queued" ] || return 1
+	run bash "$WORKER" "$queued"
+	[ "$status" -eq 0 ] || return 1
+	PROPOSAL=$(find "${LIBRARIAN_DIR}/proposals" -name '*.json' -type f 2>/dev/null | head -1)
+}
+
+@test "the classifier prompt lists existing memories only when given an index" {
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-classifier.sh"
+	run librarian_classifier_build_prompt '{"kind":"decision","summary":"s"}' '- [A](a.md) — hook'
+	[[ "$output" == *"<existing_memories>"*"- [A](a.md) — hook"*"</existing_memories>"* ]] || return 1
+	[[ "$output" == *'"contradicts"'* ]] || return 1
+
+	run librarian_classifier_build_prompt '{"kind":"decision","summary":"s"}'
+	[[ "$output" != *"existing_memories"* ]] || return 1
+	[[ "$output" != *'"relation"'* ]]
+}
+
+@test "the worker hands the classifier the store's index lines" {
+	_seed_store
+	export CLAUDE_PROMPT_LOG="${BATS_TEST_TMPDIR}/prompt"
+	_classify_with_relation extends existing || return 1
+	# Appended, not overwritten: the worker's lesson stage makes calls of its
+	# own after classifying, and the last prompt is not the classifier's.
+	grep -qF -- "- [Existing rule](existing.md) — what the store already holds" "$CLAUDE_PROMPT_LOG" || return 1
+	! grep -q '^# Memory' "$CLAUDE_PROMPT_LOG"
+}
+
+@test "a contradiction the classifier names is flagged against that memory" {
+	_seed_store
+	_classify_with_relation contradicts existing || return 1
+	[ -n "$PROPOSAL" ] || return 1
+	jq -e '.conflict_state == "conflict_candidate" and .conflict_with == ["existing.md"]' "$PROPOSAL" >/dev/null
+}
+
+@test "an extension the classifier names is a merge candidate" {
+	_seed_store
+	_classify_with_relation extends existing || return 1
+	[ -n "$PROPOSAL" ] || return 1
+	jq -e '.conflict_state == "merge_candidate" and .conflict_with == ["existing.md"]' "$PROPOSAL" >/dev/null
+}
+
+@test "a duplicate the classifier names is dropped before it reaches the queue" {
+	_seed_store
+	_classify_with_relation duplicate existing || return 1
+	[ -z "$PROPOSAL" ] || { echo "a duplicate was queued: $PROPOSAL"; return 1; }
+	grep '"event_type":"librarian.candidate.dropped"' "$ONLOOKER_EVENTS_LOG" \
+		| jq -e -s 'any(.payload.reason == "duplicate")' >/dev/null
+}
+
+# The model invents filenames, often one slugged from its own title. A name the
+# store does not hold must not flag, and above all must not drop, a proposal.
+@test "a relation naming a memory the store does not hold is ignored" {
+	_seed_store
+	_classify_with_relation duplicate invented || return 1
+	[ -n "$PROPOSAL" ] || { echo "a made-up duplicate dropped the proposal"; return 1; }
+	jq -e '.conflict_state == "none" and .conflict_with == []' "$PROPOSAL" >/dev/null
+}
+
+@test "show names the memory a proposal conflicts with" {
+	_seed_store
+	_classify_with_relation contradicts existing || return 1
+	[ -n "$PROPOSAL" ] || return 1
+	local id
+	id=$(jq -r '.id' "$PROPOSAL")
+	run bash -c "cd '$PROJECT_REPO' && source '${PLUGIN_ROOT}/scripts/lib/librarian-config.sh' \
+		&& source '${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh' \
+		&& source '${PLUGIN_ROOT}/scripts/lib/librarian-storage.sh' \
+		&& source '${PLUGIN_ROOT}/scripts/lib/librarian-emit.sh' \
+		&& source '${PLUGIN_ROOT}/scripts/lib/librarian-cli.sh' && librarian_cli show '$id'"
+	[[ "$output" == *"conflict_with:        existing.md"* ]]
 }
