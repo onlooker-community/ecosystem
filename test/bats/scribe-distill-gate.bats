@@ -275,6 +275,67 @@ STUB
 	}
 }
 
+# ONL-120. The three returns below used to print to stderr and nothing else,
+# so a pass that broke partway left the same trace as a Stop that never fired.
+# Each one is asserted by reason, and against skipped: a broken pass filed as a
+# decline would read as scribe working as designed.
+_errored_reasons() {
+	grep '"event_type":"scribe.distill.errored"' "$ONLOOKER_EVENTS_LOG" 2>/dev/null \
+		| jq -r '.payload.reason'
+}
+
+_assert_errored_only() {
+	local want="$1"
+	_wait_for_event "scribe.distill.errored" 1 || {
+		echo "no scribe.distill.errored for ${want}"
+		return 1
+	}
+	[[ "$(_errored_reasons)" == "$want" ]] || {
+		echo "errored reasons: $(_errored_reasons | tr '\n' ' ')"
+		return 1
+	}
+	# Not _count_events: with no match it prints "0" twice (see _wait_for_event).
+	[[ -z "$(_skip_reasons)" ]] || {
+		echo "a failure was also reported as a skip: $(_skip_reasons | tr '\n' ' ')"
+		return 1
+	}
+	! grep -q '"event_type":"scribe.distill.complete"' "$ONLOOKER_EVENTS_LOG" 2>/dev/null || {
+		echo "a failed pass reported complete"
+		return 1
+	}
+}
+
+@test "a failed extraction reports errored, not skipped" {
+	cat >"${STUB_BIN}/claude" <<'STUB'
+#!/usr/bin/env bash
+exit 1
+STUB
+	chmod +x "${STUB_BIN}/claude"
+
+	_run_hook sess-err-extract >/dev/null
+	_assert_errored_only "extraction_failed"
+}
+
+# The cwd is not a repo, so the pass resolves no project key and writes under
+# scribe/unknown. A regular file there is what mkdir -p cannot get past.
+@test "an output dir that cannot be created reports output_dir_unwritable" {
+	mkdir -p "${ONLOOKER_DIR}/scribe"
+	: >"${ONLOOKER_DIR}/scribe/unknown"
+
+	_run_hook sess-err-mkdir >/dev/null
+	_assert_errored_only "output_dir_unwritable"
+}
+
+# A directory where the document goes, rather than a read-only dir: CI can run
+# as root, and root writes through chmod 555.
+@test "a document that cannot be written reports write_failed" {
+	local out="${ONLOOKER_DIR}/scribe/unknown"
+	mkdir -p "${out}/$(date '+%Y-%m-%d')-sess-err.md"
+
+	_run_hook sess-err-write >/dev/null
+	_assert_errored_only "write_failed"
+}
+
 # The escape hatch. Anyone who wants the old every-turn behavior sets 0, and a
 # gate that ignored that would be a behavior change with no way out.
 @test "redistill_min_new_turns of 0 disables the gate" {

@@ -73,6 +73,7 @@
     "prompt_rule.applied",
     "prompt_rule.matched",
     "scribe.distill.complete",
+    "scribe.distill.errored",
     "scribe.distill.skipped",
     "session.compact",
     "session.end",
