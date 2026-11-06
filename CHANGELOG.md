@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.18](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.17...ecosystem-v0.76.18) (2026-11-06)
+
+
+### Bug Fixes
+
+* **librarian:** stop scoring lessons on how little they leak :scales: ([#548](https://github.com/onlooker-community/ecosystem/issues/548)) ([d518508](https://github.com/onlooker-community/ecosystem/commit/d5185084fdefd08a713604f5f61295b2f042816b))
+
 ## [0.76.17](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.16...ecosystem-v0.76.17) (2026-11-05)
 
 
