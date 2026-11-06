@@ -235,6 +235,7 @@ librarian_cli_show() {
 		"filename:             " + (.proposed.filename // ""),
 		"classifier_confidence: " + ((.proposed.classifier_confidence // 0) | tostring),
 		"conflict_state:       " + (.conflict_state // "none"),
+		"conflict_with:        " + ((.conflict_with // []) | if length == 0 then "(none)" else join(", ") end),
 		"source_session_ids:   " + ((.source_session_ids // []) | join(", ")),
 		"source_artifact_ids:  " + ((.source_artifact_ids // []) | join(", ")),
 		"",

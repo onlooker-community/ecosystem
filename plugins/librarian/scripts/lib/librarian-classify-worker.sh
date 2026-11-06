@@ -191,6 +191,28 @@ TOMBSTONE_TTL=$(librarian_config_get '.librarian.tombstones.ttl_days')
 AUTO_PROMOTE_THRESHOLD=$(librarian_config_get '.librarian.auto_promote_threshold')
 [[ -z "$AUTO_PROMOTE_THRESHOLD" || "$AUTO_PROMOTE_THRESHOLD" == "null" ]] && AUTO_PROMOTE_THRESHOLD="0.85"
 
+# Resolve the typed memory store path for this project. Resolved once: it does
+# not change between artifacts, and the index below needs it before the first
+# classifier call.
+MEMORY_STORE_PATH=$(librarian_config_get '.librarian.memory_store_path')
+[[ -z "$MEMORY_STORE_PATH" || "$MEMORY_STORE_PATH" == "null" ]] && \
+	MEMORY_STORE_PATH='${CLAUDE_CONFIG_DIR}/projects/${CLAUDE_PROJECT_ENCODED}/memory'
+
+# Interpolate placeholders. This was `eval echo`, which command-substituted
+# a value the config loader reads from <repo>/.claude/settings.json — so a
+# cloned repo could run anything here, as the user, on every SessionEnd
+# (ecosystem-18f).
+MEMORY_STORE_PATH=$(librarian_memory_resolve_path "$MEMORY_STORE_PATH")
+
+# The store's index, handed to the classifier so it can name a memory the
+# candidate repeats, contradicts or extends (ONL-252). Only its link lines: the
+# heading and any prose are not memories. Capped so a large store cannot grow
+# the prompt without bound; a memory past the cap is just not compared.
+MEMORY_INDEX=""
+if [[ -f "${MEMORY_STORE_PATH}/MEMORY.md" ]]; then
+	MEMORY_INDEX=$(grep -E '^- \[' "${MEMORY_STORE_PATH}/MEMORY.md" 2>/dev/null | head -c 16000)
+fi
+
 KEPT_COUNT=$(printf '%s' "$KEPT" | jq 'length' 2>/dev/null) || KEPT_COUNT=0
 PROPOSED_COUNT=0
 POST_CLASSIFIER_DROPPED=0
@@ -210,7 +232,8 @@ for ((i = 0; i < KEPT_COUNT; i++)); do
 	[[ -z "$ARTIFACT" || "$ARTIFACT" == "null" ]] && continue
 
 	RESPONSE=$(librarian_classifier_call \
-		"$ARTIFACT" "$CLASSIFIER_MODEL" "$CLASSIFIER_TEMP" "$CLASSIFIER_MAX")
+		"$ARTIFACT" "$CLASSIFIER_MODEL" "$CLASSIFIER_TEMP" "$CLASSIFIER_MAX" \
+		"$MEMORY_INDEX")
 
 	# An EMPTY response means the call did not happen: no CLI on PATH, a
 	# timeout, or unparseable output. That is not the model judging this
@@ -287,17 +310,6 @@ for ((i = 0; i < KEPT_COUNT; i++)); do
 	ARTIFACT_ID=$(printf '%s' "$ARTIFACT" | jq -r '.id // ""')
 	ARTIFACT_SESSION=$(printf '%s' "$ARTIFACT" | jq -r '.session_id // ""')
 
-	# Resolve the typed memory store path for this project.
-	MEMORY_STORE_PATH=$(librarian_config_get '.librarian.memory_store_path')
-	[[ -z "$MEMORY_STORE_PATH" || "$MEMORY_STORE_PATH" == "null" ]] && \
-		MEMORY_STORE_PATH='${CLAUDE_CONFIG_DIR}/projects/${CLAUDE_PROJECT_ENCODED}/memory'
-
-	# Interpolate placeholders. This was `eval echo`, which command-substituted
-	# a value the config loader reads from <repo>/.claude/settings.json — so a
-	# cloned repo could run anything here, as the user, on every SessionEnd
-	# (ecosystem-18f).
-	MEMORY_STORE_PATH=$(librarian_memory_resolve_path "$MEMORY_STORE_PATH")
-
 	# Initialize conflict state; will scan if memory dir exists.
 	CONFLICT_STATE="none"
 	CONFLICT_WITH="[]"
@@ -339,6 +351,27 @@ for ((i = 0; i < KEPT_COUNT; i++)); do
 
 		CONFLICT_STATE=$(printf '%s' "$CONFLICT_RESULT" | jq -r '.conflict_state // "none"' 2>/dev/null) || CONFLICT_STATE="none"
 		CONFLICT_WITH=$(printf '%s' "$CONFLICT_RESULT" | jq -c '.conflict_with // []' 2>/dev/null) || CONFLICT_WITH="[]"
+
+		# The classifier's own reading of the index (ONL-252). It sees what the
+		# token scan cannot, a contradiction in different words, so it raises the
+		# state the scan reported but never lowers it. The file has to be one
+		# the store holds: a name the model made up flags nothing.
+		REL_KIND=$(printf '%s' "$RESPONSE" | jq -r '(.relation.kind | strings) // ""' 2>/dev/null) || REL_KIND=""
+		REL_FILE=$(printf '%s' "$RESPONSE" | jq -r '(.relation.file | strings) // ""' 2>/dev/null) || REL_FILE=""
+		if [[ -n "$REL_FILE" && "$REL_FILE" != */* && "$REL_FILE" != "MEMORY.md" \
+				&& -f "${MEMORY_STORE_PATH}/${REL_FILE}" ]]; then
+			REL_STATE=""
+			case "$REL_KIND" in
+				duplicate) REL_STATE="duplicate" ;;
+				contradicts) REL_STATE="conflict_candidate" ;;
+				extends) REL_STATE="merge_candidate" ;;
+			esac
+			if [[ -n "$REL_STATE" ]] && \
+					[[ $(_librarian_conflict_rank "$REL_STATE") -gt $(_librarian_conflict_rank "$CONFLICT_STATE") ]]; then
+				CONFLICT_STATE="$REL_STATE"
+				CONFLICT_WITH=$(jq -cn --arg f "$REL_FILE" '[$f]')
+			fi
+		fi
 
 		# Silently drop duplicates — no proposal written.
 		if [[ "$CONFLICT_STATE" == "duplicate" ]]; then
@@ -396,7 +429,7 @@ for ((i = 0; i < KEPT_COUNT; i++)); do
 		--arg title "$TITLE" \
 		--arg body "$BODY" \
 		--argjson classifier_confidence "$CONFIDENCE" \
-		--arg conflict_state "none" \
+		--arg conflict_state "$CONFLICT_STATE" \
 		--argjson source_session_ids \
 			"$(if [[ -n "$ARTIFACT_SESSION" ]]; then
 				printf '["%s"]' "$ARTIFACT_SESSION"

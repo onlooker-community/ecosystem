@@ -142,6 +142,17 @@ librarian_conflict_check() {
 	fi
 }
 
+# Severity order of the states, so two sources of a verdict can be merged by
+# keeping the worse one: duplicate > conflict_candidate > merge_candidate > none.
+_librarian_conflict_rank() {
+	case "${1:-}" in
+		duplicate) printf '3' ;;
+		conflict_candidate) printf '2' ;;
+		merge_candidate) printf '1' ;;
+		*) printf '0' ;;
+	esac
+}
+
 # Scan a proposal against all existing memories in the project.
 # Returns the highest-priority conflict found (duplicate > conflict > merge).
 #

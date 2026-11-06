@@ -47,9 +47,22 @@ _librarian_classifier_timeout() {
 }
 
 # Build the classifier prompt for a single artifact.
-# Usage: librarian_classifier_build_prompt <artifact_json>
+#
+# The optional memory index is the store's MEMORY.md, one line per memory. It
+# is what lets the classifier say a candidate repeats, contradicts or extends a
+# memory that already exists. The lexical scan in librarian-conflict-detector.sh
+# cannot: the classifier rewrites every artifact in its own words, so a
+# same-topic pair shares about a fifth of its tokens. Two proposals that
+# restated an existing memory scored 0.19 and 0.23, under a merge threshold of
+# 0.45; with the index, the classifier named that memory for both (ONL-252).
+#
+# The index lines are only as good as their hooks. One that drifted from its
+# memory's body is how a review read a false contradiction into ONL-252.
+#
+# Usage: librarian_classifier_build_prompt <artifact_json> [memory_index]
 librarian_classifier_build_prompt() {
 	local artifact="$1"
+	local memory_index="${2:-}"
 	local kind summary detail files_list session_id created_at
 
 	kind=$(printf '%s' "$artifact" | jq -r '.kind // ""')
@@ -58,6 +71,29 @@ librarian_classifier_build_prompt() {
 	files_list=$(printf '%s' "$artifact" | jq -r '(.files // []) | join(", ")')
 	session_id=$(printf '%s' "$artifact" | jq -r '.session_id // ""')
 	created_at=$(printf '%s' "$artifact" | jq -r '.created_at // ""')
+
+	# Both stay empty without an index, so a store with no MEMORY.md gets the
+	# prompt it always had.
+	local relation_rules="" memory_block=""
+	if [[ -n "$memory_index" ]]; then
+		relation_rules='- The existing memories are listed below. Compare the candidate with
+  them and, if one applies, add a "relation" field:
+  { "file": "<filename.md exactly as it appears in a link below>",
+    "kind": "<contradicts|duplicate|extends>" }
+  Check for a contradiction first, against every memory: if the candidate
+  states as fact something any listed memory denies, name that memory with
+  "contradicts", even when another memory is closer in topic and even if
+  the two share few words.
+  Otherwise, "duplicate" when it says nothing a listed memory does not, or
+  "extends" when it adds to one without disagreeing.
+  Omit "relation" when none applies. Never name a file that is not listed.
+'
+		memory_block="<existing_memories>
+${memory_index}
+</existing_memories>
+
+"
+	fi
 
 	cat <<EOF
 You are classifying a session artifact for promotion into a long-term memory store.
@@ -82,8 +118,8 @@ RULES:
   that didn't change anything).
 - For feedback and project types, include **Why:** and **How to apply:**
   lines inside the body.
-
-<artifact>
+${relation_rules}
+${memory_block}<artifact>
 kind: ${kind}
 summary: ${summary}
 detail: ${detail}
@@ -98,12 +134,13 @@ EOF
 # empty string on error.
 #
 # Usage: librarian_classifier_call <artifact_json> <model> <temperature>
-#                                  <max_output_tokens>
+#                                  <max_output_tokens> [memory_index]
 librarian_classifier_call() {
 	local artifact="$1"
 	local model="${2:-}"
 	local temperature="${3:-0.2}"
 	local max_tokens="${4:-256}"
+	local memory_index="${5:-}"
 
 	command -v claude >/dev/null 2>&1 || return 0
 	[[ -z "$artifact" ]] && return 0
@@ -117,7 +154,7 @@ librarian_classifier_call() {
 	# lock (ONL-118). Every path out removes the file itself; a killed call
 	# leaks one small file under $TMPDIR, which costs nothing next to a lock
 	# that blocks its queue for good.
-	librarian_classifier_build_prompt "$artifact" > "$prompt_file" \
+	librarian_classifier_build_prompt "$artifact" "$memory_index" > "$prompt_file" \
 		|| { rm -f "$prompt_file"; return 0; }
 
 	local args=(-p --max-turns 1 --settings '{"disableAllHooks":true}')
