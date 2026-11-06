@@ -58,6 +58,25 @@ _scribe_emit_skip() {
 	return 0
 }
 
+# Report a pass that broke partway.
+#
+# Kept apart from _scribe_emit_skip on purpose: skipped is scribe choosing not
+# to distill, this is scribe trying and failing. These three returns used to
+# print to stderr and nothing else, so a broken pass and a hook that never fired
+# looked the same on the bus (ONL-120). Same fail-soft contract as above.
+_scribe_emit_error() {
+	local reason="${1:-}"
+
+	[[ -z "$reason" ]] && return 0
+	declare -F scribe_emit_event >/dev/null 2>&1 || return 0
+
+	local payload
+	payload=$(jq -cn --arg reason "$reason" '{reason: $reason}' 2>/dev/null) || return 0
+
+	[[ -n "$payload" ]] && scribe_emit_event "scribe.distill.errored" "$payload" >/dev/null 2>&1
+	return 0
+}
+
 # Where the turn count of the last successful distillation is recorded.
 #
 # Deliberately NOT <session>.json: scribe-capture.sh read-modify-writes that
@@ -292,6 +311,7 @@ scribe_distill() {
 	intent_json=$(scribe_extract_intent \
 		"$transcript_path" "$model" "$timeout_s" "$max_tokens" "$temperature" "$transcript_chars_max") || {
 		printf 'scribe_distill: extraction failed for session %s\n' "$session_id" >&2
+		_scribe_emit_error "extraction_failed"
 		return 1
 	}
 
@@ -314,6 +334,7 @@ scribe_distill() {
 
 	mkdir -p "$output_dir" 2>/dev/null || {
 		printf 'scribe_distill: cannot create output dir %s\n' "$output_dir" >&2
+		_scribe_emit_error "output_dir_unwritable"
 		return 1
 	}
 
@@ -330,6 +351,7 @@ scribe_distill() {
 
 	printf '%s\n' "$doc" > "$output_path" 2>/dev/null || {
 		printf 'scribe_distill: failed to write %s\n' "$output_path" >&2
+		_scribe_emit_error "write_failed"
 		return 1
 	}
 
