@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.21](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.20...ecosystem-v0.76.21) (2026-11-06)
+
+
+### Bug Fixes
+
+* **librarian:** let the classifier name the memory a proposal repeats :mag: ([#555](https://github.com/onlooker-community/ecosystem/issues/555)) ([ba38173](https://github.com/onlooker-community/ecosystem/commit/ba38173a4aa6ad3c5a06b48229f22c3316050189))
+
 ## [0.76.20](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.19...ecosystem-v0.76.20) (2026-11-06)
 
 
