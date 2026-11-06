@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.20](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.19...ecosystem-v0.76.20) (2026-11-06)
+
+
+### Bug Fixes
+
+* **scribe:** report a distill pass that breaks partway :rotating_light: ([#553](https://github.com/onlooker-community/ecosystem/issues/553)) ([9ed62a6](https://github.com/onlooker-community/ecosystem/commit/9ed62a6bb5ab6de8eef635248a02796cfced672c))
+
 ## [0.76.19](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.18...ecosystem-v0.76.19) (2026-11-06)
 
 

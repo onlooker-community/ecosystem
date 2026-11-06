@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.5](https://github.com/onlooker-community/ecosystem/compare/scribe-v0.10.4...scribe-v0.10.5) (2026-11-06)
+
+
+### Bug Fixes
+
+* **scribe:** report a distill pass that breaks partway :rotating_light: ([#553](https://github.com/onlooker-community/ecosystem/issues/553)) ([9ed62a6](https://github.com/onlooker-community/ecosystem/commit/9ed62a6bb5ab6de8eef635248a02796cfced672c))
+
 ## [0.10.4](https://github.com/onlooker-community/ecosystem/compare/scribe-v0.10.3...scribe-v0.10.4) (2026-11-06)
 
 
