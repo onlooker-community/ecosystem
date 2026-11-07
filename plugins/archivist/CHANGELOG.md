@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.9.8...archivist-v0.10.0) (2026-11-07)
+
+
+### Features
+
+* **hook-health:** record which kind of SessionStart a run was :mag: ([#566](https://github.com/onlooker-community/ecosystem/issues/566)) ([b2413cb](https://github.com/onlooker-community/ecosystem/commit/b2413cb670502823d8688ad27b0dbeb2cebef7f3))
+
 ## [0.9.8](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.9.7...archivist-v0.9.8) (2026-11-07)
 
 
