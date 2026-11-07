@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.22](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.21...ecosystem-v0.76.22) (2026-11-07)
+
+
+### Bug Fixes
+
+* **librarian:** give the classifier its prompt and nothing else :see_no_evil: ([#558](https://github.com/onlooker-community/ecosystem/issues/558)) ([8124920](https://github.com/onlooker-community/ecosystem/commit/81249206cb84c2a226bbced1fb7de262e76f52e4))
+
 ## [0.76.21](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.20...ecosystem-v0.76.21) (2026-11-06)
 
 
