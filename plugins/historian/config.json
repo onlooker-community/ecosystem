@@ -7,7 +7,8 @@
       "min_transcript_chars_to_index": 1200,
       "chunk_target_chars": 2400,
       "chunk_overlap_chars": 400,
-      "retention_days": 365
+      "retention_days": 365,
+      "_retention_days_note": "Session transcripts older than this many days, by file mtime, are deleted from this project's store each time historian indexes. 0 keeps them forever. Retrieval already ignores chunks older than retrieval.max_age_days, so a window above that only bounds disk use."
     },
     "sanitization": {
       "redact_secret_patterns": true,
