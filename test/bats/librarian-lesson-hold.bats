@@ -117,7 +117,7 @@ _seed_judged() {
 
 	run librarian_lesson_sweep_held "$PROJECT_KEY"
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"01M3B87J7046SJE5BECNMP670K"* ]]
+	[[ "$output" == *"01M3B87J7046SJE5BECNMP670K"* ]] || return 1
 	[ -f "${LESSONS_DIR}/approved/01M3B87J7046SJE5BECNMP670K.json" ]
 	[ ! -f "${LESSONS_DIR}/approved_held/01M3B87J7046SJE5BECNMP670K.json" ]
 }
@@ -204,7 +204,7 @@ _hold_cli_setup() {
 	librarian_lesson_promote "$PROJECT_KEY" 01M3B87J7046SJE5BECNMP670K
 	run librarian_cli lessons queue "$PROJECT_REPO"
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"01M3B87J7046SJE5BECNMP670K"* ]]
+	[[ "$output" == *"01M3B87J7046SJE5BECNMP670K"* ]] || return 1
 	[[ "$output" == *"shippable"* ]]
 }
 
@@ -234,7 +234,7 @@ _hold_cli_setup() {
 	# landed on. See the same rationale in librarian-author-key.bats.
 	run --separate-stderr librarian_cli lessons veto 01M3ASXRSRGY9TXKV045NK8V7G "" "$PROJECT_REPO"
 	[ "$status" -ne 0 ]
-	[[ "$stderr" == *"not held"* ]]
+	[[ "$stderr" == *"not held"* ]] || return 1
 	[[ "$output" != *"not held"* ]]
 }
 
@@ -244,7 +244,7 @@ _hold_cli_setup() {
 	librarian_lesson_promote "$PROJECT_KEY" 01M3CQEG6ZR2E4XJ0K6WY9J1QD
 	run --separate-stderr librarian_cli lessons veto 01M3CQEG6ZR2E4XJ0K6WY9J1QD "" "$PROJECT_REPO"
 	[ "$status" -ne 0 ]
-	[[ "$stderr" == *"already shipped"* ]]
+	[[ "$stderr" == *"already shipped"* ]] || return 1
 	[[ "$output" != *"already shipped"* ]]
 }
 
@@ -253,7 +253,7 @@ _hold_cli_setup() {
 	_seed_judged 01M3DHRTC1ZQXWQ5V7Y9F0K3MB model
 	run --separate-stderr librarian_cli lessons veto 01M3DHRTC1ZQXWQ5V7Y9F0K3MB "" "$PROJECT_REPO"
 	[ "$status" -ne 0 ]
-	[[ "$stderr" == *"never promoted"* ]]
+	[[ "$stderr" == *"never promoted"* ]] || return 1
 	[[ "$output" != *"never promoted"* ]]
 }
 
@@ -267,9 +267,9 @@ _hold_cli_setup() {
 	run --separate-stderr librarian_cli lessons veto 01M3B87J7046SJE5BECNMP670K "" "$PROJECT_REPO"
 	[ "$status" -eq 0 ]
 	[ ! -f "${LESSONS_DIR}/approved_held/01M3B87J7046SJE5BECNMP670K.json" ]
-	[[ "$stderr" == *"artifact_id could not be resolved"* ]]
-	[[ "$stderr" == *"no declined-ledger row was recorded"* ]]
-	[[ "$output" != *"artifact_id could not be resolved"* ]]
+	[[ "$stderr" == *"artifact_id could not be resolved"* ]] || return 1
+	[[ "$stderr" == *"no declined-ledger row was recorded"* ]] || return 1
+	[[ "$output" != *"artifact_id could not be resolved"* ]] || return 1
 	[[ "$output" == *"vetoed; it will not leave this machine"* ]]
 }
 
@@ -286,7 +286,7 @@ _hold_cli_setup() {
 	run --separate-stderr librarian_cli lessons veto 01M3B87J7046SJE5BECNMP670K "overreaches" "$PROJECT_REPO"
 	[ "$status" -eq 0 ]
 	[ ! -f "${LESSONS_DIR}/approved_held/01M3B87J7046SJE5BECNMP670K.json" ]
-	[[ "$stderr" == *"declined-ledger row could not be written"* ]]
-	[[ "$output" != *"declined-ledger row could not be written"* ]]
+	[[ "$stderr" == *"declined-ledger row could not be written"* ]] || return 1
+	[[ "$output" != *"declined-ledger row could not be written"* ]] || return 1
 	[[ "$output" == *"vetoed; it will not leave this machine"* ]]
 }

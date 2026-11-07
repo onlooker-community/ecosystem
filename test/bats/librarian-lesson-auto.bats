@@ -178,7 +178,7 @@ STUB
 	_auto_setup; _auto_stub
 	run librarian_lesson_auto_justify "$(_candidate "$(_unscoped)")"
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"exec boundary"* ]]
+	[[ "$output" == *"exec boundary"* ]] || return 1
 	[ "$(printf '%s' "$output" | wc -l | tr -d ' ')" -le 1 ]
 }
 

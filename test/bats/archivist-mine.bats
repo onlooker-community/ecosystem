@@ -51,8 +51,8 @@ second body because other reasons"
 	[ "${#RECORDS[@]}" -eq 2 ]
 	# Normalized on the way out, so each record reads as the message its
 	# author wrote rather than as a bullet in someone else's list.
-	[[ "${RECORDS[0]}" == "first subject"* ]]
-	[[ "${RECORDS[1]}" == "second subject"* ]]
+	[[ "${RECORDS[0]}" == "first subject"* ]] || return 1
+	[[ "${RECORDS[1]}" == "second subject"* ]] || return 1
 	[[ "${RECORDS[0]}" == *"first body because reasons"* ]]
 }
 

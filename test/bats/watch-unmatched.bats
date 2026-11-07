@@ -72,7 +72,7 @@ setup() {
 @test "clearing removes the marker and is safe when absent" {
 	onlooker_watch_marker_write "$MARKER" "abc123abc123"
 	onlooker_watch_marker_clear "$MARKER"
-	[[ ! -f "$MARKER" ]]
+	[[ ! -f "$MARKER" ]] || return 1
 	onlooker_watch_marker_clear "$MARKER"
 }
 
@@ -97,7 +97,7 @@ _make_repo() {
 @test "files scanner reports zero for a pattern that hits nothing" {
 	_make_repo
 	result=$(_onlooker_watch_scan_files "$FIXTURE" '["nope/*/never.md"]')
-	[[ "${result%% *}" == "0" ]]
+	[[ "${result%% *}" == "0" ]] || return 1
 	[[ "${result##* }" -ge 2 ]]
 }
 
@@ -154,7 +154,7 @@ _make_repo() {
 
 	dirs_result=$(_onlooker_watch_scan_dirs "$FIXTURE" '["ignored-dir/*/"]')
 	files_result=$(_onlooker_watch_scan_files "$FIXTURE" '["ignored-dir/*"]')
-	[[ "${dirs_result%% *}" == "1" ]]
+	[[ "${dirs_result%% *}" == "1" ]] || return 1
 	[[ "${files_result%% *}" == "0" ]]
 }
 
@@ -191,7 +191,7 @@ _check() {
 @test "emits when patterns match nothing" {
 	_make_repo
 	_check '["nope/*.md"]'
-	[[ "$(_emitted_count)" == "1" ]]
+	[[ "$(_emitted_count)" == "1" ]] || return 1
 	grep -q 'onlooker.watch.unmatched' "${BATS_TEST_TMPDIR}/emitted"
 }
 
@@ -229,7 +229,7 @@ _check() {
 @test "a second call is suppressed by the marker but the first still emitted" {
 	_make_repo
 	_check '["nope/*.md"]'
-	[[ "$(_emitted_count)" == "1" ]]
+	[[ "$(_emitted_count)" == "1" ]] || return 1
 	_check '["nope/*.md"]'
 	[[ "$(_emitted_count)" == "1" ]]
 }
@@ -244,7 +244,7 @@ _check() {
 	hash=$(onlooker_watch_patterns_hash '["plugins/*/agents/*.md"]')
 	onlooker_watch_marker_write "$marker" "$hash"
 	_check '["plugins/*/agents/*.md"]'
-	[[ -f "$marker" ]]
+	[[ -f "$marker" ]] || return 1
 	[[ "$(_emitted_count)" == "0" ]]
 }
 

@@ -26,8 +26,8 @@ _row() {
 	_row echo 0.5.2 4242
 	run bash "$SCRIPT" --pid 4242
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"echo 0.5.2"* ]]
-	[[ "$output" == *"lineage 0.5.1"* ]]
+	[[ "$output" == *"echo 0.5.2"* ]] || return 1
+	[[ "$output" == *"lineage 0.5.1"* ]] || return 1
 	[ "$(printf '%s\n' "$output" | grep -c lineage)" -eq 1 ]
 }
 
@@ -36,7 +36,7 @@ _row() {
 	_row lineage 0.5.0 9999
 	run bash "$SCRIPT" --pid 4242
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"0.5.1"* ]]
+	[[ "$output" == *"0.5.1"* ]] || return 1
 	[[ "$output" != *"0.5.0"* ]]
 }
 
@@ -54,8 +54,8 @@ _row() {
 	jq -cn '{hook:"h", plugin_name:"lineage", plugin_version:null, host_pid:4242}' >> "$HEALTH_LOG"
 	run bash "$SCRIPT" --pid 4242
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"lineage"* ]]
-	[[ "$output" == *"(working tree)"* ]]
+	[[ "$output" == *"lineage"* ]] || return 1
+	[[ "$output" == *"(working tree)"* ]] || return 1
 	[[ "$output" != *"null"* ]]
 }
 
