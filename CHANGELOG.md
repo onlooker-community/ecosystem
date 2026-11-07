@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.77.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.77.0...ecosystem-v0.77.1) (2026-11-07)
+
+
+### Performance Improvements
+
+* **archivist:** stop paying locale and regex costs to rank :scissors: ([#564](https://github.com/onlooker-community/ecosystem/issues/564)) ([82de943](https://github.com/onlooker-community/ecosystem/commit/82de943418fdf9a1176674e973cf684ad51e8faa))
+
 ## [0.77.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.76.22...ecosystem-v0.77.0) (2026-11-07)
 
 
