@@ -106,6 +106,10 @@
           {
             "type": "command",
             "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hooks/session-end-tracker.sh"
+          },
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hooks/storage-gc.sh"
           }
         ]
       }

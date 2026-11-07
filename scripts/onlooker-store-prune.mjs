@@ -6,8 +6,11 @@
 // footprint is block waste (ecosystem-449.2). The permanent fix is on the write
 // path; this script reclaims what was already written.
 //
-// Run by hand. There is deliberately no recurring sweep — see
-// docs/superpowers/specs/2026-08-30-onlooker-store-retention-design.md §5.
+// scripts/hooks/storage-gc.sh runs this from SessionEnd at most once per
+// storage_gc.interval_hours, detached, passing the windows from config
+// (ONL-44). It can still be run by hand, e.g. with --dry-run to preview. The
+// sweep was cut from the original design to keep it out of wave 1's SessionEnd
+// measurement — docs/superpowers/specs/2026-08-30-onlooker-store-retention-design.md §5.
 //
 // Exit code is always 0. This never blocks anything.
 //

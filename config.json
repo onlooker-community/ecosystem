@@ -14,5 +14,12 @@
     "probe_timeout_seconds": 30,
     "surface_when_current": false,
     "max_pointer_chars": 200
+  },
+  "storage_gc": {
+    "enabled": true,
+    "interval_hours": 24,
+    "scratch_max_age_hours": 48,
+    "retention_days": 90,
+    "_note": "scripts/hooks/storage-gc.sh runs scripts/onlooker-store-prune.mjs at SessionEnd at most once per interval_hours, detached. scratch_max_age_hours applies to session-trackers and lineage-baselines; retention_days to session-history, scribe/sessions, bursar/sessions and compass/sessions. Durable memory (historian, lineage, archivist, librarian, curator) and logs/ are never touched; historian applies its own retention_days. The last run report is storage-gc/last-run.json."
   }
 }
