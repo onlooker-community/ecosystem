@@ -113,6 +113,25 @@ historian_storage_reset_session() {
 	: > "$path"
 }
 
+# Delete this project's session transcripts older than <days>, by mtime, and
+# print how many went. 0 keeps everything. Scoped to one project key because
+# retention_days resolves per project, and limited to *.jsonl so nothing else
+# a person drops in the directory is touched (ONL-45).
+historian_storage_prune_expired() {
+	local key="$1"
+	local days="$2"
+	local dir n
+	if [[ ! "$days" =~ ^[0-9]+$ ]] || (( days == 0 )); then
+		printf '0'
+		return 0
+	fi
+	dir=$(historian_sessions_dir "$key")
+	[[ -d "$dir" ]] || { printf '0'; return 0; }
+	n=$(find "$dir" -maxdepth 1 -type f -name '*.jsonl' -mtime "+${days}" -print -delete 2>/dev/null \
+		| wc -l | tr -d ' ')
+	printf '%s' "${n:-0}"
+}
+
 # ============================================================================
 # Retrieval watermarks (per-session, scoped to the project key)
 # ============================================================================

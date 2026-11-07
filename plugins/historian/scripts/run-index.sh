@@ -109,6 +109,17 @@ historian_storage_init "$PROJECT_KEY" || exit 0
 REMOTE_URL=$(onlooker_project_remote_url "$CWD")
 historian_storage_write_manifest "$PROJECT_KEY" "$REMOTE_URL" "$REPO_ROOT" || true
 
+# Before any skip exit: the store ages whether or not this session has
+# anything to index. retention_days declared 365 for months while nothing read
+# it (ONL-45). Retrieval stops at retrieval.max_age_days long before this, so
+# what goes is a file retrieval could no longer surface.
+RETENTION_DAYS=$(historian_config_int '.historian.indexing.retention_days' 365)
+PRUNED=$(historian_storage_prune_expired "$PROJECT_KEY" "$RETENTION_DAYS")
+if [[ "$PRUNED" != "0" ]]; then
+	printf 'historian: retention deleted %s session file(s) older than %s days for %s\n' \
+		"$PRUNED" "$RETENTION_DAYS" "$PROJECT_KEY"
+fi
+
 # Keyed by session, not by project: two sessions indexing at once write
 # different files and must not block each other, while two SessionEnd fires for
 # the SAME session are the collision this prevents. Non-blocking, since a
