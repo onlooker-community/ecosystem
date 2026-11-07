@@ -51,7 +51,7 @@
 # Derived from the bytes rather than declared: a version directory's name, its
 # package.json and its mtime have each been caught disagreeing with the contents
 # they label. A hand-maintained constant would be a fourth such label.
-_ONLOOKER_LIB_FINGERPRINT="18c8543e9cff"
+_ONLOOKER_LIB_FINGERPRINT="a90cc2185e5f"
 
 # What the record actually reports, and the reason it is a second variable.
 #
@@ -89,6 +89,7 @@ _HOOK_START_MS="${_HOOK_START_MS:-}"
 _HOOK_SESSION_ID="${_HOOK_SESSION_ID:-}"
 _HOOK_EVENT="${_HOOK_EVENT:-}"
 _HOOK_TOOL_NAME="${_HOOK_TOOL_NAME:-}"
+_HOOK_SOURCE="${_HOOK_SOURCE:-}"
 _HOOK_PRIOR_EXIT_CMD="${_HOOK_PRIOR_EXIT_CMD:-}"
 # The start stamp in ISO form, and the key that joins a breadcrumb to the
 # terminal record that closes it (ecosystem-449.66).
@@ -527,20 +528,36 @@ _hook_health_on_exit() {
 # caller-set value alone — several plugins set it before sourcing and pass a
 # payload that carries none.
 #
-# tool_name and hook_event keep caller-wins: neither is ever exported, so
-# neither can be inherited across a process boundary.
+# tool_name, hook_event and source keep caller-wins: none is ever exported, so
+# none can be inherited across a process boundary.
+#
+# source is SessionStart's startup/resume/clear/compact. A startup shares the
+# machine with Claude Code's own launch and a /clear does not, so without it a
+# SessionStart duration cannot tell a slow hook from a busy launch (ONL-269).
+#
+# One jq reads all four fields; this runs in every hook, and it used to start a
+# jq per field. They come back joined on the unit separator, not a tab: IFS
+# whitespace collapses runs, so an absent tool_name would shift hook_event into
+# its slot. Unparseable input leaves all four empty, and the function still
+# returns 0 as every function here must.
 hook_health_context() {
 	local input="${1:-}"
 	[[ -n "$input" ]] || return 0
 	command -v jq >/dev/null 2>&1 || return 0
 
-	local payload_session_id
-	payload_session_id=$(printf '%s' "$input" | jq -r '.session_id // ""' 2>/dev/null)
+	local fields="" payload_session_id="" tool_name="" hook_event="" source=""
+	fields=$(printf '%s' "$input" | jq -r '
+		[.session_id, .tool_name, .hook_event_name, .source]
+		| map(. // "" | tostring | gsub("[\u001f\n]"; " "))
+		| join("\u001f")' 2>/dev/null) || fields=""
+	IFS=$'\x1f' read -r payload_session_id tool_name hook_event source <<<"$fields" || true
+
 	if [[ -n "$payload_session_id" ]]; then
 		_HOOK_SESSION_ID="$payload_session_id"
 	fi
-	[[ -z "$_HOOK_TOOL_NAME" ]] && _HOOK_TOOL_NAME=$(printf '%s' "$input" | jq -r '.tool_name // ""' 2>/dev/null)
-	[[ -z "$_HOOK_EVENT" ]] && _HOOK_EVENT=$(printf '%s' "$input" | jq -r '.hook_event_name // ""' 2>/dev/null)
+	[[ -z "$_HOOK_TOOL_NAME" ]] && _HOOK_TOOL_NAME="$tool_name"
+	[[ -z "$_HOOK_EVENT" ]] && _HOOK_EVENT="$hook_event"
+	[[ -z "$_HOOK_SOURCE" ]] && _HOOK_SOURCE="$source"
 	return 0
 }
 
@@ -629,6 +646,7 @@ _hook_health_write() {
 		--arg session_id "$_HOOK_SESSION_ID" \
 		--arg hook_event "$_HOOK_EVENT" \
 		--arg tool_name "$_HOOK_TOOL_NAME" \
+		--arg source "$_HOOK_SOURCE" \
 		--arg lib "$_ONLOOKER_LIB_SCHEMA" \
 		--arg plugin_name "$_ONLOOKER_PLUGIN_NAME" \
 		--arg plugin_version "$_ONLOOKER_PLUGIN_VERSION" \
@@ -652,6 +670,8 @@ _hook_health_write() {
 			session_id: (if $session_id == "" then null else $session_id end),
 			hook_event: (if $hook_event == "" then null else $hook_event end),
 			tool_name: (if $tool_name == "" then null else $tool_name end),
+			# SessionStart only: startup, resume, clear or compact.
+			source: (if $source == "" then null else $source end),
 			# Which vendored copy of hook-health.sh wrote this row. Rows with
 			# differing values in one session are a skew window, not noise.
 			lib_schema: (if $lib == "" then null else $lib end),
