@@ -596,6 +596,39 @@ _classify_with_relation() {
 	jq -e '.conflict_state == "none" and .conflict_with == []' "$PROPOSAL" >/dev/null
 }
 
+# ONL-253. `claude -p` is a full session: started in the repo, it also loaded
+# the project's CLAUDE.md, its MEMORY.md and the user's global CLAUDE.md, so
+# the classifier judged with context the prompt never gave it. Re-run on a kept
+# proposal, it found that proposal's own memory through auto-memory and called
+# it a duplicate of itself. The call has to see the prompt and nothing else.
+@test "the classifier call loads no CLAUDE.md or auto-memory" {
+	local args_log="${BATS_TEST_TMPDIR}/claude-args"
+	cat > "${STUB_BIN}/claude" <<STUB
+#!/usr/bin/env bash
+cat >/dev/null
+printf '%s\n' "\$@" > "${args_log}"
+printf '%s' '{"type":null,"title":"","body":"","confidence":0.2}'
+STUB
+	chmod +x "${STUB_BIN}/claude"
+
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-classifier.sh"
+	librarian_classifier_call '{"kind":"decision","summary":"s"}' "" 0.2 256 >/dev/null
+	[ -f "$args_log" ] || return 1
+
+	# An empty --setting-sources loads neither the user's nor the project's
+	# CLAUDE.md. It does not stop auto-memory, which reads MEMORY.md for the
+	# working directory; autoMemoryEnabled does.
+	local sources
+	sources=$(awk 'prev == "--setting-sources" { print "[" $0 "]"; found = 1 } { prev = $0 } END { if (!found) print "missing" }' "$args_log")
+	[ "$sources" = "[]" ] || { echo "--setting-sources: $sources"; return 1; }
+
+	local settings
+	settings=$(awk 'prev == "--settings" { print } { prev = $0 }' "$args_log")
+	printf '%s' "$settings" | jq -e '.disableAllHooks == true and .autoMemoryEnabled == false' >/dev/null \
+		|| { echo "--settings: $settings"; return 1; }
+}
+
 @test "show names the memory a proposal conflicts with" {
 	_seed_store
 	_classify_with_relation contradicts existing || return 1
