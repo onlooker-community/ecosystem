@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.8](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.9.7...archivist-v0.9.8) (2026-11-07)
+
+
+### Performance Improvements
+
+* **archivist:** stop paying locale and regex costs to rank :scissors: ([#564](https://github.com/onlooker-community/ecosystem/issues/564)) ([82de943](https://github.com/onlooker-community/ecosystem/commit/82de943418fdf9a1176674e973cf684ad51e8faa))
+
 ## [0.9.7](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.9.6...archivist-v0.9.7) (2026-11-03)
 
 
