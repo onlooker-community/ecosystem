@@ -157,7 +157,15 @@ librarian_classifier_call() {
 	librarian_classifier_build_prompt "$artifact" "$memory_index" > "$prompt_file" \
 		|| { rm -f "$prompt_file"; return 0; }
 
-	local args=(-p --max-turns 1 --settings '{"disableAllHooks":true}')
+	# The prompt has to be the classifier's whole input (ONL-253). `claude -p`
+	# is a full session, and the worker inherits the ending session's working
+	# directory, so it also loaded that repo's CLAUDE.md, the user's global
+	# CLAUDE.md and the project's auto-memory MEMORY.md, uncapped. A kept
+	# proposal re-run that way found its own memory and called itself a
+	# duplicate. An empty --setting-sources drops both CLAUDE.md files but not
+	# auto-memory, which autoMemoryEnabled turns off. --bare would cover both,
+	# but it only authenticates with ANTHROPIC_API_KEY.
+	local args=(-p --max-turns 1 --setting-sources '' --settings '{"disableAllHooks":true,"autoMemoryEnabled":false}')
 	[[ -n "$model" ]] && args+=(--model "$model")
 
 	local bound
