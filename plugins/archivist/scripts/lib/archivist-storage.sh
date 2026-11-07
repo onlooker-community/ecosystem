@@ -187,15 +187,43 @@ archivist_storage_write_artifact() {
 
 # Pinned artifacts first, then newest first. Shared by the single-pass read and
 # its per-kind fallback so the two cannot rank apart.
+#
+# Timestamps compare as strings. Every writer stamps fixed-width UTC
+# (%Y-%m-%dT%H:%M:%SZ), so string order is time order. The key used to strip
+# every non-digit with a regex and parse the rest as a number: ~47ms of
+# archivist-inject at 1,282 artifacts, for the same order (ONL-260). A string
+# key cannot be negated, so the sort runs ascending over the reversed list and
+# is reversed back; sort_by is stable, so ties keep their read order as before.
 _ARCHIVIST_RANK_JQ='
 	def rank($pinned):
 		($pinned.ids // []) as $pids
 		| map(. + { pinned: (.id as $id | $pids | index($id) != null) })
+		| reverse
 		| sort_by([
-			(if .pinned then 0 else 1 end),
-			-((.updated_at // .created_at // "") | sub("[^0-9]"; ""; "g") | tonumber? // 0)
-		]);
+			(if .pinned then 1 else 0 end),
+			((.updated_at // .created_at // "") | if type == "string" then . else "" end)
+		])
+		| reverse;
 '
+
+# Collect the artifact files of each named kind into _ARCHIVIST_FILES, in kind
+# order. The glob sorts under C collation: under the en_US.UTF-8 sessions run
+# in, it sorted 1,282 names in ~30ms against ~1ms on the /bin/bash 3.2 hooks get
+# (ONL-260). Names are ULIDs, plain ASCII, so the order is the same. Only
+# LC_COLLATE: LC_ALL=C made bash 5.3's glob slower, ~76ms. It is local, so jq
+# never sees it, and an LC_ALL in the environment still wins, at the old speed.
+_archivist_artifact_files() {
+	local LC_COLLATE=C
+	local project_dir="$1" kind file
+	shift
+	_ARCHIVIST_FILES=()
+	for kind in "$@"; do
+		for file in "$project_dir/$kind"/*.json; do
+			[[ -f "$file" ]] && _ARCHIVIST_FILES+=("$file")
+		done
+	done
+	return 0
+}
 
 # Read all artifacts for a given project key as a single JSON array, with each
 # entry augmented with a `kind` field. Output is sorted by `updated_at`
@@ -245,11 +273,8 @@ archivist_storage_load_ranked() {
 	# the whole corpus to combine it: ~380ms at 1,221 artifacts against ~120ms
 	# for one pass (ONL-114). Files go in kind order, so ties sort as before.
 	local kind file all_files=()
-	for kind in decisions dead_ends open_questions; do
-		for file in "$project_dir/$kind"/*.json; do
-			[[ -f "$file" ]] && all_files+=("$file")
-		done
-	done
+	_archivist_artifact_files "$project_dir" decisions dead_ends open_questions
+	all_files=("${_ARCHIVIST_FILES[@]+"${_ARCHIVIST_FILES[@]}"}")
 	[[ ${#all_files[@]} -eq 0 ]] && { _archivist_empty_ranked; return 0; }
 
 	jq -n --argjson pinned "$pinned_json" "${jq_args[@]+"${jq_args[@]}"}" "${_ARCHIVIST_RANK_JQ}"'
@@ -264,10 +289,8 @@ archivist_storage_load_ranked() {
 		[[ -d "$project_dir/$kind" ]] || continue
 
 		local files=()
-		for file in "$project_dir/$kind"/*.json; do
-			[[ -f "$file" ]] || continue
-			files+=("$file")
-		done
+		_archivist_artifact_files "$project_dir" "$kind"
+		files=("${_ARCHIVIST_FILES[@]+"${_ARCHIVIST_FILES[@]}"}")
 		[[ ${#files[@]} -eq 0 ]] && continue
 
 		local batch=""
