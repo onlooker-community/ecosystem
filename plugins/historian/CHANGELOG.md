@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/onlooker-community/ecosystem/compare/historian-v0.11.4...historian-v0.12.0) (2026-11-07)
+
+
+### Features
+
+* **storage:** sweep the store on a schedule :broom: ([#562](https://github.com/onlooker-community/ecosystem/issues/562)) ([d30f522](https://github.com/onlooker-community/ecosystem/commit/d30f522e145f36a5ebe042502609060f62da6b2e))
+
 ## [0.11.4](https://github.com/onlooker-community/ecosystem/compare/historian-v0.11.3...historian-v0.11.4) (2026-11-01)
 
 
