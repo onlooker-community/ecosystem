@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.17](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.26.16...librarian-v0.26.17) (2026-11-07)
+
+
+### Bug Fixes
+
+* **librarian:** give the classifier its prompt and nothing else :see_no_evil: ([#558](https://github.com/onlooker-community/ecosystem/issues/558)) ([8124920](https://github.com/onlooker-community/ecosystem/commit/81249206cb84c2a226bbced1fb7de262e76f52e4))
+
 ## [0.26.16](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.26.15...librarian-v0.26.16) (2026-11-06)
 
 
