@@ -60,6 +60,41 @@ setup() {
 	hook_health_success
 	tail -n 1 "$HEALTH_LOG" | jq -e '
 		.session_id == null and .tool_name == null and .hook_event == null
+		and .source == null
+	' >/dev/null
+}
+
+# SessionStart fires on startup, resume, clear and compact, and its durations
+# mean different things under each: a startup shares the machine with Claude
+# Code's own launch, a /clear does not. Without source on the record, the
+# SessionStart budget cannot tell a slow hook from a busy launch (ONL-269).
+@test "a SessionStart payload's source lands on the record" {
+	hook_health_register "start-hook"
+	hook_health_context '{"session_id":"s","hook_event_name":"SessionStart","source":"clear"}'
+	hook_health_success
+	tail -n 1 "$HEALTH_LOG" | jq -e '
+		.source == "clear" and .hook_event == "SessionStart" and .session_id == "s"
+	' >/dev/null
+}
+
+# The fields are read in one jq and split on a separator. A missing field in
+# the middle must stay empty rather than shift the ones after it into its slot.
+@test "a missing middle field does not shift the fields after it" {
+	hook_health_register "gap-hook"
+	hook_health_context '{"session_id":"s","hook_event_name":"SessionStart","source":"compact"}'
+	hook_health_success
+	tail -n 1 "$HEALTH_LOG" | jq -e '
+		.tool_name == null and .hook_event == "SessionStart" and .source == "compact"
+	' >/dev/null
+}
+
+@test "unparseable hook input leaves the context fields null" {
+	hook_health_register "junk-hook"
+	hook_health_context 'not json'
+	hook_health_success
+	tail -n 1 "$HEALTH_LOG" | jq -e '
+		.status == "success" and .session_id == null and .tool_name == null
+		and .hook_event == null and .source == null
 	' >/dev/null
 }
 
