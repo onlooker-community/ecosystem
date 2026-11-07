@@ -124,7 +124,7 @@ _run_hook() { printf '%s' "$(_bash_input "$1")" | bash "$HOOK"; }
   _run_hook "npm ci"
   if [ -f "$LEDGER" ]; then
     run jq -r 'select(.tool == "Bash") | .file_path' "$LEDGER"
-    [[ "$output" != *"package-lock.json"* ]]
+    [[ "$output" != *"package-lock.json"* ]] || return 1
   fi
 }
 

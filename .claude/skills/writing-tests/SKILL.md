@@ -178,17 +178,20 @@ _seed_artifact() {
 }
 ```
 
-## Gate every assertion: non-final `[[ ]]` and `!` need `|| return 1`
+## Gate every assertion: non-final `[[ ]]`, `(( ))` and `!` need `|| return 1`
 
 `bats` resolves `#!/usr/bin/env bash`, which on macOS is the system bash 3.2.
-Under 3.2 a failing **non-final** `[[ ]]` does **not** fail the test body —
-execution continues and the test reports `ok`. Single-bracket `[ ]`, failing
-commands, and failing command substitutions all gate correctly even there; the
-defect is specific to `[[ ]]`. Under bash 5.x (what CI runs) it gates properly,
-so a broken assertion passes locally and only CI would catch it.
+Under 3.2 a failing **non-final** `[[ ]]` or `(( ))` does **not** fail the
+test body — execution continues and the test reports `ok`. Nesting doesn't
+help: one inside a `for` loop, an `if` body or a `{ }` group is lost the same
+way. Single-bracket `[ ]`, failing commands, a `( )` subshell and failing
+command substitutions all gate correctly even there. Under bash 5.x (what CI
+runs) all of them gate, so a broken assertion passes locally and only CI would
+catch it.
 
-Only the **last** assertion in a test body is safe, because a body's exit
-status is its last command. Any `[[ ]]` before that needs explicit gating:
+Only the **last** statement in a test body is safe, because a body's exit
+status is its last command. Any `[[ ]]` or `(( ))` before that needs explicit
+gating:
 
 ```bash
 @test "example" {
@@ -196,6 +199,10 @@ status is its last command. Any `[[ ]]` before that needs explicit gating:
   [ "$status" -eq 0 ]                            # final — gates on its own
 }
 ```
+
+`npm run lint:bats-assertions` reports every ungated one and runs inside
+`test:ci`, so a new one fails CI. `node scripts/lint/check-bats-assertions.mjs
+--fix` appends the guard for you (ONL-206).
 
 Do **not** "fix" this by swapping to `[ ]`. Most of these assertions rely on
 `[[ ]]`-only behavior — `==` glob patterns, `=~` regex, internal `&&`/`||` —

@@ -76,8 +76,8 @@ _seed_artifact_on_disk() {
 
   run librarian_lesson_remove_declined "$PROJECT_KEY" no_versions
   [ "$status" -eq 0 ]
-  [[ "$output" == *"01M3B87J7046SJE5BECNMP670K"* ]]
-  [[ "$output" == *"01M33440PGTWP4QMMG1BVA52DR"* ]]
+  [[ "$output" == *"01M3B87J7046SJE5BECNMP670K"* ]] || return 1
+  [[ "$output" == *"01M33440PGTWP4QMMG1BVA52DR"* ]] || return 1
   [ "$(wc -l < "${LESSONS_DIR}/declined.jsonl" | tr -d ' ')" -eq 1 ]
   jq -e '.reason == "no_resolution"' < "${LESSONS_DIR}/declined.jsonl"
 }
@@ -90,7 +90,7 @@ _seed_artifact_on_disk() {
     > "${LESSONS_DIR}/declined.jsonl"
   run librarian_lesson_remove_declined "$PROJECT_KEY" no_versions
   [ "$status" -eq 0 ]
-  [[ "$output" == *"01M3B87J7046SJE5BECNMP670K"* ]]
+  [[ "$output" == *"01M3B87J7046SJE5BECNMP670K"* ]] || return 1
   # The unparseable line is not a matching decline, so it must survive rather
   # than be swept up by the rewrite.
   grep -q "01M33440PGTWP" "${LESSONS_DIR}/declined.jsonl"
@@ -145,7 +145,7 @@ _seed_artifact_on_disk() {
     > "${LESSONS_DIR}/declined.jsonl"
   run librarian_cli lessons reconsider "$PROJECT_REPO"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"Nothing to reconsider"* ]]
+  [[ "$output" == *"Nothing to reconsider"* ]] || return 1
   grep -q "no_resolution" "${LESSONS_DIR}/declined.jsonl"
 }
 

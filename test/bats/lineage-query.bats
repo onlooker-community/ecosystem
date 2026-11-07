@@ -122,7 +122,7 @@ setup() {
 @test "scope_note does not hedge an exact answer" {
 	run lineage_scope_note "" "Edit"
 	[ "$status" -eq 0 ]
-	[[ "$output" != *"uncommitted"* ]]
+	[[ "$output" != *"uncommitted"* ]] || return 1
 	[ -n "$output" ]
 }
 

@@ -1073,7 +1073,7 @@ _set_status() {
 	id=$(_seed_pending_unscoped)
 	run librarian_cli lessons show "$id" "$PROJECT_REPO"
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"unscoped"* ]]
+	[[ "$output" == *"unscoped"* ]] || return 1
 	[[ "$output" == *"justification"* ]]
 }
 

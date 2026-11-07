@@ -193,7 +193,7 @@ _seed_held_lesson() {
 	local ctx
 	ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
 	[[ "$ctx" == *"1 lesson(s) will leave this machine unless vetoed"* ]] || return 1
-	[[ "$ctx" == *"/librarian lessons queue"* ]]
+	[[ "$ctx" == *"/librarian lessons queue"* ]] || return 1
 	# Confirms the held lesson is still there — the sweep ran but its
 	# window (2099) hasn't elapsed, so this isn't accidentally passing
 	# because the lesson shipped and count_held now reads 0 some other way.
@@ -236,7 +236,7 @@ _seed_shippable_lesson() {
 	[[ "$ctx" == *"01M3SWEPTSURFACE00000001"* ]] || return 1
 	# The held line must NOT also fire for the same lesson — it shipped, it
 	# is no longer held.
-	[[ "$ctx" != *"will leave this machine unless vetoed"* ]]
+	[[ "$ctx" != *"will leave this machine unless vetoed"* ]] || return 1
 	[ -f "${LIBRARIAN_DIR}/lessons/approved/01M3SWEPTSURFACE00000001.json" ]
 	[ ! -f "${LIBRARIAN_DIR}/lessons/approved_held/01M3SWEPTSURFACE00000001.json" ]
 }
