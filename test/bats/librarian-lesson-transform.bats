@@ -381,7 +381,7 @@ _seed() {
     "Vitest 4.1.9 imports vite/module-runner which is absent in Vite 5.4.21.")
   run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
   [ "$status" -eq 0 ]
-  [[ "$output" == proposed:* ]]
+  [[ "$output" == proposed:* ]] || return 1
   id="${output#proposed:}"
   jq -e '.candidate.applies_to.scope.versions.vite == "<6"
      and .candidate.applies_to.scope.versions.vitest == ">=4"' \
@@ -429,7 +429,7 @@ _seed() {
   # Asserted skipped:pregate before ONL-107. The artifact is now routed to the
   # unscoped prompt and parked for a human rather than dropped with no record at
   # all; the half that still holds is that it never reaches the decline ledger.
-  [[ "$output" == proposed:* ]]
+  [[ "$output" == proposed:* ]] || return 1
   [ ! -f "${LESSONS_DIR}/declined.jsonl" ]
 }
 
@@ -783,7 +783,7 @@ STUB
     "A bare footer was meant for one package and hit the whole manifest.")
   run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
   [ "$status" -eq 0 ]
-  [[ "$output" == proposed:* ]]
+  [[ "$output" == proposed:* ]] || return 1
   # Task 3 appends the route to a parked result, so strip twice. Written this
   # way now so Task 3 does not have to come back and edit this test.
   id="${output#proposed:}"; id="${id%%:*}"
@@ -805,7 +805,7 @@ STUB
   art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "Vitest 4.1.9 / Vite 5.x mismatch" \
     "Vitest 4.1.9 imports vite/module-runner which is absent in Vite 5.4.21.")
   run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
-  [[ "$output" == proposed:* ]]
+  [[ "$output" == proposed:* ]] || return 1
   id="${output#proposed:}"; id="${id%%:*}"
   jq -e '.candidate.applies_to.scope.kind == "versioned"' \
     "${LESSONS_DIR}/proposals/${id}.json"
@@ -835,7 +835,7 @@ STUB
   art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "no token here" "none either")
   run librarian_lesson_build_prompt "$art" unscoped
   [ "$status" -eq 0 ]
-  [[ "$output" == *"<scope-mode>unscoped</scope-mode>"* ]]
+  [[ "$output" == *"<scope-mode>unscoped</scope-mode>"* ]] || return 1
   [[ "$output" != *"There is no version-independent option"* ]]
 }
 
@@ -851,7 +851,7 @@ STUB
   art1=$(_seed "01M3B87J7046SJE5BECNMP6701" "Release-As bumps every component" \
     "A bare footer was meant for one package and hit the whole manifest.")
   run librarian_lesson_transform_one "$PROJECT_KEY" "$art1" 0
-  [[ "$output" == proposed:* ]]
+  [[ "$output" == proposed:* ]] || return 1
 
   art2=$(_seed "01M3B87J7046SJE5BECNMP6702" "Release-As bumps every component" \
     "A bare footer was meant for one package and hit the whole manifest.")

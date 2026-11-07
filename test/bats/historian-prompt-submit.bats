@@ -169,7 +169,7 @@ _index_session() {
   local ctx
   ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
   [[ "$ctx" == *"Historian: a past chunk looks similar"* ]] || return 1
-  [[ "$ctx" == *"redash"* ]]
+  [[ "$ctx" == *"redash"* ]] || return 1
 
   grep '"event_type":"historian.retrieval.surfaced"' "$ONLOOKER_EVENTS_LOG" \
     | jq -e '.payload.similarity >= 0.55 and .payload.source_session_id == "past-1"

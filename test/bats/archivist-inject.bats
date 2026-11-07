@@ -178,7 +178,7 @@ SHIM
   _settings '{"archivist":{"injection":{"max_chars":120}}}'
 
   run _ctx
-  [[ "$output" == *"- [decision] fits"$'\n\n'"(Archivist injected 1/3 items"* ]]
+  [[ "$output" == *"- [decision] fits"$'\n\n'"(Archivist injected 1/3 items"* ]] || return 1
   [[ "$output" != *"small"* ]]
 }
 
@@ -188,7 +188,7 @@ SHIM
   _settings '{"archivist":{"injection":{"include_dead_ends":false,"include_open_questions":false}}}'
 
   run _ctx
-  [[ "$output" != *"a dead end"* && "$output" != *"a question"* ]]
+  [[ "$output" != *"a dead end"* && "$output" != *"a question"* ]] || return 1
   [[ "$output" == *"injected 1/3 items"* ]]
 }
 
