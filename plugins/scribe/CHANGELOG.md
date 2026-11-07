@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/onlooker-community/ecosystem/compare/scribe-v0.10.5...scribe-v0.11.0) (2026-11-07)
+
+
+### Features
+
+* **hook-health:** record which kind of SessionStart a run was :mag: ([#566](https://github.com/onlooker-community/ecosystem/issues/566)) ([b2413cb](https://github.com/onlooker-community/ecosystem/commit/b2413cb670502823d8688ad27b0dbeb2cebef7f3))
+
 ## [0.10.5](https://github.com/onlooker-community/ecosystem/compare/scribe-v0.10.4...scribe-v0.10.5) (2026-11-06)
 
 
