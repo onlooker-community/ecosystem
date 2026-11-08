@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.79.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.78.3...ecosystem-v0.79.0) (2026-11-08)
+
+
+### Features
+
+* **session:** tell a spawned session from a person's :mag: ([#576](https://github.com/onlooker-community/ecosystem/issues/576)) ([6fab898](https://github.com/onlooker-community/ecosystem/commit/6fab898596eaa7a378d4185d1391a12ab1184937))
+
 ## [0.78.3](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.78.2...ecosystem-v0.78.3) (2026-11-08)
 
 
