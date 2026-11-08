@@ -156,7 +156,7 @@ Warden emits the canonical `warden.*` event surface from [`@onlooker-community/s
 `/warden` is the user-facing control surface for the gate that the hooks open and close automatically.
 
 - `/warden` or `/warden status` — prints whether the gate is OPEN or CLOSED. When closed, prints the recorded threat: `threat_type`, `source_type`, source URL/path, confidence, detection method, matched pattern, and the flagged snippet (when storage is enabled).
-- `/warden clear` (also `reopen`, `override`, `unblock`) — verifies the gate is closed, removes the lock, re-enables `Write`/`Edit`/`Bash`, and emits `warden.threat.cleared` with `cleared_by: user_override`.
+- `/warden clear` (also `reopen`, `override`, `unblock`) — verifies the gate is closed, removes the lock, re-enables `Write`/`Edit`/`MultiEdit`/`Bash`, and emits `warden.threat.cleared` with `cleared_by: user_override`.
 
 The skill resolves the active session automatically: it prefers `$CLAUDE_SESSION_ID`, falls back to the single closed gate when exactly one exists, and reports ambiguity if several sessions have closed gates (re-run with an explicit session id in that case). Closing is automatic; clearing is always a deliberate user decision.
 

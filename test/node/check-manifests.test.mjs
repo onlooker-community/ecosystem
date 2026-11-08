@@ -73,6 +73,36 @@ describe('check-manifests', () => {
     assert.match(r.stderr, /does not match marketplace entry name/);
   });
 
+  // Claude Code's /plugin browser shows the marketplace copy and onlooker.dev
+  // shows plugin.json's, so two copies that differ tell two audiences two
+  // different things (ONL-273).
+  it('errors when a marketplace description differs from plugin.json', () => {
+    const root = scaffold();
+    writeJson(
+      join(root, '.claude-plugin', 'marketplace.json'),
+      VALID_MARKETPLACE({
+        plugins: [{ name: 'sample', source: './', description: 'An older description.' }],
+      }),
+    );
+    writeJson(join(root, '.claude-plugin', 'plugin.json'), VALID_PLUGIN_JSON());
+    const r = run(root);
+    assert.equal(r.code, 1);
+    assert.match(r.stderr, /marketplace\.json `description` does not match plugin\.json/);
+  });
+
+  it('passes when a marketplace description matches plugin.json', () => {
+    const root = scaffold();
+    writeJson(
+      join(root, '.claude-plugin', 'marketplace.json'),
+      VALID_MARKETPLACE({
+        plugins: [{ name: 'sample', source: './', description: 'A sample plugin used by tests.' }],
+      }),
+    );
+    writeJson(join(root, '.claude-plugin', 'plugin.json'), VALID_PLUGIN_JSON());
+    const r = run(root);
+    assert.equal(r.code, 0, r.stderr);
+  });
+
   it('errors on non-kebab-case names', () => {
     const root = scaffold();
     writeJson(

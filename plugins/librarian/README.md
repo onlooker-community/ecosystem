@@ -37,7 +37,7 @@ Accepted promotions land in the user's typed memory store at `~/.claude/projects
 
 ## Status
 
-This plugin is **in design / scaffolding phase**. The hook entry points exist and load cleanly but the scan + classify + propose pipeline is not yet implemented. See [`docs/design.md`](docs/design.md) for the full design and [`docs/adr/001-propose-dont-auto-write.md`](docs/adr/001-propose-dont-auto-write.md) for the load-bearing decision.
+The scan, classify and propose pipeline runs at `SessionEnd`, as [How it works](#how-it-works) describes, and `/librarian review` walks the queue it fills. See [`docs/design.md`](docs/design.md) for the full design and [`docs/adr/001-propose-dont-auto-write.md`](docs/adr/001-propose-dont-auto-write.md) for the load-bearing decision.
 
 ## Measurements
 
