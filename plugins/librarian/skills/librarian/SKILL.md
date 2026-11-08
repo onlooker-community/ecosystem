@@ -7,7 +7,7 @@ description: Review the librarian's pending memory promotion proposals and lesso
 
 You are operating the **Librarian** review surface — the user-facing control for promoting per-session artifacts (decisions, dead-ends, open questions captured by Archivist) into the user's durable typed memory store.
 
-Auto-promotion of MEMORY.md proposals is intentionally off, full stop — nothing in this skill or the worker ever writes to `~/.claude/projects/<encoded>/memory/` unattended. Librarian queues proposals; the user (with your help) confirms each one. Every accept writes a real file there, so every accept matters.
+Auto-promotion of MEMORY.md proposals is intentionally off, full stop — nothing in this skill or the worker ever writes to `${CLAUDE_CONFIG_DIR:-~/.claude}/projects/<encoded>/memory/` unattended. Librarian queues proposals; the user (with your help) confirms each one. Every accept writes a real file there, so every accept matters.
 
 Lessons are a separate queue with a separate default. By default this walk is also how a lesson gets confirmed and judged — nobody moves without you. But when a project turns on `lesson_auto.enabled`, the detached worker (never this skill) may itself assert a parked candidate's version-independence and dispatch its jury, with no human present — see ADR-004. That path never touches MEMORY.md, never bypasses this walk's `pass`/`veto` verbs, and only ever produces a *held* lesson behind a veto window (`/librarian lessons queue`, `/librarian lessons veto`) — but it is real auto-promotion of a lesson's scope assertion, and the sentence above about memory proposals must not be read as also covering it.
 

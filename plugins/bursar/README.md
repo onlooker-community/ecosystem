@@ -55,7 +55,7 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
 | `surface_at_session_start` | `true` | When `false`, bursar still records sessions and writes breadcrumbs but prints nothing at `SessionStart`. |
 | `min_cost_to_surface_usd` | `0` | Suppress the `SessionStart` message when the windowed total is below this dollar amount. |
 
-Config resolves in three layers, latest wins: plugin `config.json` → `~/.claude/settings.json` → `<repo>/.claude/settings.json`.
+Config resolves in three layers, latest wins: plugin `config.json` → `${CLAUDE_CONFIG_DIR:-~/.claude}/settings.json` → `<repo>/.claude/settings.json`.
 
 ## Storage layout
 

@@ -3,8 +3,8 @@
 #
 # Five layers, latest wins:
 #   1. <repo>/config.json  (the substrate's shipped defaults)
-#   2. ~/.claude/settings.json
-#   3. ~/.claude/settings.local.json
+#   2. <claude_dir>/settings.json
+#   3. <claude_dir>/settings.local.json
 #   4. <repo>/.claude/settings.json
 #   5. <repo>/.claude/settings.local.json
 #

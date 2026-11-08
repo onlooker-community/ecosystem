@@ -2,7 +2,7 @@
 
 Maintenance layer for the user's typed auto-memory store.
 
-At every `SessionStart`, Curator runs cheap heuristic checks against the memories at `~/.claude/projects/<encoded-project>/memory/` — deadlines past the grace period, broken path references, broken `MEMORY.md` index entries, and orphaned memory files — and records findings. The one-line SessionStart pointer stays off (`surfacer.enabled`) until `/curator review` ships. Curator never edits the memory store directly.
+At every `SessionStart`, Curator runs cheap heuristic checks against the memories at `${CLAUDE_CONFIG_DIR:-~/.claude}/projects/<encoded-project>/memory/` — deadlines past the grace period, broken path references, broken `MEMORY.md` index entries, and orphaned memory files — and records findings. The one-line SessionStart pointer stays off (`surfacer.enabled`) until `/curator review` ships. Curator never edits the memory store directly.
 
 The weekly LLM-backed contradiction sweep described in [`docs/design.md`](docs/design.md) is a future capability — see the **Status** section below for what's actually shipped today.
 

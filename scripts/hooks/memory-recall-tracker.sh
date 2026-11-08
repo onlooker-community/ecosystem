@@ -105,7 +105,7 @@ fi
 
 # ---------------------------------------------------------------------------
 # Resolve the per-project typed-memory store at
-# ~/.claude/projects/<encoded>/memory/. Claude Code encodes the project
+# ${CLAUDE_CONFIG_DIR:-~/.claude}/projects/<encoded>/memory/. Claude Code encodes the project
 # path by replacing path separators with `-` and prepending a leading `-`.
 # Prefer $CLAUDE_PROJECT_ENCODED when the harness has populated it; fall
 # back to deriving from CWD.

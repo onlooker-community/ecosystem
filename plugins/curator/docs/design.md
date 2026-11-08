@@ -6,7 +6,7 @@
 
 Curator is the maintenance layer for the user's typed memory store. It runs cheap heuristic checks at every `SessionStart` and an LLM-backed conflict sweep at most weekly, surfaces stale references, decayed dates, and contradicting entries, and proposes prunes for user review. It does not edit the memory store directly — the same posture librarian and cartographer adopt for durable substrates.
 
-It sits in the [memory architecture](../../../docs/memory-architecture.md) downstream of librarian: librarian writes (with user confirmation); curator audits. Curator is parallel to cartographer: same shape (audit, propose, surface), different substrate. Cartographer audits hand-maintained instruction files (CLAUDE.md, AGENTS.md, `.claude/rules/`); curator audits the typed auto-memory store at `~/.claude/projects/<encoded-project>/memory/`.
+It sits in the [memory architecture](../../../docs/memory-architecture.md) downstream of librarian: librarian writes (with user confirmation); curator audits. Curator is parallel to cartographer: same shape (audit, propose, surface), different substrate. Cartographer audits hand-maintained instruction files (CLAUDE.md, AGENTS.md, `.claude/rules/`); curator audits the typed auto-memory store at `${CLAUDE_CONFIG_DIR:-~/.claude}/projects/<encoded-project>/memory/`.
 
 ---
 
@@ -91,7 +91,7 @@ The rate gate exists because curator runs on every session start, and a quadrati
 
 Parses the typed memory store:
 
-1. Reads `~/.claude/projects/<encoded-project>/memory/MEMORY.md` for the index entries.
+1. Reads `${CLAUDE_CONFIG_DIR:-~/.claude}/projects/<encoded-project>/memory/MEMORY.md` for the index entries.
 2. For each line of the form `- [Title](file.md) — hook`, resolves `file.md` against the memory dir.
 3. Reads each referenced file. Parses YAML frontmatter (`name`, `description`, `type`). The body after frontmatter is the memory content.
 4. If a file is referenced from `MEMORY.md` but does not exist, that itself is a `findings.broken_index` — surfaced immediately.
@@ -297,7 +297,7 @@ The pointer caps the inject at one line; findings details live in the skill, not
 
 6. **Type-drift detection.** Mentioned as failure mode E but not addressed by the current checks. Would require an LLM call per memory: "given this body, what type fits best?" — too expensive for every session, plausible for the weekly sweep.
 
-7. **Interaction with `~/.claude/CLAUDE.md`.** Global instructions in `~/.claude/CLAUDE.md` shape behavior but live outside the typed memory store. Curator does not audit them — cartographer does. If the boundary moves (e.g., librarian gains the ability to propose `~/.claude/CLAUDE.md` edits), curator and cartographer will need a shared rule for which substrate owns which file.
+7. **Interaction with `${CLAUDE_CONFIG_DIR:-~/.claude}/CLAUDE.md`.** Global instructions in `${CLAUDE_CONFIG_DIR:-~/.claude}/CLAUDE.md` shape behavior but live outside the typed memory store. Curator does not audit them — cartographer does. If the boundary moves (e.g., librarian gains the ability to propose `${CLAUDE_CONFIG_DIR:-~/.claude}/CLAUDE.md` edits), curator and cartographer will need a shared rule for which substrate owns which file.
 
 ---
 

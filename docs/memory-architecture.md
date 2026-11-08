@@ -12,7 +12,7 @@ It is the companion to [`architecture.md`](architecture.md), which describes the
 |-----------|----------|-----------|--------|
 | Working | Within one model turn | Conversation context window | (the model itself) |
 | Session | One Claude Code session, across compactions | `~/.onlooker/archivist/<project-key>/` | **archivist** |
-| Durable | Across sessions, weeks–months | `~/.claude/projects/<encoded-project>/memory/` | **librarian**, **curator** |
+| Durable | Across sessions, weeks–months | `${CLAUDE_CONFIG_DIR:-~/.claude}/projects/<encoded-project>/memory/` | **librarian**, **curator** |
 | Episodic | Across sessions, retrieved on similarity | `~/.onlooker/historian/<project-key>/` | **historian** |
 
 Each plugin operates on exactly one substrate. They communicate by events, not by reaching across substrates.
@@ -56,7 +56,7 @@ The memory plugins overlap in spirit but operate on different substrates and ans
 | Plugin | Question it answers | Storage | Trigger |
 |--------|---------------------|---------|---------|
 | archivist | "What did we decide / try / leave open in *this* session?" | `~/.onlooker/archivist/<project-key>/` | PreCompact, SessionStart |
-| librarian | "Which of those decisions deserves to live forever?" | `~/.claude/projects/<encoded-project>/memory/` (writes proposals; user confirms) | SessionEnd, scheduled |
+| librarian | "Which of those decisions deserves to live forever?" | `${CLAUDE_CONFIG_DIR:-~/.claude}/projects/<encoded-project>/memory/` (writes proposals; user confirms) | SessionEnd, scheduled |
 | curator | "Which of our durable memories are now wrong, stale, or contradictory?" | reads & proposes prunes against the typed memory store | SessionStart (cheap), scheduled (LLM) |
 | historian | "Have we seen something like this before, and if so, what happened?" | `~/.onlooker/historian/<project-key>/` (embeddings) | SessionEnd, UserPromptSubmit |
 | scribe | "What's a readable artifact of what we did?" | scribe's own output dir | session end |
@@ -75,7 +75,7 @@ The memory plugins overlap in spirit but operate on different substrates and ans
 
 All three new memory plugins follow the ecosystem conventions:
 
-- **Project keying** for plugin-owned storage (`~/.onlooker/<plugin>/<project-key>/`) uses the SHA256-of-remote-URL scheme from [`architecture.md`](architecture.md#project-keying), so cross-clone consistency is preserved for plugin state. Note: the typed memory store the librarian writes into is keyed by Claude Code's per-checkout path encoding (`~/.claude/projects/<encoded-project>/memory/`), which is a different scheme — see [librarian ADR-001](../plugins/librarian/docs/adr/001-propose-dont-auto-write.md) for how this asymmetry is handled.
+- **Project keying** for plugin-owned storage (`~/.onlooker/<plugin>/<project-key>/`) uses the SHA256-of-remote-URL scheme from [`architecture.md`](architecture.md#project-keying), so cross-clone consistency is preserved for plugin state. Note: the typed memory store the librarian writes into is keyed by Claude Code's per-checkout path encoding (`${CLAUDE_CONFIG_DIR:-~/.claude}/projects/<encoded-project>/memory/`), which is a different scheme — see [librarian ADR-001](../plugins/librarian/docs/adr/001-propose-dont-auto-write.md) for how this asymmetry is handled.
 - **No cross-plugin runtime dependencies.** Librarian degrades gracefully if archivist artifacts are absent (no proposals; emits `librarian.scan.skipped`). Curator degrades gracefully if the memory store is empty. Historian degrades gracefully if no past transcripts are indexed.
 - **Event emission via `onlooker-event.mjs`.** Event types: `librarian.*`, `curator.*`, `historian.*`. Registered in `@onlooker-community/schema` before first emission.
 - **Fail-soft on missing `~/.onlooker/`.** Plugins must not block a session they were not invited to.

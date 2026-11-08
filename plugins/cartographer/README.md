@@ -13,7 +13,7 @@ Every other Onlooker plugin is reactive. Cartographer is the exception.
 | `contradiction` | Two rules that cannot both be satisfied simultaneously |
 | `dead_rule` | A rule fully subsumed by a more specific rule elsewhere |
 | `stale_ref` | A reference to a file path, tool, or command that no longer exists |
-| `scope_collision` | A project rule that duplicates or silently overrides a global `~/.claude/CLAUDE.md` rule |
+| `scope_collision` | A project rule that duplicates or silently overrides a global `${CLAUDE_CONFIG_DIR:-~/.claude}/CLAUDE.md` rule |
 | `undocumented_entity` | Something that exists on disk — a plugin, a skill — that no instruction file mentions |
 
 ## Installation

@@ -183,7 +183,7 @@ Workflow:
 - Hook scripts source shared helpers from `scripts/lib/` (or the plugin's own `scripts/lib/`).
 - Event types follow `<plugin>.<noun>.<verb>` — e.g. `compass.check.skipped`, `tribunal.gate.blocked`.
 - ULIDs everywhere for IDs (not UUIDs). Each plugin ships its own `*_ulid` helper (e.g. `archivist-ulid.sh`, `tribunal-ulid.sh`); there is no shared ecosystem helper. Copy `plugins/tribunal/scripts/lib/tribunal-ulid.sh` as a starting point and rename the function prefix.
-- Config defaults live in `config.json`. User overrides go in `~/.claude/settings.json` (global) or `.claude/settings.json` (per-project) under the plugin's namespace key (e.g. `"compass"`, `"tribunal"`). See ADR-004.
+- Config defaults live in `config.json`. User overrides go in `${CLAUDE_CONFIG_DIR:-~/.claude}/settings.json` (global) or `.claude/settings.json` (per-project) under the plugin's namespace key (e.g. `"compass"`, `"tribunal"`). See ADR-004.
 
 <!-- Every `bd`-generated block is fenced by markdownlint-disable/enable pairs.
      `bd setup` rewrites whatever sits between BEGIN and END verbatim, so any
