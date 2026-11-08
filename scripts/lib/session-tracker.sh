@@ -110,15 +110,57 @@ session_tracker_build_start_payload() {
 	branch=$(echo "$git_lines" | sed -n '1p')
 	commit=$(echo "$git_lines" | sed -n '2p')
 
+	local source session_id parent attended
+	source=$(echo "$input_json" | jq -r '.source // ""' 2>/dev/null) || source=""
+	session_id=$(echo "$input_json" | jq -r '.session_id // ""' 2>/dev/null) || session_id=""
+	parent=$(session_tracker_parent_session_id)
+	[[ "$parent" == "$session_id" ]] && parent=""
+	case "${CLAUDE_CODE_SESSION_ATTENDED:-}" in
+	1) attended="true" ;;
+	0) attended="false" ;;
+	*) attended="" ;;
+	esac
+
 	jq -n \
 		--arg wd "$cwd" \
 		--arg branch "$branch" \
 		--arg commit "$commit" \
+		--arg source "$source" \
+		--arg parent "$parent" \
+		--arg attended "$attended" \
 		'{
 			working_directory: $wd
 		}
 		+ (if $branch != "" then {git_branch: $branch} else {} end)
-		+ (if $commit != "" then {git_commit: $commit} else {} end)'
+		+ (if $commit != "" then {git_commit: $commit} else {} end)
+		+ (if $source != "" then {source: $source} else {} end)
+		+ (if $parent != "" then {parent_session_id: $parent} else {} end)
+		+ (if $attended != "" then {attended: ($attended == "true")} else {} end)'
+}
+
+# The session that spawned this one, or nothing (ONL-221).
+#
+# Claude Code overwrites CLAUDE_CODE_SESSION_ID with the new session's id before
+# it runs hooks, so the spawner's id is gone from our environment. It survives in
+# the environment the claude process itself was launched with, which $CLAUDE_PID
+# names: a claude started from another session's shell inherited that session's
+# CLAUDE_CODE_SESSION_ID, and one a person started from a terminal has none.
+# Measured against claude 2.1.309; both variables are undocumented, so every
+# failure here means "no parent found", never an error.
+session_tracker_parent_session_id() {
+	local pid="${CLAUDE_PID:-}" line=""
+	[[ "$pid" =~ ^[0-9]+$ ]] || return 0
+
+	if [[ -r "/proc/$pid/environ" ]]; then
+		line=$(tr '\0' '\n' <"/proc/$pid/environ" 2>/dev/null \
+			| grep -m1 '^CLAUDE_CODE_SESSION_ID=') || line=""
+	else
+		# macOS ps -E appends the launch environment to the command line. The
+		# environment follows the arguments, so the last match is the real one.
+		line=$(ps -E -ww -o command= -p "$pid" 2>/dev/null | tr ' ' '\n' \
+			| grep '^CLAUDE_CODE_SESSION_ID=' | tail -n 1) || line=""
+	fi
+	printf '%s' "${line#CLAUDE_CODE_SESSION_ID=}"
 }
 
 # Build session.end payload JSON from hook input and tracker file.
