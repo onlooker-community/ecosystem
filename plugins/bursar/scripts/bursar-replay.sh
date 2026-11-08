@@ -127,8 +127,11 @@ while IFS= read -r bc; do
 	# No timestamp to date it by: recording it as "now" would misplace it, so
 	# fall back to the file mtime, which is when SessionStart wrote it.
 	if [[ -z "${RECORD:-}" ]]; then
-		mtime=$(stat -f %m "$bc" 2>/dev/null || stat -c %Y "$bc" 2>/dev/null || printf '')
-		if [[ -n "$mtime" ]]; then
+		# GNU first: GNU's `stat -f %m` reads %m as a second file and prints
+		# filesystem info for the first before failing, which the fallback's
+		# output would then be appended to. BSD rejects -c outright.
+		mtime=$(stat -c %Y "$bc" 2>/dev/null) || mtime=$(stat -f %m "$bc" 2>/dev/null) || mtime=""
+		if [[ "$mtime" =~ ^[0-9]+$ ]]; then
 			{ IFS= read -r RECORD; IFS= read -r EV; } < <(
 				jq -rn --arg sid "$sid" --arg pk "$pk" --arg model "$model" \
 					--argjson te "$mtime" --arg ts "$(bursar_epoch_to_iso "$mtime")" \
