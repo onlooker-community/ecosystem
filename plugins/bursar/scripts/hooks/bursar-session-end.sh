@@ -184,10 +184,8 @@ MODEL=""
 # 1.5s SessionEnd budget. If the lock is contended, fail fast and retain the
 # breadcrumb rather than being cancelled mid-execution by the CLI timeout.
 #
-# The breadcrumb preserves the session -> project attribution, but nothing
-# replays it: SessionStart writes a breadcrumb for its own session and never
-# reads a stranded one, so a session lost here is lost for good and its file
-# stays behind. 116 such files are on this machine. Tracked separately.
+# A breadcrumb left behind here is picked up by bursar-replay.sh, which a later
+# SessionStart launches once the breadcrumb is a day old (ONL-34).
 if [[ -n "$RECORD" ]]; then
 	if bursar_ledger_record "$PROJECT_KEY" "$RECORD" 1; then
 		[[ -n "$EV" ]] && bursar_emit_event "bursar.session.recorded" "$EV" "$SESSION_ID" || true
