@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.27.2](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.27.1...librarian-v0.27.2) (2026-11-08)
+
+
+### Bug Fixes
+
+* **cartographer:** find global instruction files in CLAUDE_CONFIG_DIR :compass: ([#580](https://github.com/onlooker-community/ecosystem/issues/580)) ([c1b2759](https://github.com/onlooker-community/ecosystem/commit/c1b275902c025e49afb7d18de88578280a10dcf8))
+
 ## [0.27.1](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.27.0...librarian-v0.27.1) (2026-11-08)
 
 

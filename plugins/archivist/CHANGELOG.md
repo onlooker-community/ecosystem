@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.2](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.10.1...archivist-v0.10.2) (2026-11-08)
+
+
+### Bug Fixes
+
+* **cartographer:** find global instruction files in CLAUDE_CONFIG_DIR :compass: ([#580](https://github.com/onlooker-community/ecosystem/issues/580)) ([c1b2759](https://github.com/onlooker-community/ecosystem/commit/c1b275902c025e49afb7d18de88578280a10dcf8))
+
 ## [0.10.1](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.10.0...archivist-v0.10.1) (2026-11-08)
 
 
