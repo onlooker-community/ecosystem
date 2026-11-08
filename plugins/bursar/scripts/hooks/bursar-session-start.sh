@@ -9,6 +9,8 @@
 #      ledger over the configured window and emitting it as SessionStart
 #      additionalContext.
 #   3. Emit bursar.rollup.surfaced (or bursar.rollup.skipped) for audit.
+#   4. Launch bursar-replay.sh detached, which records the sessions whose
+#      SessionEnd never did and so left their breadcrumbs behind (ONL-34).
 #
 # Hook contract:
 #   - Always exits 0. Never blocks SessionStart.
@@ -58,9 +60,26 @@ if [[ -n "$SESSION_ID" ]]; then
 	BREADCRUMB_DIR="${ONLOOKER_DIR}/bursar/sessions"
 	mkdir -p "$BREADCRUMB_DIR" 2>/dev/null || true
 	safe_sid=$(printf '%s' "$SESSION_ID" | tr -c 'a-zA-Z0-9-' '_')
-	jq -n --arg pk "$PROJECT_KEY" --arg cwd "$CWD" --arg ts "$(bursar_now_iso)" \
-		'{project_key: $pk, cwd: $cwd, started_at: $ts}' \
+	jq -n --arg sid "$SESSION_ID" --arg pk "$PROJECT_KEY" --arg cwd "$CWD" --arg ts "$(bursar_now_iso)" \
+		'{session_id: $sid, project_key: $pk, cwd: $cwd, started_at: $ts}' \
 		>"${BREADCRUMB_DIR}/${safe_sid}.json" 2>/dev/null || true
+fi
+
+# -----------------------------------------------------------------------
+# Replay stranded breadcrumbs. Detached, so a backlog of hundreds costs this
+# hook nothing; setsid keeps the session's SIGHUP from killing it, with nohup
+# alone on macOS, where setsid needs coreutils. The replay locks against a
+# concurrent copy and is a no-op when no breadcrumb is old enough.
+# -----------------------------------------------------------------------
+REPLAY="${PLUGIN_ROOT}/scripts/bursar-replay.sh"
+if [[ -x "$REPLAY" ]]; then
+	export ONLOOKER_DIR
+	if command -v setsid >/dev/null 2>&1; then
+		nohup setsid "$REPLAY" </dev/null >/dev/null 2>&1 &
+	else
+		nohup "$REPLAY" </dev/null >/dev/null 2>&1 &
+	fi
+	disown 2>/dev/null || true
 fi
 
 # -----------------------------------------------------------------------
