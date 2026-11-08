@@ -44,12 +44,18 @@ cartographer_collect_files() {
 }
 
 cartographer_collect_global_files() {
-	# Global ~/.claude/CLAUDE.md and ~/.claude/rules/*.md
-	if [[ -f "$HOME/.claude/CLAUDE.md" ]]; then
-		printf '%s\n' "$HOME/.claude/CLAUDE.md"
+	# Global <claude_dir>/CLAUDE.md and <claude_dir>/rules/*.md, with claude_dir
+	# resolved in the same order config-loader.sh uses. This was a hardcoded
+	# $HOME/.claude, but Claude Code exports CLAUDE_CONFIG_DIR to hooks, and
+	# where that differs $HOME/.claude usually does not exist — so the user's
+	# global files were never audited and scope_collision reported clean
+	# (ONL-276).
+	local claude_dir="${CLAUDE_HOME:-${CLAUDE_CONFIG_DIR:-${HOME}/.claude}}"
+	if [[ -f "${claude_dir}/CLAUDE.md" ]]; then
+		printf '%s\n' "${claude_dir}/CLAUDE.md"
 	fi
-	if [[ -d "$HOME/.claude/rules" ]]; then
-		find "$HOME/.claude/rules" -maxdepth 2 -type f -name "*.md" 2>/dev/null
+	if [[ -d "${claude_dir}/rules" ]]; then
+		find "${claude_dir}/rules" -maxdepth 2 -type f -name "*.md" 2>/dev/null
 	fi
 }
 
