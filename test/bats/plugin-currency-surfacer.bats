@@ -78,6 +78,7 @@ _break_node() {
 	_disable
 	_run_hook
 	[ "$status" -eq 0 ] || return 1
+	await_events onlooker.currency.skipped 1 || return 1
 	grep '"event_type":"onlooker.currency.skipped"' "$ONLOOKER_EVENTS_LOG" \
 		| jq -e '.payload.skip_reason == "disabled"' >/dev/null
 }
@@ -85,6 +86,7 @@ _break_node() {
 @test "a fresh cache is read without re-probing" {
 	_seed_now '[]'
 	_run_hook
+	await_events onlooker.currency.skipped 1 || return 1
 	grep '"event_type":"onlooker.currency.skipped"' "$ONLOOKER_EVENTS_LOG" \
 		| jq -e '.payload.skip_reason == "cache_fresh"' >/dev/null || return 1
 	! grep -q '"event_type":"onlooker.currency.checked"' "$ONLOOKER_EVENTS_LOG" || return 1
@@ -99,6 +101,7 @@ _break_node() {
 @test "a fresh cache with findings surfaces and carries its answer age" {
 	_seed_now '[{"reason":"clone_behind","subject":"onlooker-community","effective":"6caacd39","available":"ff773b41"}]'
 	_run_hook
+	await_events onlooker.currency.stale 1 || return 1
 	grep '"event_type":"onlooker.currency.stale"' "$ONLOOKER_EVENTS_LOG" \
 		| jq -e '.payload.findings_count == 1 and .payload.answer_age_seconds >= 0' >/dev/null || return 1
 	[ -n "$(_context)" ]
@@ -129,6 +132,7 @@ _break_node() {
 	# lossy: this is the surfacer's most common path, so the bus could not
 	# answer "how often does a session start with a stale answer?" -- the
 	# question the whole epic is about.
+	await_events onlooker.currency.skipped 1 || return 1
 	grep -q '"skip_reason":"refresh_deferred"' "$ONLOOKER_EVENTS_LOG" || return 1
 	# Still NOT probe_failed. The probe has not failed, it has not finished,
 	# and conflating those is the mistake ecosystem-449.39 records against
@@ -142,6 +146,7 @@ _break_node() {
 	# on a nearly-fresh cache. The age is what makes the skip readable.
 	_seed_aged 2 '[]'
 	_run_hook
+	await_events onlooker.currency.skipped 1 || return 1
 	local age
 	age=$(grep '"skip_reason":"refresh_deferred"' "$ONLOOKER_EVENTS_LOG" \
 		| tail -n 1 | jq -r '.payload.answer_age_seconds // empty')
@@ -156,6 +161,7 @@ _break_node() {
 	# optional precisely so this case can stay silent about it instead of
 	# asserting a measurement it does not have.
 	_run_hook
+	await_events onlooker.currency.skipped 1 || return 1
 	grep -q '"skip_reason":"refresh_deferred"' "$ONLOOKER_EVENTS_LOG" || return 1
 	local line
 	line=$(grep '"skip_reason":"refresh_deferred"' "$ONLOOKER_EVENTS_LOG" | tail -n 1)
@@ -244,6 +250,7 @@ STUBEOF
 @test "an expired cache reports unchecked rather than replaying old findings as fresh" {
 	_seed_aged 1 '[{"reason":"clone_behind","subject":"onlooker-community"}]'
 	_run_hook
+	await_events onlooker.currency.skipped 1 || return 1
 	! _context | grep -qi 'current' || return 1
 	! grep -q '"skip_reason":"cache_fresh"' "$ONLOOKER_EVENTS_LOG" || return 1
 	[ "$status" -eq 0 ]
@@ -266,6 +273,7 @@ STUBEOF
 	mkdir -p "$plain"
 	run bash -c "printf '%s' '$(jq -cn --arg cwd "$plain" '{cwd: $cwd, session_id: "s", hook_event_name: "SessionStart"}')' | '$HOOK'"
 	[ "$status" -eq 0 ] || return 1
+	await_events onlooker.currency.skipped 1 || return 1
 	grep '"event_type":"onlooker.currency.skipped"' "$ONLOOKER_EVENTS_LOG" \
 		| jq -e '.payload.skip_reason == "no_git_context"' >/dev/null
 }
@@ -289,4 +297,66 @@ STUBEOF
 	local log; log="${ONLOOKER_DIR}/logs/hook-health.jsonl"
 	grep '"plugin-currency-surfacer"' "$log" \
 		| jq -e 'select(.session_id == "sess-currency") | .hook_event == "SessionStart"' >/dev/null
+}
+
+# ONL-272. The age was parsed by python3, twice per run, ~66ms together. Both
+# paths are driven: the fresh one asks for the age to decide and to report it,
+# the deferred one to decide and to say how stale the old answer is.
+_shim_python3() {
+	PY_SHIM="${BATS_TEST_TMPDIR}/pyshim"
+	mkdir -p "$PY_SHIM"
+	printf '#!/bin/sh\necho x >>"%s"\nexit 1\n' "${BATS_TEST_TMPDIR}/python3-calls" >"${PY_SHIM}/python3"
+	chmod +x "${PY_SHIM}/python3"
+	: >"${BATS_TEST_TMPDIR}/python3-calls"
+}
+
+@test "neither the fresh nor the deferred path starts python3" {
+	_shim_python3
+	_seed_now '[]'
+	run bash -c "printf '%s' '$(_input)' | PATH='${PY_SHIM}:$PATH' '$HOOK'"
+	[ "$status" -eq 0 ] || return 1
+	_seed_aged 1 '[]'
+	mkdir "${CACHE}.refresh.lock"
+	run bash -c "printf '%s' '$(_input)' | PATH='${PY_SHIM}:$PATH' '$HOOK'"
+	[ "$status" -eq 0 ] || return 1
+	_context | grep -qi 'unchecked' || return 1
+	[ ! -s "${BATS_TEST_TMPDIR}/python3-calls" ]
+}
+
+# Nothing in the hook reads what an emit returns, so SessionStart must not wait
+# on node to write it. A node that takes 3s to emit stands in for the ~38ms
+# per event, scaled up past any timing noise; the event must still land.
+@test "the hook returns without waiting for its events to be written" {
+	_seed_now '[{"reason":"clone_behind","subject":"onlooker-community"}]'
+	local slow="${BATS_TEST_TMPDIR}/slownode" real_node
+	real_node=$(command -v node)
+	mkdir -p "$slow"
+	cat >"${slow}/node" <<STUBEOF
+#!/usr/bin/env bash
+case "\$*" in
+	*onlooker-event*) sleep 3 ;;
+esac
+exec "${real_node}" "\$@"
+STUBEOF
+	chmod +x "${slow}/node"
+
+	local start end
+	start=$(date -u +%s)
+	run bash -c "printf '%s' '$(_input)' | PATH='${slow}:$PATH' '$HOOK'"
+	end=$(date -u +%s)
+	[ "$status" -eq 0 ] || return 1
+	[ "$((end - start))" -lt 2 ] || return 1
+	[ -n "$(_context)" ] || return 1
+	await_events onlooker.currency.stale 1 15 || return 1
+	await_events onlooker.currency.skipped 1 15
+}
+
+# Queued events flush in the order the hook raised them, so a consumer reading
+# the log still sees the cache_fresh skip before the stale finding it explains.
+@test "deferred events land in the order they were raised" {
+	_seed_now '[{"reason":"clone_behind","subject":"onlooker-community"}]'
+	_run_hook
+	await_events onlooker.currency.stale 1 || return 1
+	grep -o '"event_type":"onlooker\.currency\.[a-z]*"' "$ONLOOKER_EVENTS_LOG" | tr '\n' ' ' \
+		| grep -q 'skipped".*stale"'
 }
