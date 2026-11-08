@@ -4,8 +4,8 @@
 # Uses the vendored config loader (scripts/lib/config-loader.sh is canonical).
 # Reads five layers, latest wins:
 #   1. plugins/bursar/config.json (defaults shipped with the plugin)
-#   2. ~/.claude/settings.json
-#   3. ~/.claude/settings.local.json (local overrides user)
+#   2. <claude_dir>/settings.json
+#   3. <claude_dir>/settings.local.json (local overrides user)
 #   4. <worktree>/.claude/settings.json
 #   5. <parent>/.claude/settings.local.json (local overrides project)
 #

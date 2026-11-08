@@ -157,7 +157,7 @@ This means:
 Each plugin reads config in two steps:
 
 1. **Plugin defaults** — `plugins/<name>/config.json`. Ships with the plugin; defines all available knobs and their defaults.
-2. **Settings overlay** — `.claude/settings.json` (repo-level) or `~/.claude/settings.json` (global). The plugin-specific key (e.g., `echo`, `tribunal`) is merged onto the defaults.
+2. **Settings overlay** — `.claude/settings.json` (repo-level) or `${CLAUDE_CONFIG_DIR:-~/.claude}/settings.json` (global). The plugin-specific key (e.g., `echo`, `tribunal`) is merged onto the defaults.
 
 Tribunal and Archivist use a recursive `deepmerge` so nested keys can be overridden individually without replacing an entire sub-object. Echo uses a simpler per-key lookup against the flat settings block. Repo-level settings take precedence over global; both override plugin defaults. This lets you:
 - Enable a plugin for a specific project without touching your global config.

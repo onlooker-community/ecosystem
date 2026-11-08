@@ -33,7 +33,7 @@ Installing the plugin enables it. See [`config.json`](config.json) for the full 
 └── tombstones/<body_hash>.json      # records of rejected/pruned promotions
 ```
 
-Accepted promotions land in the user's typed memory store at `~/.claude/projects/<encoded-project>/memory/` with a `source: "librarian"` provenance trailer in the frontmatter.
+Accepted promotions land in the user's typed memory store at `${CLAUDE_CONFIG_DIR:-~/.claude}/projects/<encoded-project>/memory/` with a `source: "librarian"` provenance trailer in the frontmatter.
 
 ## Status
 

@@ -3,8 +3,8 @@
 #
 # Uses the shared config loader from ecosystem. Merges five layers in precedence order:
 #   1. plugins/cartographer/config.json  (plugin defaults)
-#   2. ~/.claude/settings.json           (.cartographer subtree)
-#   3. ~/.claude/settings.local.json     (.cartographer subtree, local overrides user)
+#   2. <claude_dir>/settings.json           (.cartographer subtree)
+#   3. <claude_dir>/settings.local.json     (.cartographer subtree, local overrides user)
 #   4. <worktree>/.claude/settings.json      (.cartographer subtree)
 #   5. <parent>/.claude/settings.local.json (.cartographer subtree, local overrides project)
 #

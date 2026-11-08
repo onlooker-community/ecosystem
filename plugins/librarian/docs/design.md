@@ -126,7 +126,7 @@ Candidates with `confidence < min_classifier_confidence` (default: 0.6) are drop
 
 For each surviving candidate, librarian:
 
-1. Reads `MEMORY.md` and each referenced memory file from `~/.claude/projects/<encoded-project>/memory/`.
+1. Reads `MEMORY.md` and each referenced memory file from `${CLAUDE_CONFIG_DIR:-~/.claude}/projects/<encoded-project>/memory/`.
 2. Computes token-set similarity (Jaccard on lowercased, stopword-stripped token sets) against each existing memory's body.
 3. If max similarity ≥ `duplicate_threshold` (default: 0.7), classifies as `duplicate` — annotated and dropped from proposals, but logged as `librarian.candidate.dropped` with `reason: "duplicate"`.
 4. If `merge_candidate_threshold` (default: 0.45) ≤ similarity < `duplicate_threshold`, classifies as `merge_candidate` — the proposal records the existing memory's filename so the surfacer can offer "merge into X" as a resolution path.

@@ -19,7 +19,7 @@ This is easy to misread as "another memory type." It is not. Compare with
 
 | | destination | scope | who sees it |
 |---|---|---|---|
-| librarian → typed memory store | `~/.claude/projects/<encoded>/memory/` | one machine | you |
+| librarian → typed memory store | `${CLAUDE_CONFIG_DIR:-~/.claude}/projects/<encoded>/memory/` | one machine | you |
 | **librarian → lesson pool** | `~/.onlooker/librarian/<project-key>/lessons/` | shared, eventually cross-person | you, your org, or the public |
 
 Everything upstream is unchanged. Artifacts are still captured by archivist,

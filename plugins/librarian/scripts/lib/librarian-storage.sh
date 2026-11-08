@@ -9,7 +9,7 @@
 #
 # All paths inside proposals are stored relative to the repo root where they
 # originated. The typed memory store the user maintains lives elsewhere
-# (~/.claude/projects/<encoded>/memory/) and is resolved at promotion time.
+# (${CLAUDE_CONFIG_DIR:-~/.claude}/projects/<encoded>/memory/) and is resolved at promotion time.
 
 # ============================================================================
 # Path helpers

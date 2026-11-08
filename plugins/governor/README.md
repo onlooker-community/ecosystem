@@ -84,7 +84,7 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
 | `estimation.hard_stop_margin` | `1.5` | Multiplier on `tokens_default` that defines the hard ceiling (`ceiling_exceeded`), which blocks regardless of enforcement mode. |
 | `estimation.method` | `"tier_table"` | Estimation strategy. Only `tier_table` is implemented. |
 
-Config resolves in three layers, latest wins: plugin `config.json` → `~/.claude/settings.json` → `<repo>/.claude/settings.json`.
+Config resolves in three layers, latest wins: plugin `config.json` → `${CLAUDE_CONFIG_DIR:-~/.claude}/settings.json` → `<repo>/.claude/settings.json`.
 
 ## Storage layout
 

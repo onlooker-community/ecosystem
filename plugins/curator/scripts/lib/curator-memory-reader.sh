@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Memory store reader for Curator.
 #
-# Parses ~/.claude/projects/<encoded-project>/memory/MEMORY.md and the
+# Parses ${CLAUDE_CONFIG_DIR:-~/.claude}/projects/<encoded-project>/memory/MEMORY.md and the
 # referenced *.md files. Returns a JSON array of memory records:
 #
 #   [

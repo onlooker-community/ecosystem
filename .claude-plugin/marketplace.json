@@ -167,7 +167,7 @@
     {
       "name": "curator",
       "source": "./plugins/curator",
-      "description": "Maintenance layer for the user's typed auto-memory store. At every SessionStart, runs four cheap heuristic checks (date_decayed, path_broken, broken_index, orphaned_memory) against the memories at ~/.claude/projects/<encoded>/memory/ inside a wall-clock budget, and records what it finds. The one-line SessionStart pointer to those findings stays off until /curator review ships. Never edits the memory store directly. Builds on the Onlooker ecosystem plugin.",
+      "description": "Maintenance layer for the user's typed auto-memory store. At every SessionStart, runs four cheap heuristic checks (date_decayed, path_broken, broken_index, orphaned_memory) against the memories at ${CLAUDE_CONFIG_DIR:-~/.claude}/projects/<encoded>/memory/ inside a wall-clock budget, and records what it finds. The one-line SessionStart pointer to those findings stays off until /curator review ships. Never edits the memory store directly. Builds on the Onlooker ecosystem plugin.",
       "author": {
         "name": "Onlooker Community"
       },

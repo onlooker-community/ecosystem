@@ -2,7 +2,7 @@
 # Conflict and duplicate detection for librarian proposals.
 #
 # Compares proposed memories against existing memories in the user's
-# typed memory store (~/.claude/projects/<encoded>/memory/) and classifies
+# typed memory store (${CLAUDE_CONFIG_DIR:-~/.claude}/projects/<encoded>/memory/) and classifies
 # each proposal into one of:
 #   - none           (no similarity, safe to propose)
 #   - duplicate      (similarity >= duplicate_threshold; drop silently)

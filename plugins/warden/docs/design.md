@@ -114,7 +114,7 @@ All three are registered in `@onlooker-community/schema` (v2.4.0) — no schema 
 
 ## Configuration
 
-Defaults ship in `config.json` under the `warden` namespace; override in `~/.claude/settings.json` (global) or `<repo>/.claude/settings.json` (per-project). Warden is **disabled by default** (`warden.enabled: false`) — like compass, it is opt-in. Key knobs: `scan.sources`, `scan.max_content_chars`, `scan.skip_globs`, `detection.close_threshold`, `escalation.*`, `gate.clear_policy` (`user_override_only`).
+Defaults ship in `config.json` under the `warden` namespace; override in `${CLAUDE_CONFIG_DIR:-~/.claude}/settings.json` (global) or `<repo>/.claude/settings.json` (per-project). Warden is **disabled by default** (`warden.enabled: false`) — like compass, it is opt-in. Key knobs: `scan.sources`, `scan.max_content_chars`, `scan.skip_globs`, `detection.close_threshold`, `escalation.*`, `gate.clear_policy` (`user_override_only`).
 
 ## Scope boundaries (v0.1.0)
 

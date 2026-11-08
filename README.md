@@ -94,7 +94,7 @@ Add the marketplace, then install the plugins you want:
 > exists on npm for historical reasons and is deprecated — it carries no entry
 > point and installs nothing. Nothing here is published to npm.
 
-`ecosystem` is the substrate the other plugins emit their events through — install it first. Installing a plugin enables it; tune it under its namespace key in `~/.claude/settings.json` (global) or `.claude/settings.json` (per-project). See [ADR-004](docs/adr/004-plugin-config-with-settings-overlay.md) for the configuration model.
+`ecosystem` is the substrate the other plugins emit their events through — install it first. Installing a plugin enables it; tune it under its namespace key in `${CLAUDE_CONFIG_DIR:-~/.claude}/settings.json` (global) or `.claude/settings.json` (per-project). See [ADR-004](docs/adr/004-plugin-config-with-settings-overlay.md) for the configuration model.
 
 ### Onlooker CLI
 
@@ -116,7 +116,7 @@ Each plugin ships defaults in its own `config.json`. Override them per-namespace
 
 ```jsonc
 {
-  // ~/.claude/settings.json (global) or .claude/settings.json (per-project)
+  // ${CLAUDE_CONFIG_DIR:-~/.claude}/settings.json (global) or .claude/settings.json (per-project)
   "inspector": { "enabled": true },
   "tribunal": { "enabled": true, "stop_hook": { "enabled": true } }
 }

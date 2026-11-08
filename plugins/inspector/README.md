@@ -99,7 +99,7 @@ A bare argv array (`["shellcheck", "${file}"]`) is also accepted as a shorthand
 | `exclude_paths` | `["node_modules", ".git", "vendor", ".venv", "dist", ".next", ".nuxt", "build", "__pycache__", "target", "coverage"]` | Containment match against the file's path relative to the repo root. A match emits `inspector.check.skipped` with `reason: "excluded_path"` and runs no checks. |
 | `checks` | `{}` | Map of file extension (with leading dot) to an array of check definitions. Empty by default — opt in per project. |
 
-Config precedence: plugin defaults < `~/.claude/settings.json` (`.inspector`) <
+Config precedence: plugin defaults < `${CLAUDE_CONFIG_DIR:-~/.claude}/settings.json` (`.inspector`) <
 `<repo>/.claude/settings.json` (`.inspector`). Each layer fully replaces the
 `checks` array for a given extension; per-entry deep-merge is intentionally not
 supported because the override behavior would be unpredictable.

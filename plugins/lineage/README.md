@@ -126,7 +126,7 @@ All keys are optional. Unset keys fall back to the plugin's `config.json` defaul
 | `attribution_slack_seconds` | `2` | How far before a `Bash` command's reported start a file's mtime must be to count as predating it and be recorded with unknown authorship. Raise it on a filesystem with clock skew. |
 
 Config resolves in three layers, latest wins: plugin `config.json` →
-`~/.claude/settings.json` → `<repo>/.claude/settings.json`.
+`${CLAUDE_CONFIG_DIR:-~/.claude}/settings.json` → `<repo>/.claude/settings.json`.
 
 ## The `/lineage` query
 
