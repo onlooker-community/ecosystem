@@ -6,57 +6,36 @@
 # schema-validated by onlooker-event.mjs; if validation fails the line is
 # silently dropped (fail-soft) rather than blocking the hook.
 
-# Resolve the ecosystem helper path. The substrate is in the sibling
-# ecosystem plugin at ../../.. relative to plugins/librarian/scripts/lib.
-# Honor ONLOOKER_ECOSYSTEM_ROOT when set (test isolation).
+# Vendored substrate resolver, located from this file's own path and tolerated
+# absent — see substrate-resolve.sh, "FAIL-SOFT CALLERS", for why both.
+_LIBRARIAN_EMIT_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${_LIBRARIAN_EMIT_LIB_DIR}/substrate-resolve.sh" ]]; then
+	# shellcheck source=plugins/librarian/scripts/lib/substrate-resolve.sh
+	source "${_LIBRARIAN_EMIT_LIB_DIR}/substrate-resolve.sh"
+fi
+
+# Resolve onlooker-event.mjs in the newest cached ecosystem. Honors
+# ONLOOKER_ECOSYSTEM_ROOT (test isolation) and a sibling checkout, both via
+# the resolver.
+#
+# This used to walk the cache itself, comparing versions pairwise with a
+# `printf | sort | tail` per cached ecosystem, and it ran when the lib was
+# sourced. At 47 cached versions that was ~140ms on every hook that sourced
+# it, emitting or not, growing with each release (ONL-271). The resolver
+# orders the whole glob in one sort; this lib only appends the filename.
 _librarian_resolve_event_js() {
-	local script_dir plugin_root sibling version_dir version mjs best_version best_path
-	script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-	plugin_root="$(cd "${script_dir}/../.." && pwd)"
-
-	if [[ -n "${ONLOOKER_ECOSYSTEM_ROOT:-}" ]]; then
-		printf '%s/scripts/lib/onlooker-event.mjs' "$ONLOOKER_ECOSYSTEM_ROOT"
-		return 0
+	local root=""
+	if declare -F onlooker_resolve_substrate >/dev/null 2>&1; then
+		root="$(onlooker_resolve_substrate "$(cd "${_LIBRARIAN_EMIT_LIB_DIR}/../.." && pwd)")"
 	fi
-
-	sibling="$(cd "${plugin_root}/../.." 2>/dev/null && pwd)"
-	if [[ -f "${sibling}/scripts/lib/onlooker-event.mjs" ]]; then
-		printf '%s/scripts/lib/onlooker-event.mjs' "$sibling"
-		return 0
-	fi
-
-	# Glob-discover the ecosystem plugin under the shared plugin cache parent;
-	# works regardless of which ecosystem version is installed.
-	#
-	# Return the matched path itself. Re-deriving an ecosystem root from it
-	# needs three dirnames, not two, and the two-dirname form doubled the
-	# path to <v>/scripts/scripts/lib and silenced this plugin for 34 days
-	# (ecosystem-449.34). Nothing here reconstructs what the glob already knows.
-	#
-	# Glob order is lexical and lexical order is not version order: 0.33.1
-	# sorts ahead of 0.49.2, 0.9.0 sorts after both, and 0.47.9 sorts after
-	# 0.47.10. Compare the version directories field by field as numbers so
-	# the newest install wins regardless of how many are cached.
-	best_version=""
-	best_path=""
-	for version_dir in "${plugin_root}/../../ecosystem/"*/; do
-		version_dir="${version_dir%/}"
-		mjs="${version_dir}/scripts/lib/onlooker-event.mjs"
-		[[ -f "$mjs" ]] || continue
-		version="${version_dir##*/}"
-		if [[ -z "$best_version" ]] || [[ "$(printf '%s\n%s\n' "$best_version" "$version" |
-			sort -t. -k1,1n -k2,2n -k3,3n | tail -1)" == "$version" ]]; then
-			best_version="$version"
-			best_path="$mjs"
-		fi
-	done
-
-	if [[ -n "$best_path" ]]; then
-		printf '%s' "$best_path"
+	if [[ -n "$root" && -f "${root}/scripts/lib/onlooker-event.mjs" ]]; then
+		printf '%s/scripts/lib/onlooker-event.mjs' "$root"
 	fi
 }
 
-_LIBRARIAN_EVENT_JS="${_LIBRARIAN_EVENT_JS:-$(_librarian_resolve_event_js)}"
+# Resolved on the first emit rather than here: most runs of the hooks that
+# source this emit nothing. A preset value (tests) is used as-is.
+_LIBRARIAN_EVENT_JS="${_LIBRARIAN_EVENT_JS:-}"
 
 # Emit a librarian.* event. Fail-soft: returns 0 on success or when the
 # substrate is unavailable; the event is dropped silently.
@@ -73,6 +52,7 @@ librarian_emit() {
 	[ -z "$payload" ] && payload='{}'
 
 	[[ -z "$event_type" || -z "$session_id" ]] && return 0
+	[[ -n "$_LIBRARIAN_EVENT_JS" ]] || _LIBRARIAN_EVENT_JS="$(_librarian_resolve_event_js)"
 	[[ -z "$_LIBRARIAN_EVENT_JS" || ! -f "$_LIBRARIAN_EVENT_JS" ]] && return 0
 	command -v node >/dev/null 2>&1 || return 0
 
