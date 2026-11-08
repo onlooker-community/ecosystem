@@ -333,3 +333,95 @@ seed_start_ms_ago() {
   [ ! -f "$history_file" ]
   [ ! -s "$ONLOOKER_EVENTS_LOG" ]
 }
+
+# ONL-221: source, attended and parent_session_id. The parent id is read from the
+# launch environment of the claude process ($CLAUDE_PID), which still carries the
+# spawning session's CLAUDE_CODE_SESSION_ID after claude overwrites it for its own
+# hooks. A real process stands in for claude so the ps/proc read is exercised.
+#
+# The stand-in is node, not sleep: macOS ps -E hides the environment of system
+# binaries such as /bin/sleep, so a sleep stand-in would make every parent
+# assertion fail and every absence assertion pass vacuously. claude is not a
+# system binary, and neither is node.
+#
+# env -u first: a suite run from inside a Claude Code session inherits that
+# session's CLAUDE_CODE_SESSION_ID, which would otherwise surface as a parent.
+_start_fake_claude() {
+  env -u CLAUDE_CODE_SESSION_ID "$@" node -e 'setTimeout(() => {}, 30000)' &
+  FAKE_CLAUDE_PID=$!
+  # ps -E can race a process that has not finished exec'ing yet.
+  sleep 0.3
+}
+
+teardown() {
+  [[ -n "${FAKE_CLAUDE_PID:-}" ]] && kill "$FAKE_CLAUDE_PID" 2>/dev/null
+  return 0
+}
+
+@test "session_tracker_build_start_payload records source, attended and parent_session_id" {
+  _start_fake_claude CLAUDE_CODE_SESSION_ID=parent-session-001
+  local payload
+  payload=$(CLAUDE_PID="$FAKE_CLAUDE_PID" CLAUDE_CODE_SESSION_ATTENDED=0 \
+    session_tracker_build_start_payload '{"cwd":"/tmp","session_id":"child-001","source":"startup"}')
+  echo "$payload" | jq -e '.source == "startup"
+    and .attended == false
+    and .parent_session_id == "parent-session-001"' >/dev/null
+}
+
+@test "session_tracker_build_start_payload marks an interactive session attended" {
+  local payload
+  payload=$(CLAUDE_CODE_SESSION_ATTENDED=1 session_tracker_build_start_payload '{"cwd":"/tmp"}')
+  echo "$payload" | jq -e '.attended == true' >/dev/null
+}
+
+@test "session_tracker_build_start_payload omits the new fields when nothing supplies them" {
+  _start_fake_claude
+  local payload
+  payload=$(unset CLAUDE_CODE_SESSION_ATTENDED CLAUDE_CODE_SESSION_ID
+    CLAUDE_PID="$FAKE_CLAUDE_PID" session_tracker_build_start_payload '{"cwd":"/tmp","session_id":"top-001"}')
+  echo "$payload" | jq -e '(has("source") | not)
+    and (has("attended") | not)
+    and (has("parent_session_id") | not)' >/dev/null
+}
+
+@test "session_tracker_build_start_payload omits attended for a value it does not recognize" {
+  local payload
+  payload=$(CLAUDE_CODE_SESSION_ATTENDED=yes session_tracker_build_start_payload '{"cwd":"/tmp"}')
+  echo "$payload" | jq -e 'has("attended") | not' >/dev/null
+}
+
+@test "session_tracker_build_start_payload never names a session as its own parent" {
+  _start_fake_claude CLAUDE_CODE_SESSION_ID=same-001
+  local payload
+  payload=$(CLAUDE_PID="$FAKE_CLAUDE_PID" \
+    session_tracker_build_start_payload '{"cwd":"/tmp","session_id":"same-001"}')
+  echo "$payload" | jq -e 'has("parent_session_id") | not' >/dev/null
+}
+
+@test "session_tracker_build_start_payload omits parent_session_id when CLAUDE_PID is not running" {
+  local payload
+  payload=$(CLAUDE_PID=999999 session_tracker_build_start_payload '{"cwd":"/tmp","session_id":"x-001"}')
+  echo "$payload" | jq -e 'has("parent_session_id") | not' >/dev/null
+}
+
+@test "session_tracker_build_start_payload ignores a non-numeric CLAUDE_PID" {
+  local payload
+  payload=$(CLAUDE_PID='1;touch /tmp/onl221' session_tracker_build_start_payload '{"cwd":"/tmp","session_id":"x-002"}')
+  echo "$payload" | jq -e 'has("parent_session_id") | not' >/dev/null
+}
+
+@test "session-start-tracker emits a schema-valid session.start carrying the new fields" {
+  _start_fake_claude CLAUDE_CODE_SESSION_ID=parent-session-002
+  local input history_file="${ONLOOKER_SESSION_HISTORY_DIR}/child-002.jsonl"
+  input=$(jq -cn '{session_id: "child-002", cwd: "/tmp", hook_event_name: "SessionStart", source: "resume"}')
+
+  run bash -c "printf '%s' '$input' | CLAUDE_PID='$FAKE_CLAUDE_PID' CLAUDE_CODE_SESSION_ATTENDED=0 '${REPO_ROOT}/scripts/hooks/session-start-tracker.sh' 2>/dev/null"
+  [ "$status" -eq 0 ] || return 1
+
+  jq -e '.event_type == "session.start"
+    and .payload.source == "resume"
+    and .payload.attended == false
+    and .payload.parent_session_id == "parent-session-002"' "$history_file" >/dev/null || return 1
+  tail -n 1 "$history_file" \
+    | ONLOOKER_DIR="$ONLOOKER_DIR" node "${REPO_ROOT}/scripts/lib/onlooker-event.mjs" validate >/dev/null
+}

@@ -52,7 +52,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.15",
-    "@onlooker-community/schema": "^3.8.0",
+    "@onlooker-community/schema": "^3.9.0",
     "globals": "^17.6.0",
     "markdownlint-cli": "^0.48.0"
   }
