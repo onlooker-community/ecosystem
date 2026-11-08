@@ -7,9 +7,7 @@
     "total_timeout_seconds": 600,
     "extraction": {
       "model": "claude-haiku-4-5-20251001",
-      "max_output_tokens": 2048,
-      "chunk_size_files": 10,
-      "chunk_overlap_pct": 10
+      "max_output_tokens": 2048
     },
     "synthesis": {
       "model": "claude-haiku-4-5-20251001",
