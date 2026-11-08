@@ -29,18 +29,22 @@ setup() {
 	CACHE="${BATS_TEST_TMPDIR}/cache"
 	mkdir -p "${CACHE}/archivist/0.4.6/scripts/lib"
 	cp "${REPO_ROOT}/plugins/archivist/scripts/lib/archivist-events.sh" \
-		"${CACHE}/archivist/0.4.6/scripts/lib/archivist-events.sh"
+		"${REPO_ROOT}/plugins/archivist/scripts/lib/substrate-resolve.sh" \
+		"${CACHE}/archivist/0.4.6/scripts/lib/"
 
 	# Two cached ecosystems, each with a distinguishable emitter.
 	for v in 0.33.1 0.49.2; do
 		mkdir -p "${CACHE}/ecosystem/${v}/scripts/lib"
 		printf '// emitter %s\n' "$v" > "${CACHE}/ecosystem/${v}/scripts/lib/onlooker-event.mjs"
+		# The resolver keys on validate-path.sh (ONL-271).
+		printf '# ecosystem %s\n' "$v" > "${CACHE}/ecosystem/${v}/scripts/lib/validate-path.sh"
 	done
 
 	# Resolution reads CLAUDE_PLUGIN_ROOT, and the two local candidates it
 	# checks first must not exist for the glob branch to be reached.
 	export CLAUDE_PLUGIN_ROOT="${CACHE}/archivist/0.4.6"
 	unset _ARCHIVIST_EVENT_JS 2>/dev/null || true
+	unset ONLOOKER_ECOSYSTEM_ROOT
 
 	# shellcheck disable=SC1091
 	source "${CACHE}/archivist/0.4.6/scripts/lib/archivist-events.sh"

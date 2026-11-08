@@ -11,6 +11,14 @@
 
 _ARCHIVIST_PLUGIN_NAME="archivist"
 
+# Vendored substrate resolver, located from this file's own path and tolerated
+# absent — see substrate-resolve.sh, "FAIL-SOFT CALLERS", for why both.
+_ARCHIVIST_EVENTS_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${_ARCHIVIST_EVENTS_LIB_DIR}/substrate-resolve.sh" ]]; then
+	# shellcheck source=plugins/archivist/scripts/lib/substrate-resolve.sh
+	source "${_ARCHIVIST_EVENTS_LIB_DIR}/substrate-resolve.sh"
+fi
+
 _archivist_event_js_path() {
 	if [[ -n "${_ONLOOKER_EVENT_JS:-}" && -f "$_ONLOOKER_EVENT_JS" ]]; then
 		printf '%s' "$_ONLOOKER_EVENT_JS"
@@ -25,20 +33,19 @@ _archivist_event_js_path() {
 	for c in "${candidates[@]}"; do
 		[[ -f "$c" ]] && { printf '%s' "$c"; return 0; }
 	done
-	# Glob-discover the ecosystem plugin under the shared plugin cache parent;
-	# works regardless of which ecosystem version is installed.
-	#
-	# NEWEST, not first (ecosystem-449.35). Glob expansion is lexicographic
-	# rather than semver, so 0.33.1 sorts ahead of 0.49.2 and returning the
-	# first match bound a month-stale emitter. Unlike the validate-path loop in
-	# the hooks there is no doubled dirname here, so the path resolved, emission
-	# worked, and nothing reported that the emitter was old. sort -V orders by
-	# version on BSD/macOS and GNU alike.
-	local mjs newest=""
-	while IFS= read -r mjs; do
-		[[ -f "$mjs" ]] && newest="$mjs"
-	done < <(printf '%s\n' "${plugin_root}/../../ecosystem/"*/scripts/lib/onlooker-event.mjs | sort -V)
-	[[ -n "$newest" ]] && { printf '%s' "$newest"; return 0; }
+	# Version-ordered, not glob-ordered (ecosystem-449.35). Lexical expansion
+	# puts 0.33.1 ahead of 0.49.2, so returning the first match bound a
+	# months-stale substrate. substrate-resolve.sh does the ordering, and is
+	# the only lib that walks the cache (ONL-271); this one only appends the
+	# filename it wants.
+	local root=""
+	if declare -F onlooker_resolve_substrate >/dev/null 2>&1; then
+		root="$(onlooker_resolve_substrate "$plugin_root")"
+	fi
+	if [[ -n "$root" && -f "${root}/scripts/lib/onlooker-event.mjs" ]]; then
+		printf '%s' "${root}/scripts/lib/onlooker-event.mjs"
+		return 0
+	fi
 	return 1
 }
 
