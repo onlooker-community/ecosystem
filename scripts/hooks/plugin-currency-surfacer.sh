@@ -42,7 +42,7 @@ _envelope() {
 	}'
 }
 
-_emit() {
+_emit_now() {
 	local event_type="$1" payload="$2" params event
 	params=$(jq -n \
 		--arg plugin "${ONLOOKER_PLUGIN_NAME:-onlooker}" \
@@ -57,8 +57,32 @@ _emit() {
 	return 0
 }
 
+# Events are queued here and written by _finish from one detached subshell.
+# Nothing in this hook reads what an emit returns, and each one waited on node
+# for ~38ms, one or two per SessionStart (ONL-272). One subshell for the whole
+# queue, rather than one per event, keeps them in the order they were raised.
+_QUEUED_TYPES=()
+_QUEUED_PAYLOADS=()
+_emit() {
+	_QUEUED_TYPES+=("$1")
+	_QUEUED_PAYLOADS+=("$2")
+}
+
+_flush_events() {
+	[[ ${#_QUEUED_TYPES[@]} -gt 0 ]] || return 0
+	# Output and bats' fd 3 are closed so neither the CLI nor a test waits on it.
+	(
+		local i
+		for ((i = 0; i < ${#_QUEUED_TYPES[@]}; i++)); do
+			_emit_now "${_QUEUED_TYPES[$i]}" "${_QUEUED_PAYLOADS[$i]}"
+		done
+	) >/dev/null 2>&1 3>&- &
+	disown 2>/dev/null || true
+}
+
 _finish() {
 	_envelope "${1:-}"
+	_flush_events
 	hook_health_exit 0
 }
 
@@ -112,8 +136,11 @@ _render() {
 	printf '%.*s' "$MAX_CHARS" "$line"
 }
 
-if plugin_currency_cache_is_fresh "$CACHE" "$TTL"; then
-	AGE=$(plugin_currency_cache_age_seconds "$CACHE")
+# Read once: both the freshness decision and every age this hook reports come
+# from this one value (ONL-272). Empty means no answer whose age is known.
+AGE=$(plugin_currency_cache_age_seconds "$CACHE")
+
+if plugin_currency_age_is_fresh "$AGE" "$TTL"; then
 	FINDINGS=$(jq -c '.findings // []' "$CACHE" 2>/dev/null) || FINDINGS='[]'
 	COUNT=$(printf '%s' "$FINDINGS" | jq -r 'length' 2>/dev/null) || COUNT=0
 
@@ -175,7 +202,7 @@ _spawn_refresh || true
 # could not answer how often a session starts with a stale answer, which is the
 # question the epic exists to ask. The detached probe still emits
 # onlooker.currency.checked when it lands; that remains the record of the probe.
-PREV_AGE=$(plugin_currency_cache_age_seconds "$CACHE")
+PREV_AGE="$AGE"
 if [[ -n "$PREV_AGE" ]]; then
 	_emit "onlooker.currency.skipped" \
 		"$(jq -cn --arg a "$PREV_AGE" \

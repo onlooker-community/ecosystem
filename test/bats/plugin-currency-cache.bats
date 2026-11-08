@@ -81,3 +81,39 @@ setup() {
 	[[ "$p" == *"deadbeef1234"* ]] || return 1
 	[[ "$p" == *"probe.json" ]]
 }
+
+# The age used to be parsed by python3, ~22ms of interpreter start per call,
+# and the surfacer asked for it twice per SessionStart (ONL-272). A logging
+# python3 shim on PATH makes any return of it visible.
+_shim_python3() {
+	local shim="${BATS_TEST_TMPDIR}/pyshim"
+	mkdir -p "$shim"
+	printf '#!/bin/sh\necho x >>"%s"\nexit 1\n' "${BATS_TEST_TMPDIR}/python3-calls" >"${shim}/python3"
+	chmod +x "${shim}/python3"
+	: >"${BATS_TEST_TMPDIR}/python3-calls"
+	PATH="${shim}:${PATH}"
+}
+
+@test "computing the age starts no python3" {
+	plugin_currency_cache_write "$CACHE" '[]'
+	_shim_python3
+	age=$(plugin_currency_cache_age_seconds "$CACHE")
+	[ -n "$age" ] || return 1
+	[ ! -s "${BATS_TEST_TMPDIR}/python3-calls" ]
+}
+
+# The old parser was strptime("%Y-%m-%dT%H:%M:%SZ"), which rejects an offset
+# form. Whatever replaces it must reject it too, or an answer stamped by some
+# other writer would read as fresh on a format the cache never promised.
+@test "a checked_at with a numeric offset instead of Z is not fresh" {
+	jq -n '{checked_at: "2026-11-07T22:48:23+00:00", findings: []}' >"$CACHE"
+	! plugin_currency_cache_is_fresh "$CACHE" 6 || return 1
+	[ -z "$(plugin_currency_cache_age_seconds "$CACHE")" ]
+}
+
+@test "freshness from a known age honors the ttl without reading the cache" {
+	plugin_currency_age_is_fresh 100 6 || return 1
+	! plugin_currency_age_is_fresh 21600 6 || return 1
+	! plugin_currency_age_is_fresh "" 6 || return 1
+	plugin_currency_age_is_fresh 21599 6
+}

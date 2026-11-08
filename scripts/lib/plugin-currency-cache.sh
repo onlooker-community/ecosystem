@@ -26,32 +26,35 @@ plugin_currency_cache_path() {
 # Empty is load-bearing: callers must not read it as zero.
 # Usage: age=$(plugin_currency_cache_age_seconds "$path")
 plugin_currency_cache_age_seconds() {
-	local path="${1:-}" stamp then_ts now
+	local path="${1:-}"
 	[[ -f "$path" ]] || return 0
 
-	stamp=$(jq -r '.checked_at // empty' "$path" 2>/dev/null) || return 0
-	[[ -n "$stamp" ]] || return 0
+	# jq rather than `date`, which parses differently on GNU and BSD and this
+	# lib ships to both. fromdateiso8601 takes exactly the Z form the writer
+	# stamps, as the strptime it replaced did; anything else, or a non-string,
+	# yields nothing rather than an age. This was python3, ~22ms of interpreter
+	# start per call against ~5ms here, and the surfacer pays it every
+	# SessionStart (ONL-272).
+	jq -r '(.checked_at // empty) | try (now - fromdateiso8601 | floor) catch empty' \
+		"$path" 2>/dev/null || return 0
+}
 
-	# python3 for portable parsing: `date -d` is GNU and `date -j -f` is BSD,
-	# and this lib ships to both.
-	then_ts=$(python3 -c 'import sys, datetime
-try:
-    print(int(datetime.datetime.strptime(sys.argv[1], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc).timestamp()))
-except Exception:
-    pass' "$stamp" 2>/dev/null) || return 0
-	[[ -n "$then_ts" ]] || return 0
-
-	now=$(date -u +%s)
-	printf '%s' "$(( now - then_ts ))"
+# True (0) only when a known age is younger than the ttl. An empty age is an
+# answer whose freshness cannot be established, and is never fresh.
+# Usage: if plugin_currency_age_is_fresh "$age" "$ttl_hours"; then ...
+plugin_currency_age_is_fresh() {
+	local age="${1:-}" ttl_hours="${2:-6}"
+	[[ -n "$age" ]] || return 1
+	[[ "$age" -lt $(( ttl_hours * 3600 )) ]]
 }
 
 # True (0) only when the cache exists, parses, and is younger than the ttl.
+# A caller that also reports the age should compute it once and use
+# plugin_currency_age_is_fresh instead of reading the cache twice.
 # Usage: if plugin_currency_cache_is_fresh "$path" "$ttl_hours"; then ...
 plugin_currency_cache_is_fresh() {
-	local path="${1:-}" ttl_hours="${2:-6}" age
-	age=$(plugin_currency_cache_age_seconds "$path")
-	[[ -n "$age" ]] || return 1
-	[[ "$age" -lt $(( ttl_hours * 3600 )) ]]
+	local path="${1:-}" ttl_hours="${2:-6}"
+	plugin_currency_age_is_fresh "$(plugin_currency_cache_age_seconds "$path")" "$ttl_hours"
 }
 
 # Write findings with checked_at stamped now.
