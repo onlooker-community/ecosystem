@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.78.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.78.1...ecosystem-v0.78.2) (2026-11-08)
+
+
+### Performance Improvements
+
+* **currency:** drop python3 and stop waiting on node :zap: ([#570](https://github.com/onlooker-community/ecosystem/issues/570)) ([0bc210f](https://github.com/onlooker-community/ecosystem/commit/0bc210f9194754b537f978f55e3afd728c78cc9e))
+
 ## [0.78.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.78.0...ecosystem-v0.78.1) (2026-11-08)
 
 
