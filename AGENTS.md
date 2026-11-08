@@ -207,9 +207,17 @@ all task tracking, that now means task-level planning, not the backlog itself.
 - Start work with `bd linear pull ONL-123`, then `bd create --parent <bead-id>`
   for the steps. Name the branch after the issue (`meagan/onl-123-short-name`)
   so the PR links itself.
-- Found something that outlives the current task? **File it in Linear**, not as
-  a new top-level bead. If it's just the next step of this task, it's a child
-  bead.
+- Found something that outlives the current task? First check whether it fits
+  an existing issue, and add it there if so. Otherwise **file it in Linear**,
+  not as a new top-level bead. If it's just the next step of this task, it's a
+  child bead.
+- **The workspace is on Linear's free plan: 250 non-archived issues, and closed
+  issues count until they auto-archive a month later.** File an issue for work
+  that is about to start, not for an idea. Ideas, backlogs and candidate lists
+  go in a document on the relevant Linear project, as the Blog project's "Post
+  backlog" does. If `save_issue` fails with the issue-limit error, stop filing,
+  put the content in a project document, and say so. The MCP can't delete
+  issues, and canceling one doesn't free its slot.
 - **A bead's description mirrors its Linear issue and a pull overwrites it.**
   Measurements, `file:line` references and ruled-out theories go in notes:
   `bd update <id> --append-notes "..."`.
