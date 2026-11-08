@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/onlooker-community/ecosystem/compare/bursar-v0.9.0...bursar-v0.9.1) (2026-11-08)
+
+
+### Bug Fixes
+
+* **bursar:** replay the sessions SessionEnd failed to record :recycle: ([#578](https://github.com/onlooker-community/ecosystem/issues/578)) ([0e50881](https://github.com/onlooker-community/ecosystem/commit/0e50881cf2b5ddb69ebeb2416e2dd8aa70de2e21))
+
 ## [0.9.0](https://github.com/onlooker-community/ecosystem/compare/bursar-v0.8.2...bursar-v0.9.0) (2026-11-07)
 
 

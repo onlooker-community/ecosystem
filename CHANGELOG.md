@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.79.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.79.0...ecosystem-v0.79.1) (2026-11-08)
+
+
+### Bug Fixes
+
+* **bursar:** replay the sessions SessionEnd failed to record :recycle: ([#578](https://github.com/onlooker-community/ecosystem/issues/578)) ([0e50881](https://github.com/onlooker-community/ecosystem/commit/0e50881cf2b5ddb69ebeb2416e2dd8aa70de2e21))
+
 ## [0.79.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.78.3...ecosystem-v0.79.0) (2026-11-08)
 
 
