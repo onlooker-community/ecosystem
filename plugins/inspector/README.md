@@ -2,8 +2,8 @@
 
 Per-edit lint and typecheck gate for the Onlooker ecosystem — runs the project's
 configured checks on **just the touched file** after every `Write`, `Edit`, and
-`MultiEdit`, so the agent sees its own lint and type errors before it claims
-success.
+`MultiEdit`, and on each file a `Bash` command changes, so the agent sees its own
+lint and type errors before it claims success.
 
 Inspector is a sibling plugin to [`ecosystem`](../../) and assumes the Onlooker
 observability substrate (`~/.onlooker/`) is present.
@@ -31,7 +31,7 @@ now is a fast feedback loop that runs after every edit and tells the agent
 
 | Hook | Matcher | What Inspector does |
 |------|---------|---------------------|
-| `PostToolUse` | `Edit`, `Write`, `MultiEdit` | Resolves the touched file from `tool_input.file_path`, looks up the configured checks for the file's extension, runs each check with a per-check timeout, and emits `inspector.check.passed` / `.failed` / `.skipped` plus a single `inspector.run.completed` summary. Bounded by `total_timeout_seconds`. Always exits 0 — inspector is advisory and never blocks the tool call. |
+| `PostToolUse` | `Edit`, `Write`, `MultiEdit`, `Bash` | Resolves the touched file from `tool_input.file_path`, or for a `Bash` call asks git which files the command changed and checks each one (a call that changed nothing leaves after the git check). Looks up the configured checks for the file's extension, runs each check with a per-check timeout, and emits `inspector.check.passed` / `.failed` / `.skipped` plus a single `inspector.run.completed` summary. Bounded by `total_timeout_seconds`. Always exits 0 — inspector is advisory and never blocks the tool call. |
 
 The hook's stdout (the additional-context channel for `PostToolUse` hooks) is
 the agent-facing summary. By default it's quiet on clean runs:
