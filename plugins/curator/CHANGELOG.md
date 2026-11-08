@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/onlooker-community/ecosystem/compare/curator-v0.8.0...curator-v0.8.1) (2026-11-08)
+
+
+### Performance Improvements
+
+* **emit:** find the emitter in one sort, not one per version :zap: ([#568](https://github.com/onlooker-community/ecosystem/issues/568)) ([2bc0d0e](https://github.com/onlooker-community/ecosystem/commit/2bc0d0eccef4ef3e5e56f1a9dc8f5fd844ab384c))
+
 ## [0.8.0](https://github.com/onlooker-community/ecosystem/compare/curator-v0.7.7...curator-v0.8.0) (2026-11-07)
 
 

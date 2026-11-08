@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.1](https://github.com/onlooker-community/ecosystem/compare/historian-v0.13.0...historian-v0.13.1) (2026-11-08)
+
+
+### Performance Improvements
+
+* **emit:** find the emitter in one sort, not one per version :zap: ([#568](https://github.com/onlooker-community/ecosystem/issues/568)) ([2bc0d0e](https://github.com/onlooker-community/ecosystem/commit/2bc0d0eccef4ef3e5e56f1a9dc8f5fd844ab384c))
+
 ## [0.13.0](https://github.com/onlooker-community/ecosystem/compare/historian-v0.12.0...historian-v0.13.0) (2026-11-07)
 
 
