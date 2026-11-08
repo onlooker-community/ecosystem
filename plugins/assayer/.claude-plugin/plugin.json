@@ -1,7 +1,7 @@
 {
   "name": "assayer",
   "version": "1.7.0",
-  "description": "Claim verification. At session end, parses the agent's final message for testable claims (\"I ran the tests, they pass\", \"the build is green\") and checks each against the actual command results in the session transcript, classifying it corroborated, contradicted, or unverifiable. Catches lying-without-malice. Advisory by default. Builds on the Onlooker ecosystem plugin.",
+  "description": "Claim verification. At session end, parses the agent's final message for testable claims (\"I ran the tests, they pass\", \"the build is green\") and checks each against the actual command results in the session transcript, classifying it corroborated, contradicted, or unverified. Catches lying-without-malice. Advisory only: it never blocks Stop. Builds on the Onlooker ecosystem plugin.",
   "author": {
     "name": "Onlooker Community",
     "url": "https://onlooker.dev"

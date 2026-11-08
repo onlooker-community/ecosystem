@@ -88,7 +88,7 @@ Run the agent's output. Report what actually happened.
 
 - **proctor** — planned — Stop, PostToolUse(Edit, Write). Runs the project's verification command (configurable: `npm test`, `mise run check`, `cargo test`, …) after writes or at Stop; emits `proctor.verify.passed` or `.failed`.
 - **assayer** — shipped — Stop. Parses the agent's final message for testable claims ("I ran the tests", "the build passes") and verifies them against actual exit codes in the session log. Catches lying-without-malice.
-- **inspector** — shipped — PostToolUse(Edit, Write). Runs lint and typecheck on just the touched files. Cheaper than proctor; fires far more often.
+- **inspector** — shipped — PostToolUse(Edit, Write, MultiEdit, Bash). Runs lint and typecheck on just the touched files. Cheaper than proctor; fires far more often.
 
 ## Feedback / Adaptation
 
