@@ -69,7 +69,12 @@ _emit() {
 
 INPUT=$(cat 2>/dev/null || true)
 hook_health_context "$INPUT"
-CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
+# One jq for both fields: under the contention of every plugin's SessionStart
+# hooks starting at once, each process this hook spawns costs ~1.7x what it
+# does alone (ONL-269). The session id scopes the sweep's events below.
+CWD="" LIBRARIAN_SESSION_ID=""
+IFS=$'\x1f' read -r CWD LIBRARIAN_SESSION_ID <<<"$(printf '%s' "$INPUT" \
+	| jq -r '[.cwd // "", .session_id // ""] | map(tostring) | join("\u001f")' 2>/dev/null)" || true
 [[ -z "$CWD" ]] && CWD="$(pwd)"
 
 librarian_config_load "$CWD"
@@ -90,7 +95,6 @@ fi
 # a lesson leaves this machine unattended. Captured here (rather than
 # discarded, as before) so that moment gets a line below instead of vanishing
 # the instant the veto window elapses between sessions.
-LIBRARIAN_SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || LIBRARIAN_SESSION_ID=""
 SWEPT_OUTPUT=$(librarian_lesson_sweep_held "$PROJECT_KEY" 2>/dev/null) || SWEPT_OUTPUT=""
 
 HELD=$(librarian_lesson_count_held "$PROJECT_KEY" 2>/dev/null) || HELD=0
@@ -113,17 +117,23 @@ MAX_PENDING=$(librarian_config_int '.librarian.surfacer.max_pending_for_inject' 
 PENDING=$(librarian_storage_count_pending "$PROJECT_KEY")
 [[ -z "$PENDING" || "$PENDING" == "null" ]] && PENDING=0
 
-LESSON_PENDING=$(librarian_lesson_list_pending "$PROJECT_KEY" | jq 'length' 2>/dev/null) || LESSON_PENDING=0
-[[ -z "$LESSON_PENDING" || "$LESSON_PENDING" == "null" ]] && LESSON_PENDING=0
-
-# A judged lesson whose promote() refused before the pool write. The worker
-# discards promote's stderr and the jury loop only reads `confirmed`, so
-# nothing retries it; this line is the only place a person hears of it
-# (ONL-117).
+# The pending lesson count and the stranded ids come from one read of the
+# lesson proposals: the count on the first line, then one id per line.
+#
+# A stranded id is a judged lesson whose promote() refused before the pool
+# write. The worker discards promote's stderr and the jury loop only reads
+# `confirmed`, so nothing retries it; this line is the only place a person
+# hears of it (ONL-117).
+LESSON_PENDING=""
 STRANDED_IDS=()
-while IFS= read -r _stranded_id; do
-	[[ -n "$_stranded_id" ]] && STRANDED_IDS+=("$_stranded_id")
-done < <(librarian_lesson_list_awaiting_promotion "$PROJECT_KEY" 2>/dev/null)
+while IFS= read -r _surface_line; do
+	if [[ -z "$LESSON_PENDING" ]]; then
+		LESSON_PENDING="$_surface_line"
+	elif [[ -n "$_surface_line" ]]; then
+		STRANDED_IDS+=("$_surface_line")
+	fi
+done < <(librarian_lesson_surface_counts "$PROJECT_KEY" 2>/dev/null)
+[[ "$LESSON_PENDING" =~ ^[0-9]+$ ]] || LESSON_PENDING=0
 STRANDED_COUNT=${#STRANDED_IDS[@]}
 
 # HELD and SWEPT_COUNT must count toward this gate too, not just the other two

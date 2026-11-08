@@ -156,6 +156,21 @@ STUB
   [ "$(librarian_storage_count_pending "$KEY")" -eq 2 ]
 }
 
+@test "count_pending still counts the rest when one proposal is malformed" {
+  # The one-pass count is a batch parse, which aborts on the first malformed
+  # byte; the tolerant load is its fallback (ONL-269).
+  _seed_proposal "$KEY" "01PROP$(printf '%019d' 1)" pending
+  _seed_proposal "$KEY" "01PROP$(printf '%019d' 2)" pending
+  _seed_proposal "$KEY" "01PROP$(printf '%019d' 3)" accepted
+  printf '{not json' > "$(librarian_proposals_dir "$KEY")/01PROPbroken.json"
+
+  [ "$(librarian_storage_count_pending "$KEY")" -eq 2 ]
+}
+
+@test "count_pending prints 0 with no proposals directory" {
+  [ "$(librarian_storage_count_pending "nokey0000000")" = "0" ]
+}
+
 @test "write_last_scan records the instant it is given, not the time it runs" {
   # ONL-200. The worker writes the watermark when it FINISHES, ~40s after the
   # scan read the window. Stamping "now" there excluded everything archivist

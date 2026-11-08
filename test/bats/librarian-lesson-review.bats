@@ -1171,3 +1171,85 @@ _seed_files() {
 	run librarian_lesson_list_pending "$PROJECT_KEY"
 	[ "$(jq -c 'map(.id)' <<<"$output")" = '["s1","s10","s2"]' ]
 }
+
+# SessionStart reads the pending count and the stranded ids from one pass over
+# the proposals instead of three (ONL-269). These pin that the single pass
+# answers exactly what the per-status functions answer.
+
+# Usage: _seed_lesson <id> <status> <second> [promoted]
+_seed_lesson() {
+	jq -n --arg id "$1" --arg s "$2" --arg ts "2026-01-01T00:00:${3}Z" --arg p "${4:-}" \
+		'{id: $id, status: $s, created_at: $ts}
+		 + (if $p == "" then {} else {promoted_at: $ts} end)' \
+		>"${LESSONS_DIR}/proposals/$1.json"
+}
+
+_seed_surface_mix() {
+	_seed_lesson p1 pending 01
+	_seed_lesson p2 pending 02
+	_seed_lesson a1 approved 05
+	_seed_lesson r1 rejected 03
+	_seed_lesson a2 approved 04 promoted
+	_seed_lesson c1 confirmed 06
+	printf '{not json' >"${LESSONS_DIR}/proposals/broken.json"
+}
+
+@test "surface_counts prints the pending count, then the ids awaiting promotion oldest first" {
+	_review_setup
+	_seed_surface_mix
+
+	run librarian_lesson_surface_counts "$PROJECT_KEY"
+	[ "$status" -eq 0 ] || return 1
+	[ "$output" = $'2\nr1\na1' ]
+}
+
+@test "surface_counts agrees with list_pending and list_awaiting_promotion" {
+	_review_setup
+	_seed_surface_mix
+	local single pending awaiting
+	single=$(librarian_lesson_surface_counts "$PROJECT_KEY")
+	pending=$(librarian_lesson_list_pending "$PROJECT_KEY" | jq length)
+	awaiting=$(librarian_lesson_list_awaiting_promotion "$PROJECT_KEY")
+
+	[ "$single" = "${pending}"$'\n'"${awaiting}" ]
+}
+
+@test "surface_counts keeps the rest when jq cannot open one of the files" {
+	[[ "$(id -u)" -ne 0 ]] || skip "root reads through file modes"
+	_review_setup
+	_seed_surface_mix
+	chmod 000 "${LESSONS_DIR}/proposals/p1.json"
+
+	run librarian_lesson_surface_counts "$PROJECT_KEY"
+	chmod 644 "${LESSONS_DIR}/proposals/p1.json"
+
+	[ "$status" -eq 0 ] || return 1
+	[ "$output" = $'1\nr1\na1' ]
+}
+
+@test "surface_counts prints a zero count for an empty queue or no key" {
+	_review_setup
+	run librarian_lesson_surface_counts "$PROJECT_KEY"
+	[ "$output" = "0" ] || return 1
+
+	run librarian_lesson_surface_counts ""
+	[ "$output" = "0" ]
+}
+
+@test "surface_counts starts one jq process" {
+	_review_setup
+	_seed_surface_mix
+	rm -f "${LESSONS_DIR}/proposals/broken.json"
+	local shim="${BATS_TEST_TMPDIR}/shim" real
+	real=$(command -v jq)
+	mkdir -p "$shim"
+	cat >"${shim}/jq" <<SHIM
+#!/usr/bin/env bash
+printf 'x\n' >>"${BATS_TEST_TMPDIR}/jq-starts"
+exec "$real" "\$@"
+SHIM
+	chmod +x "${shim}/jq"
+	PATH="${shim}:${PATH}" librarian_lesson_surface_counts "$PROJECT_KEY" >/dev/null
+
+	[ "$(wc -l <"${BATS_TEST_TMPDIR}/jq-starts" | tr -d ' ')" -eq 1 ]
+}

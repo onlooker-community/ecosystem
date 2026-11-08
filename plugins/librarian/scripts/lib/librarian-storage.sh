@@ -231,11 +231,29 @@ librarian_storage_load_proposals() {
 }
 
 # Count pending proposals (status == "pending").
+#
+# Counted in the same jq that reads the files. Loading the set and piping it to
+# a second jq parsed every proposal twice, ~29ms of SessionStart against ~12ms
+# for one pass (ONL-269). A batch parse fails on one malformed file, so that
+# case falls back to the tolerant load below, which costs only the broken file.
 librarian_storage_count_pending() {
 	local key="$1"
+	local filter='map(select(type == "object" and (.status // "pending") == "pending")) | length'
+	[[ -z "$key" ]] && { printf '0'; return 0; }
+
+	local dir file files=()
+	dir=$(librarian_proposals_dir "$key")
+	[[ -d "$dir" ]] || { printf '0'; return 0; }
+	for file in "$dir"/*.json; do
+		[[ -f "$file" ]] || continue
+		files+=("$file")
+	done
+	[[ ${#files[@]} -eq 0 ]] && { printf '0'; return 0; }
+	jq -s "$filter" "${files[@]}" 2>/dev/null && return 0
+
 	local all
 	all=$(librarian_storage_load_proposals "$key")
-	printf '%s' "$all" | jq '[.[] | select((.status // "pending") == "pending")] | length' 2>/dev/null
+	printf '%s' "$all" | jq "$filter" 2>/dev/null
 }
 
 # ============================================================================

@@ -15,51 +15,66 @@ librarian_lesson_passed_path() {
 	local key="$1"
 	printf '%s/passed.jsonl' "$(librarian_lessons_dir "$key")"
 }
-
-# Print proposals in the given status as a JSON array, oldest first. Prints []
-# when none.
+# Run a jq filter over every proposal object, oldest first, and print what it
+# yields. Each caller's filter receives the whole array, so a caller that needs
+# several answers gets them from one read.
 #
 # A malformed or racing file must shrink the result, never erase it: a
 # truncated write, a bare-value file, or a confirm/pass rewriting the file
 # mid-read all read as "that entry is missing" here, not as an error that
-# discards every proposal already gathered. `select(type == "object" and
-# ...)` folds the parse guard and the status check into a single read of
-# each file, the same shape librarian_lesson_seen uses for the same reason.
+# discards every proposal already gathered. `select(type == "object")` is the
+# parse guard, the same shape librarian_lesson_seen uses for the same reason.
 #
-# One jq reads every file, because SessionStart lists three statuses and one jq
-# per file cost ~2s at 82 lessons (ONL-238). jq reads each file as text and
-# parses it under `try`, since a parse error in an input would end the run. The
-# one failure that can't be caught there is a file jq can't open, which fails
-# the whole call before the filter runs, so that case re-reads file by file.
+# One jq reads every file, because one jq per file cost ~2s at 82 lessons
+# (ONL-238). jq reads each file as text and parses it under `try`, since a
+# parse error in an input would end the run. The one failure that can't be
+# caught there is a file jq can't open, which fails the whole call before the
+# filter runs, so that case re-reads file by file.
+#
+# Output is -r: string results print raw, arrays and numbers are unaffected.
+#
+# Usage: _librarian_lesson_query <key> <filter> [jq args...]
+_librarian_lesson_query() {
+	local key="$1" filter="$2"
+	shift 2
+
+	local dir=""
+	[[ -n "$key" ]] && dir="$(librarian_lessons_dir "$key")/proposals"
+
+	local f n=0 rawfiles=() files=()
+	if [[ -n "$dir" && -d "$dir" ]]; then
+		for f in "$dir"/*.json; do
+			[[ -f "$f" ]] || continue
+			files+=("$f")
+			rawfiles+=(--rawfile "f${n}" "$f")
+			n=$((n + 1))
+		done
+	fi
+	# The filter still runs on an empty set, so a count prints 0 and a list
+	# prints [] rather than the caller special-casing nothing.
+	[[ "$n" -eq 0 ]] && { jq -rcn "$@" "[] | ${filter}"; return 0; }
+
+	jq -rcn --argjson n "$n" "$@" "${rawfiles[@]}" "
+		[range(\$n) as \$i | \$ARGS.named[\"f\\(\$i)\"] | try fromjson catch empty
+			| select(type == \"object\")]
+		| sort_by(.created_at)
+		| ${filter}
+	" 2>/dev/null && return 0
+
+	for f in "${files[@]}"; do
+		jq -cRs 'try fromjson catch empty | select(type == "object")' "$f" 2>/dev/null
+	done | jq -rcs "$@" "sort_by(.created_at) | ${filter}"
+}
+
+# Print proposals in the given status as a JSON array, oldest first. Prints []
+# when none.
 #
 # Usage: librarian_lesson_list_by_status <key> <status>
 librarian_lesson_list_by_status() {
 	local key="$1"
 	local status="$2"
 	[[ -z "$key" || -z "$status" ]] && { printf '[]'; return 0; }
-
-	local dir
-	dir="$(librarian_lessons_dir "$key")/proposals"
-	[[ -d "$dir" ]] || { printf '[]'; return 0; }
-
-	local f n=0 rawfiles=() files=()
-	for f in "$dir"/*.json; do
-		[[ -f "$f" ]] || continue
-		files+=("$f")
-		rawfiles+=(--rawfile "f${n}" "$f")
-		n=$((n + 1))
-	done
-	[[ "$n" -eq 0 ]] && { printf '[]'; return 0; }
-
-	jq -cn --arg s "$status" --argjson n "$n" "${rawfiles[@]}" '
-		[range($n) as $i | $ARGS.named["f\($i)"] | try fromjson catch empty
-			| select(type == "object" and .status == $s)]
-		| sort_by(.created_at)
-	' 2>/dev/null && return 0
-
-	for f in "${files[@]}"; do
-		jq -cRs --arg s "$status" 'try fromjson catch empty | select(type == "object" and .status == $s)' "$f" 2>/dev/null
-	done | jq -cs 'sort_by(.created_at)'
+	_librarian_lesson_query "$key" 'map(select(.status == $s))' --arg s "$status"
 }
 
 # Pending is the queue the review walk drives, so it keeps its own name.
@@ -73,17 +88,35 @@ librarian_lesson_list_pending() {
 # row has not landed, or landed without its stamp. promote() stamps
 # promoted_at LAST, so the missing stamp is exactly that state, and a held
 # lesson is stamped before it waits out its window, so it is never counted
-# here. `lessons promote <id>` reconciles every case. Shared by `lessons
-# status` and the SessionStart line so the two cannot disagree (ONL-117).
+# here. `lessons promote <id>` reconciles every case.
 #
+# The filter is data both readers use, `lessons status` through
+# librarian_lesson_list_awaiting_promotion and SessionStart through
+# librarian_lesson_surface_counts, so the two cannot disagree (ONL-117).
+# Approved before rejected, then a stable sort, as the per-status lists it
+# replaced produced.
+_LIBRARIAN_LESSON_AWAITING_PROMOTION='(map(select(.status == "approved")) + map(select(.status == "rejected")))
+	| sort_by(.created_at) | .[] | select(has("promoted_at") | not) | .id'
+
 # Prints the ids, one per line, oldest first.
 #
 # Usage: librarian_lesson_list_awaiting_promotion <key>
 librarian_lesson_list_awaiting_promotion() {
-	local key="${1:-}" s
-	for s in approved rejected; do
-		librarian_lesson_list_by_status "$key" "$s"
-	done | jq -rs 'add | sort_by(.created_at) | .[] | select(has("promoted_at") | not) | .id'
+	[[ -z "${1:-}" ]] && return 0
+	_librarian_lesson_query "$1" "$_LIBRARIAN_LESSON_AWAITING_PROMOTION"
+}
+
+# What SessionStart surfaces, from one read of the proposals: the pending
+# count on the first line, then the ids awaiting promotion, one per line.
+# SessionStart used to read every proposal three times for these (pending,
+# approved, rejected) plus a jq to merge two of them: ~53ms of a ~270ms hook,
+# against ~15ms for this (ONL-269).
+#
+# Usage: librarian_lesson_surface_counts <key>
+librarian_lesson_surface_counts() {
+	[[ -z "${1:-}" ]] && { printf '0\n'; return 0; }
+	_librarian_lesson_query "$1" \
+		"(map(select(.status == \"pending\")) | length), (${_LIBRARIAN_LESSON_AWAITING_PROMOTION})"
 }
 
 _librarian_lesson_valid_visibility() {
