@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.79.3](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.79.2...ecosystem-v0.79.3) (2026-11-08)
+
+
+### Bug Fixes
+
+* **librarian:** read lesson proposals once at SessionStart :scissors: ([#582](https://github.com/onlooker-community/ecosystem/issues/582)) ([e48467e](https://github.com/onlooker-community/ecosystem/commit/e48467e99fdc9fbd1ea154ce71408689a7310997))
+
 ## [0.79.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.79.1...ecosystem-v0.79.2) (2026-11-08)
 
 
