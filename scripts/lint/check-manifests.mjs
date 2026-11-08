@@ -10,6 +10,10 @@
 //     setting both is documented as harmful in plugins-reference).
 //   * plugin.json `name` matches its marketplace entry name (no surprise
 //     renames).
+//   * a marketplace entry's `description`, when present, equals its
+//     plugin.json `description`. Claude Code's /plugin browser shows the
+//     marketplace copy and onlooker.dev shows plugin.json's, and the two had
+//     drifted into telling each audience something different (ONL-273).
 //   * plugin.json `name` is kebab-case (matches plugin loader conventions).
 //   * plugin.json `version` is semver-shaped.
 //   * resource arrays (skills/commands/agents) and mcpServers/hooks fields
@@ -283,6 +287,9 @@ function main() {
       continue;
     }
     validatePluginJson(pluginJson, entry.name, label, errors, warnings);
+    if (typeof entry.description === 'string' && entry.description !== pluginJson.description) {
+      errors.push(`${label}: marketplace.json \`description\` does not match plugin.json \`description\``);
+    }
 
     // Validate hooks/hooks.json if the plugin appears to ship hooks.
     const hooksJsonPath = join(pluginRoot, 'hooks', 'hooks.json');
