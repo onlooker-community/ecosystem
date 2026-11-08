@@ -2,6 +2,13 @@
 
 All notable changes to the Cartographer plugin are documented here.
 
+## [0.13.1](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.13.0...cartographer-v0.13.1) (2026-11-08)
+
+
+### Bug Fixes
+
+* **cartographer:** drop chunking config that nothing reads :scissors: ([#573](https://github.com/onlooker-community/ecosystem/issues/573)) ([cb6ce60](https://github.com/onlooker-community/ecosystem/commit/cb6ce605154f47595ec3717ca21d5c3ad63d829c))
+
 ## [0.13.0](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.12.4...cartographer-v0.13.0) (2026-11-07)
 
 

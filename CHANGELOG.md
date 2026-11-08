@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.78.3](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.78.2...ecosystem-v0.78.3) (2026-11-08)
+
+
+### Bug Fixes
+
+* **cartographer:** drop chunking config that nothing reads :scissors: ([#573](https://github.com/onlooker-community/ecosystem/issues/573)) ([cb6ce60](https://github.com/onlooker-community/ecosystem/commit/cb6ce605154f47595ec3717ca21d5c3ad63d829c))
+
 ## [0.78.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.78.1...ecosystem-v0.78.2) (2026-11-08)
 
 
