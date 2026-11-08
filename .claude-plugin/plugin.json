@@ -1,6 +1,6 @@
 {
   "name": "ecosystem",
-  "version": "0.79.0",
+  "version": "0.79.1",
   "description": "Observability substrate for Claude Code. Provides the shared $ONLOOKER_DIR storage root (default $HOME/.onlooker), canonical schema-validated event emission, session and tool tracking hooks, and prompt rules. Other Onlooker plugins emit their events through it: without it they still run and keep their own files, but write nothing to the shared event log.",
   "author": {
     "name": "Onlooker Community",
