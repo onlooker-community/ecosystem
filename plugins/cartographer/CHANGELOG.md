@@ -2,6 +2,13 @@
 
 All notable changes to the Cartographer plugin are documented here.
 
+## [0.13.3](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.13.2...cartographer-v0.13.3) (2026-11-09)
+
+
+### Performance Improvements
+
+* start fewer processes in the libs every hook loads :feather: ([#584](https://github.com/onlooker-community/ecosystem/issues/584)) ([dad527e](https://github.com/onlooker-community/ecosystem/commit/dad527ee3dd2b8b8bf95879939c36f9cc2c56fcc))
+
 ## [0.13.2](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.13.1...cartographer-v0.13.2) (2026-11-08)
 
 

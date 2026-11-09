@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.2](https://github.com/onlooker-community/ecosystem/compare/governor-v0.8.1...governor-v0.8.2) (2026-11-09)
+
+
+### Performance Improvements
+
+* start fewer processes in the libs every hook loads :feather: ([#584](https://github.com/onlooker-community/ecosystem/issues/584)) ([dad527e](https://github.com/onlooker-community/ecosystem/commit/dad527ee3dd2b8b8bf95879939c36f9cc2c56fcc))
+
 ## [0.8.1](https://github.com/onlooker-community/ecosystem/compare/governor-v0.8.0...governor-v0.8.1) (2026-11-08)
 
 
