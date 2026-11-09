@@ -444,3 +444,37 @@ setup() {
   "
   [ "$output" = "${BATS_TEST_TMPDIR}/plainhome/.claude" ]
 }
+
+# validate-path locates its own directory without a process when sourced by an
+# absolute path, as every hook does, and with `cd && pwd` otherwise (ONL-292).
+# Either way it must find its siblings and export an absolute emitter path.
+_source_validate_path_from() {
+  # $1 labels the case; $2 is the directory to source from, $3 the path.
+  bash -c '
+    set -u
+    unset ONLOOKER_EMIT
+    cd "$1" || exit 9
+    source "$2" || exit 8
+    [[ "$ONLOOKER_EMIT" == /* ]] || { echo "relative: $ONLOOKER_EMIT"; exit 1; }
+    [[ -f "$ONLOOKER_EMIT" ]] || { echo "missing: $ONLOOKER_EMIT"; exit 2; }
+    declare -F lock_acquire >/dev/null || { echo "no portable-lock"; exit 3; }
+    declare -F hook_health_register >/dev/null || { echo "no hook-health"; exit 4; }
+    printf "%s" "$ONLOOKER_EMIT"
+  ' _ "$2" "$3"
+}
+
+@test "validate-path finds its siblings when sourced by an absolute path" {
+  run _source_validate_path_from abs "${BATS_TEST_TMPDIR}" "${REPO_ROOT}/scripts/lib/validate-path.sh"
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  [ "$output" = "${REPO_ROOT}/scripts/lib/onlooker-emit.sh" ]
+}
+
+@test "validate-path finds its siblings when sourced by a relative path" {
+  run _source_validate_path_from rel "${REPO_ROOT}/scripts" "lib/validate-path.sh"
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  [ "$output" = "${REPO_ROOT}/scripts/lib/onlooker-emit.sh" ] || return 1
+
+  run _source_validate_path_from bare "${REPO_ROOT}/scripts/lib" "validate-path.sh"
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  [ "$output" = "${REPO_ROOT}/scripts/lib/onlooker-emit.sh" ]
+}

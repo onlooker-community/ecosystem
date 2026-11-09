@@ -51,7 +51,7 @@
 # Derived from the bytes rather than declared: a version directory's name, its
 # package.json and its mtime have each been caught disagreeing with the contents
 # they label. A hand-maintained constant would be a fourth such label.
-_ONLOOKER_LIB_FINGERPRINT="a90cc2185e5f"
+_ONLOOKER_LIB_FINGERPRINT="f730c8a55af9"
 
 # What the record actually reports, and the reason it is a second variable.
 #
@@ -614,11 +614,17 @@ _hook_health_write() {
 	# clock underneath is free, and the fork happens after the start stamp, so
 	# it was billed to the hook. Preferring the variable form makes the whole
 	# measured window subprocess-free under bash 5.
-	local end
+	#
+	# Without a free clock (bash 3.2, which runs every hook on macOS) the end is
+	# read by the jq below instead. A separate `jq -n now` here cost a whole
+	# process on every hook for a value the write's own jq can produce: both
+	# read the clock after one jq startup, so the reported duration is the same
+	# to within the builtin path and directory checks between them (ONL-292).
+	local end=0 end_in_jq=0
 	if _hook_health_now_ms_var; then
 		end="$_HH_NOW_MS"
 	else
-		end=$(_hook_health_now_ms)
+		end_in_jq=1
 	fi
 
 	local path
@@ -654,7 +660,9 @@ _hook_health_write() {
 		--argjson host_pid "${_HOOK_HOST_PID:-0}" \
 		--argjson start "$start" \
 		--argjson end "$end" \
-		'{
+		--argjson end_in_jq "$end_in_jq" \
+		'(if $end_in_jq == 1 then (now * 1000 | floor) else $end end) as $end
+		| {
 			timestamp: (now | todate),
 			hook: $hook,
 			status: $hook_status,

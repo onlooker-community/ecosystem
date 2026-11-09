@@ -609,3 +609,50 @@ setup() {
 	done
 	[ -z "$offenders" ] || { echo "bare exit after registering: $offenders" >&2; return 1; }
 }
+
+# ---------------------------------------------------------------------------
+# No free clock: bash 3.2, which is what runs every hook on macOS. CI runs
+# bash 5, where EPOCHREALTIME exists, so these force the 3.2 path by unsetting
+# it; under bash 5 that drops its special meaning. There the end is read by the
+# record's own jq rather than by a separate `jq -n now` (ONL-292).
+# ---------------------------------------------------------------------------
+
+@test "without a free clock the duration is still measured" {
+	unset EPOCHREALTIME
+	[ -z "${EPOCHREALTIME:-}" ] || skip "EPOCHREALTIME could not be unset"
+	hook_health_register "no-free-clock-hook"
+	sleep 0.2
+	hook_health_success
+	local d
+	d=$(tail -n 1 "$HEALTH_LOG" | jq -r '.duration_ms')
+	[ "$d" != "null" ] || { echo "duration_ms was null" >&2; return 1; }
+	[ "$d" -ge 150 ] || { echo "duration_ms=${d}, slept 200ms" >&2; return 1; }
+	[ "$d" -lt 5000 ]
+}
+
+@test "without a free clock a backward step still records null" {
+	unset EPOCHREALTIME
+	[ -z "${EPOCHREALTIME:-}" ] || skip "EPOCHREALTIME could not be unset"
+	hook_health_register "no-free-clock-time-traveler"
+	_HOOK_START_MS=$(( $(_hook_health_now_ms) + 60000 ))
+	hook_health_success
+	tail -n 1 "$HEALTH_LOG" | jq -e '.duration_ms == null' >/dev/null
+}
+
+@test "without a free clock the terminal write starts one jq" {
+	unset EPOCHREALTIME
+	[ -z "${EPOCHREALTIME:-}" ] || skip "EPOCHREALTIME could not be unset"
+	hook_health_register "no-free-clock-count"
+	local shim="${BATS_TEST_TMPDIR}/shim" real
+	real=$(command -v jq)
+	mkdir -p "$shim"
+	cat >"${shim}/jq" <<SHIM
+#!/usr/bin/env bash
+printf 'x\n' >>"${BATS_TEST_TMPDIR}/jq-starts"
+exec "$real" "\$@"
+SHIM
+	chmod +x "${shim}/jq"
+	PATH="${shim}:${PATH}" hook_health_success
+	[ "$(wc -l <"${BATS_TEST_TMPDIR}/jq-starts" | tr -d ' ')" -eq 1 ] || return 1
+	tail -n 1 "$HEALTH_LOG" | jq -e '.hook == "no-free-clock-count" and (.duration_ms | type) == "number"' >/dev/null
+}
