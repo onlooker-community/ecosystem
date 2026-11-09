@@ -99,10 +99,15 @@ _config_resolve_roots() {
 	local out=""
 	out=$(git -C "$cwd" rev-parse --show-toplevel --git-common-dir 2>/dev/null) || out=""
 
+	# Split with parameter expansion, not `sed -n 1p` / `sed -n 2p`: those were
+	# two processes, ~3ms each, on every hook that loads config (ONL-292).
 	local toplevel="" common_dir=""
 	if [[ -n "$out" ]]; then
-		toplevel=$(printf '%s\n' "$out" | sed -n '1p')
-		common_dir=$(printf '%s\n' "$out" | sed -n '2p')
+		toplevel="${out%%$'\n'*}"
+		if [[ "$out" == *$'\n'* ]]; then
+			common_dir="${out#*$'\n'}"
+			common_dir="${common_dir%%$'\n'*}"
+		fi
 	fi
 
 	if [[ -n "$toplevel" ]]; then

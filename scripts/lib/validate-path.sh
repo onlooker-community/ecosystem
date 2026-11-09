@@ -34,13 +34,17 @@ export ONLOOKER_COMPACT_TRACKERS_DIR="${ONLOOKER_COMPACT_TRACKERS_DIR:-$ONLOOKER
 export ONLOOKER_METRICS_DIR="${ONLOOKER_METRICS_DIR:-$ONLOOKER_DIR/metrics}"
 export ONLOOKER_EVENTS_LOG="${ONLOOKER_EVENTS_LOG:-$ONLOOKER_DIR/logs/onlooker-events.jsonl}"
 export ONLOOKER_HOOK_HEALTH_LOG="${ONLOOKER_HOOK_HEALTH_LOG:-$ONLOOKER_DIR/logs/hook-health.jsonl}"
-_VALIDATE_PATH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# This file's directory without a process when the path is already absolute,
+# which it is whenever Claude Code runs a hook. `$(cd "$(dirname ...)" && pwd)`
+# was a subshell plus a dirname, ~3.7ms, and this file did it twice (ONL-292).
+_VALIDATE_PATH_DIR="${BASH_SOURCE[0]%/*}"
+[[ "$_VALIDATE_PATH_DIR" == "${BASH_SOURCE[0]}" ]] && _VALIDATE_PATH_DIR="."
+[[ "$_VALIDATE_PATH_DIR" == /* ]] || _VALIDATE_PATH_DIR="$(cd "$_VALIDATE_PATH_DIR" && pwd)"
 export ONLOOKER_EMIT="$_VALIDATE_PATH_DIR/onlooker-emit.sh"
 # Portable mutex (flock substitute) — every hook script that needs to write
 # shared state can call lock_acquire/lock_release after sourcing this file.
 # shellcheck source=portable-lock.sh
 source "$_VALIDATE_PATH_DIR/portable-lock.sh"
-unset _VALIDATE_PATH_DIR
 
 # ==============================================================================
 # Plugin Identity
@@ -68,7 +72,8 @@ export ONLOOKER_PLUGIN_NAME
 # plugin so plugin hooks report the same way. Sourced from this file's own
 # directory, never from a caller-supplied variable.
 # shellcheck source=hook-health.sh
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/hook-health.sh"
+source "${_VALIDATE_PATH_DIR}/hook-health.sh"
+unset _VALIDATE_PATH_DIR
 
 # Back-compat aliases. Every ecosystem hook calls these names.
 hook_register() { hook_health_register "$@"; }
