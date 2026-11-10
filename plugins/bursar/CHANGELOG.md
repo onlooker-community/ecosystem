@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.4](https://github.com/onlooker-community/ecosystem/compare/bursar-v0.9.3...bursar-v0.9.4) (2026-11-10)
+
+
+### Performance Improvements
+
+* answer config_get from a table the config load builds :card_index: ([#586](https://github.com/onlooker-community/ecosystem/issues/586)) ([34c8b93](https://github.com/onlooker-community/ecosystem/commit/34c8b93ddfc7565a1dfc5a857ea467a099fd3d9c))
+
 ## [0.9.3](https://github.com/onlooker-community/ecosystem/compare/bursar-v0.9.2...bursar-v0.9.3) (2026-11-09)
 
 

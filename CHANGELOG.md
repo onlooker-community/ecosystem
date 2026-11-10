@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.79.5](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.79.4...ecosystem-v0.79.5) (2026-11-10)
+
+
+### Performance Improvements
+
+* answer config_get from a table the config load builds :card_index: ([#586](https://github.com/onlooker-community/ecosystem/issues/586)) ([34c8b93](https://github.com/onlooker-community/ecosystem/commit/34c8b93ddfc7565a1dfc5a857ea467a099fd3d9c))
+
 ## [0.79.4](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.79.3...ecosystem-v0.79.4) (2026-11-09)
 
 
