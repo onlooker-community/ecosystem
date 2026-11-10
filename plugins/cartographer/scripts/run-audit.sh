@@ -343,6 +343,12 @@ run_synthesize() {
 		enriched=$(printf '%s' "$finding" \
 			| jq --arg h "$fhash" --arg aid "$AUDIT_ID" \
 			  '. + {"finding_hash":$h,"audit_id":$aid}')
+		# `. + [$f]` is quadratic, and is left that way on purpose (ONL-84):
+		# 322 real audits peaked at 17 findings, where the append costs ~95ms
+		# of a ~600ms loop, flat at ~5ms per call — jq startup, not re-parsing.
+		# The quadratic term only shows past ~100 findings, and this runs in
+		# the detached audit, off the SessionStart clock. If this loop ever
+		# needs to be faster, the six other jq spawns per finding come first.
 		ALL_FINDINGS=$(printf '%s' "$ALL_FINDINGS" \
 			| jq --argjson f "$enriched" '. + [$f]')
 		(( idx++ )) || true

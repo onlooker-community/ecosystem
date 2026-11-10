@@ -113,6 +113,9 @@ cartographer_analyze_undocumented_entity() {
 					suggested_fix: ("Document " + $n
 						+ " in CLAUDE.md, or exclude its path from cartographer.undocumented_entity.")
 				}')
+			# Quadratic append, kept on purpose (ONL-84): max_findings caps this
+			# at 20, where it measured ~120ms at ~5ms per call (jq startup, not
+			# re-parsing), inside the detached audit rather than SessionStart.
 			findings=$(printf '%s' "$findings" | jq --argjson f "$finding" '. + [$f]')
 			emitted=$(( emitted + 1 ))
 		done
