@@ -137,7 +137,9 @@ _non_hook_scripts_using_resolver() {
 	#
 	# The hook floor went 14 -> 13 when historian's SessionEnd hook became a
 	# launcher and moved its lookup into scripts/run-index.sh, and 13 -> 12
-	# when ONL-103 retired echo-stop-gate.sh. Both are real removals, so the
+	# when ONL-103 retired echo-stop-gate.sh, and 12 -> 11 when ONL-260
+	# dropped archivist-inject's lookup, which sourced a substrate it never
+	# called. All three are real removals, so the
 	# floor tracks them rather than being held high as aspiration -- a floor
 	# above the true count fails every run and teaches people to edit the
 	# number without reading it.
@@ -145,9 +147,9 @@ _non_hook_scripts_using_resolver() {
 	hooks=$(_hooks_using_resolver | wc -l | tr -d ' ')
 	scripts=$(_non_hook_scripts_using_resolver | wc -l | tr -d ' ')
 
-	[ "$hooks" -ge 12 ] || { echo "hooks: $hooks"; return 1; }
+	[ "$hooks" -ge 11 ] || { echo "hooks: $hooks"; return 1; }
 	[ "$scripts" -ge 2 ] || { echo "non-hook scripts: $scripts"; return 1; }
-	[ "$((hooks + scripts))" -ge 14 ]
+	[ "$((hooks + scripts))" -ge 13 ]
 }
 
 @test "no plugin script still carries its own inline substrate lookup" {

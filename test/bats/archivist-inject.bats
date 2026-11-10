@@ -208,3 +208,198 @@ SHIM
   [ "$status" -eq 0 ]
   echo "$output" | jq -e '.hookSpecificOutput.additionalContext == ""' >/dev/null
 }
+
+# --- The injection cache (ONL-260) -------------------------------------------
+#
+# Rendering re-reads every artifact the project has to show at most eight of
+# them: ~60ms of jq at 1,345 artifacts, and 2.4x that under SessionStart
+# contention. The cache is valid while it is strictly newer than every kind
+# directory and pinned.json. Writers create a file per artifact, so a write
+# moves its directory's mtime. A change in the same second as the cache is a
+# miss, which is why these tests backdate the corpus before building one.
+
+_project_dir() { printf '%s' "${ONLOOKER_DIR}/archivist/${PROJECT_KEY}"; }
+
+_backdate_corpus() {
+  local p
+  for p in decisions dead_ends open_questions pinned.json; do
+    [[ -e "$(_project_dir)/$p" ]] && touch -t 202001010000 "$(_project_dir)/$p"
+  done
+  return 0
+}
+
+# A later second than the cache, whatever second it was built in. Not a
+# backdated cache: that would also be older than the hook script, and miss on
+# that alone.
+_future() { touch -t "$(($(date +%Y) + 1))01010000" "$1"; }
+
+_run_inject_as() {
+  jq -n --arg cwd "$PROJECT_REPO" --arg src "$1" '{cwd: $cwd, source: $src, session_id: "s"}' \
+    | "${PLUGIN_ROOT}/scripts/hooks/archivist-inject.sh"
+}
+
+# Logs every jq argument list, still running the real jq.
+_log_jq_args() {
+  local shim="${BATS_TEST_TMPDIR}/argshim" real
+  real=$(command -v jq)
+  mkdir -p "$shim"
+  cat >"${shim}/jq" <<SHIM
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >>"${BATS_TEST_TMPDIR}/jq-args"
+exec "$real" "\$@"
+SHIM
+  chmod +x "${shim}/jq"
+  : >"${BATS_TEST_TMPDIR}/jq-args"
+  printf '%s' "$shim"
+}
+
+@test "an unchanged corpus is answered without reading an artifact" {
+  _artifact dead_ends e1 "2026-06-02T00:00:00Z" '{"summary":"a dead end","files":["x.sh"]}'
+  _backdate_corpus
+  local first second shim
+  first=$(_run_inject_as startup)
+  shim=$(_log_jq_args)
+  second=$(PATH="${shim}:${PATH}" _run_inject_as startup)
+
+  [[ "$first" == *"a dead end"* ]] || return 1
+  [ "$second" = "$first" ] || return 1
+  ! grep -q '/decisions/\|/dead_ends/' "${BATS_TEST_TMPDIR}/jq-args"
+}
+
+@test "a cached answer names the source of the session it answers" {
+  _backdate_corpus
+  local first second shim
+  first=$(_run_inject_as startup)
+  shim=$(_log_jq_args)
+  second=$(PATH="${shim}:${PATH}" _run_inject_as compact)
+
+  ! grep -q '/decisions/' "${BATS_TEST_TMPDIR}/jq-args" || return 1
+  [ "$second" = "${first/Source: startup./Source: compact.}" ]
+}
+
+@test "an artifact written after the cache is injected" {
+  _backdate_corpus
+  _run_inject_as startup >/dev/null
+  _artifact decisions later "2026-07-01T00:00:00Z" '{"summary":"written later"}'
+  _future "$(_project_dir)/decisions"
+
+  run _ctx
+  [[ "$output" == *"written later"* ]]
+}
+
+@test "an artifact written in the same second as the cache is injected" {
+  _backdate_corpus
+  _run_inject_as startup >/dev/null
+  _artifact decisions later "2026-07-01T00:00:00Z" '{"summary":"written later"}'
+
+  run _ctx
+  [[ "$output" == *"written later"* ]]
+}
+
+@test "a new kind directory is injected" {
+  _backdate_corpus
+  _run_inject_as startup >/dev/null
+  _artifact open_questions q1 "2026-07-01T00:00:00Z" '{"summary":"a new question"}'
+  touch -t 202001010000 "$(_project_dir)/open_questions"
+
+  run _ctx
+  [[ "$output" == *"a new question"* ]]
+}
+
+@test "a pin made after the cache is injected" {
+  _artifact decisions old "2020-01-01T00:00:00Z" '{"summary":"old one"}'
+  # Present before the cache, so the pin changes no path's existence.
+  printf '{"ids":[]}\n' >"$(_project_dir)/pinned.json"
+  _backdate_corpus
+  _run_inject_as startup >/dev/null
+  printf '{"ids":["old"]}\n' >"$(_project_dir)/pinned.json"
+  _future "$(_project_dir)/pinned.json"
+
+  run _ctx
+  [[ "$output" == *"- [pinned decision] old one"* ]]
+}
+
+@test "a cache built under other budgets is not used" {
+  _artifact decisions d2 "2026-06-02T00:00:00Z" '{"summary":"second"}'
+  _backdate_corpus
+  _run_inject_as startup >/dev/null
+  _settings '{"archivist":{"injection":{"max_items":1}}}'
+
+  run _ctx
+  [[ "$output" == *"injected 1/2 items"* ]]
+}
+
+# The cache is stamped with the time its read began, not the time it was
+# written. Otherwise an artifact written mid-read would land in neither: not in
+# the rendered list, and not newer than the cache that rendered it.
+@test "an artifact written while the corpus is read is injected next time" {
+  _backdate_corpus
+  local shim="${BATS_TEST_TMPDIR}/racer" real
+  real=$(command -v jq)
+  mkdir -p "$shim"
+  cat >"${shim}/jq" <<SHIM
+#!/usr/bin/env bash
+if [[ "\$*" == *"/decisions/"* && ! -e "${BATS_TEST_TMPDIR}/raced" ]]; then
+  : >"${BATS_TEST_TMPDIR}/raced"
+  sleep 1.1
+  printf '%s\n' '{"id":"racer","summary":"written mid-read","created_at":"2026-08-01T00:00:00Z","updated_at":"2026-08-01T00:00:00Z"}' \
+    >"$(_project_dir)/decisions/racer.json"
+  sleep 1.1
+fi
+exec "$real" "\$@"
+SHIM
+  chmod +x "${shim}/jq"
+  PATH="${shim}:${PATH}" _run_inject_as startup >/dev/null
+  [ -e "${BATS_TEST_TMPDIR}/raced" ] || return 1
+
+  run _ctx
+  [[ "$output" == *"written mid-read"* ]]
+}
+
+@test "a corrupt cache is read past" {
+  _backdate_corpus
+  local first
+  first=$(_run_inject_as startup)
+  printf 'garbage\n' >"$(_project_dir)/.inject-cache"
+
+  run _run_inject_as startup
+  [ "$output" = "$first" ]
+}
+
+@test "a cached empty answer stays an empty context" {
+  rm -f "$(_project_dir)/decisions/"*.json
+  _artifact decisions blank "2026-06-04T00:00:00Z" '{"summary":""}'
+  _backdate_corpus
+  _run_inject_as startup >/dev/null
+
+  run _run_inject_as startup
+  [ "$output" = '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":""}}' ]
+}
+
+@test "a store the hook cannot write to still injects" {
+  _backdate_corpus
+  chmod 555 "$(_project_dir)"
+  run _ctx
+  chmod 755 "$(_project_dir)"
+  [[ "$output" == *"use git remote SHA256 as project key"* ]] || return 1
+  [ ! -e "$(_project_dir)/.inject-cache" ]
+}
+
+# A changed render must not answer with a body the old one cached. Releases
+# install to their own directory, which the key carries; an edit in place moves
+# the script's mtime. On a copy, so the real hook's mtime is left alone for the
+# tests running beside this one.
+@test "an edited hook does not answer from a cache the old one wrote" {
+  local copy="${BATS_TEST_TMPDIR}/archivist-copy"
+  cp -R "$PLUGIN_ROOT" "$copy"
+  _backdate_corpus
+  local input
+  input=$(jq -n --arg cwd "$PROJECT_REPO" '{cwd: $cwd, source: "startup", session_id: "s"}')
+  printf '%s' "$input" | "${copy}/scripts/hooks/archivist-inject.sh" >/dev/null
+  sed -i.bak 's/Archivist — carried over/Archivist (edited) — carried over/' \
+    "${copy}/scripts/hooks/archivist-inject.sh"
+  _future "${copy}/scripts/hooks/archivist-inject.sh"
+
+  run bash -c "printf '%s' '$input' | '${copy}/scripts/hooks/archivist-inject.sh'"
+  [[ "$output" == *"Archivist (edited)"* ]]
+}
