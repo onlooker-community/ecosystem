@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.6](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.10.5...archivist-v0.10.6) (2026-11-10)
+
+
+### Bug Fixes
+
+* **archivist:** answer SessionStart from a cached injection :ice_cube: ([#590](https://github.com/onlooker-community/ecosystem/issues/590)) ([f2afa32](https://github.com/onlooker-community/ecosystem/commit/f2afa329679483b606c2ee443c15453496e66767))
+
 ## [0.10.5](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.10.4...archivist-v0.10.5) (2026-11-10)
 
 
