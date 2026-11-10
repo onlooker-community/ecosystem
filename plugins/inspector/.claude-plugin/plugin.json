@@ -1,6 +1,6 @@
 {
   "name": "inspector",
-  "version": "0.10.2",
+  "version": "0.10.3",
   "description": "Per-edit lint and typecheck gate. Runs the project's configured checks on just the touched file after every Write/Edit/MultiEdit, and on each file a Bash command changes, so the agent sees its own lint and type errors before claiming success. Cheaper than running the full project verify; complements assayer (which catches the agent lying about claims). Emits inspector.* events for downstream analysis. Builds on the Onlooker ecosystem plugin.",
   "author": {
     "name": "Onlooker Community",

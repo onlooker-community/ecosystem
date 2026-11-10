@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.27.5](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.27.4...librarian-v0.27.5) (2026-11-10)
+
+
+### Performance Improvements
+
+* answer config_get from a table the config load builds :card_index: ([#586](https://github.com/onlooker-community/ecosystem/issues/586)) ([34c8b93](https://github.com/onlooker-community/ecosystem/commit/34c8b93ddfc7565a1dfc5a857ea467a099fd3d9c))
+
 ## [0.27.4](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.27.3...librarian-v0.27.4) (2026-11-09)
 
 

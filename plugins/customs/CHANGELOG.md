@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/onlooker-community/ecosystem/compare/customs-v0.3.1...customs-v0.3.2) (2026-11-10)
+
+
+### Performance Improvements
+
+* answer config_get from a table the config load builds :card_index: ([#586](https://github.com/onlooker-community/ecosystem/issues/586)) ([34c8b93](https://github.com/onlooker-community/ecosystem/commit/34c8b93ddfc7565a1dfc5a857ea467a099fd3d9c))
+
 ## [0.3.1](https://github.com/onlooker-community/ecosystem/compare/customs-v0.3.0...customs-v0.3.1) (2026-11-09)
 
 

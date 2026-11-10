@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.4](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.10.3...archivist-v0.10.4) (2026-11-10)
+
+
+### Performance Improvements
+
+* answer config_get from a table the config load builds :card_index: ([#586](https://github.com/onlooker-community/ecosystem/issues/586)) ([34c8b93](https://github.com/onlooker-community/ecosystem/commit/34c8b93ddfc7565a1dfc5a857ea467a099fd3d9c))
+
 ## [0.10.3](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.10.2...archivist-v0.10.3) (2026-11-09)
 
 
