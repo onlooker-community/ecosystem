@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.79.7](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.79.6...ecosystem-v0.79.7) (2026-11-10)
+
+
+### Bug Fixes
+
+* **archivist:** answer SessionStart from a cached injection :ice_cube: ([#590](https://github.com/onlooker-community/ecosystem/issues/590)) ([f2afa32](https://github.com/onlooker-community/ecosystem/commit/f2afa329679483b606c2ee443c15453496e66767))
+
 ## [0.79.6](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.79.5...ecosystem-v0.79.6) (2026-11-10)
 
 
