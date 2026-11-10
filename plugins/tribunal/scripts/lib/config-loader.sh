@@ -207,15 +207,23 @@ config_load_plugin() {
 	# Merge all five layers in a single jq invocation. Precedence:
 	# defaults < home < home-local < repo < repo-local
 	# Settings files (.json, .local.json) contribute only their plugin-scoped key.
-	local merged_json
-	merged_json=$(jq -n \
+	#
+	# The same jq also prints a flat table of the merged config, so config_get
+	# can answer a plain path without starting a process of its own (see
+	# _config_flat_lookup). The table comes first, after a line giving its
+	# length, so bash can cut the two apart by offset. A separator split with
+	# `${out#*<sep>}` measured 42ms on librarian's 8.5KB output under bash 3.2,
+	# where that expansion is quadratic in the string's length; the offsets
+	# are linear (ONL-292).
+	local out merged_json table
+	out=$(jq -rn \
 		--arg plugin "$plugin_name" \
 		--arg d "$default_txt" \
 		--arg h "$home_txt" \
 		--arg hl "$home_local_txt" \
 		--arg r "$repo_txt" \
 		--arg rl "$repo_local_txt" \
-		'
+		"${_CONFIG_FLAT_TABLE_JQ}"'
 		def deepmerge($a; $b):
 			if ($a|type) == "object" and ($b|type) == "object" then
 				reduce (($a|keys) + ($b|keys) | unique)[] as $k
@@ -235,12 +243,110 @@ config_load_plugin() {
 					$home_local);
 				$repo);
 			$repo_local)
-		' 2>/dev/null) || merged_json="{}"
+		| _config_flat_table as $t
+		| ($t | length | tostring), $t, .
+		' 2>/dev/null) || out=""
 
-	[[ -z "$merged_json" ]] && merged_json="{}"
+	# The table is ASCII by construction, so its length in characters is its
+	# length in bytes, and the offsets below hold in any locale.
+	merged_json="" table=""
+	local head="${out:0:12}" len=""
+	len="${head%%$'\n'*}"
+	if [[ "$len" =~ ^[0-9]+$ && "$head" == *$'\n'* ]]; then
+		local off=$(( ${#len} + 1 ))
+		table="${out:off:len}"
+		merged_json="${out:off+len+1}"
+	fi
+	[[ -z "$merged_json" ]] && merged_json="{}" table=""
 
 	# Set the output variable in the caller's scope via printf (works in bash).
 	printf -v "$output_var" '%s' "$merged_json"
+	# The table is only good for the JSON it was built from, so a copy of that
+	# JSON goes beside it. A caller that reassigns the config variable later
+	# gets jq again rather than a stale answer.
+	printf -v "${output_var}__FLAT" '%s' "$table"
+	printf -v "${output_var}__FLAT_SRC" '%s' "$merged_json"
+	return 0
+}
+
+# jq: one "<path>\t<value>" line per node config_get could be asked for by a
+# plain path (.a.b.c), with the value printed as `jq -r <path>` prints it:
+# strings raw, everything else as JSON. jq 1.7 prints a number the same way
+# under -r and tojson, literal included (1E+3, 1.0, -0).
+#
+# Two markers stand in for values config_get must not answer from here:
+#   \x01  an object. `jq -r` would print it as JSON, so it is not answered
+#         here; it still marks the node as present, which is what makes a
+#         missing key under it read as null.
+#   \x02  an array, or a string with any character outside printable ASCII:
+#         a tab, newline or CR would break a line-oriented table, a control
+#         character could be read as one of these markers, and a non-ASCII
+#         character would break the byte offsets the loader cuts the table
+#         out by.
+# A path through a key that is not an identifier, or into an array, cannot be
+# written as a plain path, so it is left out.
+_CONFIG_FLAT_TABLE_JQ='
+	def _config_flat_table:
+		. as $root
+		| [paths
+			| select(all(.[]; type == "string" and test("^[A-Za-z_][A-Za-z0-9_]*$")))
+			| . as $p
+			| ($root | getpath($p)) as $v
+			| "." + ($p | join(".")) + "\t" + (
+				if ($v | type) == "object" then "\u0001"
+				elif ($v | type) == "array" then "\u0002"
+				elif ($v | type) == "string" then
+					(if ($v | test("[^\\x20-\\x7E]")) then "\u0002" else $v end)
+				else ($v | tojson) end)]
+		| join("\n");
+'
+
+# Answer config_get from the flat table when it can. Sets _CONFIG_FLAT_VAL and
+# returns 0 on an answer; returns 1 to send the caller to jq.
+#
+# Every config_get used to start a jq, ~4ms each and 21 of them across one
+# SessionStart, ~1.7x that under the contention of every hook starting at once
+# (ONL-292). 172 of the 181 distinct paths callers pass are plain, so nearly
+# all of them now cost no process.
+#
+# A missing key reads as null, as jq would read it, but only when the nearest
+# node above it is an object. Below a scalar jq errors and below an array it
+# indexes, so those go to jq too.
+_CONFIG_FLAT_VAL=""
+_config_flat_lookup() {
+	local config_var="$1" path="$2"
+	[[ "$path" =~ ^(\.[A-Za-z_][A-Za-z0-9_]*)+$ ]] || return 1
+
+	local flat_var="${config_var}__FLAT" src_var="${config_var}__FLAT_SRC"
+	[[ -n "${!src_var+set}" ]] || return 1
+	[[ "${!config_var}" == "${!src_var}" ]] || return 1
+
+	# Matched with =~ (regexec) rather than `${table#*<path>}`, which bash 3.2
+	# evaluates in time quadratic in the table's length: 2.8ms against 0.4ms
+	# on librarian's. A path is [A-Za-z0-9_.] by the check above, so escaping
+	# its dots is all it needs to be a literal in the regex.
+	local table=$'\n'"${!flat_var}"$'\n'
+	local re val
+	re=$'\n'"${path//./\\.}"$'\t''([^'$'\n'']*)'
+	if [[ $table =~ $re ]]; then
+		val="${BASH_REMATCH[1]}"
+		[[ "$val" == $'\x01' || "$val" == $'\x02' ]] && return 1
+		_CONFIG_FLAT_VAL="$val"
+		return 0
+	fi
+
+	# Missing: find the nearest node above it. The root is always an object.
+	local up="$path"
+	while [[ "$up" == .*.* ]]; do
+		up="${up%.*}"
+		re=$'\n'"${up//./\\.}"$'\t''([^'$'\n'']*)'
+		if [[ $table =~ $re ]]; then
+			[[ "${BASH_REMATCH[1]}" == $'\x01' ]] || return 1
+			_CONFIG_FLAT_VAL=""
+			return 0
+		fi
+	done
+	_CONFIG_FLAT_VAL=""
 	return 0
 }
 
@@ -258,6 +364,12 @@ config_get() {
 	[[ -z "$config_var" ]] && return 1
 
 	# Use indirect expansion to read the variable's value.
+	if _config_flat_lookup "$config_var" "$path"; then
+		[[ "$_CONFIG_FLAT_VAL" == "null" ]] && _CONFIG_FLAT_VAL=""
+		printf '%s' "$_CONFIG_FLAT_VAL"
+		return 0
+	fi
+
 	local config_json="${!config_var}"
 	# NB: do NOT use `${path} // empty` — jq's `//` treats `false` and `0` as
 	# empty, so a false boolean would read back as "" and a true default would
