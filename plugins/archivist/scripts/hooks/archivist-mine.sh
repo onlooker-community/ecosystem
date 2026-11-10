@@ -18,6 +18,10 @@
 # agent that made it, at the moment it understood it. This reads that rather
 # than paying a model to reconstruct it from a transcript later.
 #
+# The mining itself runs in scripts/lib/archivist-mine-worker.sh, detached. This
+# hook only decides whether there is anything to mine, so it returns well inside
+# SessionEnd's 1500ms however far behind the watermark is (ONL-293).
+#
 # Hook contract:
 #   - Always exits 0. Session end is never blocked.
 #   - Skips silently with no git context (no project key).
@@ -40,14 +44,11 @@ hook_health_register "archivist-mine"
 
 # shellcheck source=../lib/onlooker-project-key.sh
 source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
-# shellcheck source=../lib/archivist-ulid.sh
-source "${PLUGIN_ROOT}/scripts/lib/archivist-ulid.sh"
-# shellcheck source=../lib/archivist-mine.sh
-source "${PLUGIN_ROOT}/scripts/lib/archivist-mine.sh"
 # shellcheck source=../lib/archivist-storage.sh
 source "${PLUGIN_ROOT}/scripts/lib/archivist-storage.sh"
 
 INPUT=$(cat 2>/dev/null || printf '')
+hook_health_context "$INPUT"
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
 [[ -z "$CWD" ]] && CWD="$(pwd)"
 
@@ -59,152 +60,31 @@ PROJECT_KEY="$ONLOOKER_PROJECT_KEY"
 REPO_ROOT=$(onlooker_project_repo_root "$CWD")
 [[ -z "$REPO_ROOT" ]] && hook_health_exit 0
 
-# ---------------------------------------------------------------------------
-# Watermark
-#
-# Its own file rather than a field in manifest.json, because
-# archivist_storage_write_manifest rewrites that document wholesale from a fixed
-# shape and would clobber anything added beside its keys.
-# ---------------------------------------------------------------------------
+# The common case, and the only one decided here: the watermark already names
+# HEAD. Anything else -- new commits, a stale watermark, none at all -- is the
+# worker's to sort out under its lock, so this check never has to agree with
+# the worker's range logic, only to be a cheap way of not spawning one.
 MINED_PATH="$(archivist_project_dir "$PROJECT_KEY")/mined.json"
-WATERMARK=""
 if [[ -f "$MINED_PATH" ]]; then
 	WATERMARK=$(jq -r '.last_sha // ""' "$MINED_PATH" 2>/dev/null) || WATERMARK=""
+	HEAD_SHA=$(git -C "$REPO_ROOT" rev-parse -q --verify HEAD 2>/dev/null) || HEAD_SHA=""
+	[[ -n "$WATERMARK" && "$WATERMARK" == "$HEAD_SHA" ]] && hook_health_exit 0
 fi
 
-# A watermark naming a commit this repository no longer has - a reclone, a
-# rewritten history - is not a reason to mine nothing forever. Drop it and
-# start over; content-addressed ids make the re-mine an overwrite.
-if [[ -n "$WATERMARK" ]] && ! git -C "$REPO_ROOT" cat-file -e "${WATERMARK}^{commit}" 2>/dev/null; then
-	WATERMARK=""
-fi
-
-RANGE="HEAD"
-[[ -n "$WATERMARK" ]] && RANGE="${WATERMARK}..HEAD"
-
-# --first-parent: on a squash-merged repository every commit on the default
-# branch is one pull request, and following merge parents would mine branch
-# commits whose messages the squash already carries.
-COMMITS=$(git -C "$REPO_ROOT" log --first-parent --format='%H %ct' "$RANGE" 2>/dev/null | tail -r 2>/dev/null || \
-	git -C "$REPO_ROOT" log --first-parent --reverse --format='%H %ct' "$RANGE" 2>/dev/null)
-[[ -z "$COMMITS" ]] && hook_health_exit 0
-
-# ---------------------------------------------------------------------------
-# Per-run cap
+# Detached, following librarian's _spawn_one: output discarded, stdin closed,
+# disowned so SessionEnd does not wait on it. fd 3 is closed too, or a bats
+# test running this hook would wait on the worker through it.
 #
-# The CLI gives the whole SessionEnd batch 1500ms, and a timeout declared in a
-# plugin's hooks.json does not raise it (#338). Each commit measured 43-62ms, so
-# a backlog past roughly 25 commits cannot finish in one run. That was not a
-# slow run but a stuck one: the watermark only moved at the end, every killed
-# run saved nothing, and the next session faced the same backlog plus whatever
-# had landed since. Measured on the dotfiles repo: 182 commits behind, killed
-# at ~1510ms on every session end for almost four weeks.
-#
-# Mining oldest-first a bounded slice at a time turns a backlog into a few
-# sessions of catch-up. Loaded only here, past the empty-range exit, so the
-# common up-to-date path pays nothing for it. 0 means no cap.
-# ---------------------------------------------------------------------------
-# shellcheck source=../lib/archivist-config.sh
-source "${PLUGIN_ROOT}/scripts/lib/archivist-config.sh"
-archivist_config_load "$CWD"
-MAX_COMMITS=$(archivist_config_int '.archivist.mining.max_commits_per_run' 10)
-if (( MAX_COMMITS > 0 )); then
-	# A here-string, not `printf | head`: head closing the pipe early makes printf
-	# report a broken pipe on stderr, and SessionEnd stderr reaches the terminal.
-	COMMITS=$(head -n "$MAX_COMMITS" <<< "$COMMITS")
+# ARCHIVIST_MINE_WORKER is a test seam; ARCHIVIST_MINE_FOREGROUND runs the
+# worker inline so a test can assert on what it wrote without racing it.
+WORKER="${ARCHIVIST_MINE_WORKER:-${PLUGIN_ROOT}/scripts/lib/archivist-mine-worker.sh}"
+[[ -f "$WORKER" ]] || hook_health_exit 0
+
+if [[ "${ARCHIVIST_MINE_FOREGROUND:-}" == "1" ]]; then
+	bash "$WORKER" "$PROJECT_KEY" "$REPO_ROOT" "$CWD" </dev/null >/dev/null 2>&1
+else
+	bash "$WORKER" "$PROJECT_KEY" "$REPO_ROOT" "$CWD" </dev/null >/dev/null 2>&1 3>&- &
+	disown 2>/dev/null || true
 fi
-
-# Atomic, because it is now written while the run can still be killed: a
-# truncated mined.json parses as no watermark, which re-mines the whole history.
-archivist_mine_checkpoint() {
-	local sha="$1" tmp
-	mkdir -p "$(dirname "$MINED_PATH")" 2>/dev/null || return 0
-	tmp="${MINED_PATH}.tmp.$$"
-	printf '{"last_sha":"%s","at":"%s"}\n' \
-		"$sha" "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "$tmp" 2>/dev/null &&
-		mv -f "$tmp" "$MINED_PATH" 2>/dev/null || rm -f "$tmp" 2>/dev/null
-	return 0
-}
-
-wrote_any=0
-write_failed=0
-while IFS=' ' read -r sha epoch; do
-	[[ -z "$sha" ]] && continue
-
-	body=$(git -C "$REPO_ROOT" log -1 --format='%B' "$sha" 2>/dev/null) || continue
-	files=$(git -C "$REPO_ROOT" show --name-only --format='' "$sha" 2>/dev/null | jq -R . | jq -sc 'map(select(length > 0))')
-	created=$(date -u -r "$epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -d "@$epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null)
-	# The session that wrote it, when the commit convention records one.
-	session=$(printf '%s' "$body" | sed -n 's/^Claude-Session:.*session_\([A-Za-z0-9]*\).*$/\1/p' | head -1)
-
-	record=""
-	while IFS= read -r -d '' record || [[ -n "$record" ]]; do
-		[[ -z "$record" ]] && continue
-
-		summary=$(printf '%s' "$record" | head -1)
-		detail=$(printf '%s' "$record" | tail -n +2 | sed '/./,$!d')
-		# A claim with no rationale. The durability filter downstream would
-		# drop it anyway; skipping here keeps the store free of records nothing
-		# will ever promote -- and keeps the classifier and the lesson transform
-		# from paying a model call each to distill a generated changelog.
-		#
-		# Covers an absent body AND a body that is only git trailers or
-		# separator rules, which is what a release-please or auto-format commit
-		# leaves behind once the squash split has consumed its bullets
-		# (ONL-170).
-		if ! archivist_mine_has_rationale "$detail"; then
-			record=""
-			continue
-		fi
-
-		id=$(archivist_mine_id "$record")
-		json=$(jq -n \
-			--arg id "$id" \
-			--arg key "$PROJECT_KEY" \
-			--arg created "$created" \
-			--arg summary "$summary" \
-			--arg detail "$detail" \
-			--argjson files "${files:-[]}" \
-			--arg session "$session" \
-			'{
-				id: $id,
-				kind: "decision",
-				project_key: $key,
-				source: "local",
-				created_at: $created,
-				updated_at: $created,
-				summary: $summary,
-				detail: $detail,
-				files: $files,
-				session_id: (if $session == "" then null else $session end),
-				trigger: "commit"
-			}' 2>/dev/null) || { record=""; continue; }
-
-		if archivist_storage_write_artifact "$PROJECT_KEY" "decisions" "$id" "$json" >/dev/null 2>&1; then
-			wrote_any=1
-		else
-			write_failed=1
-		fi
-		record=""
-	done < <(archivist_mine_split "$body")
-
-	# The watermark never moves ahead of the artifacts it claims to describe -
-	# ecosystem-449.55 is what the inverse costs, and its failure is invisible
-	# because the watermark is the thing asserting all is well. So a failed write
-	# stops the run here, leaving the watermark on the last commit that landed
-	# whole; the next session retries from this commit.
-	(( write_failed )) && break
-
-	# The condition is "nothing FAILED", not "something was written". Those came
-	# apart once a body of pure metadata became a legitimate skip: a commit that
-	# is all release or auto-format noise writes nothing and has still been
-	# examined, and gating on wrote_any would re-walk it on every session end
-	# forever. $wrote_any stays because it reads as the intent at a glance.
-	#
-	# After every commit rather than once at the end, so a run killed at the
-	# SessionEnd deadline keeps what it finished instead of handing the whole
-	# range to the next session.
-	archivist_mine_checkpoint "$sha"
-done <<< "$COMMITS"
 
 hook_health_exit 0

@@ -9,6 +9,10 @@ setup() {
 	PLUGIN_ROOT="${REPO_ROOT}/plugins/archivist"
 	export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
 	export ONLOOKER_DIR="${BATS_TEST_TMPDIR}/onlooker"
+	# The hook launches the miner detached; inline, these assert on what it
+	# wrote without racing it. archivist-mine-nonblocking.bats covers the
+	# detached launch itself.
+	export ARCHIVIST_MINE_FOREGROUND=1
 
 	source "${PLUGIN_ROOT}/scripts/lib/onlooker-project-key.sh"
 	source "${PLUGIN_ROOT}/scripts/lib/archivist-storage.sh"
@@ -486,8 +490,8 @@ watermark() {
 }
 
 @test "the shipped default caps a run at 10 commits" {
-	# Pins config.json, so the default that keeps a run under the deadline cannot
-	# be dropped without a test noticing.
+	# Pins config.json, so the default that bounds one run cannot be dropped
+	# without a test noticing.
 	make_backlog 12
 
 	run run_hook
