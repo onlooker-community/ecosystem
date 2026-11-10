@@ -49,17 +49,46 @@ _inspector_now_ms() {
 	printf '%s000' "$(date +%s 2>/dev/null || printf 0)"
 }
 
-# Substitute ${file}, ${file_relative}, ${repo_root} in each argv element.
+# The package that owns $INSPECTOR_FILE: the nearest ancestor directory, up to
+# and including $INSPECTOR_REPO_ROOT, that holds a package.json. Falls back to
+# the repo root when none does, so `-p ${package_root}` never becomes `-p ""`.
+#
+# It never climbs above the repo root. A manifest up there belongs to another
+# project — a parent directory, or the main checkout a worktree sits inside —
+# and handing that to `tsc -p` would check the wrong code. Pure string
+# operations and `[[ -f ]]`, so the walk runs no external command (ONL-214).
+_inspector_package_root() {
+	local root="$INSPECTOR_REPO_ROOT"
+	local dir="${INSPECTOR_FILE%/*}"
+	while [[ "$dir" == "$root" || "$dir" == "$root"/* ]]; do
+		if [[ -f "$dir/package.json" ]]; then
+			printf '%s' "$dir"
+			return 0
+		fi
+		[[ "$dir" == "$root" ]] && break
+		dir="${dir%/*}"
+	done
+	printf '%s' "$root"
+}
+
+# Substitute ${file}, ${file_relative}, ${repo_root} and ${package_root} in each
+# argv element. ${package_root} is resolved only when some element names it.
 _inspector_expand_argv() {
 	local raw_argv_json="$1"
+	local pkg=""
+	if [[ "$raw_argv_json" == *'${package_root}'* ]]; then
+		pkg=$(_inspector_package_root)
+	fi
 	jq -c \
 		--arg file "$INSPECTOR_FILE" \
 		--arg rel "$INSPECTOR_FILE_RELATIVE" \
 		--arg root "$INSPECTOR_REPO_ROOT" \
+		--arg pkg "$pkg" \
 		'map(
 			gsub("\\$\\{file\\}"; $file)
 			| gsub("\\$\\{file_relative\\}"; $rel)
 			| gsub("\\$\\{repo_root\\}"; $root)
+			| gsub("\\$\\{package_root\\}"; $pkg)
 		)' <<<"$raw_argv_json"
 }
 
