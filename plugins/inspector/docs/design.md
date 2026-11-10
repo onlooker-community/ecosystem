@@ -39,7 +39,7 @@ PostToolUse(Write|Edit|MultiEdit)
     → load merged config (plugin defaults < home < repo)
     → if disabled OR excluded path OR no extension match → emit .skipped, exit 0
     → for each configured check matching the extension:
-        → expand ${file}, ${file_relative}, ${repo_root} in the command
+        → expand ${file}, ${file_relative}, ${repo_root}, ${package_root} in the command
         → run with per-check timeout
         → emit inspector.check.passed / .failed / .skipped
     → exit 0 (never blocks the tool call)

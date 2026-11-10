@@ -84,6 +84,19 @@ the following placeholders are expanded before exec:
 | `${file}`         | absolute path to the touched file          |
 | `${file_relative}`| path relative to the repo root             |
 | `${repo_root}`    | the repo's `git rev-parse --show-toplevel` |
+| `${package_root}` | nearest ancestor of the file, up to `${repo_root}`, holding a `package.json`; `${repo_root}` when none does |
+
+`${package_root}` is what a workspace typecheck needs. In a pnpm or turbo
+monorepo, `tsc --noEmit ${file}` ignores the package's `tsconfig.json` and
+reports errors a clean tree does not have, while a typecheck from `${repo_root}`
+checks every package on every edit. Scope it to the owning package instead:
+
+```jsonc
+{ "name": "tsc", "kind": "typecheck", "argv": ["tsc", "--noEmit", "-p", "${package_root}"] }
+```
+
+It looks for `package.json` only, and never above `${repo_root}`. Other
+manifests (`Cargo.toml`, `go.mod`, `pyproject.toml`) are not consulted.
 
 A bare argv array (`["shellcheck", "${file}"]`) is also accepted as a shorthand
 — inspector treats the first entry as the check name and the kind as `lint`.
