@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.80.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.79.7...ecosystem-v0.80.0) (2026-11-10)
+
+
+### Features
+
+* **inspector:** add ${package_root} for workspace-scoped checks :package: ([#593](https://github.com/onlooker-community/ecosystem/issues/593)) ([ebb5cf2](https://github.com/onlooker-community/ecosystem/commit/ebb5cf2f7733dc406d6d0dfdb5e904b58dc2d3ef))
+
 ## [0.79.7](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.79.6...ecosystem-v0.79.7) (2026-11-10)
 
 
