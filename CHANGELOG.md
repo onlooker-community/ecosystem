@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.79.6](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.79.5...ecosystem-v0.79.6) (2026-11-10)
+
+
+### Bug Fixes
+
+* **archivist:** mine commits off the SessionEnd clock :door: ([#588](https://github.com/onlooker-community/ecosystem/issues/588)) ([52741ef](https://github.com/onlooker-community/ecosystem/commit/52741eff35bf2402a71ef461bb0ef21f2be3f7bc))
+
 ## [0.79.5](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.79.4...ecosystem-v0.79.5) (2026-11-10)
 
 

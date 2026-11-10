@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.5](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.10.4...archivist-v0.10.5) (2026-11-10)
+
+
+### Bug Fixes
+
+* **archivist:** mine commits off the SessionEnd clock :door: ([#588](https://github.com/onlooker-community/ecosystem/issues/588)) ([52741ef](https://github.com/onlooker-community/ecosystem/commit/52741eff35bf2402a71ef461bb0ef21f2be3f7bc))
+
 ## [0.10.4](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.10.3...archivist-v0.10.4) (2026-11-10)
 
 
