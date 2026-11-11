@@ -257,3 +257,49 @@ test('a torn final log line is skipped rather than fatal', () => {
   );
   assert.equal(verdictOf(fx), 'live');
 });
+
+// ONL-152. The script used to rebuild the project key in JS, from
+// --show-toplevel, while the canonical shell lib anchors a remote-less repo on
+// --git-common-dir so a linked worktree shares its parent's key. The two only
+// disagreed in that one case, so that is the case these pin: the key the script
+// reports must be whatever onlooker-project-key.sh says, byte for byte.
+const KEY_LIB = join(REPO, 'scripts', 'lib', 'onlooker-project-key.sh');
+
+function canonicalKey(dir) {
+  return execFileSync('bash', ['-c', 'source "$1" && onlooker_project_key "$2"', 'bash', KEY_LIB, dir], {
+    encoding: 'utf8',
+  }).trim();
+}
+
+// A remote-less repo with one commit (worktree add needs a commit to check
+// out) and a linked worktree beside it, carrying the same plugin fixture.
+function worktreeFixture() {
+  const fx = fixture({ remote: false });
+  const git = (...a) => execFileSync('git', ['-C', fx.project, ...a], { stdio: 'ignore' });
+  git('-c', 'user.email=t@example.com', '-c', 'user.name=T', 'commit', '-q', '--allow-empty', '-m', 'init');
+  const linked = join(fx.root, 'linked');
+  git('worktree', 'add', '-q', linked);
+  mkdirSync(join(linked, '.claude'), { recursive: true });
+  writeFileSync(join(linked, '.claude', 'settings.json'), JSON.stringify({ enabledPlugins: { 'demo@m': true } }));
+  mkdirSync(join(linked, 'plugins', 'demo', 'hooks'), { recursive: true });
+  writeFileSync(join(linked, 'plugins', 'demo', 'hooks', 'hooks.json'), JSON.stringify([{ command: 'demo-stop.sh' }]));
+  return { ...fx, linked };
+}
+
+test('a linked worktree of a remote-less repo gets the canonical key, shared with its parent', () => {
+  const fx = worktreeFixture();
+  const expected = canonicalKey(fx.linked);
+  assert.match(expected, /^[0-9a-f]{12}$/);
+  assert.equal(expected, canonicalKey(fx.project), 'the lib itself should give a worktree its parent key');
+  assert.equal(run({ ...fx, project: fx.linked }).project_key, expected);
+});
+
+test('the reported key matches the canonical lib for a repo with a remote', () => {
+  const fx = fixture();
+  assert.equal(run(fx).project_key, canonicalKey(fx.project));
+});
+
+test('the reported key matches the canonical lib for a remote-less main checkout', () => {
+  const fx = fixture({ remote: false });
+  assert.equal(run(fx).project_key, canonicalKey(fx.project));
+});
