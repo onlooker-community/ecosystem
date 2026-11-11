@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.80.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.80.1...ecosystem-v0.80.2) (2026-11-11)
+
+
+### Bug Fixes
+
+* **lint:** take liveness's project key from the canonical lib :link: ([#597](https://github.com/onlooker-community/ecosystem/issues/597)) ([40bd788](https://github.com/onlooker-community/ecosystem/commit/40bd7888e49b639577ccbfe8aaa265cd996eb17f))
+
 ## [0.80.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.80.0...ecosystem-v0.80.1) (2026-11-11)
 
 
