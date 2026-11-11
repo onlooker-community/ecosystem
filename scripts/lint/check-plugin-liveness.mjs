@@ -58,8 +58,7 @@
 //   2  setup/usage error
 
 import { execFileSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -96,31 +95,29 @@ function parseArgs(argv) {
   return args;
 }
 
-// Mirrors onlooker-project-key.sh: sha256("remote:<origin-url>") first 12 hex,
-// falling back to sha256("root:<realpath of toplevel>").
+// The project key, from the canonical shell lib itself rather than a JS copy of
+// it. A copy is what this used to be: it took the root from --show-toplevel
+// where the lib uses --git-common-dir, so for a remote-less repo in a linked
+// worktree it named the worktree instead of the parent checkout and stopped
+// matching the key every plugin files that project's events under (ONL-152).
+// Shelling out costs one bash start per run of a lint script, and the key can
+// no longer drift. onlooker_project_key is the uncached resolve, so a --project
+// pointing anywhere never touches the session cache. Empty for a directory
+// that is not a git repo, as the lib returns.
+const PROJECT_KEY_LIB = join(REPO_ROOT, 'scripts', 'lib', 'onlooker-project-key.sh');
 function projectKey(projectRoot) {
-  const first12 = (s) => createHash('sha256').update(s).digest('hex').slice(0, 12);
-  const git = (...a) => {
-    try {
-      return execFileSync('git', ['-C', projectRoot, ...a], {
+  try {
+    return execFileSync(
+      'bash',
+      ['-c', 'source "$1" && onlooker_project_key "$2"', 'bash', PROJECT_KEY_LIB, projectRoot],
+      {
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'ignore'],
-      }).trim();
-    } catch {
-      return '';
-    }
-  };
-  const remote = git('remote', 'get-url', 'origin');
-  if (remote) return first12(`remote:${remote}`);
-  const top = git('rev-parse', '--show-toplevel');
-  if (!top) return '';
-  let real = top;
-  try {
-    real = realpathSync(top);
+      },
+    ).trim();
   } catch {
-    /* fall back to the unresolved path */
+    return '';
   }
-  return first12(`root:${real}`);
 }
 
 function readJson(path) {

@@ -23,10 +23,10 @@ SHAPE='^[^#]*["`](remote|root):\$'
 
 # Known derivations outside the canonical lib, each with the issue that removes
 # it. An entry here is a debt, not a permission: the second test fails the day
-# its file stops matching, so the fix has to delete the entry too.
-KNOWN_EXCEPTIONS=(
-	"scripts/lint/check-plugin-liveness.mjs" # ONL-152: JS reimplementation, diverges on worktrees
-)
+# its file stops matching, so the fix has to delete the entry too. Empty since
+# ONL-152 moved check-plugin-liveness.mjs onto the lib. Expanded with the
+# `${a[@]+...}` form below because bash 3.2 calls an empty array unbound.
+KNOWN_EXCEPTIONS=()
 
 # Every tracked file under scripts/ and plugins/ whose code builds a
 # remote:/root: key input from a variable. Matches the shell forms
@@ -47,7 +47,7 @@ _derivation_sites() {
 	while IFS= read -r site; do
 		[[ -z "$site" ]] && continue
 		known=0
-		for k in "${KNOWN_EXCEPTIONS[@]}"; do
+		for k in ${KNOWN_EXCEPTIONS[@]+"${KNOWN_EXCEPTIONS[@]}"}; do
 			[[ "$site" == "$k" ]] && known=1
 		done
 		[[ "$known" -eq 0 ]] && unexpected+="${site}"$'\n'
@@ -63,7 +63,7 @@ _derivation_sites() {
 @test "every known exception still derives a key, so a fixed one is removed from the list" {
 	local sites k stale=""
 	sites=$(_derivation_sites)
-	for k in "${KNOWN_EXCEPTIONS[@]}"; do
+	for k in ${KNOWN_EXCEPTIONS[@]+"${KNOWN_EXCEPTIONS[@]}"}; do
 		grep -qxF "$k" <<<"$sites" || stale+="${k}"$'\n'
 	done
 	if [[ -n "$stale" ]]; then
