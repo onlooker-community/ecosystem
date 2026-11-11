@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.80.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.80.0...ecosystem-v0.80.1) (2026-11-11)
+
+
+### Bug Fixes
+
+* **hooks:** derive memory-recall's project key from the one lib :link: ([#595](https://github.com/onlooker-community/ecosystem/issues/595)) ([d069e8d](https://github.com/onlooker-community/ecosystem/commit/d069e8d6a707138a2f53be0dd076ed42557e3be5))
+
 ## [0.80.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.79.7...ecosystem-v0.80.0) (2026-11-10)
 
 
