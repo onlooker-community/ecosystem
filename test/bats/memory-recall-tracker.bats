@@ -335,6 +335,28 @@ _shim_node() {
   [ "$output" = "2" ]
 }
 
+# The test above covers the remote basis only. A repo with no origin falls
+# back to a root-derived key, the branch the hook's old private helpers
+# reimplemented with their own common-dir walk. The payload key, the envelope
+# key and the canonical lib must all name the same project (ONL-164).
+@test "a repo with no remote carries the canonical root-derived key in payload and envelope" {
+  git -C "$PROJECT_REPO" remote remove origin
+  _seed_memory "a.md" "project"
+
+  local expected
+  expected=$(source "${REPO_ROOT}/scripts/lib/onlooker-project-key.sh" \
+    && ONLOOKER_PROJECT_CACHE=0 onlooker_project_key "$PROJECT_REPO")
+  [ -n "$expected" ] || return 1
+
+  run bash -c "printf '%s' '$(_input)' | '$HOOK'"
+  [ "$status" -eq 0 ] || return 1
+
+  run jq -rs --arg k "$expected" 'map(select(.event_type == "memory.recalled"))
+    | map(select(.payload.project_key == $k and .project == $k and .project_basis == "root"))
+    | length' "$ONLOOKER_EVENTS_LOG"
+  [ "$output" = "1" ]
+}
+
 @test "the first type in frontmatter wins and the body is never read" {
   printf -- '---\nname: x\ntype: "user"\ntype: project\n---\n\ntype: reference\n' \
     > "${MEM_DIR}/first.md"
