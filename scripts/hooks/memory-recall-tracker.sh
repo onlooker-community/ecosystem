@@ -47,56 +47,18 @@ if [[ "$SOURCE" == "compact" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Resolve project_key. Mirrors the SHA256-of-remote-URL + common-dir
-# fallback every memory plugin uses (see plugins/librarian/scripts/lib/
-# onlooker-project-key.sh and friends): if there's no origin remote,
-# anchor the key on git --git-common-dir rather than --show-toplevel so
-# two worktrees of the same local-only repo share a key.
+# Resolve project_key through the canonical lib, already sourced by
+# onlooker-schema.sh. This hook used to hand-roll its own derivation, which no
+# vendoring guard could see, and so emitted the one event carrying two
+# independently derived keys: the payload's and the envelope's. Resolving once
+# here makes them the same value by construction, and the session cache spares
+# the git calls the hand-rolled version paid on every SessionStart (ONL-164).
+# test/bats/project-key-single-derivation.bats keeps a derivation from
+# reappearing anywhere outside the lib.
 # ---------------------------------------------------------------------------
 
-_memory_sha256_first12() {
-	local input="$1"
-	if command -v shasum >/dev/null 2>&1; then
-		printf '%s' "$input" | shasum -a 256 2>/dev/null | cut -c1-12
-	elif command -v sha256sum >/dev/null 2>&1; then
-		printf '%s' "$input" | sha256sum 2>/dev/null | cut -c1-12
-	else
-		return 1
-	fi
-}
-
-_memory_repo_root_via_common_dir() {
-	local cwd="$1"
-	local common_dir toplevel
-	common_dir=$(git -C "$cwd" rev-parse --git-common-dir 2>/dev/null) || return 0
-	# git-common-dir may be relative; resolve relative to cwd.
-	if [[ -n "$common_dir" && "$common_dir" != /* ]]; then
-		common_dir="$(cd "$cwd" && cd "$common_dir" 2>/dev/null && pwd -P)" || common_dir=""
-	fi
-	if [[ -n "$common_dir" && -d "$common_dir" ]]; then
-		# common_dir is typically the .git dir of the main repo; its
-		# parent is the canonical repo root (shared across worktrees).
-		toplevel="$(cd "$common_dir/.." 2>/dev/null && pwd -P)" || toplevel=""
-	fi
-	if [[ -z "$toplevel" ]]; then
-		toplevel=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null || true)
-		[[ -n "$toplevel" ]] && toplevel="$(cd "$toplevel" 2>/dev/null && pwd -P)"
-	fi
-	printf '%s' "$toplevel"
-}
-
-PROJECT_KEY=""
-if git -C "$CWD" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-	REMOTE=$(git -C "$CWD" remote get-url origin 2>/dev/null || true)
-	if [[ -n "$REMOTE" ]]; then
-		PROJECT_KEY=$(_memory_sha256_first12 "remote:${REMOTE}")
-	else
-		ROOT=$(_memory_repo_root_via_common_dir "$CWD")
-		if [[ -n "$ROOT" ]]; then
-			PROJECT_KEY=$(_memory_sha256_first12 "root:${ROOT}")
-		fi
-	fi
-fi
+onlooker_project_resolve_cached "$CWD"
+PROJECT_KEY="$ONLOOKER_PROJECT_KEY"
 
 if [[ -z "$PROJECT_KEY" ]]; then
 	hook_success
@@ -215,13 +177,8 @@ if [[ -z "$params" ]]; then
 	exit 0
 fi
 
-# The envelope dimension, alongside the payload project_key this hook has
-# always carried. Both are derived from the same CWD and were verified to
-# agree on all three cases (remote, root, non-repo) — this hook predates the
-# canonical lib and still hand-rolls the derivation above, which is a
-# maintenance risk tracked separately, not a divergence today.
-onlooker_project_resolve_cached "$CWD"
-
+# The emitter reads ONLOOKER_PROJECT_KEY and ONLOOKER_PROJECT_BASIS, exported
+# by the resolve above, for the envelope dimension.
 # A non-zero exit means a line was dropped; the rest of stdout is still good.
 event_json=$(printf '%s\n' "$params" \
 	| ONLOOKER_DIR="$ONLOOKER_DIR" ONLOOKER_PLUGIN_NAME="$local_plugin" \
