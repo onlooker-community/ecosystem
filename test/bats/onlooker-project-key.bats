@@ -149,18 +149,22 @@ setup() {
 	[ "$ONLOOKER_PROJECT_KEY" = "$(onlooker_project_key "$REPO")" ]
 }
 
-@test "the export survives a direct call but not command substitution" {
+@test "the variables reach a direct caller but not a command substitution" {
 	git -C "$REPO" remote add origin git@github.com:org/fixture.git
 
-	# Direct call, in the current shell: the export is visible afterward.
+	# This pins the subshell boundary, not `export`: the variables are globals,
+	# so a same-shell caller sees them with or without it. `export` is pinned by
+	# "resolve exports the variables to a child process" above, which runs env.
+
+	# Direct call, in the current shell: the variables are visible afterward.
 	unset ONLOOKER_PROJECT_KEY ONLOOKER_PROJECT_BASIS
 	onlooker_project_key "$REPO" >/dev/null
 	[ "$ONLOOKER_PROJECT_BASIS" = "remote" ] || return 1
 	[[ "$ONLOOKER_PROJECT_KEY" =~ ^[0-9a-f]{12}$ ]] || return 1
 
 	# Command substitution — the form every production call site uses — runs
-	# the call in a subshell, so the export dies there and never reaches this
-	# shell. This is the form that reaches zero callers' env.
+	# the call in a subshell, so the variables die there and never reach this
+	# shell.
 	unset ONLOOKER_PROJECT_KEY ONLOOKER_PROJECT_BASIS
 	local captured
 	captured=$(onlooker_project_key "$REPO")
