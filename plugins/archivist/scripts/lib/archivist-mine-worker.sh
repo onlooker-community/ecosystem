@@ -226,4 +226,13 @@ while IFS=' ' read -r sha epoch; do
 	archivist_mine_checkpoint "$sha"
 done <<< "$COMMITS"
 
+# These writes are what the next SessionStart would otherwise rebuild for
+# (ONL-260). Before the lock is released, so a run that has let go of it is
+# over, warm included.
+if (( wrote_any )); then
+	# shellcheck source=./archivist-inject-cache.sh
+	source "${SCRIPT_DIR}/archivist-inject-cache.sh"
+	archivist_inject_cache_warm "$PROJECT_KEY" "$CWD"
+fi
+
 archivist_mine_worker_exit 0
