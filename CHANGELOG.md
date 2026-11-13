@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.80.3](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.80.2...ecosystem-v0.80.3) (2026-11-13)
+
+
+### Bug Fixes
+
+* **archivist:** warm the inject cache where its artifacts are written :fire: ([#600](https://github.com/onlooker-community/ecosystem/issues/600)) ([815b9d1](https://github.com/onlooker-community/ecosystem/commit/815b9d11b616555b9187e84ecd98b034346895d4))
+
 ## [0.80.2](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.80.1...ecosystem-v0.80.2) (2026-11-11)
 
 
