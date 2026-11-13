@@ -387,9 +387,9 @@ SHIM
 
 # A changed render must not answer with a body the old one cached. Releases
 # install to their own directory, which the key carries; an edit in place moves
-# the script's mtime. On a copy, so the real hook's mtime is left alone for the
-# tests running beside this one.
-@test "an edited hook does not answer from a cache the old one wrote" {
+# the render lib's mtime. On a copy, so the real lib's mtime is left alone for
+# the tests running beside this one.
+@test "an edited render does not answer from a cache the old one wrote" {
   local copy="${BATS_TEST_TMPDIR}/archivist-copy"
   cp -R "$PLUGIN_ROOT" "$copy"
   _backdate_corpus
@@ -397,8 +397,8 @@ SHIM
   input=$(jq -n --arg cwd "$PROJECT_REPO" '{cwd: $cwd, source: "startup", session_id: "s"}')
   printf '%s' "$input" | "${copy}/scripts/hooks/archivist-inject.sh" >/dev/null
   sed -i.bak 's/Archivist — carried over/Archivist (edited) — carried over/' \
-    "${copy}/scripts/hooks/archivist-inject.sh"
-  _future "${copy}/scripts/hooks/archivist-inject.sh"
+    "${copy}/scripts/lib/archivist-inject-cache.sh"
+  _future "${copy}/scripts/lib/archivist-inject-cache.sh"
 
   run bash -c "printf '%s' '$input' | '${copy}/scripts/hooks/archivist-inject.sh'"
   [[ "$output" == *"Archivist (edited)"* ]]

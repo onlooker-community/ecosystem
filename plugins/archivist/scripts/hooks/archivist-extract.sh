@@ -290,5 +290,14 @@ if [[ "$WRITE_COUNT" -gt 0 && -n "$SESSION_ID" ]]; then
 	fi
 fi
 
+# The compact SessionStart comes next, and these writes are what it would
+# otherwise rebuild for (ONL-260). Detached, as archivist-mine.sh launches its
+# worker: output discarded, stdin closed, fd 3 closed so a bats test does not
+# wait on it.
+if [[ "$WRITE_COUNT" -gt 0 ]]; then
+	bash "${PLUGIN_ROOT}/scripts/lib/archivist-inject-warm.sh" "$PROJECT_KEY" "$CWD" </dev/null >/dev/null 2>&1 3>&- &
+	disown 2>/dev/null || true
+fi
+
 _approve "Archivist: wrote ${WRITE_COUNT} artifacts (trigger=${TRIGGER})"
 hook_health_exit 0
