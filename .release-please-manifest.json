@@ -1,6 +1,6 @@
 {
-  ".": "0.80.2",
-  "plugins/archivist": "0.10.6",
+  ".": "0.80.3",
+  "plugins/archivist": "0.10.7",
   "plugins/tribunal": "1.9.3",
   "plugins/echo": "0.13.3",
   "plugins/cartographer": "0.13.4",

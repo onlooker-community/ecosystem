@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.7](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.10.6...archivist-v0.10.7) (2026-11-13)
+
+
+### Bug Fixes
+
+* **archivist:** warm the inject cache where its artifacts are written :fire: ([#600](https://github.com/onlooker-community/ecosystem/issues/600)) ([815b9d1](https://github.com/onlooker-community/ecosystem/commit/815b9d11b616555b9187e84ecd98b034346895d4))
+
 ## [0.10.6](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.10.5...archivist-v0.10.6) (2026-11-10)
 
 
