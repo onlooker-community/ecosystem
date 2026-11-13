@@ -69,8 +69,8 @@ _emit() {
 
 INPUT=$(cat 2>/dev/null || true)
 hook_health_context "$INPUT"
-CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
-SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SESSION_ID=""
+CWD="$HOOK_INPUT_CWD"
+SESSION_ID="$HOOK_INPUT_SESSION_ID"
 [[ -z "$CWD" ]] && CWD="$(pwd)"
 [[ -z "$SESSION_ID" ]] && SESSION_ID="unknown"
 

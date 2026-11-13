@@ -74,14 +74,8 @@ _emit_rendered() {
 
 INPUT=$(cat)
 hook_health_context "$INPUT"
-
-FIELDS=$(printf '%s' "$INPUT" | jq -r '
-	[(.cwd // ""), (.source // "startup")]
-	| map(tostring | gsub("[\u001f\n]"; " "))
-	| join("\u001f")' 2>/dev/null) || FIELDS=""
-CWD="" SOURCE=""
-IFS=$'\x1f' read -r CWD SOURCE <<<"$FIELDS" || true
-[[ -n "$FIELDS" ]] || SOURCE="startup"
+CWD="$HOOK_INPUT_CWD"
+SOURCE="${HOOK_INPUT_SOURCE:-startup}"
 
 onlooker_project_resolve "$CWD"
 PROJECT_KEY="$ONLOOKER_PROJECT_KEY"

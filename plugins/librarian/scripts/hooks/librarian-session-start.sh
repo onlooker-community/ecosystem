@@ -69,12 +69,11 @@ _emit() {
 
 INPUT=$(cat 2>/dev/null || true)
 hook_health_context "$INPUT"
-# One jq for both fields: under the contention of every plugin's SessionStart
-# hooks starting at once, each process this hook spawns costs ~1.7x what it
-# does alone (ONL-269). The session id scopes the sweep's events below.
-CWD="" LIBRARIAN_SESSION_ID=""
-IFS=$'\x1f' read -r CWD LIBRARIAN_SESSION_ID <<<"$(printf '%s' "$INPUT" \
-	| jq -r '[.cwd // "", .session_id // ""] | map(tostring) | join("\u001f")' 2>/dev/null)" || true
+# From the parse hook_health_context already made: under the contention of
+# every plugin's SessionStart hooks starting at once, each process this hook
+# spawns costs ~1.7x what it does alone (ONL-269, ONL-292). The session id
+# scopes the sweep's events below.
+CWD="$HOOK_INPUT_CWD" LIBRARIAN_SESSION_ID="$HOOK_INPUT_SESSION_ID"
 [[ -z "$CWD" ]] && CWD="$(pwd)"
 
 librarian_config_load "$CWD"

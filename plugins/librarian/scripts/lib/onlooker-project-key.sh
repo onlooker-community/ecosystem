@@ -85,17 +85,25 @@
 # plugin-visible error rather than a fourth hashing tier: today the failure is
 # silent, which is the shape ONL-153 rightly objected to, and an empty key is
 # indistinguishable from "not a git repo" at every call site.
+#
+# The digest is trimmed in the shell rather than by `cut` and `sed`, which were
+# one or two more processes on every derivation, in every SessionStart hook at
+# once (ONL-292). Some openssl builds print `SHA2-256(stdin)= <hex>`, so its
+# label is stripped the way the sed did: through the last `=`, then spaces.
 _onlooker_sha256_first12() {
-	local input="$1"
+	local input="$1" digest=""
 	if command -v sha256sum >/dev/null 2>&1; then
-		printf '%s' "$input" | sha256sum 2>/dev/null | cut -c1-12
+		digest=$(printf '%s' "$input" | sha256sum 2>/dev/null)
 	elif command -v openssl >/dev/null 2>&1; then
-		printf '%s' "$input" | openssl dgst -sha256 2>/dev/null | sed 's/^.*= *//' | cut -c1-12
+		digest=$(printf '%s' "$input" | openssl dgst -sha256 2>/dev/null)
+		digest="${digest##*=}"
+		digest="${digest#"${digest%%[! ]*}"}"
 	elif command -v shasum >/dev/null 2>&1; then
-		printf '%s' "$input" | shasum -a 256 2>/dev/null | cut -c1-12
+		digest=$(printf '%s' "$input" | shasum -a 256 2>/dev/null)
 	else
 		return 1
 	fi
+	printf '%s\n' "${digest:0:12}"
 }
 
 onlooker_project_remote_url() {

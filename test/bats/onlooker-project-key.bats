@@ -341,6 +341,31 @@ _derive_with_tiers() {
 	[ "$(_derive_with_tiers shasum)" = "cccccccccccc" ]
 }
 
+# The digest is cut to 12 in the shell, not by `cut` and `sed`: those were two
+# more processes on every derivation, in every SessionStart hook at once
+# (ONL-292). Each tier is derived here with neither on PATH.
+_derive_without_text_tools() {
+	local dir
+	dir=$(_stub_path "$@")
+	rm -f "${dir}/cut" "${dir}/sed"
+	( PATH="$dir"; _onlooker_sha256_first12 "remote:x" )
+}
+
+@test "each tier derives its key without cut or sed" {
+	[ "$(_derive_without_text_tools sha256sum)" = "aaaaaaaaaaaa" ] || return 1
+	[ "$(_derive_without_text_tools openssl)" = "bbbbbbbbbbbb" ] || return 1
+	[ "$(_derive_without_text_tools shasum)" = "cccccccccccc" ]
+}
+
+# Some openssl builds prefix the digest, as `SHA2-256(stdin)= <hex>`.
+@test "an openssl digest with a label prefix still yields the bare key" {
+	local dir
+	dir=$(_stub_path)
+	printf '#!/bin/sh\nprintf "%%s\\n" "SHA2-256(stdin)= dddddddddddddddd"\n' >"${dir}/openssl"
+	chmod +x "${dir}/openssl"
+	[ "$( PATH="$dir"; _onlooker_sha256_first12 "remote:x" )" = "dddddddddddd" ]
+}
+
 @test "fails rather than inventing a key when no hash tool exists" {
 	run _derive_with_tiers
 	[ "$status" -ne 0 ] || return 1

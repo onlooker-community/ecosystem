@@ -51,7 +51,7 @@
 # Derived from the bytes rather than declared: a version directory's name, its
 # package.json and its mtime have each been caught disagreeing with the contents
 # they label. A hand-maintained constant would be a fourth such label.
-_ONLOOKER_LIB_FINGERPRINT="f730c8a55af9"
+_ONLOOKER_LIB_FINGERPRINT="b2fbc49ea6d6"
 
 # What the record actually reports, and the reason it is a second variable.
 #
@@ -91,6 +91,10 @@ _HOOK_EVENT="${_HOOK_EVENT:-}"
 _HOOK_TOOL_NAME="${_HOOK_TOOL_NAME:-}"
 _HOOK_SOURCE="${_HOOK_SOURCE:-}"
 _HOOK_PRIOR_EXIT_CMD="${_HOOK_PRIOR_EXIT_CMD:-}"
+# The payload's own fields, as hook_health_context read them, for the hook to
+# use instead of parsing its input again. Never seeded from the environment:
+# they describe this process's payload and nothing else.
+HOOK_INPUT_CWD="" HOOK_INPUT_SESSION_ID="" HOOK_INPUT_SOURCE=""
 # The start stamp in ISO form, and the key that joins a breadcrumb to the
 # terminal record that closes it (ecosystem-449.66).
 _HOOK_START_ISO="${_HOOK_START_ISO:-}"
@@ -540,17 +544,27 @@ _hook_health_on_exit() {
 # whitespace collapses runs, so an absent tool_name would shift hook_event into
 # its slot. Unparseable input leaves all four empty, and the function still
 # returns 0 as every function here must.
+#
+# The same jq reads cwd, and the payload's cwd, session_id and source are left
+# in HOOK_INPUT_CWD, HOOK_INPUT_SESSION_ID and HOOK_INPUT_SOURCE. Every
+# SessionStart hook used to parse its payload again for those, one or two jq
+# starts each while every plugin's hooks contend for the CPU (ONL-292). They
+# are the payload's values whatever the record keeps: session_id here is never
+# an inherited one. A newline or unit separator in one reads as a space, as
+# archivist-inject's own parse always read it.
 hook_health_context() {
 	local input="${1:-}"
+	HOOK_INPUT_CWD="" HOOK_INPUT_SESSION_ID="" HOOK_INPUT_SOURCE=""
 	[[ -n "$input" ]] || return 0
 	command -v jq >/dev/null 2>&1 || return 0
 
-	local fields="" payload_session_id="" tool_name="" hook_event="" source=""
+	local fields="" payload_session_id="" tool_name="" hook_event="" source="" cwd=""
 	fields=$(printf '%s' "$input" | jq -r '
-		[.session_id, .tool_name, .hook_event_name, .source]
+		[.session_id, .tool_name, .hook_event_name, .source, .cwd]
 		| map(. // "" | tostring | gsub("[\u001f\n]"; " "))
 		| join("\u001f")' 2>/dev/null) || fields=""
-	IFS=$'\x1f' read -r payload_session_id tool_name hook_event source <<<"$fields" || true
+	IFS=$'\x1f' read -r payload_session_id tool_name hook_event source cwd <<<"$fields" || true
+	HOOK_INPUT_CWD="$cwd" HOOK_INPUT_SESSION_ID="$payload_session_id" HOOK_INPUT_SOURCE="$source"
 
 	if [[ -n "$payload_session_id" ]]; then
 		_HOOK_SESSION_ID="$payload_session_id"
