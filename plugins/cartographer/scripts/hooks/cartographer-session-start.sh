@@ -36,8 +36,8 @@ source "$PLUGIN_ROOT/scripts/lib/watch-unmatched.sh"
 # Parse hook input
 HOOK_INPUT=$(cat)
 hook_health_context "$HOOK_INPUT"
-CWD=$(printf '%s' "$HOOK_INPUT" | jq -r '.cwd // empty' 2>/dev/null)
-_HOOK_SESSION_ID=$(printf '%s' "$HOOK_INPUT" | jq -r '.session_id // empty' 2>/dev/null)
+CWD="$HOOK_INPUT_CWD"
+_HOOK_SESSION_ID="$HOOK_INPUT_SESSION_ID"
 export _HOOK_SESSION_ID
 
 [[ -z "$CWD" ]] && hook_health_exit 0

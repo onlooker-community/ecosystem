@@ -29,8 +29,8 @@ source "${PLUGIN_ROOT}/scripts/lib/compass-events.sh"
 
 INPUT=$(cat)
 hook_health_context "$INPUT"
-SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null) || SESSION_ID=""
-CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null) || CWD=""
+SESSION_ID="$HOOK_INPUT_SESSION_ID"
+CWD="$HOOK_INPUT_CWD"
 
 _done() { hook_health_exit 0; }
 

@@ -142,6 +142,41 @@ setup() {
 	' >/dev/null
 }
 
+# A hook reads cwd and session_id from the same payload hook_health_context has
+# just parsed. Handing them back saves each hook its own jq, which every
+# SessionStart hook pays at once (ONL-292).
+@test "context hands the payload's cwd, session_id and source back to the hook" {
+	hook_health_context '{"session_id":"sess-1","cwd":"/work/repo","hook_event_name":"SessionStart","source":"compact"}'
+	[ "$HOOK_INPUT_CWD" = "/work/repo" ] || return 1
+	[ "$HOOK_INPUT_SESSION_ID" = "sess-1" ] || return 1
+	[ "$HOOK_INPUT_SOURCE" = "compact" ]
+}
+
+# What the hook parsed for itself is the payload's own value, so an inherited
+# id is not one: it would scope a child's work to the parent session.
+@test "the handed-back session_id is the payload's, never an inherited one" {
+	export _HOOK_SESSION_ID="parent-session"
+	hook_health_context '{"cwd":"/work/repo","hook_event_name":"SessionStart"}'
+	[ -z "$HOOK_INPUT_SESSION_ID" ] || return 1
+	[ "$HOOK_INPUT_CWD" = "/work/repo" ]
+}
+
+@test "the handed-back fields are empty before context and for absent input" {
+	[ -z "$HOOK_INPUT_CWD" ] || return 1
+	hook_health_context '{"session_id":"s","cwd":"/work/repo"}'
+	hook_health_context ''
+	[ -z "$HOOK_INPUT_CWD" ] || return 1
+	[ -z "$HOOK_INPUT_SESSION_ID" ] || return 1
+	[ -z "$HOOK_INPUT_SOURCE" ]
+}
+
+@test "unparseable input hands back empty fields" {
+	hook_health_context '{"session_id":"s","cwd":"/work/repo"}'
+	hook_health_context 'not json'
+	[ -z "$HOOK_INPUT_CWD" ] || return 1
+	[ -z "$HOOK_INPUT_SESSION_ID" ]
+}
+
 # Since ecosystem-449.66 register DOES write: the start breadcrumb, which is
 # what makes a SIGKILLed hook legible. What must still be absent is a TERMINAL
 # record — registering alone has never been, and must never become, evidence
