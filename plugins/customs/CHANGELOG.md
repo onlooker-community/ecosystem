@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.3](https://github.com/onlooker-community/ecosystem/compare/customs-v0.3.2...customs-v0.3.3) (2026-11-13)
+
+
+### Performance Improvements
+
+* parse each SessionStart payload once, and hash without cut :scissors: ([#602](https://github.com/onlooker-community/ecosystem/issues/602)) ([8dc2e03](https://github.com/onlooker-community/ecosystem/commit/8dc2e0383308a17fdb8f5752706bdc02ad43252c))
+
 ## [0.3.2](https://github.com/onlooker-community/ecosystem/compare/customs-v0.3.1...customs-v0.3.2) (2026-11-10)
 
 
