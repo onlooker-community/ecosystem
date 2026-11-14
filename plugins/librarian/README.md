@@ -13,6 +13,12 @@ Librarian is a sibling plugin to [`ecosystem`](../../) and assumes the Onlooker 
 | `SessionEnd` | Scans archivist artifacts since last watermark, runs the durability filter, classifies surviving candidates with Haiku, detects conflicts/duplicates against existing memories, writes proposals to `~/.onlooker/librarian/<project-key>/proposals/`. |
 | `SessionStart` | Counts pending proposals; if any, injects a single-line pointer pointing the user at `/librarian review`. |
 
+### Approved lessons and `onlooker sync`
+
+A lesson in `lessons/approved/` stays on this machine until `onlooker sync` sends it to the pool. While any approved lesson, in any project, is missing from the CLI's record of what the pool holds (`~/.onlooker/pushed.json`), every SessionStart adds a line saying how many there are and what to run: install the CLI, `onlooker link`, or `onlooker sync`.
+
+Set `librarian.lesson_sync.auto` to `true` and SessionStart runs `onlooker sync` itself. It runs detached, only on a linked machine, at most once per `min_interval_minutes` (default 60), and writes its output to `~/.onlooker/librarian/lesson-sync.log`. It is off by default because `sync` also reports this machine's inventory and sessions to the service. A background sync that ran and did not clear the count says so on the next session. `lesson_sync.remind: false` silences the line.
+
 ## Activation
 
 Install Librarian from the marketplace:

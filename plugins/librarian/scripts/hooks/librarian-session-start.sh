@@ -52,6 +52,8 @@ source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-storage.sh"
 source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-validate.sh"
 # shellcheck source=../lib/librarian-lesson-review.sh
 source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-review.sh"
+# shellcheck source=../lib/librarian-lesson-sync.sh
+source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-sync.sh"
 
 # Emit hookSpecificOutput with the given additionalContext string. An
 # empty string is fine — the harness sees "nothing to say".
@@ -135,6 +137,11 @@ done < <(librarian_lesson_surface_counts "$PROJECT_KEY" 2>/dev/null)
 [[ "$LESSON_PENDING" =~ ^[0-9]+$ ]] || LESSON_PENDING=0
 STRANDED_COUNT=${#STRANDED_IDS[@]}
 
+# After the sweep above, which is what moves a held lesson into approved/, so
+# a lesson released this session is counted, and synced, this session.
+UNSYNCED=$(librarian_lesson_unsynced_count 2>/dev/null) || UNSYNCED=0
+[[ "$UNSYNCED" =~ ^[0-9]+$ ]] || UNSYNCED=0
+
 # HELD and SWEPT_COUNT must count toward this gate too, not just the other two
 # queues: a lessons-only-held session (no pending memory proposals, no pending
 # lesson candidates) would otherwise hit the default skip-when-zero exit before
@@ -145,7 +152,7 @@ STRANDED_COUNT=${#STRANDED_IDS[@]}
 # SWEPT_COUNT here that publication would be the one thing this hook has
 # nothing to say about. STRANDED_COUNT is here for the same reason: a stranded
 # promotion is often the only news a session has.
-if [[ "$PENDING" -eq 0 && "$LESSON_PENDING" -eq 0 && "${HELD:-0}" -eq 0 && "${SWEPT_COUNT:-0}" -eq 0 && "${STRANDED_COUNT:-0}" -eq 0 && "$SKIP_WHEN_ZERO" == "true" ]]; then
+if [[ "$PENDING" -eq 0 && "$LESSON_PENDING" -eq 0 && "${HELD:-0}" -eq 0 && "${SWEPT_COUNT:-0}" -eq 0 && "${STRANDED_COUNT:-0}" -eq 0 && "$UNSYNCED" -eq 0 && "$SKIP_WHEN_ZERO" == "true" ]]; then
 	_emit ""
 	hook_health_exit 0
 fi
@@ -240,6 +247,18 @@ if [[ -n "$STRANDED_LINE" ]]; then
 		CONTEXT="${CONTEXT}"$'\n'"${STRANDED_LINE}"
 	else
 		CONTEXT="$STRANDED_LINE"
+	fi
+fi
+
+# Every session until the pool holds them: a lesson that never leaves this
+# machine was approved for nothing.
+SYNC_LINE=$(librarian_lesson_sync_surface "$UNSYNCED" 2>/dev/null) || SYNC_LINE=""
+
+if [[ -n "$SYNC_LINE" ]]; then
+	if [[ -n "$CONTEXT" ]]; then
+		CONTEXT="${CONTEXT}"$'\n'"${SYNC_LINE}"
+	else
+		CONTEXT="$SYNC_LINE"
 	fi
 fi
 

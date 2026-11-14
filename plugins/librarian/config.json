@@ -24,6 +24,12 @@
       "total_budget_ms": 600000,
       "unscoped_per_scan": 3
     },
+    "lesson_sync": {
+      "remind": true,
+      "auto": false,
+      "min_interval_minutes": 60,
+      "cli": "onlooker"
+    },
     "lesson_auto": {
       "enabled": false,
       "visibility": "org",
