@@ -19,7 +19,7 @@ npm run test:schema    # just node  (node --test test/node/*.test.mjs)
 npm run test:ci        # shellcheck + bats + schema + biome + manifest/reference lint
 ```
 
-Run a single bats file while iterating: `npm run test:bats -- test/bats/<name>.bats`. Files you pass replace the default target. The runner refuses overlapping targets (say, a file plus the directory it's in) and fails any run that executed fewer tests than it planned, because under `-j` bats would otherwise drop a duplicated file and exit 0 (ONL-109). Bare `bats test/bats/<name>.bats` also works, but it skips `ONLOOKER_VALIDATE=1`, so a negative schema test fails locally even though it passes in CI. `bats` comes from mise (it is on `PATH`), not `npx`.
+Run a single bats file while iterating: `npm run test:bats -- test/bats/<name>.bats`. Files you pass replace the default target. The runner refuses overlapping targets (say, a file plus the directory it's in) and fails any run that executed fewer tests than it planned, because under `-j` bats would otherwise drop a duplicated file and exit 0 (ONL-109). Bare `bats test/bats/<name>.bats` also works. It skips the runner's suite-wide `ONLOOKER_VALIDATE=1`, but `expect_emission_rejected` turns validation on for its own call, so a negative schema test written with it asserts the same thing either way (ONL-205). `bats` comes from mise (it is on `PATH`), not `npx`.
 
 ## Golden rules
 

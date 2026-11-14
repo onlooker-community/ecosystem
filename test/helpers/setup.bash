@@ -107,15 +107,28 @@ load_validate_path() {
 # the duration keeps the negative test honest — it still asserts the emitter
 # rejects — without polluting the gate.
 #
+# It also turns validation on for the call. The emitter validates only under
+# ONLOOKER_VALIDATE=1 (ADR-005), which scripts/test/run-bats.sh sets for the
+# suite; a file run with bare `bats` while iterating had it off, so every
+# rejection these tests assert went unasserted and failed as if the change
+# under work had broken it (ONL-205).
+#
 # Sets $status and $output exactly as bats' `run` does.
 #
 # Usage: expect_emission_rejected <command> [args...]
 expect_emission_rejected() {
   local saved="${ONLOOKER_TEST_REPORT_DIR:-}"
+  local saved_validate="${ONLOOKER_VALIDATE-__unset__}"
   unset ONLOOKER_TEST_REPORT_DIR
+  export ONLOOKER_VALIDATE=1
   run "$@"
   if [ -n "$saved" ]; then
     export ONLOOKER_TEST_REPORT_DIR="$saved"
+  fi
+  if [ "$saved_validate" = "__unset__" ]; then
+    unset ONLOOKER_VALIDATE
+  else
+    export ONLOOKER_VALIDATE="$saved_validate"
   fi
 }
 
