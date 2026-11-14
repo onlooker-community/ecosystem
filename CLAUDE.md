@@ -155,6 +155,7 @@ Workflow:
 - Event types follow `<plugin>.<noun>.<verb>` — e.g. `compass.check.skipped`, `tribunal.gate.blocked`.
 - ULIDs everywhere for IDs (not UUIDs). Each plugin ships its own `*_ulid` helper (e.g. `archivist-ulid.sh`, `tribunal-ulid.sh`); there is no shared ecosystem helper. Copy `plugins/tribunal/scripts/lib/tribunal-ulid.sh` as a starting point and rename the function prefix.
 - Config defaults live in `config.json`. User overrides go in `${CLAUDE_CONFIG_DIR:-~/.claude}/settings.json` (global) or `.claude/settings.json` (per-project) under the plugin's namespace key (e.g. `"compass"`, `"tribunal"`). See ADR-004.
+- `AGENTS.md` carries a copy of this file, between its `mirror-of-claude-md` markers, for Codex and the other tools that read it. Edit this file, then copy the change there; `npm run lint:agents-mirror` fails CI when the two differ (ONL-155).
 
 <!-- Every `bd`-generated block is fenced by markdownlint-disable/enable pairs.
      `bd setup` rewrites whatever sits between BEGIN and END verbatim, so any
@@ -168,9 +169,9 @@ Workflow:
 ## Issue tracking: Linear is the source of truth
 
 Linear holds **what** the work is, **why** it matters and **where it stands**.
-beads holds the **plan** for doing it. The managed Beads block below describes
-how to run `bd`; read it through this section. Where it says to use `bd` for all
-task tracking, that now means task-level planning, not the backlog itself.
+beads holds the **plan** for doing it. The managed Beads sections below describe
+how to run `bd`; read them through this section. Where they say to use `bd` for
+all task tracking, that now means task-level planning, not the backlog itself.
 
 - Work items live in Linear, team `ONL` (<https://linear.app/onlooker>), which
   covers this repo, `onlooker` and `schema` together. A bead is the local plan
