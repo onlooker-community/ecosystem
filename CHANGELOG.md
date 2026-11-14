@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.81.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.80.4...ecosystem-v0.81.0) (2026-11-14)
+
+
+### Features
+
+* **librarian:** let unattended lessons finish without a person :hourglass: ([#607](https://github.com/onlooker-community/ecosystem/issues/607)) ([dace75e](https://github.com/onlooker-community/ecosystem/commit/dace75eff84a6c8aa0127dbd61a961869f8d14d0))
+* **librarian:** say when approved lessons haven't reached the pool :outbox_tray: ([#609](https://github.com/onlooker-community/ecosystem/issues/609)) ([f58a835](https://github.com/onlooker-community/ecosystem/commit/f58a8351c36ea45caa689335192c4a641dffddd1))
+
 ## [0.80.4](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.80.3...ecosystem-v0.80.4) (2026-11-13)
 
 
