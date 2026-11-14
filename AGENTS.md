@@ -47,11 +47,14 @@ cp -rf source dest          # NOT: cp -r source dest
 - `apt-get` - use `-y` flag
 - `brew` - use `HOMEBREW_NO_AUTO_UPDATE=1` env var
 
-<!-- The sections below are mirrored from CLAUDE.md. The two files are
-     independent — not symlinked, not sharing an inode — so an edit to the
-     repository's conventions must land in both or agents get different
-     instructions depending on which file their harness reads. Claude Code
-     reads CLAUDE.md; Codex and several other tools read this one. -->
+<!-- Everything between the mirror-of-claude-md markers is a copy of CLAUDE.md
+     after its title. Claude Code reads CLAUDE.md; Codex and several other
+     tools read this file, so a convention changes in CLAUDE.md first and is
+     copied here. `npm run lint:agents-mirror` fails CI when the copy differs.
+     The generated Beads block inside is this file's own: `bd setup` writes
+     it per file, so the check compares its position, not its text. -->
+
+<!-- mirror-of-claude-md:start -->
 
 ## Repository layout
 
@@ -95,7 +98,7 @@ scripts/lib/onlooker-event.mjs  ← canonical event builder; all plugins route t
 | warden | PostToolUse (WebFetch, Read), PreToolUse (Write, Edit, MultiEdit, Bash), SessionStart + skill invocation | Scans ingested content for injection; closes a content gate that blocks write-class tools until cleared via `/warden` |
 | assayer | Stop | Verifies the agent's final-message claims against actual command results in the transcript; advisory |
 | bursar | SessionStart, SessionEnd | Rolls each session's spend into a per-project ledger on SessionEnd; surfaces "this project burned $X this week" at SessionStart. Governor is per-session; bursar is the cross-session rollup |
-| lineage | PostToolUse (Edit, Write, MultiEdit) + skill invocation | Records per-change provenance (session_id/turn + redacted, size-capped snippets) into a per-project ledger; `/lineage <file>:<line>` answers "why does this line exist?" by joining records to historian transcripts to recover prompt context |
+| lineage | PostToolUse (Edit, Write, MultiEdit, Bash) + skill invocation | Records per-change provenance (session_id/turn + redacted, size-capped snippets) into a per-project ledger; `/lineage <file>:<line>` answers "why does this line exist?" by joining records to historian transcripts to recover prompt context |
 | inspector | PostToolUse (Write, Edit, MultiEdit) | Per-edit verification: runs the project's configured lint + typecheck commands on just the touched file and emits `inspector.check.*` / `inspector.run.completed`. Surfaces issues to the agent for the next turn. Cheaper than the planned proctor (which runs the full project verify at Stop); complements assayer (which catches claims the agent makes without running anything) |
 | librarian | SessionEnd, SessionStart + skill invocation | Consolidation layer between archivist's per-session artifacts and the user's durable typed memory store. At SessionEnd, decides which decisions/dead-ends deserve to outlive the session, classifies them into user/feedback/project/reference, and queues them as proposals; at SessionStart, surfaces a one-line pointer to the queue. Propose-only (its ADR-001) — auto-promotion is opt-in. Also owns the lesson-promotion pipeline under `lessons/`, walked via `/librarian lessons` |
 | historian | SessionEnd, UserPromptSubmit | Episodic memory. Chunks and sanitizes the transcript at SessionEnd into `$ONLOOKER_DIR/historian/<project-key>/sessions/`; on UserPromptSubmit, embeds the prompt and retrieves similar past chunks. Lineage joins these transcripts to recover the prompt context behind a change |
@@ -131,7 +134,7 @@ See `plugins/compass/docs/adr/001-evaluate-prompts-in-context.md` for the full d
 2. Use `scripts/lib/onlooker-event.mjs` for all event emission — never write directly to the JSONL log.
 3. Store runtime artifacts under `${ONLOOKER_DIR:-$HOME/.onlooker}/<name>/<project-key>/`. Always use `$ONLOOKER_DIR` — never hardcode `~/.onlooker` — so the test suite's isolated temp home is respected.
 4. Derive the project key via `onlooker_project_key` from the vendored `onlooker-project-key.sh` — first 12 hex chars of SHA256(`remote:<origin-url>`), falling back to SHA256(`root:<repo-root>`) for repos without a remote, and **empty** when neither resolves. Use `onlooker_project_resolve` instead when you also need the derivation basis; it exports `ONLOOKER_PROJECT_KEY` and `ONLOOKER_PROJECT_BASIS` in one git pass. The canonical copy is `scripts/lib/onlooker-project-key.sh` and it is in `ON_DEMAND_LIBS`, so vendor it with `scripts/sync-shared-libs.sh` — never hand-roll a per-plugin variant. Thirteen hand-maintained copies drifted into seven distinct implementations, two of which returned a 12-hex key for a directory that was not a git repo at all; `shared-lib-vendoring.bats` now keeps every copy byte-identical.
-5. Register event types in `@onlooker-community/schema` before emitting them. The runtime emitter is dependency-free and **fails open**: it validates against the schema package only when that package is resolvable (dev, CI, tests) and emits unconditionally otherwise, because installed marketplace plugins ship no `node_modules`. Schema drift is caught in CI against the published schemas at `schema.onlooker.dev`. See [ADR-005](docs/adr/005-runtime-emitter-fails-open.md).
+5. Register event types in `@onlooker-community/schema` before emitting them. The runtime emitter is dependency-free and **fails open**: it validates only when `ONLOOKER_VALIDATE=1` is set — `test:bats` and `test:schema` both set it — and emits unconditionally otherwise. Do not assume an installed plugin skips validation because it lacks `node_modules`: it ships one (the install runs `npm install`), so resolvability was never a proxy for "this is a dev run", and gating on it cost ~73ms of `ajv` load on every event in production. Schema drift is caught in CI against the published schemas at `schema.onlooker.dev`. See [ADR-005](docs/adr/005-runtime-emitter-fails-open.md).
 6. Triage every new event type into `test/bus-coverage.json` — `expected` when
    a test drives the branch that emits it, `excluded` with a reason when not.
    `npm run test:bus` fails on any registered type that appears in neither list.
@@ -145,9 +148,16 @@ See `plugins/compass/docs/adr/001-evaluate-prompts-in-context.md` for the full d
    in this checkout and nowhere else: an installed plugin publishes rooted at `plugins/<name>` and has
    no ecosystem tree above it. Edit the canonical `scripts/lib/config-loader.sh`, then run
    `scripts/sync-shared-libs.sh` to propagate it. `test/bats/config-lib-self-locating.bats` enforces
-   all of this across every plugin, including from a copied-out standalone tree. `hook-health.sh` is
-   vendored the same way and for the same reason, propagated by the same script and guarded by
-   `test/bats/shared-lib-vendoring.bats`.
+   all of this across every plugin, including from a copied-out standalone tree. `hook-health.sh` and
+   `substrate-resolve.sh` are vendored the same way and for the same reason, propagated by the same
+   script and guarded by `test/bats/shared-lib-vendoring.bats` — which reads the list straight out of
+   `sync-shared-libs.sh`, so a lib added to `SHARED_LIBS` is guarded automatically.
+   To find the substrate, call `onlooker_resolve_substrate "$PLUGIN_ROOT"` rather than writing a glob.
+   Fourteen hooks each hand-rolled that lookup and all fourteen were wrong the same two ways —
+   resolving to `<v>/scripts` instead of `<v>` so nothing was ever sourced, and taking the
+   lexically-first cached ecosystem (`0.33.1`) instead of the newest ([ADR-005](docs/adr/005-runtime-emitter-fails-open.md)-era
+   `0.49.x`). Both failures are silent: a hook that sources no substrate exports no
+   `ONLOOKER_EVENTS_LOG` and reports nothing about it. See ecosystem-449.36 and ecosystem-449.35.
 9. In the hook script itself, source the vendored `hook-health.sh` and call
    `hook_health_register "<hook-filename-without-.sh>"` near the top of the script, before any real
    work happens. Once stdin has been read, call `hook_health_context "$INPUT"` so the record picks up
@@ -155,6 +165,21 @@ See `plugins/compass/docs/adr/001-evaluate-prompts-in-context.md` for the full d
    measurement — it silently reports nothing to `hook-health.jsonl`, with no error and no test failure
    to flag it. `test/bats/hook-health.bats` enforces that every hook under `plugins/*/scripts/hooks/*.sh`
    calls `hook_health_register`.
+10. Once a hook has registered, every path out of it must go through `hook_health_exit` rather
+    than a bare `exit`. The EXIT trap cannot tell an exit the hook chose from a kill: when a
+    signal terminates the shell bash still runs the trap, but `$?` there is the last *completed*
+    command's status — typically a successful `jq` — so a killed hook recorded `success`. That is
+    how librarian ran up 624 consecutive `status=success` records while being killed at the 1500ms
+    SessionEnd deadline on nearly every session. `BASH_COMMAND` cannot separate them either: a hook
+    that fell off its own end reports the last command, exactly like an interrupted one. So an
+    unmarked exit now records `terminated`, and `hook_health_exit` is what marks it.
+    The one exception is the `*_NESTED` re-entry guard: it runs *before* `hook-health.sh` is
+    sourced, where `hook_health_exit` is undefined and would exit 127 instead of 0. Those stay a
+    plain `exit`, and a guard that returns before registering is not a measured run anyway.
+    SIGKILL runs no trap at all, so it is covered separately by the start breadcrumb
+    `hook_health_register` writes — a breadcrumb whose `run_id` never appears on a terminal record
+    is a run that was killed outright. `test/bats/hook-health.bats` enforces the no-bare-`exit`
+    rule; see ecosystem-449.66.
 
 ## Development
 
@@ -181,9 +206,12 @@ Workflow:
 
 - All hooks are bash scripts. No Python, no Node entry points in hook scripts (they may shell out to `node` for event emission or heavy lifting).
 - Hook scripts source shared helpers from `scripts/lib/` (or the plugin's own `scripts/lib/`).
+- A SKILL.md shell block spells the plugin root exactly `${CLAUDE_PLUGIN_ROOT}`, and tells the agent to run it inside `bash <<'ONLOOKER_SKILL'`. The variable is not exported to the Bash tool and no other spelling is substituted, the tool shell may be zsh, and it keeps no functions between calls. Setup also exports `CLAUDE_SESSION_ID="${CLAUDE_SESSION_ID}"`, because that variable reaches the Bash tool the same way and the libs read it from the environment. `test/bats/skill-blocks-run-under-bash.bats` enforces this (ONL-230, ONL-233). Every plugin function a block or a prose command calls must come from a lib that block or Setup sources: a missing one fails silently under `set -uo pipefail`, and `test/bats/skill-blocks-source-what-they-call.bats` enforces it (ONL-151).
+- Every `claude -p` a plugin starts passes `--settings '{"disableAllHooks":true}'` on the line that builds its arguments. A nested session otherwise runs every installed plugin's hooks, which start model calls of their own: in ONL-115's measured run that was 59–66% of the spend, and each plugin's `*_NESTED` guard only stops it re-entering itself. `test/bats/nested-claude-runs-no-hooks.bats` fails on a call site without it (ONL-195).
 - Event types follow `<plugin>.<noun>.<verb>` — e.g. `compass.check.skipped`, `tribunal.gate.blocked`.
 - ULIDs everywhere for IDs (not UUIDs). Each plugin ships its own `*_ulid` helper (e.g. `archivist-ulid.sh`, `tribunal-ulid.sh`); there is no shared ecosystem helper. Copy `plugins/tribunal/scripts/lib/tribunal-ulid.sh` as a starting point and rename the function prefix.
 - Config defaults live in `config.json`. User overrides go in `${CLAUDE_CONFIG_DIR:-~/.claude}/settings.json` (global) or `.claude/settings.json` (per-project) under the plugin's namespace key (e.g. `"compass"`, `"tribunal"`). See ADR-004.
+- `AGENTS.md` carries a copy of this file, between its `mirror-of-claude-md` markers, for Codex and the other tools that read it. Edit this file, then copy the change there; `npm run lint:agents-mirror` fails CI when the two differ (ONL-155).
 
 <!-- Every `bd`-generated block is fenced by markdownlint-disable/enable pairs.
      `bd setup` rewrites whatever sits between BEGIN and END verbatim, so any
@@ -197,7 +225,7 @@ Workflow:
 ## Issue tracking: Linear is the source of truth
 
 Linear holds **what** the work is, **why** it matters and **where it stands**.
-beads holds the **plan** for doing it. The managed Beads blocks below describe
+beads holds the **plan** for doing it. The managed Beads sections below describe
 how to run `bd`; read them through this section. Where they say to use `bd` for
 all task tracking, that now means task-level planning, not the backlog itself.
 
@@ -285,6 +313,8 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 - If a required sync or push is blocked, stop and report the exact command and error.
 <!-- END BEADS INTEGRATION -->
 <!-- markdownlint-enable MD012 MD024 MD034 -->
+
+<!-- mirror-of-claude-md:end -->
 
 <!-- The Codex block below repeats the "Beads Issue Tracker" heading from the
      integration block above. Both are generated and re-synced by different `bd`
