@@ -68,7 +68,9 @@ STUB
 	chmod +x "${STUB_BIN}/claude"
 	export PATH="${STUB_BIN}:${PATH}"
 
-	_settings '{"enabled": true, "max_juries_per_scan": 0}'
+	# These tests pin the hold policy: a refusal waits for a human. The decline
+	# policy, the default, is covered in librarian-lesson-auto-decline.bats.
+	_settings '{"enabled": true, "max_juries_per_scan": 0, "on_refusal": "hold"}'
 }
 
 # Usage: _settings <lesson_auto_json> [transform_model]
@@ -124,7 +126,7 @@ _proposal() { printf '%s' "${LESSONS_DIR}/proposals/$1.json"; }
 @test "a model change re-asks a refused candidate once, then holds again" {
 	id=$(_seed_parked "c refuse-me")
 	librarian_lesson_auto_stage "$PROJECT_KEY"
-	_settings '{"enabled": true, "max_juries_per_scan": 0}' "claude-other-model"
+	_settings '{"enabled": true, "max_juries_per_scan": 0, "on_refusal": "hold"}' "claude-other-model"
 	librarian_lesson_auto_stage "$PROJECT_KEY"
 	[ "$(_calls)" = "2" ] || return 1
 	librarian_lesson_auto_stage "$PROJECT_KEY"
