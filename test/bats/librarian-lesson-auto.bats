@@ -193,8 +193,16 @@ STUB
 		"${LESSONS_DIR}/proposals/${id}.json"
 }
 
-@test "a refusal leaves the candidate pending for a human and writes no decline" {
-	_auto_setup; _auto_stub
+# Usage: _on_refusal <decline|hold>
+_on_refusal() {
+	mkdir -p "${PROJECT_REPO}/.claude"
+	jq -cn --arg p "$1" '{librarian: {lesson_auto: {on_refusal: $p}}}' \
+		> "${PROJECT_REPO}/.claude/settings.json"
+	librarian_config_load "$PROJECT_REPO"
+}
+
+@test "under the hold policy a refusal leaves the candidate pending and writes no decline" {
+	_auto_setup; _auto_stub; _on_refusal hold
 	id=$(_seed_pending_unscoped_marked "refuse-justification")
 	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
 	[ "$output" = "skipped:no_justification" ]
@@ -202,8 +210,8 @@ STUB
 	[ ! -f "${LESSONS_DIR}/declined.jsonl" ]
 }
 
-@test "a refusal records the model's reason on the proposal" {
-	_auto_setup; _auto_stub
+@test "under the hold policy a refusal records the model's reason on the proposal" {
+	_auto_setup; _auto_stub; _on_refusal hold
 	id=$(_seed_pending_unscoped_marked "refuse-with-reason")
 	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
 	[ "$output" = "skipped:no_justification" ] || return 1
@@ -219,7 +227,7 @@ STUB
 	_auto_setup; _auto_stub
 	id=$(_seed_pending_unscoped_marked "refuse-justification")
 	librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id" >/dev/null
-	jq -e '.status == "pending" and has("auto_refusal")
+	jq -e 'has("auto_refusal")
 	   and .auto_refusal.reason == null' \
 		"${LESSONS_DIR}/proposals/${id}.json" >/dev/null
 }
@@ -265,12 +273,20 @@ STUB
 	jq -e '.status == "pending"' "${LESSONS_DIR}/proposals/${id}.json"
 }
 
-@test "auto_confirm_one refuses a candidate that is not parked" {
+# A versioned candidate already says which versions it holds for, so it needs
+# no justification, and nothing about it was waiting on a person but the
+# confirm itself. Confirmed as model-asserted, it is judged on the harder
+# rubric and held for the veto window like any other unattended lesson.
+@test "auto_confirm_one confirms a versioned candidate as model-asserted, with no model call" {
 	_auto_setup; _auto_stub
-	id=$(_seed_pending)   # versioned scope, needs no justification
+	export STUB_PROMPT_LOG="${BATS_TEST_TMPDIR}/prompt.txt"
+	id=$(_seed_pending)
 	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
-	[ "$output" = "skipped:not_parked" ]
-	jq -e '.status == "pending"' "${LESSONS_DIR}/proposals/${id}.json"
+	[ "$output" = "confirmed:${id}" ] || return 1
+	[ ! -f "$STUB_PROMPT_LOG" ] || return 1
+	jq -e '.status == "confirmed" and .asserted_by == "model" and .visibility == "org"
+	   and .candidate.applies_to.scope.kind == "versioned"' \
+		"${LESSONS_DIR}/proposals/${id}.json"
 }
 
 # ----------------------------------------------------------------------------

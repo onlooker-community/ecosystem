@@ -384,8 +384,8 @@ STUB
 	jq -e '.candidates[0].verdicts | length == 2' "${OUT}/samples.json" >/dev/null
 }
 
-@test "a refused justification is left unjudged, as production leaves it pending" {
-	# auto_confirm_one returns skipped:no_justification on REFUSE and the
+@test "a refused justification is left unjudged, as production never juries it" {
+	# auto_confirm_one declines a REFUSE under the default policy, and the
 	# candidate never reaches a jury, so judging it here would measure a
 	# panel production never convenes.
 	_stub_parked_claude "REFUSE"
@@ -395,7 +395,7 @@ STUB
 		--artifacts-from "$CORPUS" --out "$OUT"
 	[ "$status" -eq 0 ] || return 1
 
-	jq -e '.candidates[0].confirm_outcome == "skipped:no_justification"' \
+	jq -e '.candidates[0].confirm_outcome == "declined:no_justification"' \
 		"${OUT}/samples.json" >/dev/null || return 1
 	jq -e '.candidates[0].verdicts == []' "${OUT}/samples.json" >/dev/null || return 1
 	jq -e '.n == 0' "${OUT}/stats.json" >/dev/null

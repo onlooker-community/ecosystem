@@ -735,7 +735,7 @@ librarian_cli_lessons_status() {
 	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
 
 	local s counts=()
-	for s in pending confirmed approved rejected; do
+	for s in pending confirmed approved rejected declined; do
 		counts+=("$(librarian_lesson_list_by_status "$key" "$s" | jq 'length')")
 	done
 
@@ -744,8 +744,8 @@ librarian_cli_lessons_status() {
 	local awaiting
 	awaiting=$(librarian_lesson_list_awaiting_promotion "$key" | grep -c .)
 
-	printf 'lessons pending: %s, confirmed: %s, approved: %s, rejected: %s, awaiting promotion: %s\n' \
-		"${counts[0]}" "${counts[1]}" "${counts[2]}" "${counts[3]}" "$awaiting"
+	printf 'lessons pending: %s, confirmed: %s, approved: %s, rejected: %s, declined: %s, awaiting promotion: %s\n' \
+		"${counts[0]}" "${counts[1]}" "${counts[2]}" "${counts[3]}" "${counts[4]}" "$awaiting"
 }
 
 # Replay declined artifacts back through the transform. Two reasons are

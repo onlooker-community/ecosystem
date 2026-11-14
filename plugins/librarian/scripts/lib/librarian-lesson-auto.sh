@@ -155,6 +155,40 @@ _librarian_lesson_auto_record_promote_error() {
 	librarian_lesson_write_atomic "$path" "$updated" >/dev/null 2>&1 || true
 }
 
+# The lesson_auto.on_refusal policy: `decline` (the default) or `hold`.
+#
+# Under hold, a refusal waits for a person. Nobody came: 41 of the 52 pending
+# candidates in the store this was measured on were refusals, each surfaced at
+# every SessionStart while the stage, by design, never asked again. A decline
+# is terminal, so only the word itself or no value declines; anything else is
+# read as hold, since a typo must not be what makes a decision permanent.
+#
+# Usage: _librarian_lesson_auto_declines_refusals && ...
+_librarian_lesson_auto_declines_refusals() {
+	local policy
+	policy=$(librarian_config_get '.librarian.lesson_auto.on_refusal' 2>/dev/null)
+	case "$policy" in '' | null | decline) return 0 ;; *) return 1 ;; esac
+}
+
+# Decline a refused candidate: status `declined`, and a row in declined.jsonl,
+# the ledger of machine verdicts, carrying the model's recorded reason. Not
+# passed.jsonl, which records a person's intent and must not be mixed with a
+# model's (librarian_lesson_pass). The proposal stays where it is, so
+# librarian_lesson_seen never re-proposes its artifact.
+#
+# Usage: _librarian_lesson_auto_decline <key> <lesson_id> <proposal_path>
+_librarian_lesson_auto_decline() {
+	local key="$1" lesson_id="$2" path="$3"
+	local artifact_id reason now updated
+	artifact_id=$(jq -r '.artifact_id // ""' "$path" 2>/dev/null)
+	reason=$(jq -r '.auto_refusal.reason // ""' "$path" 2>/dev/null)
+	now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+	updated=$(jq --arg t "$now" '.status = "declined" | .declined_at = $t' "$path" 2>/dev/null) || return 1
+	[[ -z "$updated" || "$updated" == "null" ]] && return 1
+	librarian_lesson_write_atomic "$path" "$updated" >/dev/null 2>&1 || return 1
+	librarian_lesson_append_declined "$key" "$artifact_id" auto_refused "$reason" "" "$lesson_id"
+}
+
 # Announce the model's answer for one parked candidate (ONL-116). On a
 # refusal, only whether a reason was given rides on the bus; the reason itself
 # is on the proposal, recorded by _librarian_lesson_auto_record_refusal.
@@ -173,22 +207,29 @@ _librarian_lesson_auto_emit_asserted() {
 	librarian_lesson_emit "librarian.lesson.asserted" "$payload"
 }
 
-# Auto-confirm one parked candidate. Prints exactly one of:
-#   confirmed:<id>             model asserted a scope; now awaiting a jury
-#   skipped:not_parked         scope is not unscoped; nothing to assert
-#   skipped:no_justification   the model refused; left pending for a human,
-#                              with the refusal recorded as .auto_refusal
+# Auto-confirm one pending candidate. Prints exactly one of:
+#   confirmed:<id>             a parked candidate the model justified, or a
+#                              versioned one, which needs no justification;
+#                              either is model-asserted and awaits a jury
+#   skipped:not_pending        already confirmed, judged, passed or declined
+#   skipped:not_parked         neither unscoped nor versioned; nothing to assert
+#   skipped:no_justification   the model refused under the hold policy; left
+#                              pending for a human, recorded as .auto_refusal
+#   declined:no_justification  the model refused under the decline policy
 #   skipped:held               a person deferred or unconfirmed it (.auto_hold)
-#   skipped:refused            already refused by this prompt and model
+#   skipped:refused            already refused by this prompt and model, under
+#                              the hold policy
+#   declined:refused           the same, under the decline policy: retired
+#                              without asking again
 #   unavailable                infrastructure, or a lesson_auto.visibility
 #                              confirm would refuse; nothing written
 #
-# The two skips are what keep this loop from re-billing the same refusal on
-# every scan and from undoing a person's "not now" (ONL-112). Neither asks
-# the model, so neither emits librarian.lesson.asserted.
+# The skips are what keep this loop from re-billing the same refusal on every
+# scan and from undoing a person's "not now" (ONL-112). declined:refused is
+# the backlog those skips left under the hold policy, retired at no cost.
+# None of them asks the model, so none emits librarian.lesson.asserted.
 #
-# Every outcome but skipped:not_parked emits librarian.lesson.asserted. A
-# candidate that is not parked was never a question for the model.
+# Every other outcome emits librarian.lesson.asserted.
 #
 # Usage: librarian_lesson_auto_confirm_one <key> <lesson_id>
 librarian_lesson_auto_confirm_one() {
@@ -202,15 +243,26 @@ librarian_lesson_auto_confirm_one() {
 	candidate=$(jq -c '.candidate' "$path" 2>/dev/null) \
 		|| { _librarian_lesson_auto_emit_asserted "$lesson_id" unavailable; printf 'unavailable'; return 0; }
 
-	if ! printf '%s' "$candidate" | jq -e '.applies_to.scope.kind == "unscoped"' >/dev/null 2>&1; then
-		printf 'skipped:not_parked'
+	# The stage only offers pending candidates, but a direct caller may not,
+	# and a second decline would write a second ledger row.
+	if ! jq -e '(.status // "pending") == "pending"' "$path" >/dev/null 2>&1; then
+		printf 'skipped:not_pending'
 		return 0
 	fi
 
+	# Before the scope check, so a person's hold reads as a hold whatever the
+	# candidate's scope.
 	if jq -e 'has("auto_hold")' "$path" >/dev/null 2>&1; then
 		printf 'skipped:held'
 		return 0
 	fi
+
+	local scope_kind
+	scope_kind=$(printf '%s' "$candidate" | jq -r '.applies_to.scope.kind // ""' 2>/dev/null)
+	case "$scope_kind" in
+		unscoped | versioned) ;;
+		*) printf 'skipped:not_parked'; return 0 ;;
+	esac
 
 	# Checked before the model call, not after: librarian_lesson_confirm refuses
 	# a justification at private visibility, so a misconfigured value used to
@@ -223,13 +275,30 @@ librarian_lesson_auto_confirm_one() {
 		*) _librarian_lesson_auto_emit_asserted "$lesson_id" unavailable; printf 'unavailable'; return 0 ;;
 	esac
 
+	# A versioned candidate already names the versions it holds for, so there
+	# is nothing for the model to justify and no call to pay for. Only the
+	# confirm was waiting on a person, and model-asserted it is judged on the
+	# harder rubric and held for the veto window.
+	if [[ "$scope_kind" == "versioned" ]]; then
+		librarian_lesson_confirm "$key" "$lesson_id" "$visibility" "" model \
+			>/dev/null 2>&1 || { _librarian_lesson_auto_emit_asserted "$lesson_id" unavailable; printf 'unavailable'; return 0; }
+		_librarian_lesson_auto_emit_asserted "$lesson_id" asserted
+		printf 'confirmed:%s' "$lesson_id"
+		return 0
+	fi
+
 	local model fingerprint justification
 	model=$(librarian_config_get '.librarian.lesson_transform.model' 2>/dev/null)
 	case "$model" in null) model="" ;; esac
 	fingerprint=$(librarian_lesson_auto_justify_fingerprint "$model")
 	if [[ -n "$fingerprint" ]] && jq -e --arg f "$fingerprint" \
 		'.auto_refusal.fingerprint == $f' "$path" >/dev/null 2>&1; then
-		printf 'skipped:refused'
+		if _librarian_lesson_auto_declines_refusals \
+			&& _librarian_lesson_auto_decline "$key" "$lesson_id" "$path"; then
+			printf 'declined:refused'
+		else
+			printf 'skipped:refused'
+		fi
 		return 0
 	fi
 
@@ -241,7 +310,12 @@ librarian_lesson_auto_confirm_one() {
 	if [[ "$justification" == REFUSE* ]]; then
 		_librarian_lesson_auto_record_refusal "$path" "$justification" "$fingerprint"
 		_librarian_lesson_auto_emit_asserted "$lesson_id" refused "$justification"
-		printf 'skipped:no_justification'
+		if _librarian_lesson_auto_declines_refusals \
+			&& _librarian_lesson_auto_decline "$key" "$lesson_id" "$path"; then
+			printf 'declined:no_justification'
+		else
+			printf 'skipped:no_justification'
+		fi
 		return 0
 	fi
 
@@ -401,7 +475,7 @@ librarian_lesson_auto_judge_one() {
 	esac
 }
 
-# Auto-confirm every parked candidate, then jury as many as the cap allows.
+# Auto-confirm every pending candidate, then jury as many as the cap allows.
 # A no-op unless lesson_auto.enabled is true, and then it emits nothing, so a
 # scan with no librarian.autojury.complete is a scan where the stage was off.
 #
@@ -434,7 +508,7 @@ librarian_lesson_auto_stage() {
 		result=$(librarian_lesson_auto_confirm_one "$key" "$id")
 		case "$result" in
 			confirmed:*) asserted=$((asserted + 1)) ;;
-			skipped:no_justification) refused=$((refused + 1)) ;;
+			skipped:no_justification | declined:no_justification) refused=$((refused + 1)) ;;
 			unavailable) unavailable=$((unavailable + 1)) ;;
 		esac
 	done < <(librarian_lesson_list_pending "$key" | jq -r '.[].id' 2>/dev/null)

@@ -155,6 +155,15 @@ anywhere until a project explicitly turns it on.
   (`librarian_lesson_auto_stage`), never on the `SessionEnd` path (design D6, ADR-003).
 - `lesson_auto.enabled` defaults to `false` (design D7). `lesson_auto.max_juries_per_scan` bounds
   jury cost per scan; `lesson_auto.veto_window_hours` (default 72) bounds the hold.
+- With the flag on, no candidate waits on a person unless a person asked it to. A model refusal
+  is declined: the proposal's status becomes `declined`, and a row in `declined.jsonl`, the
+  machine-verdict ledger, carries the model's reason. A refusal recorded under the old policy, by
+  the prompt and model still in use, is retired the same way without asking again. A versioned
+  candidate needs no justification, so it is confirmed as model-asserted with no model call, and
+  goes through the same harder rubric and veto hold. `lesson_auto.on_refusal: "hold"` restores
+  the earlier behavior, where a refusal waited for a human. Only `defer` and `unconfirm` still
+  hold a candidate. In the store where this was measured, 41 of 52 pending candidates were
+  refusals waiting for a person who never came, all of them surfaced at every SessionStart.
 - SKILL.md's two blanket statements are corrected in the same change that adds this ADR: they
   remain accurate for the attended walk and for any project with the flag off, and now name what
   changes when `lesson_auto.enabled` is true.

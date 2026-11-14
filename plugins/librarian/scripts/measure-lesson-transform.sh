@@ -325,7 +325,9 @@ for f in "${SELECTED[@]}"; do
 			# failure so a short batch cannot masquerade as a low pass rate.
 			printf 'x' >&2
 		fi
-	elif [[ "$confirm_outcome" == "skipped:no_justification" ]]; then
+	# skipped: under the hold policy, declined: under the decline policy. Both
+	# are the same refusal, so both are measured as one.
+	elif [[ "$confirm_outcome" == *":no_justification" ]]; then
 		printf 'r' >&2
 	else
 		printf '%s' "${outcome:0:1}" >&2
@@ -334,7 +336,7 @@ for f in "${SELECTED[@]}"; do
 	# The refusal reason sits beside the claim it refused, which is what the
 	# false-refusal measurement hand-labels (ONL-183).
 	refusal_reason='null'
-	if [[ "$confirm_outcome" == "skipped:no_justification" && -f "$path" ]]; then
+	if [[ "$confirm_outcome" == *":no_justification" && -f "$path" ]]; then
 		refusal_reason=$(jq -c '.auto_refusal.reason // null' "$path" 2>/dev/null) || refusal_reason='null'
 	fi
 

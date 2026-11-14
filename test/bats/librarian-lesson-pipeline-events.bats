@@ -134,7 +134,7 @@ _full_scores='{"grounding":0.9,"scope_accuracy":0.9,"generality":0.9,"disclosure
 	_stub_claude
 	id=$(_seed_parked refuse-with-reason)
 	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
-	[ "$output" = "skipped:no_justification" ] || return 1
+	[ "$output" = "declined:no_justification" ] || return 1
 	_events librarian.lesson.asserted \
 		| jq -e '.payload.outcome == "refused" and .payload.reason_given == true' >/dev/null || return 1
 	! grep -q "own plugin" "$EVENTS_LOG"
@@ -157,12 +157,16 @@ _full_scores='{"grounding":0.9,"scope_accuracy":0.9,"generality":0.9,"disclosure
 		| jq -e '.payload.outcome == "unavailable" and (.payload | has("reason_given") | not)' >/dev/null
 }
 
-@test "a candidate that is not parked is never asked, so nothing is emitted" {
+# The model is never asked (librarian-lesson-auto.bats pins that), but the
+# stage still asserted the candidate, so the bus hears one assertion.
+@test "a versioned candidate is confirmed and emits asserted" {
 	_stub_claude
 	id=$(_seed_versioned)
 	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
-	[ "$output" = "skipped:not_parked" ] || return 1
-	[ "$(_count librarian.lesson.asserted)" = "0" ]
+	[ "$output" = "confirmed:${id}" ] || return 1
+	[ "$(_count librarian.lesson.asserted)" = "1" ] || return 1
+	_events librarian.lesson.asserted \
+		| jq -e --arg id "$id" '.payload == {lesson_id: $id, outcome: "asserted"}' >/dev/null
 }
 
 # --- librarian.lesson.judged ------------------------------------------------
