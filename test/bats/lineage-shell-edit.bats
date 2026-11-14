@@ -82,9 +82,23 @@ _run_hook() { printf '%s' "$(_bash_input "$1")" | bash "$HOOK"; }
     wait "$pid"
   done
 
-  [ -f "$LEDGER" ] || return 1
-  run jq -rs '[ .[] | select(.tool == "Bash") ] | length' "$LEDGER"
-  [ "$output" = "1" ]
+  # This failed once in CI (ONL-237), and a bare `[ "$output" = "1" ]` could
+  # not say whether it saw 0 records (a change went unrecorded) or 2 (the
+  # baseline lock let a duplicate through). Those are different bugs, so a
+  # failure prints the count and what each hook run reported. bats shows a
+  # test's output only when it fails.
+  local count=0
+  [ -f "$LEDGER" ] && count=$(jq -rs '[ .[] | select(.tool == "Bash") ] | length' "$LEDGER")
+  if [ "$count" != "1" ]; then
+    echo "observed ${count} Bash records, want 1"
+    echo "--- ledger"
+    cat "$LEDGER" 2>/dev/null || echo "(no ledger)"
+    echo "--- lineage hook-health records"
+    jq -c 'select(.hook == "lineage-post-tool-use")
+      | {status, error, duration_ms, run_id}' \
+      "${ONLOOKER_DIR}/logs/hook-health.jsonl" 2>/dev/null || echo "(no hook-health log)"
+    return 1
+  fi
 }
 
 @test "the record is tagged shell_edit and authored" {
