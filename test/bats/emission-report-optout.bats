@@ -39,3 +39,22 @@ _valid_payload() {
   [ "$status" -eq 0 ] || return 1
   [ -s "$REPORT" ]
 }
+
+# The emitter validates only under ONLOOKER_VALIDATE=1, which the suite runner
+# sets and bare `bats` does not. A rejection test must assert a rejection
+# however the file is run, so the helper turns validation on itself (ONL-205).
+@test "expect_emission_rejected validates when the environment does not" {
+  unset ONLOOKER_VALIDATE
+  expect_emission_rejected warden_emit_event "warden.bogus.event" "$(_valid_payload)"
+  [ "$status" -ne 0 ]
+}
+
+@test "expect_emission_rejected leaves ONLOOKER_VALIDATE as it found it" {
+  unset ONLOOKER_VALIDATE
+  expect_emission_rejected warden_emit_event "warden.bogus.event" "$(_valid_payload)"
+  [ -z "${ONLOOKER_VALIDATE+set}" ] || return 1
+
+  export ONLOOKER_VALIDATE=0
+  expect_emission_rejected warden_emit_event "warden.bogus.event" "$(_valid_payload)"
+  [ "$ONLOOKER_VALIDATE" = "0" ]
+}
