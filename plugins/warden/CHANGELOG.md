@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.4](https://github.com/onlooker-community/ecosystem/compare/warden-v0.8.3...warden-v0.8.4) (2026-11-13)
+
+
+### Performance Improvements
+
+* parse each SessionStart payload once, and hash without cut :scissors: ([#602](https://github.com/onlooker-community/ecosystem/issues/602)) ([8dc2e03](https://github.com/onlooker-community/ecosystem/commit/8dc2e0383308a17fdb8f5752706bdc02ad43252c))
+
 ## [0.8.3](https://github.com/onlooker-community/ecosystem/compare/warden-v0.8.2...warden-v0.8.3) (2026-11-10)
 
 
