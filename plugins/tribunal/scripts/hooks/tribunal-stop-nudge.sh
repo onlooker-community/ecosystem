@@ -69,7 +69,8 @@ WORKTREE_ROOT=$(onlooker_worktree_root "$CWD")
 [[ -z "$WORKTREE_ROOT" ]] && WORKTREE_ROOT="$REPO_ROOT"
 
 # Sanitized as the gate does it. No id, no state file: two id-less sessions
-# must never share one.
+# must never share one. An id-less session therefore has no memory of what it
+# said and is nudged on every Stop once over threshold.
 STATE_FILE=""
 SAFE_SID=$(printf '%s' "$SESSION_ID" | tr -c 'a-zA-Z0-9-' '_')
 if [[ -n "$SESSION_ID" ]]; then
@@ -99,7 +100,10 @@ tribunal_config_stop_hook_enabled && _skip "gate_enabled"
 [[ -z "$TRANSCRIPT_PATH" || ! -f "$TRANSCRIPT_PATH" ]] && _skip "no_transcript"
 
 SCAN=$(tribunal_nudge_scan "$TRANSCRIPT_PATH")
-printf '%s\n' "$SCAN" | grep -qx 'T' && _skip "tribunal_ran"
+# Not a grep -q pipeline: grep exits at its first match, printf takes SIGPIPE
+# once a long session's SCAN outruns the pipe buffer, and pipefail then reports
+# 141, so the && never fired.
+[[ $'\n'"$SCAN"$'\n' == *$'\n'T$'\n'* ]] && _skip "tribunal_ran"
 
 # A glob list that is absent or not an array falls back to what config.json
 # ships, read from the file rather than restated here.
@@ -115,25 +119,41 @@ while IFS= read -r g; do [[ -n "$g" ]] && SENSITIVE_GLOBS+=("$g"); done < <(_glo
 IGNORE_GLOBS=()
 while IFS= read -r g; do [[ -n "$g" ]] && IGNORE_GLOBS+=("$g"); done < <(_globs ignore_globs)
 
+# Globs compile once; nocasematch is set once around the loop (and restored
+# after it) so each edited file costs two in-process regex tests, no forks.
+SENS_RE=()
+IGN_RE=()
+[[ ${#SENSITIVE_GLOBS[@]} -gt 0 ]] && tribunal_nudge_compile_globs SENS_RE "${SENSITIVE_GLOBS[@]}"
+[[ ${#IGNORE_GLOBS[@]} -gt 0 ]] && tribunal_nudge_compile_globs IGN_RE "${IGNORE_GLOBS[@]}"
+WAS_NOCASE=0
+if shopt -q nocasematch; then WAS_NOCASE=1; fi
+shopt -s nocasematch
+
 COUNT=0
 SENSITIVE=()
 while IFS= read -r f; do
 	[[ -n "$f" ]] || continue
-	if [[ ${#IGNORE_GLOBS[@]} -gt 0 ]] && tribunal_nudge_matches_any "$f" "${IGNORE_GLOBS[@]}"; then
+	if [[ ${#IGN_RE[@]} -gt 0 ]] && tribunal_nudge_matches_any_re "$f" "${IGN_RE[@]}"; then
 		continue
 	fi
 	COUNT=$((COUNT + 1))
-	if [[ ${#SENSITIVE_GLOBS[@]} -gt 0 ]] && tribunal_nudge_matches_any "$f" "${SENSITIVE_GLOBS[@]}"; then
+	if [[ ${#SENS_RE[@]} -gt 0 ]] && tribunal_nudge_matches_any_re "$f" "${SENS_RE[@]}"; then
 		SENSITIVE+=("$f")
 	fi
 done < <(printf '%s\n' "$SCAN" | awk -F'\t' '$1 == "E" { print $2 }' | tribunal_paths_in_worktree "$WORKTREE_ROOT")
+
+if [[ $WAS_NOCASE -eq 0 ]]; then shopt -u nocasematch; fi
 
 SENSITIVE_JSON='[]'
 [[ ${#SENSITIVE[@]} -gt 0 ]] && SENSITIVE_JSON=$(printf '%s\n' "${SENSITIVE[@]}" | jq -R . | jq -cs .)
 
 MIN_FILES=$(tribunal_config_get_int '.tribunal.nudge.min_files' 8)
-DECISION=$(tribunal_nudge_decide "$COUNT" "$SENSITIVE_JSON" "$MIN_FILES" "$STATE")
-ACTION=$(printf '%s' "$DECISION" | jq -r '.action')
+DECISION=$(tribunal_nudge_decide "$COUNT" "$SENSITIVE_JSON" "$MIN_FILES" "$STATE" 2>/dev/null) || DECISION=""
+ACTION=$(printf '%s' "$DECISION" | jq -r '.action' 2>/dev/null) || ACTION=""
+
+# decide prints nothing on state it cannot read (e.g. {"files":"x"}). Skipping
+# with an empty reason would record "" in skips_reported, so leave quietly.
+[[ -n "$ACTION" ]] || hook_health_exit 0
 
 if [[ "$ACTION" != "nudge" ]]; then
 	_skip "$(printf '%s' "$DECISION" | jq -r '.reason')"

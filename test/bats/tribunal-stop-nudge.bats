@@ -73,6 +73,8 @@ _stop() { # <session> [transcript override]
 	run bash -c "printf '%s' '$input' | '$HOOK'"
 }
 
+_state_path() { printf '%s' "${ONLOOKER_DIR}/tribunal/${PROJECT_KEY}/nudge-${1:-$SID}.json"; }
+
 _state() { cat "${ONLOOKER_DIR}/tribunal/${PROJECT_KEY}/nudge-${1:-$SID}.json"; }
 
 _message() { printf '%s' "$output" | jq -r '.systemMessage'; }
@@ -194,7 +196,9 @@ _only_system_message() {
 @test "an empty session id writes no state file" {
 	_edits "" 8
 	_stop "" "$(_transcript "")"
-	[ -n "$output" ] || return 1
+	[ "$status" -eq 0 ] || return 1
+	_only_system_message || return 1
+	[[ "$(_message)" == "tribunal: "* ]] || return 1
 	[ -z "$(find "${ONLOOKER_DIR}/tribunal" -name 'nudge-*' 2>/dev/null)" ]
 }
 
@@ -217,6 +221,33 @@ _only_system_message() {
 	_edits "$SID" 8
 	_edit "$SID" "auth/login.ts"
 	_stop "$SID"
-	[ -n "$output" ] || return 1
+	[ "$status" -eq 0 ] || return 1
+	_only_system_message || return 1
+	[[ "$(_message)" == "tribunal: "* ]] || return 1
 	[ ! -e "$CLAUDE_MARKER" ]
+}
+
+@test "/tribunal run early in a very long session still silences it" {
+	jq -cn '{type: "assistant", message: {role: "assistant", content: [{type: "tool_use", id: "t", name: "Skill", input: {skill: "tribunal"}}]}}' > "$(_transcript "$SID")"
+	# The scan output must outrun the pipe buffer (64KB) for grep -q to SIGPIPE its writer.
+	local i=1
+	while [[ $i -le 1500 ]]; do
+		printf '{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t","name":"Edit","input":{"file_path":"%s/src/long-session-file-%s.txt"}}]}}\n' "$REPO" "$i"
+		i=$((i + 1))
+	done >> "$(_transcript "$SID")"
+	_stop "$SID"
+	[ "$status" -eq 0 ] || return 1
+	[ -z "$output" ] || return 1
+	_state | jq -e '.skips_reported == ["tribunal_ran"]' >/dev/null
+}
+
+@test "state that decide cannot read exits quietly and records no empty skip" {
+	_edits "$SID" 8
+	mkdir -p "$(dirname "$(_state_path)")"
+	# decide errors on this (2 * {}), and prints nothing.
+	printf '{"files":{}}\n' > "$(_state_path)"
+	_stop "$SID"
+	[ "$status" -eq 0 ] || return 1
+	[ -z "$output" ] || return 1
+	_state | jq -e '(.skips_reported // []) | index("") == null' >/dev/null
 }
