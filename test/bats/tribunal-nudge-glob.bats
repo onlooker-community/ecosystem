@@ -26,6 +26,11 @@ _match_in() {
 	tribunal_nudge_matches_any "a/b/migrations/x/y.sql" "**/migrations/**"
 }
 
+@test "**/ needs a directory boundary, so xmigrations is not migrations" {
+	! tribunal_nudge_matches_any "xmigrations/1.sql" "**/migrations/**" || return 1
+	! tribunal_nudge_matches_any "db/xmigrations/1.sql" "**/migrations/**"
+}
+
 @test "* stays inside one path segment" {
 	tribunal_nudge_matches_any "plugins/x/hooks/a.sh" "plugins/*/hooks/*.sh" || return 1
 	! tribunal_nudge_matches_any "plugins/x/y/hooks/a.sh" "plugins/*/hooks/*.sh"
@@ -43,12 +48,23 @@ _match_in() {
 	! tribunal_nudge_matches_any "vendor/.github/workflows/ci.yml" ".github/workflows/**"
 }
 
-@test "matching ignores case, and leaves nocasematch as it found it" {
+@test "matching ignores case" {
 	tribunal_nudge_matches_any "docs/Secrets.md" "**/*secret*" || return 1
-	tribunal_nudge_matches_any "config/.ENV" "**/.env*" || return 1
+	tribunal_nudge_matches_any "config/.ENV" "**/.env*"
+}
+
+@test "nocasematch is left as found, off or on, on a hit and on a miss" {
 	shopt -u nocasematch
 	tribunal_nudge_matches_any "A.md" "a.md" || return 1
-	! shopt -q nocasematch
+	! shopt -q nocasematch || return 1
+	! tribunal_nudge_matches_any "A.md" "b.md" || return 1
+	! shopt -q nocasematch || return 1
+	shopt -s nocasematch
+	tribunal_nudge_matches_any "A.md" "a.md" || return 1
+	shopt -q nocasematch || return 1
+	! tribunal_nudge_matches_any "A.md" "b.md" || return 1
+	shopt -q nocasematch || return 1
+	shopt -u nocasematch
 }
 
 @test "no glob matches nothing" {

@@ -4,12 +4,14 @@
 # this to config, the transcript and the bus.
 # Spec: docs/superpowers/specs/2026-11-15-tribunal-nudge-design.md
 
-# Usage: tribunal_nudge_glob_to_regex <glob>
-# An anchored ERE for a glob over a worktree-relative path. `**/` is zero or
-# more leading directories, `**` elsewhere is anything, `*` and `?` stay inside
-# one segment. Matched with [[ =~ ]] rather than globstar, which bash 3.2 lacks.
-tribunal_nudge_glob_to_regex() {
-	local g="$1" out="" c i=0 n=${#1}
+# Usage: tribunal_nudge_glob_to_regex_into <var> <glob>
+# Sets <var> to an anchored ERE for a glob over a worktree-relative path, with
+# no subshell: the hook compiles every glob once per run, and a $(...) per glob
+# was the bulk of its per-file cost. `**/` is zero or more leading directories,
+# `**` elsewhere is anything, `*` and `?` stay inside one segment. Matched with
+# [[ =~ ]] rather than globstar, which bash 3.2 lacks.
+tribunal_nudge_glob_to_regex_into() {
+	local _var="$1" g="$2" out="" c i=0 n=${#2}
 	while [[ $i -lt $n ]]; do
 		c="${g:i:1}"
 		if [[ "$c" == "*" && "${g:i+1:1}" == "*" ]]; then
@@ -30,26 +32,54 @@ tribunal_nudge_glob_to_regex() {
 		esac
 		i=$((i + 1))
 	done
-	printf '^%s$' "$out"
+	printf -v "$_var" '^%s$' "$out"
+}
+
+# Usage: tribunal_nudge_glob_to_regex <glob>
+# Prints what tribunal_nudge_glob_to_regex_into computes.
+tribunal_nudge_glob_to_regex() {
+	local _re
+	tribunal_nudge_glob_to_regex_into _re "$1"
+	printf '%s' "$_re"
+}
+
+# Usage: tribunal_nudge_compile_globs <array_name> [glob...]
+# Replaces the named array with one regex per glob. Assigned through eval
+# because bash 3.2 has no namerefs; the name is a literal from the caller.
+tribunal_nudge_compile_globs() {
+	local _arr="$1" _re _g
+	shift
+	eval "$_arr=()"
+	for _g in "$@"; do
+		tribunal_nudge_glob_to_regex_into _re "$_g"
+		eval "$_arr+=(\"\$_re\")"
+	done
+}
+
+# Usage: tribunal_nudge_matches_any_re <path> [regex...]
+# The matching half, for a caller that has set nocasematch around its loop:
+# no shopt, no fork. Returns 0 on the first hit.
+tribunal_nudge_matches_any_re() {
+	local path="$1" re
+	shift
+	for re in "$@"; do
+		[[ "$path" =~ $re ]] && return 0
+	done
+	return 1
 }
 
 # Usage: tribunal_nudge_matches_any <path> [glob...]
 # Case-insensitive: on macOS's filesystem Secrets.md and .ENV are the same
-# risk as their lowercase spellings. nocasematch is restored, as assayer does.
+# risk as their lowercase spellings. nocasematch is restored as it was found.
 tribunal_nudge_matches_any() {
-	local path="$1" glob re hit=1 restore
+	local path="$1" hit=1 was_on=0 _res=()
 	shift
-	# shopt -p exits 1 when the option is off; under errexit that would abort before any match.
-	restore=$(shopt -p nocasematch || true)
+	tribunal_nudge_compile_globs _res "$@"
+	# shopt -q exits 1 when the option is off; the if keeps that from aborting under errexit.
+	if shopt -q nocasematch; then was_on=1; fi
 	shopt -s nocasematch
-	for glob in "$@"; do
-		re=$(tribunal_nudge_glob_to_regex "$glob")
-		if [[ "$path" =~ $re ]]; then
-			hit=0
-			break
-		fi
-	done
-	eval "$restore"
+	if [[ ${#_res[@]} -gt 0 ]] && tribunal_nudge_matches_any_re "$path" "${_res[@]}"; then hit=0; fi
+	if [[ $was_on -eq 0 ]]; then shopt -u nocasematch; fi
 	return "$hit"
 }
 
@@ -87,7 +117,9 @@ tribunal_nudge_scan() {
 # Usage: tribunal_nudge_decide <count> <sensitive_json> <min_files> <state_json>
 # The frequency rule. A first nudge names its trigger, sensitive winning over
 # size. After that, only growth speaks again: a sensitive path not seen at the
-# last nudge, or at least twice the files. skips_reported is not a nudge.
+# last nudge, or at least twice the files while the size trigger is on and
+# tripped (min_files 0, or a count under it, never re-nudges on count alone).
+# skips_reported is not a nudge.
 tribunal_nudge_decide() {
 	jq -cn --argjson n "$1" --argjson sens "$2" --argjson min "$3" --argjson st "$4" '
 		($min > 0 and $n >= $min) as $size
@@ -95,7 +127,7 @@ tribunal_nudge_decide() {
 		| if ($size or $s) | not then {action: "skip", reason: "below_threshold"}
 		  elif ($st | has("files")) | not then
 			{action: "nudge", trigger: (if $s then "sensitive" else "size" end)}
-		  elif (($sens - ($st.sensitive // [])) | length) > 0 or $n >= 2 * $st.files then
+		  elif (($sens - ($st.sensitive // [])) | length) > 0 or ($size and $n >= 2 * $st.files) then
 			{action: "nudge", trigger: "grew"}
 		  else {action: "skip", reason: "unchanged"} end'
 }
