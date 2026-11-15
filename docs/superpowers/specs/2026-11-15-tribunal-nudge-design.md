@@ -14,10 +14,10 @@ typo, and the jury is never offered.
 ## Goal
 
 At the end of a turn, when this session's changes look high-stakes, show the
-user one line suggesting `/tribunal`. The nudge makes no model call. Its only
-cost is a transcript scan, git reads and jq on each Stop, plus one event
-emission when it has something new to record. It stays quiet once it has
-spoken.
+user one line suggesting `/tribunal`. The nudge makes no model call. Its
+per-Stop cost is one filtered pass over the transcript and some jq, plus one
+event emission when it has something new to record. It stays quiet once it
+has spoken.
 
 ## Non-goals
 
@@ -35,9 +35,7 @@ spoken.
 A new `plugins/tribunal/scripts/hooks/tribunal-stop-nudge.sh` is registered on
 Stop beside the gate. The gate makes a model call and is off by default, while
 the nudge makes none and is on by default. Keeping them apart means turning
-one on or off never affects the other. The shared pieces are already libs:
-`tribunal-session-files.sh` for attribution and `tribunal-config.sh` for
-config.
+one on or off never affects the other.
 
 The decision logic lives in `plugins/tribunal/scripts/lib/tribunal-nudge.sh`
 as functions over a file list and the previous state, so it is testable
@@ -60,35 +58,84 @@ The gate's header says a Stop hook prints nothing but an optional
 `{continue: ...}`. That holds for the gate. The nudge's single
 `systemMessage` object is the one other output this design adds.
 
+### Attribution: edited, not dirty
+
+The gate counts files this session edited that are **still dirty**, because
+it judges a diff. The nudge does not, because it judges nothing. In this repo
+nearly every session ends in a commit, so a dirty filter would leave the nudge
+silent exactly when a session finished real work.
+
+So the nudge counts every file the transcript shows this session editing
+(Edit, Write, MultiEdit, NotebookEdit) inside this worktree, committed or not.
+The count can only grow within a session. Another session's work never enters
+it, because attribution comes from this session's transcript, not from the
+tree. No `git status` is needed. The only git read is the worktree root.
+
+The gate's `tribunal_session_edited_files` already maps transcript paths onto
+the worktree, resolving symlinks such as macOS `/var` to `/private/var`. That
+path-mapping loop is factored out into `tribunal_paths_in_worktree <root>`,
+which reads absolute paths on stdin. The gate keeps calling
+`tribunal_session_edited_files`, now a thin wrapper, and its existing tests
+pin that its behavior is unchanged.
+
+### One pass over the transcript
+
+The edited files and the `/tribunal` check come from a single
+`grep -E '"tool_use"|<command-name>'` followed by a single jq. The jq prints
+`E\t<absolute path>` for each edit and `T` once if `/tribunal` ran. A long
+session's transcript runs to megabytes, so two passes would double the
+nudge's main cost.
+
+`/tribunal` counts as ran when either of these shapes appears. Both were
+checked against a real transcript, using other skills, since no transcript
+yet holds a real `/tribunal` run:
+
+- An assistant `tool_use` with `name == "Skill"` whose `input.skill` is
+  `tribunal` or `tribunal:tribunal`.
+- A user message whose content contains `<command-name>/tribunal</command-name>`
+  or `<command-name>/tribunal:tribunal</command-name>`.
+
 ### Decision, per Stop
 
-1. Exit without a nudge, with the first reason that applies:
-   - `disabled`: `tribunal.nudge.enabled` is not `true`.
+1. If `tribunal.nudge.enabled` is not `true`, exit. Nothing is emitted (see
+   Events).
+2. Resolve the project and session. The state file is
+   `<tribunal_project_dir key>/nudge-<sid>.json`. With no project key it is
+   `$ONLOOKER_DIR/tribunal/_unkeyed/nudge-<sid>.json`. `<sid>` is the
+   session id sanitized the way the gate does it, with
+   `tr -c 'a-zA-Z0-9-' '_'`. An empty id gives no state file: that Stop
+   proceeds without dedupe, so two id-less sessions never share one.
+3. Read the state file, or start from `{}`.
+4. Skip, with the first reason that applies:
    - `gate_enabled`: `tribunal.stop_hook.enabled` is `true`, so the gate is
      already judging editing Stops.
    - `no_project_context`: there is no project key or repo root.
    - `no_transcript`: `transcript_path` is absent or unreadable.
-   - `tribunal_ran`: the transcript shows `/tribunal` in this session. That is
-     either a `Skill` tool_use whose `skill` is `tribunal:tribunal` or
-     `tribunal`, or a user turn whose command name is `/tribunal`.
-2. Find this session's changed files: `tribunal_session_edited_files` on the
-   transcript, filtered through `tribunal_dirty_files`. Drop files matching
-   `ignore_globs`. Another session's dirty files never count; this is the same
-   attribution the gate uses (ecosystem-449.42).
-3. Check the triggers:
+   - `tribunal_ran`: `/tribunal` ran in this session (above).
+5. Collect this session's edited files and drop those matching
+   `ignore_globs`.
+6. Check the triggers:
    - **size**: `min_files` is above 0 and the count reaches it. Setting
      `min_files` to 0 turns the size trigger off.
    - **sensitive**: any file matches `sensitive_globs`.
 
    If neither trips, skip with `below_threshold`.
-4. Apply the frequency rule against the state file (below):
+7. Apply the frequency rule:
    - No nudge recorded yet: nudge, with trigger `size` or `sensitive`. When
      both trip, use `sensitive`.
    - A nudge recorded: nudge again with trigger `grew` only when a sensitive
      path appears that is not in `sensitive`, or the file count is at least
      twice `files`. Otherwise skip with `unchanged`.
-5. On a nudge, rewrite the state's `files` and `sensitive`, print the
-   `systemMessage`, and emit `tribunal.nudge.shown`.
+8. Write the state back, read-modify-write, keeping every field it does not
+   change:
+   - On a skip whose reason is not yet in `skips_reported`: append the
+     reason, write, and emit `tribunal.nudge.skipped`.
+   - On a skip already reported: write nothing and emit nothing.
+   - On a nudge: set `files` and `sensitive`, keep `skips_reported`, write,
+     print the `systemMessage`, and emit `tribunal.nudge.shown`.
+
+   Writes go through a temp file and `mv`, so a killed hook leaves the old
+   state rather than a partial one.
 
 ### Message
 
@@ -103,36 +150,36 @@ iterations (tribunal ADR-001), which is far more than the gate's one judge.
 
 ### State file
 
-`$ONLOOKER_DIR/tribunal/<project-key>/nudge-<session>.json`:
-
 ```json
 {"files": 9, "sensitive": [".github/workflows/ci.yml"], "skips_reported": ["below_threshold"]}
 ```
 
-- `files` is an integer: the session-file count at the last nudge.
+- `files` is an integer: the edited-file count at the last nudge.
 - `sensitive` is an array of worktree-relative paths: the sensitive files at
   the last nudge.
 - `skips_reported` is an array of skip reasons already emitted this session.
 
-`files` and `sensitive` are absent until the first nudge.
+`files` and `sensitive` are absent until the first nudge. An unparseable
+state file is treated as `{}`.
 
 ### Events, and what they cost
 
 The gate's own measurement (ONL-172) puts one emission at about 100ms of node
 startup. The nudge is on by default, so an emission on every Stop would land
 on every session. ONL-172 also showed that emitting nothing on a skip makes an
-idle plugin look broken. The nudge does both, with a limit:
+idle plugin look broken. The nudge handles both this way:
 
 - `tribunal.nudge.shown` is emitted on every nudge. That is rare by
   construction.
-- `tribunal.nudge.skipped` is emitted once per session per reason. A reason
-  already in `skips_reported` is not emitted again. A typical session pays
-  for one or two emissions, not one per Stop.
-- `disabled`, `gate_enabled`, `no_project_context` and `no_transcript` are
-  decided before the state file can be located, or without a project key.
-  Those are emitted on every Stop, as the gate does for its own skips. They
-  occur only when someone turned the nudge off or there is no project to
-  judge.
+- `tribunal.nudge.skipped` is emitted once per session per reason. Every
+  reason dedupes through the state file, including `gate_enabled`,
+  `no_project_context` and `no_transcript`. A typical session pays for one or
+  two emissions, not one per Stop.
+- `disabled` is never emitted. A user who turns the nudge off would otherwise
+  pay the emission on every Stop forever. Whether the nudge is off is a config
+  fact, so a liveness check reads it from config, the same way it can read
+  `stop_hook.enabled`. Updating `check-plugin-liveness` for the nudge is a
+  follow-up, not part of this work.
 
 Both types are registered in `@onlooker-community/schema` before anything
 emits them:
@@ -140,7 +187,7 @@ emits them:
 | Type | Payload |
 |------|---------|
 | `tribunal.nudge.shown` | `{trigger: "size" \| "sensitive" \| "grew", session_files: int, sensitive_files: string[]}` |
-| `tribunal.nudge.skipped` | `{reason: "disabled" \| "gate_enabled" \| "no_project_context" \| "no_transcript" \| "tribunal_ran" \| "below_threshold" \| "unchanged"}` |
+| `tribunal.nudge.skipped` | `{reason: "gate_enabled" \| "no_project_context" \| "no_transcript" \| "tribunal_ran" \| "below_threshold" \| "unchanged"}` |
 
 `sensitive_files` holds worktree-relative paths, capped at 20.
 
@@ -183,22 +230,51 @@ key like every other tribunal setting. Accessors read `.tribunal.nudge.*`.
 }
 ```
 
+Reading it:
+
+- `enabled` is read with `tribunal_config_get`.
+- `min_files` is read with a new `tribunal_config_get_int`, a wrapper over
+  the vendored `config_get_int`, matching `archivist-config.sh`.
+  `config_get_int` returns the caller's default for a non-integer or negative
+  value, so a bad `min_files` reads as 8.
+- The two glob lists are read with `tribunal_config_get_json`. `config_get`
+  returns nothing for an array, because the loader marks arrays `\x02`. An
+  absent or non-array value falls back to the shipped list.
+
 The defaults are kept narrow on purpose:
 
 - `**/hooks/**` is left out because it matches nearly every plugin in this
   repo.
 - `**/*auth*` is left out because it also matches `author*`, `oauth*` and
-  `authoring.md`.
+  `authoring.md`. The cost is that `auth.ts` and `authMiddleware.ts` outside an
+  `auth/` directory are not flagged.
 
-A repo that wants its hooks treated as sensitive sets the globs at project
-scope, for example with
-`onlooker config set tribunal.nudge.sensitive_globs '["plugins/*/scripts/hooks/*.sh"]' --scope project`.
+**An override replaces the list; it does not extend it.** The loader's
+`deepmerge` merges objects, but an array from a higher layer wins outright. A
+repo that wants its hooks treated as sensitive, and still wants the defaults,
+restates them. In `.claude/settings.json` (ADR-004):
 
-`tribunal-config.sh` gains `tribunal_config_get_int`, a wrapper over the
-vendored `config_get_int`, matching `archivist-config.sh`. `config_get_int`
-returns the caller's default for a non-integer value. It returns 0 only when
-the default itself is not an integer. A non-integer `min_files` therefore
-reads as 8, and a test pins that.
+```json
+{
+  "tribunal": {
+    "nudge": {
+      "sensitive_globs": [
+        "plugins/*/scripts/hooks/*.sh",
+        ".github/workflows/**",
+        "**/migrations/**",
+        "**/auth/**",
+        "**/*secret*",
+        "**/*credential*",
+        "**/.env*"
+      ]
+    }
+  }
+}
+```
+
+The onlooker CLI's `onlooker config set ... --scope project`, released in CLI
+2.14.0 from the onlooker repo, writes the same file. The README documents
+both.
 
 ### Glob matching
 
@@ -213,6 +289,16 @@ and matches it with `[[ =~ ]]`, which behaves the same on bash 3.2 and 5.x:
 - `?` matches one non-`/` character.
 - Every other regex metacharacter is escaped.
 - The pattern is anchored at both ends, against the worktree-relative path.
+- Matching is case-insensitive, under `nocasematch`, restored afterward as
+  `assayer-extract.sh` does. On macOS's case-insensitive filesystem
+  `Secrets.md` and `.ENV` are the same risk as their lowercase spellings.
+
+## Known limitations
+
+- Files changed only through Bash (`sed -i`, `mv`, codegen) are not counted.
+  The transcript does not record them as edits.
+- The count is of files edited, not of lines changed. Eight one-line edits
+  trip the size trigger, while one 2000-line rewrite does not.
 
 ## Delivery
 
@@ -221,39 +307,55 @@ This is two PRs, in order:
 1. **schema**: register both event types and release.
 2. **ecosystem**:
    - bump `@onlooker-community/schema`
-   - add the hook, the lib, `tribunal_config_get_int`, config and the
-     `hooks.json` entry
+   - add the hook, the lib, `tribunal_config_get_int`,
+     `tribunal_paths_in_worktree`, config and the `hooks.json` entry
    - add a README section
    - add `test/bus-coverage.json` entries for both types
 
 ## Testing
 
 `test/bats/tribunal-stop-nudge.bats` is written before the hook. Each test
-seeds a fixture repo and a transcript with Edit tool_use lines, runs the hook,
-and asserts on stdout and the event log:
+seeds a fixture repo and a transcript, runs the hook, and asserts on stdout,
+the event log and the state file. Transcript fixtures copy the shapes in
+"One pass over the transcript", which come from a real session.
 
 - Fewer than `min_files` ordinary files: no output, `skipped:below_threshold`.
 - `min_files` files: nudge with `trigger: size`, and the message names the
   count.
-- `.github/workflows/ci.yml` alone: nudge with `trigger: sensitive`. A
-  lockfile alone does not trip it.
+- Edited files that were then committed still count.
+- `.github/workflows/ci.yml` alone: nudge with `trigger: sensitive`.
+  `.GitHub/Workflows/CI.yml` does too. A lockfile alone does not trip it.
 - A second Stop with no change: no output, `unchanged`. A new sensitive file,
   or a doubled count, nudges again with `trigger: grew`.
 - A second below-threshold Stop emits no second `skipped:below_threshold`.
-- `/tribunal` in the transcript: no output, `tribunal_ran`.
-- Nudge disabled, or the gate enabled: no output, with the matching reason.
+- A nudge after a reported skip keeps `skips_reported` in the state file.
+- A Skill call to `tribunal:tribunal`, a Skill call to `tribunal`, and a typed
+  `/tribunal` each give no output and `tribunal_ran`.
+- Nudge disabled: no output and no event. Gate enabled: no output, and
+  `gate_enabled` once.
+- A project-scope `sensitive_globs` replaces the default list. The test sets
+  only a hooks glob and asserts that a workflow file no longer trips.
 - `min_files: 0` turns off the size trigger. A non-integer `min_files` reads
   as 8.
-- A dirty file that only another session edited is not counted.
+- An empty session id writes no state file.
+- A file only another session edited is not counted, even while dirty.
 - A `claude` stub that fails the test if it is called proves the nudge makes
   no model call.
 - Stdout is empty or exactly one JSON object whose only key is
   `systemMessage`.
+- The gate's existing tests (`tribunal-stop-gate-session-scope.bats`,
+  `tribunal-stop-gate-worktree.bats`) pass unchanged after the
+  `tribunal_paths_in_worktree` refactor.
 
 Glob-to-regex unit tests live in `test/bats/tribunal-nudge-glob.bats`:
 
 - `**/migrations/**` matches both `migrations/1.sql` and `db/migrations/1.sql`.
 - `*` does not cross `/`.
 - `.` and `+` in a glob are literal.
-- Each case runs under the bash `bats` resolves. On macOS that is 3.2, so the
-  local run is the strict one.
+- Each case runs under the default bash and again under `/bin/bash` when that
+  is a 3.2. CI runs Linux with bash 5, so without that second run 3.2 is
+  covered only by running the suite locally on macOS.
+
+Acceptance before the nudge ships on by default: a run against a synthetic
+5MB transcript stays under 300ms, measured from its `hook-health.jsonl`
+record, on a macOS laptop.
