@@ -51,6 +51,9 @@ tribunal_paths_in_worktree() {
 	root_phys=$(cd "$root" 2>/dev/null && pwd -P) || return 0
 	sort -u \
 		| while IFS= read -r p; do
+			# A caller's nocasematch would make the prefix case below match a
+			# sibling that differs only in case; this subshell keeps its own.
+			shopt -u nocasematch
 			# sort -u keeps a directory's files together, so one lookup serves the run of them.
 			raw="${p%/*}/"
 			if [[ "$raw" != "$last_raw" ]]; then

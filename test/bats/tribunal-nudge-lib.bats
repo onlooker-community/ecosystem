@@ -78,6 +78,19 @@ EOF
 	[ "$output" = "$(printf 'b.txt\nsub/a.txt')" ]
 }
 
+@test "paths_in_worktree stays case-sensitive when the caller has nocasematch on" {
+	mkdir -p "${BATS_TEST_TMPDIR}/wt"
+	[[ -d "${BATS_TEST_TMPDIR}/WT" ]] && skip "case-insensitive filesystem"
+	mkdir -p "${BATS_TEST_TMPDIR}/WT"
+	shopt -s nocasematch
+	run tribunal_paths_in_worktree "${BATS_TEST_TMPDIR}/wt" <<EOF
+${BATS_TEST_TMPDIR}/wt/a.txt
+${BATS_TEST_TMPDIR}/WT/b.txt
+EOF
+	shopt -u nocasematch
+	[ "$output" = "a.txt" ]
+}
+
 _decide() { tribunal_nudge_decide "$@" | jq -c .; }
 
 @test "decide: below both triggers skips below_threshold" {
