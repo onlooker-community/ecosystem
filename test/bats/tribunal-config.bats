@@ -59,3 +59,32 @@ setup() {
 	[ "$mi" = "7" ]
 	[ "$gp" = "majority" ]
 }
+
+@test "nudge defaults ship on, with min_files 8 and both glob lists" {
+	tribunal_config_load "$BATS_TEST_TMPDIR"
+	[ "$(tribunal_config_get '.tribunal.nudge.enabled')" = "true" ] || return 1
+	[ "$(tribunal_config_get_int '.tribunal.nudge.min_files' 8)" = "8" ] || return 1
+	tribunal_config_get_json '.tribunal.nudge.sensitive_globs' | jq -e 'index(".github/workflows/**") != null' >/dev/null || return 1
+	tribunal_config_get_json '.tribunal.nudge.ignore_globs' | jq -e 'index("**/*.lock") != null' >/dev/null
+}
+
+@test "a glob list reads as compact JSON through get_json" {
+	tribunal_config_load "$BATS_TEST_TMPDIR"
+	[ "$(tribunal_config_get_json '.tribunal.nudge.sensitive_globs' | jq -r type)" = "array" ]
+}
+
+@test "a non-integer min_files reads as the default" {
+	mkdir -p "${BATS_TEST_TMPDIR}/p/.claude"
+	git -C "${BATS_TEST_TMPDIR}/p" init -q
+	printf '{"tribunal":{"nudge":{"min_files":"lots"}}}' > "${BATS_TEST_TMPDIR}/p/.claude/settings.json"
+	tribunal_config_load "${BATS_TEST_TMPDIR}/p"
+	[ "$(tribunal_config_get_int '.tribunal.nudge.min_files' 8)" = "8" ]
+}
+
+@test "a project sensitive_globs replaces the default list" {
+	mkdir -p "${BATS_TEST_TMPDIR}/p/.claude"
+	git -C "${BATS_TEST_TMPDIR}/p" init -q
+	printf '{"tribunal":{"nudge":{"sensitive_globs":["plugins/*/scripts/hooks/*.sh"]}}}' > "${BATS_TEST_TMPDIR}/p/.claude/settings.json"
+	tribunal_config_load "${BATS_TEST_TMPDIR}/p"
+	[ "$(tribunal_config_get_json '.tribunal.nudge.sensitive_globs')" = '["plugins/*/scripts/hooks/*.sh"]' ]
+}
