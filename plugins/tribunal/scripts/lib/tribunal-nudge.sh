@@ -52,3 +52,34 @@ tribunal_nudge_matches_any() {
 	eval "$restore"
 	return "$hit"
 }
+
+# Usage: tribunal_nudge_scan <transcript>
+# One pass over the transcript for both things the nudge needs: `E<TAB><path>`
+# per write-class edit, and `T` per /tribunal run. A long session's transcript
+# runs to megabytes, so the grep keeps jq to the lines that can matter.
+#
+# /tribunal counts as ran for a Skill tool_use whose input.skill is tribunal
+# or tribunal:tribunal, or a user turn carrying <command-name>/tribunal</...>
+# (or /tribunal:tribunal). Text that merely mentions /tribunal does not count.
+tribunal_nudge_scan() {
+	local transcript="$1"
+	[[ -n "$transcript" && -f "$transcript" ]] || return 0
+	{ grep -E '"tool_use"|<command-name>' "$transcript" 2>/dev/null || true; } \
+		| jq -rR '
+			fromjson? |
+			if .type == "assistant" then
+				.message.content[]? | select(type == "object" and .type == "tool_use")
+				| if (.name | IN("Edit", "Write", "MultiEdit", "NotebookEdit")) then
+					(.input.file_path // .input.notebook_path // empty) | strings
+					| select(startswith("/")) | "E\t" + .
+				elif .name == "Skill" and ((.input.skill // "") | IN("tribunal", "tribunal:tribunal")) then
+					"T"
+				else empty end
+			elif .type == "user" then
+				(.message.content
+					| if type == "string" then .
+					  else ([.[]? | select(type == "object" and .type == "text") | .text] | join("\n")) end)
+				| select(test("<command-name>/tribunal(:tribunal)?</command-name>")) | "T"
+			else empty end
+		' 2>/dev/null
+}
