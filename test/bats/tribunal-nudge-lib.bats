@@ -77,3 +77,78 @@ ${BATS_TEST_TMPDIR}/gone/d.txt
 EOF
 	[ "$output" = "$(printf 'b.txt\nsub/a.txt')" ]
 }
+
+_decide() { tribunal_nudge_decide "$@" | jq -c .; }
+
+@test "decide: below both triggers skips below_threshold" {
+	[ "$(_decide 3 '[]' 8 '{}')" = '{"action":"skip","reason":"below_threshold"}' ]
+}
+
+@test "decide: reaching min_files nudges on size" {
+	[ "$(_decide 8 '[]' 8 '{}')" = '{"action":"nudge","trigger":"size"}' ]
+}
+
+@test "decide: a sensitive file nudges on sensitive, which wins over size" {
+	[ "$(_decide 1 '["auth/a.ts"]' 8 '{}')" = '{"action":"nudge","trigger":"sensitive"}' ] || return 1
+	[ "$(_decide 9 '["auth/a.ts"]' 8 '{}')" = '{"action":"nudge","trigger":"sensitive"}' ]
+}
+
+@test "decide: min_files 0 turns the size trigger off" {
+	[ "$(_decide 50 '[]' 0 '{}')" = '{"action":"skip","reason":"below_threshold"}' ]
+}
+
+@test "decide: after a nudge, no growth is unchanged" {
+	[ "$(_decide 9 '["auth/a.ts"]' 8 '{"files":9,"sensitive":["auth/a.ts"]}')" = '{"action":"skip","reason":"unchanged"}' ]
+}
+
+@test "decide: a new sensitive file, or a doubled count, is grew" {
+	[ "$(_decide 9 '["auth/a.ts","auth/b.ts"]' 8 '{"files":9,"sensitive":["auth/a.ts"]}')" = '{"action":"nudge","trigger":"grew"}' ] || return 1
+	[ "$(_decide 17 '[]' 8 '{"files":9,"sensitive":[]}')" = '{"action":"skip","reason":"unchanged"}' ] || return 1
+	[ "$(_decide 18 '[]' 8 '{"files":9,"sensitive":[]}')" = '{"action":"nudge","trigger":"grew"}' ]
+}
+
+@test "decide: skips_reported alone does not count as a prior nudge" {
+	[ "$(_decide 8 '[]' 8 '{"skips_reported":["below_threshold"]}')" = '{"action":"nudge","trigger":"size"}' ]
+}
+
+@test "decide and message, called directly, do not abort the caller" {
+	tribunal_nudge_decide 3 '[]' 8 '{}' > "${BATS_TEST_TMPDIR}/d.json"
+	[ "$(jq -c . "${BATS_TEST_TMPDIR}/d.json")" = '{"action":"skip","reason":"below_threshold"}' ] || return 1
+	tribunal_nudge_message 1 '[]' > "${BATS_TEST_TMPDIR}/m.txt"
+	[ "$(cat "${BATS_TEST_TMPDIR}/m.txt")" = "tribunal: this session changed 1 file. Worth a jury? /tribunal runs several judge models; type it to start." ]
+}
+
+@test "message names the count, up to three sensitive paths, and the rest" {
+	run tribunal_nudge_message 9 '["a","b","c","d","e"]'
+	[ "$output" = "tribunal: this session changed 9 files, 5 sensitive (a, b, c and 2 more). Worth a jury? /tribunal runs several judge models; type it to start." ]
+}
+
+@test "message leaves out the sensitive clause for size alone, and says file for one" {
+	run tribunal_nudge_message 8 '[]'
+	[ "$output" = "tribunal: this session changed 8 files. Worth a jury? /tribunal runs several judge models; type it to start." ] || return 1
+	run tribunal_nudge_message 1 '["auth/a.ts"]'
+	[ "$output" = "tribunal: this session changed 1 file, 1 sensitive (auth/a.ts). Worth a jury? /tribunal runs several judge models; type it to start." ]
+}
+
+@test "state: missing or unparseable reads as {}, and a write round-trips" {
+	S="${BATS_TEST_TMPDIR}/state/nudge-s.json"
+	[ "$(tribunal_nudge_state_read "$S")" = "{}" ] || return 1
+	mkdir -p "${S%/*}"
+	printf 'not json' > "$S"
+	[ "$(tribunal_nudge_state_read "$S")" = "{}" ] || return 1
+	tribunal_nudge_state_write "$S" '{"files":2}'
+	[ "$(tribunal_nudge_state_read "$S")" = '{"files":2}' ] || return 1
+	[ ! -e "${S}.tmp" ]
+}
+
+@test "state: an unparseable file, read directly, does not abort the caller" {
+	S="${BATS_TEST_TMPDIR}/nudge-bad.json"
+	printf 'not json' > "$S"
+	tribunal_nudge_state_read "$S" > "${BATS_TEST_TMPDIR}/out.json"
+	[ "$(cat "${BATS_TEST_TMPDIR}/out.json")" = "{}" ]
+}
+
+@test "state: an empty path writes nothing" {
+	tribunal_nudge_state_write "" '{"files":2}'
+	[ -z "$(find "$BATS_TEST_TMPDIR" -name 'nudge-*')" ]
+}

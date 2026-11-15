@@ -83,3 +83,54 @@ tribunal_nudge_scan() {
 			else empty end
 		' 2>/dev/null
 }
+
+# Usage: tribunal_nudge_decide <count> <sensitive_json> <min_files> <state_json>
+# The frequency rule. A first nudge names its trigger, sensitive winning over
+# size. After that, only growth speaks again: a sensitive path not seen at the
+# last nudge, or at least twice the files. skips_reported is not a nudge.
+tribunal_nudge_decide() {
+	jq -cn --argjson n "$1" --argjson sens "$2" --argjson min "$3" --argjson st "$4" '
+		($min > 0 and $n >= $min) as $size
+		| (($sens | length) > 0) as $s
+		| if ($size or $s) | not then {action: "skip", reason: "below_threshold"}
+		  elif ($st | has("files")) | not then
+			{action: "nudge", trigger: (if $s then "sensitive" else "size" end)}
+		  elif (($sens - ($st.sensitive // [])) | length) > 0 or $n >= 2 * $st.files then
+			{action: "nudge", trigger: "grew"}
+		  else {action: "skip", reason: "unchanged"} end'
+}
+
+# Usage: tribunal_nudge_message <count> <sensitive_json>
+# The cost hint is there because /tribunal runs several judge models per
+# iteration (tribunal ADR-001), far more than the gate's one judge.
+tribunal_nudge_message() {
+	jq -rn --argjson n "$1" --argjson s "$2" '
+		"tribunal: this session changed \($n) file\(if $n == 1 then "" else "s" end)"
+		+ (if ($s | length) > 0 then
+			", \($s | length) sensitive (" + ($s[0:3] | join(", "))
+			+ (if ($s | length) > 3 then " and \(($s | length) - 3) more" else "" end) + ")"
+		  else "" end)
+		+ ". Worth a jury? /tribunal runs several judge models; type it to start."'
+}
+
+# Usage: tribunal_nudge_state_read <path>
+# Reads as {} for a missing or unparseable file. The jq call is guarded because
+# a failed assignment as the last step of an && list would abort a set -e caller.
+tribunal_nudge_state_read() {
+	local path="$1" v=""
+	if [[ -n "$path" && -f "$path" ]]; then
+		v=$(jq -ce 'select(type == "object")' "$path" 2>/dev/null) || v=""
+	fi
+	printf '%s' "${v:-"{}"}"
+}
+
+# Usage: tribunal_nudge_state_write <path> <json>
+# Through a temp file and mv, so a killed hook leaves the old state, not half
+# of a new one. No path (no session id) means no state, never a shared file.
+tribunal_nudge_state_write() {
+	local path="$1" json="$2"
+	[[ -n "$path" ]] || return 0
+	mkdir -p "${path%/*}" 2>/dev/null || return 0
+	printf '%s\n' "$json" > "${path}.tmp" 2>/dev/null && mv -f "${path}.tmp" "$path" 2>/dev/null
+	return 0
+}
