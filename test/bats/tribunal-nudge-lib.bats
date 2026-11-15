@@ -107,6 +107,17 @@ _decide() { tribunal_nudge_decide "$@" | jq -c .; }
 	[ "$(_decide 18 '[]' 8 '{"files":9,"sensitive":[]}')" = '{"action":"nudge","trigger":"grew"}' ]
 }
 
+@test "decide: a count that doubles below min_files does not re-nudge" {
+	# Count growth needs the size trigger tripped; one sensitive file alone is not it.
+	[ "$(_decide 2 '["a"]' 8 '{"files":1,"sensitive":["a"]}')" = '{"action":"skip","reason":"unchanged"}' ]
+}
+
+@test "decide: with min_files 0 a doubled count never re-nudges" {
+	[ "$(_decide 40 '["a"]' 0 '{"files":9,"sensitive":["a"]}')" = '{"action":"skip","reason":"unchanged"}' ] || return 1
+	# A new sensitive path still does, at any size.
+	[ "$(_decide 2 '["a","b"]' 0 '{"files":1,"sensitive":["a"]}')" = '{"action":"nudge","trigger":"grew"}' ]
+}
+
 @test "decide: skips_reported alone does not count as a prior nudge" {
 	[ "$(_decide 8 '[]' 8 '{"skips_reported":["below_threshold"]}')" = '{"action":"nudge","trigger":"size"}' ]
 }

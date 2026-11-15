@@ -124,8 +124,11 @@ yet holds a real `/tribunal` run:
    - No nudge recorded yet: nudge, with trigger `size` or `sensitive`. When
      both trip, use `sensitive`.
    - A nudge recorded: nudge again with trigger `grew` only when a sensitive
-     path appears that is not in `sensitive`, or the file count is at least
-     twice `files`. Otherwise skip with `unchanged`.
+     path appears that is not in `sensitive` (at any size), or the size
+     trigger is tripped (`min_files` above 0 and the count at least
+     `min_files`) and the count is at least twice `files`. A count that
+     doubles below `min_files`, or with `min_files` 0, never speaks again on
+     its own. Otherwise skip with `unchanged`.
 8. Write the state back, read-modify-write, keeping every field it does not
    change:
    - On a skip whose reason is not yet in `skips_reported`: append the
@@ -238,8 +241,9 @@ Reading it:
   `config_get_int` returns the caller's default for a non-integer or negative
   value, so a bad `min_files` reads as 8.
 - The two glob lists are read with `tribunal_config_get_json`. `config_get`
-  returns nothing for an array, because the loader marks arrays `\x02`. An
-  absent or non-array value falls back to the shipped list.
+  is not used for the lists because it prints them as jq-formatted text; they
+  are read with `tribunal_config_get_json`. An absent or non-array value falls
+  back to the shipped list.
 
 The defaults are kept narrow on purpose:
 
@@ -326,7 +330,8 @@ the event log and the state file. Transcript fixtures copy the shapes in
 - `.github/workflows/ci.yml` alone: nudge with `trigger: sensitive`.
   `.GitHub/Workflows/CI.yml` does too. A lockfile alone does not trip it.
 - A second Stop with no change: no output, `unchanged`. A new sensitive file,
-  or a doubled count, nudges again with `trigger: grew`.
+  or a count that doubles while at or above `min_files`, nudges again with
+  `trigger: grew`.
 - A second below-threshold Stop emits no second `skipped:below_threshold`.
 - A nudge after a reported skip keeps `skips_reported` in the state file.
 - A Skill call to `tribunal:tribunal`, a Skill call to `tribunal`, and a typed
