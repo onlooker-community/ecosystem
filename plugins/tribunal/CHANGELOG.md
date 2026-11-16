@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.0](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.9.4...tribunal-v1.10.0) (2026-11-16)
+
+
+### Features
+
+* **tribunal:** nudge toward /tribunal at Stop, free :bell: ([#610](https://github.com/onlooker-community/ecosystem/issues/610)) ([b42ec7b](https://github.com/onlooker-community/ecosystem/commit/b42ec7b589217a858acab91e6f8b890fe639548b))
+
 ## [1.9.4](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.9.3...tribunal-v1.9.4) (2026-11-13)
 
 
