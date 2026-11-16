@@ -22,6 +22,7 @@ Tribunal is a sibling plugin to [`ecosystem`](../../) and assumes the Onlooker o
 |---|---|
 | `/tribunal <task>` skill | Orchestrates a full Actor → Jury → Meta → Gate loop, retrying the Actor with Judge critiques until the gate passes or `max_iterations` is reached. Emits the full canonical event stream. |
 | `Stop` hook (opt-in) | When `tribunal.stop_hook.enabled` is true, runs a single advisory pass on the just-finished turn's output and writes a verdict for review on the next session. No retry — the main session has already ended. The judge sees only the files this session's transcript shows it editing (Edit, Write, MultiEdit, NotebookEdit) that are still uncommitted, never another session's work in the same checkout; with `skip_if_no_file_changes` (default true), a session with none spends no model call. A file changed only through Bash is not attributed. |
+| `Stop` nudge (on by default) | Makes no model call. When a session's edits are numerous or touch a sensitive path, shows one line suggesting `/tribunal`. See [Nudge](#nudge). |
 
 ## Default jury
 
@@ -83,6 +84,59 @@ Drop a `rubrics` file at `<repo>/.claude/tribunal.json` (or globally at `~/.onlo
 
 Project rubrics override built-ins by `id`.
 
+## Nudge
+
+The jury costs several model calls, so tribunal never runs it unasked. The nudge is the free half: a `Stop` hook that makes no model call and, when the session's edits look like they deserve a jury, shows you one line:
+
+```text
+tribunal: this session changed 9 files, 1 sensitive (db/migrations/004.sql). Worth a jury? /tribunal runs several judge models; type it to start.
+```
+
+It is on by default. It stays quiet when the paid Stop gate (`stop_hook.enabled`) is on, and once `/tribunal` has run in the session.
+
+It counts the files this session's transcript shows it editing (Edit, Write, MultiEdit, NotebookEdit) inside the worktree, committed or not, after dropping `ignore_globs`. Two triggers:
+
+- **size**: the count reaches `min_files`.
+- **sensitive**: any file matches `sensitive_globs`. Matching is case-insensitive.
+
+It speaks once. After that it speaks again only when the session grows: a sensitive path appears that it has not named yet, or the count is past `min_files` and at least double what it last reported.
+
+| Key (`tribunal.nudge.*`) | Default | |
+|---|---|---|
+| `enabled` | `true` | `false` turns it off with no cost beyond reading config. |
+| `min_files` | `8` | `0` turns the size trigger off. A value that is not a non-negative integer reads as `8`. |
+| `sensitive_globs` | `.github/workflows/**`, `**/migrations/**`, `**/auth/**`, `**/*secret*`, `**/*credential*`, `**/.env*` | `*` stays within one directory; `**/` matches zero or more directories. |
+| `ignore_globs` | `**/*.lock`, `**/package-lock.json`, `**/pnpm-lock.yaml`, `**/yarn.lock` | Dropped before counting. |
+
+A list you set **replaces** the default; it is not merged with it. To add a pattern, repeat the defaults you want to keep. In `.claude/settings.json`:
+
+```json
+{
+  "tribunal": {
+    "nudge": {
+      "sensitive_globs": [
+        "plugins/*/scripts/hooks/*.sh",
+        ".github/workflows/**",
+        "**/migrations/**",
+        "**/auth/**",
+        "**/*secret*",
+        "**/*credential*",
+        "**/.env*"
+      ]
+    }
+  }
+}
+```
+
+The onlooker CLI (2.14.0 and later) writes the same file: `onlooker config set tribunal.nudge.min_files 5 --scope project`.
+
+Events: `tribunal.nudge.shown` with `trigger` (`size`, `sensitive` or `grew`), `session_files` and up to 20 `sensitive_files`; `tribunal.nudge.skipped` with a `reason`, emitted once per session per reason. Turning the nudge off emits nothing.
+
+Limitations:
+
+- Files changed only through Bash (`sed -i`, `mv`, codegen) are not counted; the transcript does not record them as edits.
+- The count is of files, not lines. Eight one-line edits trip the size trigger, while one 2000-line rewrite does not.
+
 ## Subagents
 
 | Agent | `judge_type` | Role |
@@ -121,7 +175,7 @@ Project keying mirrors `archivist`: SHA256 of `git remote get-url origin` (first
 
 Tribunal emits the full canonical `tribunal.*` event surface from [`@onlooker-community/schema`](https://github.com/onlooker-community/schema) (v2.1.0+):
 
-`session.start`, `iteration.start`, `actor.start`, `actor.complete`, `jury.empaneled`, `judge.start`, `verdict` (one per judge), `meta.start`, `meta.complete`, `consensus.reached`, `dissent.recorded` (when judges disagree), `gate.passed` / `gate.blocked`, `session.complete`.
+`session.start`, `iteration.start`, `actor.start`, `actor.complete`, `jury.empaneled`, `judge.start`, `verdict` (one per judge), `meta.start`, `meta.complete`, `consensus.reached`, `dissent.recorded` (when judges disagree), `gate.passed` / `gate.blocked`, `session.complete`, and the nudge's `nudge.shown` / `nudge.skipped` (schema v3.10.0+).
 
 All events land in `~/.onlooker/logs/onlooker-events.jsonl` and are validated against the schema before write.
 

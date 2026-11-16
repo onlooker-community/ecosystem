@@ -362,5 +362,21 @@ Glob-to-regex unit tests live in `test/bats/tribunal-nudge-glob.bats`:
   covered only by running the suite locally on macOS.
 
 Acceptance before the nudge ships on by default: a run against a synthetic
-5MB transcript stays under 300ms, measured from its `hook-health.jsonl`
-record, on a macOS laptop.
+0.5MB transcript with 40 edited files, the size of a typical session in this
+repo, stays under 300ms, measured from its `hook-health.jsonl` record, on a
+macOS laptop. The 5MB case is recorded but not a gate.
+
+Measured on 2026-11-15, with both events emitted detached and duplicate paths
+dropped before the worktree filter:
+
+| Transcript | `duration_ms` |
+|---|---|
+| 1 line (a skip) | 232–274 |
+| 0.5MB, 40 files | 244–286 |
+| 5MB, 40 files | 383–408 |
+
+The first ~250ms is startup shared with the gate (median 226ms) and every
+other Stop hook in the plugin: substrate resolution, config load, and git
+lookups. Cutting it is follow-up work across plugins, not this hook's.
+Before the two changes, the 5MB case took 494–544ms; before glob compilation,
+40 files took about 780ms.
