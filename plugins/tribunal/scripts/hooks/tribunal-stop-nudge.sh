@@ -82,6 +82,20 @@ if [[ -n "$SESSION_ID" ]]; then
 fi
 STATE=$(tribunal_nudge_state_read "$STATE_FILE")
 
+# _emit <type> <payload> — detached, following archivist-mine: output
+# discarded, stdin closed, fd 3 closed (or a bats run waits on it through that
+# fd), disowned so Stop does not wait on node. Nothing reads these events
+# before the hook exits. TRIBUNAL_NUDGE_FOREGROUND=1 is a test seam that runs
+# the emit inline, so a test can count events without racing them.
+_emit() {
+	if [[ "${TRIBUNAL_NUDGE_FOREGROUND:-}" == "1" ]]; then
+		tribunal_emit_event "$1" "$2" </dev/null >/dev/null 2>&1 || true
+	else
+		tribunal_emit_event "$1" "$2" </dev/null >/dev/null 2>&1 3>&- &
+		disown 2>/dev/null || true
+	fi
+}
+
 # _skip <reason> — record and emit a reason once per session, then exit.
 _skip() {
 	local reason="$1"
@@ -90,8 +104,7 @@ _skip() {
 	fi
 	tribunal_nudge_state_write "$STATE_FILE" \
 		"$(printf '%s' "$STATE" | jq -c --arg r "$reason" '.skips_reported = ((.skips_reported // []) + [$r])')"
-	tribunal_emit_event "tribunal.nudge.skipped" \
-		"$(jq -cn --arg r "$reason" '{reason: $r}')" >/dev/null 2>&1 || true
+	_emit "tribunal.nudge.skipped" "$(jq -cn --arg r "$reason" '{reason: $r}')"
 	hook_health_exit 0
 }
 
@@ -140,7 +153,7 @@ while IFS= read -r f; do
 	if [[ ${#SENS_RE[@]} -gt 0 ]] && tribunal_nudge_matches_any_re "$f" "${SENS_RE[@]}"; then
 		SENSITIVE+=("$f")
 	fi
-done < <(printf '%s\n' "$SCAN" | awk -F'\t' '$1 == "E" { print $2 }' | tribunal_paths_in_worktree "$WORKTREE_ROOT")
+done < <(printf '%s\n' "$SCAN" | awk -F'\t' '$1 == "E" && !seen[$2]++ { print $2 }' | tribunal_paths_in_worktree "$WORKTREE_ROOT")
 
 if [[ $WAS_NOCASE -eq 0 ]]; then shopt -u nocasematch; fi
 
@@ -163,7 +176,7 @@ TRIGGER=$(printf '%s' "$DECISION" | jq -r '.trigger')
 tribunal_nudge_state_write "$STATE_FILE" \
 	"$(printf '%s' "$STATE" | jq -c --argjson n "$COUNT" --argjson s "$SENSITIVE_JSON" '.files = $n | .sensitive = $s')"
 jq -cn --arg m "$(tribunal_nudge_message "$COUNT" "$SENSITIVE_JSON")" '{systemMessage: $m}'
-tribunal_emit_event "tribunal.nudge.shown" \
+_emit "tribunal.nudge.shown" \
 	"$(jq -cn --arg t "$TRIGGER" --argjson n "$COUNT" --argjson s "$SENSITIVE_JSON" \
-		'{trigger: $t, session_files: $n, sensitive_files: $s[0:20]}')" >/dev/null 2>&1 || true
+		'{trigger: $t, session_files: $n, sensitive_files: $s[0:20]}')"
 hook_health_exit 0
