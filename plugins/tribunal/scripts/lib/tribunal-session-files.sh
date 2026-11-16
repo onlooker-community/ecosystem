@@ -21,22 +21,12 @@
 # Usage: tribunal_session_edited_files <transcript_path> <worktree_root>
 # Prints each path this session edited inside the worktree, relative to it, one
 # per line, deduplicated.
-#
-# Both sides are compared in physical form. git reports the worktree root with
-# symlinks resolved, while the transcript keeps whatever spelling the session
-# used — on macOS /var/... against git's /private/var/... — so a plain prefix
-# match missed every edit made under a symlinked path.
 tribunal_session_edited_files() {
 	local transcript="$1" root="$2"
 	[[ -n "$transcript" && -f "$transcript" && -n "$root" ]] || return 0
-	local root_phys
-	root_phys=$(cd "$root" 2>/dev/null && pwd -P) || return 0
-
-	local p dir
 	# grep first so jq parses only the lines that can hold a tool call; a long
 	# session's transcript runs to megabytes. -R with fromjson? skips any line
-	# that is not valid JSON instead of failing the whole read. Deduplicated
-	# before the loop, which resolves each path's directory once.
+	# that is not valid JSON instead of failing the whole read.
 	grep -F '"tool_use"' "$transcript" 2>/dev/null \
 		| jq -rR '
 			fromjson? | select(.type == "assistant") | .message.content[]?
@@ -45,11 +35,38 @@ tribunal_session_edited_files() {
 			| (.input.file_path // .input.notebook_path // empty) | strings
 			| select(startswith("/"))
 		' 2>/dev/null \
-		| sort -u \
+		| tribunal_paths_in_worktree "$root"
+}
+
+# Usage: tribunal_paths_in_worktree <worktree_root>
+# Reads absolute paths on stdin; prints each one inside the worktree, relative
+# to it, deduplicated. Both sides are compared in physical form: git reports
+# the root with symlinks resolved, while a transcript keeps whatever spelling
+# the session used, so on macOS /var/... would never prefix-match git's
+# /private/var/.... Deduplicated before the loop, which resolves each path's
+# directory once. Shared by the gate and the nudge.
+tribunal_paths_in_worktree() {
+	local root="$1" root_phys p raw dir last_raw="" last_phys="" last_ok=0
+	[[ -n "$root" ]] || return 0
+	root_phys=$(cd "$root" 2>/dev/null && pwd -P) || return 0
+	sort -u \
 		| while IFS= read -r p; do
-			# A directory that no longer exists holds nothing dirty to judge.
-			dir=$(cd "${p%/*}/" 2>/dev/null && pwd -P) || continue
-			p="${dir%/}/${p##*/}"
+			# A caller's nocasematch would make the prefix case below match a
+			# sibling that differs only in case; this subshell keeps its own.
+			shopt -u nocasematch
+			# sort -u keeps a directory's files together, so one lookup serves the run of them.
+			raw="${p%/*}/"
+			if [[ "$raw" != "$last_raw" ]]; then
+				last_raw="$raw"
+				last_ok=0
+				if dir=$(cd "$raw" 2>/dev/null && pwd -P); then
+					last_ok=1
+					last_phys="$dir"
+				fi
+			fi
+			# A directory that no longer exists holds nothing to count.
+			[[ $last_ok -eq 1 ]] || continue
+			p="${last_phys%/}/${p##*/}"
 			case "$p" in
 				"$root_phys"/*) printf '%s\n' "${p#"$root_phys"/}" ;;
 			esac

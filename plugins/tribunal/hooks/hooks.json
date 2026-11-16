@@ -7,6 +7,10 @@
           {
             "type": "command",
             "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hooks/tribunal-stop-gate.sh"
+          },
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PLUGIN_ROOT\"/scripts/hooks/tribunal-stop-nudge.sh"
           }
         ]
       }

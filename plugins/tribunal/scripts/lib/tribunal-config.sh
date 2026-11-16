@@ -59,6 +59,16 @@ tribunal_config_get_json() {
 	config_get_json "_TRIBUNAL_CONFIG" "${path}"
 }
 
+# A non-negative integer, falling back to the default on anything else. Use it
+# for any value that reaches arithmetic: the plain getter returns whatever is
+# configured, and a non-numeric value then kills the caller at status 0
+# (ONL-132). Same as archivist_config_int.
+tribunal_config_get_int() {
+	local path="$1"
+	local default="$2"
+	config_get_int "_TRIBUNAL_CONFIG" "${path}" "${default}"
+}
+
 tribunal_config_stop_hook_enabled() {
 	local v
 	v=$(tribunal_config_get '.tribunal.stop_hook.enabled')

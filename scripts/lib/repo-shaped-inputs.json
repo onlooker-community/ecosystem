@@ -34,6 +34,8 @@
   "excluded": {
     "compass.skip_globs": "Exclusion list. Matching nothing means nothing is skipped, not that compass is inapplicable.",
     "lineage.ignore_globs": "Exclusion list, as above.",
+    "tribunal.nudge.ignore_globs": "Exclusion list, as above.",
+    "tribunal.nudge.sensitive_globs": "A trigger, not an input. The size trigger works in any repo, so a repo with no sensitive paths still hosts the nudge.",
     "warden.scan.skip_globs": "Exclusion list, as above."
   }
 }
