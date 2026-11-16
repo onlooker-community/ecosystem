@@ -251,3 +251,33 @@ _only_system_message() {
 	[ -z "$output" ] || return 1
 	_state | jq -e '(.skips_reported // []) | index("") == null' >/dev/null
 }
+
+_events() { # <type>
+	grep "\"event_type\":\"$1\"" "$ONLOOKER_EVENTS_LOG" 2>/dev/null || true
+}
+
+@test "a nudge emits tribunal.nudge.shown with its trigger, count and files" {
+	_edit "$SID" "auth/login.ts"
+	_stop "$SID"
+	[ "$status" -eq 0 ] || return 1
+	# Emits are detached, so wait for the event rather than racing it.
+	await_events tribunal.nudge.shown 1 10 || return 1
+	_events tribunal.nudge.shown | tail -n 1 \
+		| jq -e '.payload == {trigger: "sensitive", session_files: 1, sensitive_files: ["auth/login.ts"]}' >/dev/null
+}
+
+@test "a skip is emitted as tribunal.nudge.skipped" {
+	_edits "$SID" 2
+	_stop "$SID"
+	await_events tribunal.nudge.skipped 1 10 || return 1
+	_events tribunal.nudge.skipped | tail -n 1 | jq -e '.payload == {reason: "below_threshold"}' >/dev/null
+}
+
+@test "a skip reason is emitted once per session" {
+	# Foreground emits, so the count is final when the hook returns.
+	export TRIBUNAL_NUDGE_FOREGROUND=1
+	_edits "$SID" 2
+	_stop "$SID"
+	_stop "$SID"
+	[ "$(_events tribunal.nudge.skipped | grep -c below_threshold)" -eq 1 ]
+}

@@ -98,6 +98,8 @@
     "tribunal.jury.empaneled",
     "tribunal.meta.complete",
     "tribunal.meta.start",
+    "tribunal.nudge.shown",
+    "tribunal.nudge.skipped",
     "tribunal.session.complete",
     "tribunal.session.start",
     "tribunal.verdict",
