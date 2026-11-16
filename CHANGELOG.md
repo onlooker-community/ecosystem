@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.82.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.81.0...ecosystem-v0.82.0) (2026-11-16)
+
+
+### Features
+
+* **tribunal:** nudge toward /tribunal at Stop, free :bell: ([#610](https://github.com/onlooker-community/ecosystem/issues/610)) ([b42ec7b](https://github.com/onlooker-community/ecosystem/commit/b42ec7b589217a858acab91e6f8b890fe639548b))
+
 ## [0.81.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.80.4...ecosystem-v0.81.0) (2026-11-14)
 
 
