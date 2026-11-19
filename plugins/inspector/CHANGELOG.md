@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.2](https://github.com/onlooker-community/ecosystem/compare/inspector-v0.11.1...inspector-v0.11.2) (2026-11-19)
+
+
+### Bug Fixes
+
+* **lock:** never vacate a live lock while breaking a stale one :lock: ([#614](https://github.com/onlooker-community/ecosystem/issues/614)) ([672fd89](https://github.com/onlooker-community/ecosystem/commit/672fd89b7298bb5f15fb9701676d973502410d7c))
+
 ## [0.11.1](https://github.com/onlooker-community/ecosystem/compare/inspector-v0.11.0...inspector-v0.11.1) (2026-11-13)
 
 
