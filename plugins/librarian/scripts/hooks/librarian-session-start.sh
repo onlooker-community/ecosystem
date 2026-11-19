@@ -22,19 +22,9 @@ PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 source "${PLUGIN_ROOT}/scripts/lib/hook-health.sh"
 hook_health_register "librarian-session-start"
 
-# Ecosystem substrate (validate-path.sh) lives in the sibling ecosystem plugin.
-# Resolution is shared rather than repeated: fourteen hooks each carried a
-# byte-identical copy of this lookup, and it was wrong the same two ways in all
-# fourteen (ecosystem-449.36, ecosystem-449.35). Fixing it fourteen times is how
-# it stayed broken. See scripts/lib/substrate-resolve.sh.
-# shellcheck source=../lib/substrate-resolve.sh
-source "${PLUGIN_ROOT}/scripts/lib/substrate-resolve.sh"
-_ECOSYSTEM_ROOT=$(onlooker_resolve_substrate "$PLUGIN_ROOT")
-
-if [[ -n "$_ECOSYSTEM_ROOT" && -f "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.sh" ]]; then
-	# shellcheck disable=SC1091
-	CLAUDE_PLUGIN_ROOT="$_ECOSYSTEM_ROOT" source "${_ECOSYSTEM_ROOT}/scripts/lib/validate-path.sh"
-fi
+# No validate-path.sh: this hook calls no validate_* or other substrate helper,
+# and resolving and sourcing it cost ~5ms on every SessionStart (ONL-269).
+# librarian-emit.sh resolves the substrate itself, on the first emit.
 
 # shellcheck source=../lib/librarian-config.sh
 source "${PLUGIN_ROOT}/scripts/lib/librarian-config.sh"
