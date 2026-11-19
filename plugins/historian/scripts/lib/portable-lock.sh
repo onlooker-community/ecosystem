@@ -85,32 +85,48 @@ _lock_stale() {
 }
 
 # Break the lock at LOCKDIR, but only if it still carries the holder line the
-# staleness decision was made against.
+# staleness decision was made against. WAITED and STALE_AFTER are the caller's,
+# used only to clear a claim whose breaker never wrote its pid.
 #
-# The move-then-verify dance exists because two waiters can independently
-# decide the same lock is stale. Whoever moves it first wins; the loser finds
-# a holder line that no longer matches — the winner has already broken and
-# retaken the lock — and puts back what it took. Without this, the loser would
-# delete the winner's fresh lock and both would believe they hold it.
+# The staleness decision can be out of date by the time it is acted on: a
+# waiter reads holder A, A releases normally and exits, C takes the lock, and
+# the waiter then finds A dead. So the holder is checked again before anything
+# is removed, and never by moving the lock aside first. That used to be how
+# this worked, and while the directory was moved away the path sat empty:
+# another waiter could mkdir it while C still believed it held the lock, and
+# two lineage hooks recorded one change twice (ONL-297).
+#
+# Two waiters can also decide the same lock is stale. Each must mkdir a claim
+# inside the lock directory before checking, so only one of them ever acts on
+# a given lock. The loser's mkdir fails and it goes back to waiting; once the
+# winner has broken and retaken the lock, the loser's recheck finds a holder
+# that no longer matches.
 _lock_break() {
-	local lockdir="$1" seen="$2"
-	local victim="${lockdir}.stale.$$"
+	local lockdir="$1" seen="$2" waited="${3:-0}" stale_after="${4:-0}"
+	local claim="${lockdir}/breaking"
 
-	rm -rf "$victim" 2>/dev/null
-	mv "$lockdir" "$victim" 2>/dev/null || return 1
-
-	_lock_holder "$victim"
-	if [[ "$_LOCK_HOLDER" != "$seen" ]]; then
-		# Put it back, unless a third process has already claimed the path —
-		# in which case mv would nest the victim inside it.
-		if [[ ! -e "$lockdir" ]] && mv "$victim" "$lockdir" 2>/dev/null; then
-			return 1
+	if ! mkdir "$claim" 2>/dev/null; then
+		# Another breaker holds the claim, or the lock is already gone. A
+		# claim whose breaker died (a SIGKILL at a hook deadline) is cleared
+		# so the lock does not become unbreakable; the next poll retries.
+		_lock_holder "$claim"
+		if _lock_stale "$_LOCK_HOLDER" "$stale_after" "$waited"; then
+			rm -rf "$claim" 2>/dev/null
 		fi
-		rm -rf "$victim" 2>/dev/null
+		return 1
+	fi
+	_lock_write_holder "$claim"
+
+	_lock_holder "$lockdir"
+	if [[ "$_LOCK_HOLDER" != "$seen" ]]; then
+		# Not the lock we judged. Drop our claim, and only ours: if the lock
+		# was released and retaken meanwhile, the claim there is someone else's.
+		_lock_holder "$claim"
+		[[ "$_LOCK_HOLDER" == "$$" ]] && rm -rf "$claim" 2>/dev/null
 		return 1
 	fi
 
-	rm -rf "$victim" 2>/dev/null
+	rm -rf "$lockdir" 2>/dev/null
 	return 0
 }
 
@@ -160,7 +176,7 @@ lock_acquire() {
 			_lock_holder "$lockdir"
 			local seen="$_LOCK_HOLDER"
 			if _lock_stale "$seen" "$stale_after" "$waited"; then
-				_lock_break "$lockdir" "$seen" && continue
+				_lock_break "$lockdir" "$seen" "$waited" "$stale_after" && continue
 			fi
 
 			if ((waited >= timeout)); then

@@ -180,3 +180,71 @@ _seed_lock() {
   rm -rf "${LOCK}.d"
   [ "$status" -eq 0 ]
 }
+
+# --- a breaker racing a normal release (ONL-297) ---------------------------
+#
+# A waiter reads holder A, A releases normally and exits, and C takes the lock.
+# The waiter then finds A dead and breaks what is now C's live lock. Breaking
+# used to move the lock directory aside before checking who held it, so the
+# path sat empty while C still believed it held the lock, and any other waiter
+# could mkdir it. That let two lineage hooks into the baseline cycle at once,
+# and they recorded one change twice.
+#
+# The third waiter is simulated by wrapping mv and rm: after each one, D tries
+# to take the lock. D must never get in while C holds it.
+@test "a breaker that judged a departed holder stale never vacates the new holder's lock" {
+  sleep 30 &
+  local live=$!
+  _seed_lock "$live"
+  local departed
+  departed=$(_dead_pid)
+
+  local d_got_in="${BATS_TEST_TMPDIR}/d-got-in"
+  mv() { command mv "$@"; local r=$?; mkdir "${LOCK}.d" 2>/dev/null && : >"$d_got_in"; return $r; }
+  rm() { command rm "$@"; local r=$?; mkdir "${LOCK}.d" 2>/dev/null && : >"$d_got_in"; return $r; }
+
+  run _lock_break "${LOCK}.d" "$departed"
+  unset -f mv rm
+  local holder=""
+  [[ -r "${LOCK}.d/holder" ]] && read -r holder <"${LOCK}.d/holder"
+  kill "$live" 2>/dev/null || true
+  wait "$live" 2>/dev/null || true
+
+  [ "$status" -eq 1 ] || { echo "break returned $status on a live lock"; return 1; }
+  [ ! -e "$d_got_in" ] || { echo "a third waiter took the lock while C held it"; return 1; }
+  [ "$holder" = "$live" ] || { echo "holder is '${holder}', want the live holder ${live}"; return 1; }
+}
+
+# Two waiters can both judge the same abandoned lock stale. The first breaks it
+# and takes the lock; the second, still acting on the old holder, must leave
+# the first's fresh lock alone.
+@test "a second breaker acting on the same dead holder leaves the winner's lock alone" {
+  local dead
+  dead=$(_dead_pid)
+  _seed_lock "$dead"
+
+  _lock_break "${LOCK}.d" "$dead" || { echo "first break failed"; return 1; }
+  mkdir "${LOCK}.d" && _lock_write_holder "${LOCK}.d"
+
+  run _lock_break "${LOCK}.d" "$dead"
+  local holder=""
+  [[ -r "${LOCK}.d/holder" ]] && read -r holder <"${LOCK}.d/holder"
+  rm -rf "${LOCK}.d"
+  [ "$status" -eq 1 ] || return 1
+  [ "$holder" = "$$" ]
+}
+
+# Breaking is claimed by a marker inside the lock directory. A breaker killed
+# while holding that claim must not leave the lock unbreakable for good, or one
+# SIGKILL at a hook deadline wedges every later caller (ecosystem-2vo again).
+@test "a claim left by a killed breaker does not wedge the lock" {
+  local dead
+  dead=$(_dead_pid)
+  _seed_lock "$dead"
+  mkdir "${LOCK}.d/breaking"
+  printf '%s\n' "$(_dead_pid)" >"${LOCK}.d/breaking/holder"
+
+  run lock_acquire "$LOCK" 2
+  [ "$status" -eq 0 ] || { echo "acquire gave up behind a dead breaker's claim"; return 1; }
+  lock_release "$LOCK"
+}
