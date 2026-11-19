@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.82.1](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.82.0...ecosystem-v0.82.1) (2026-11-19)
+
+
+### Bug Fixes
+
+* **lock:** never vacate a live lock while breaking a stale one :lock: ([#614](https://github.com/onlooker-community/ecosystem/issues/614)) ([672fd89](https://github.com/onlooker-community/ecosystem/commit/672fd89b7298bb5f15fb9701676d973502410d7c))
+
+
+### Performance Improvements
+
+* **librarian:** stop sourcing a substrate session-start never calls :scissors: ([#612](https://github.com/onlooker-community/ecosystem/issues/612)) ([636290c](https://github.com/onlooker-community/ecosystem/commit/636290c897071f7488af3b569372cb1f27e0cf72))
+
 ## [0.82.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.81.0...ecosystem-v0.82.0) (2026-11-16)
 
 

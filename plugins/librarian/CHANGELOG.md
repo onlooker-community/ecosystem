@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.28.1](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.28.0...librarian-v0.28.1) (2026-11-19)
+
+
+### Performance Improvements
+
+* **librarian:** stop sourcing a substrate session-start never calls :scissors: ([#612](https://github.com/onlooker-community/ecosystem/issues/612)) ([636290c](https://github.com/onlooker-community/ecosystem/commit/636290c897071f7488af3b569372cb1f27e0cf72))
+
 ## [0.28.0](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.27.6...librarian-v0.28.0) (2026-11-14)
 
 

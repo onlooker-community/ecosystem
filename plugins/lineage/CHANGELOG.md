@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.5](https://github.com/onlooker-community/ecosystem/compare/lineage-v0.10.4...lineage-v0.10.5) (2026-11-19)
+
+
+### Bug Fixes
+
+* **lock:** never vacate a live lock while breaking a stale one :lock: ([#614](https://github.com/onlooker-community/ecosystem/issues/614)) ([672fd89](https://github.com/onlooker-community/ecosystem/commit/672fd89b7298bb5f15fb9701676d973502410d7c))
+
 ## [0.10.4](https://github.com/onlooker-community/ecosystem/compare/lineage-v0.10.3...lineage-v0.10.4) (2026-11-13)
 
 
