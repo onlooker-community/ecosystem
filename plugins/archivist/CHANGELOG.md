@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.9](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.10.8...archivist-v0.10.9) (2026-11-21)
+
+
+### Performance Improvements
+
+* ask git only what SessionStart hooks don't already know :scissors: ([#617](https://github.com/onlooker-community/ecosystem/issues/617)) ([98b0fbf](https://github.com/onlooker-community/ecosystem/commit/98b0fbf79c44d46c31cb63251d037bc4cc64ccbe))
+
 ## [0.10.8](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.10.7...archivist-v0.10.8) (2026-11-13)
 
 

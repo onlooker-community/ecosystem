@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.4](https://github.com/onlooker-community/ecosystem/compare/customs-v0.3.3...customs-v0.3.4) (2026-11-21)
+
+
+### Performance Improvements
+
+* ask git only what SessionStart hooks don't already know :scissors: ([#617](https://github.com/onlooker-community/ecosystem/issues/617)) ([98b0fbf](https://github.com/onlooker-community/ecosystem/commit/98b0fbf79c44d46c31cb63251d037bc4cc64ccbe))
+
 ## [0.3.3](https://github.com/onlooker-community/ecosystem/compare/customs-v0.3.2...customs-v0.3.3) (2026-11-13)
 
 

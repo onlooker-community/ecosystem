@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.5](https://github.com/onlooker-community/ecosystem/compare/warden-v0.8.4...warden-v0.8.5) (2026-11-21)
+
+
+### Performance Improvements
+
+* ask git only what SessionStart hooks don't already know :scissors: ([#617](https://github.com/onlooker-community/ecosystem/issues/617)) ([98b0fbf](https://github.com/onlooker-community/ecosystem/commit/98b0fbf79c44d46c31cb63251d037bc4cc64ccbe))
+
 ## [0.8.4](https://github.com/onlooker-community/ecosystem/compare/warden-v0.8.3...warden-v0.8.4) (2026-11-13)
 
 
