@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.1](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.10.0...tribunal-v1.10.1) (2026-11-21)
+
+
+### Performance Improvements
+
+* ask git only what SessionStart hooks don't already know :scissors: ([#617](https://github.com/onlooker-community/ecosystem/issues/617)) ([98b0fbf](https://github.com/onlooker-community/ecosystem/commit/98b0fbf79c44d46c31cb63251d037bc4cc64ccbe))
+
 ## [1.10.0](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.9.4...tribunal-v1.10.0) (2026-11-16)
 
 

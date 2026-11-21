@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.6](https://github.com/onlooker-community/ecosystem/compare/lineage-v0.10.5...lineage-v0.10.6) (2026-11-21)
+
+
+### Performance Improvements
+
+* ask git only what SessionStart hooks don't already know :scissors: ([#617](https://github.com/onlooker-community/ecosystem/issues/617)) ([98b0fbf](https://github.com/onlooker-community/ecosystem/commit/98b0fbf79c44d46c31cb63251d037bc4cc64ccbe))
+
 ## [0.10.5](https://github.com/onlooker-community/ecosystem/compare/lineage-v0.10.4...lineage-v0.10.5) (2026-11-19)
 
 
