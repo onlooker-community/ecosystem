@@ -113,16 +113,29 @@ onlooker_project_remote_url() {
 }
 
 # Worktree-aware: uses common-dir so worktrees share a key with the main repo.
+#
+# Answers without git when config-loader.sh has just resolved the same cwd: it
+# leaves the _ONLOOKER_GIT_ROOTS_* memo, and every hook that loads config asks
+# for its roots afterward (ONL-292). test/bats/sessionstart-git-calls.bats pins
+# the memo to git's own answer from every kind of cwd.
 onlooker_project_repo_root() {
 	local cwd="${1:-}"
 	[[ -z "$cwd" || ! -d "$cwd" ]] && return 0
 
-	if ! git -C "$cwd" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+	if [[ "${_ONLOOKER_GIT_ROOTS_CWD:-}" == "$cwd" ]]; then
+		printf '%s' "${_ONLOOKER_GIT_ROOTS_PARENT:-}"
 		return 0
 	fi
 
-	local common_dir toplevel
-	common_dir=$(git -C "$cwd" rev-parse --git-common-dir 2>/dev/null) || return 0
+	# One rev-parse for both answers. --show-toplevel fails outside a work tree,
+	# including inside .git itself, which is what --is-inside-work-tree was here
+	# to catch at the cost of a second call.
+	local out common_dir="" toplevel=""
+	out=$(git -C "$cwd" rev-parse --show-toplevel --git-common-dir 2>/dev/null) || return 0
+	if [[ "$out" == *$'\n'* ]]; then
+		common_dir="${out#*$'\n'}"
+		common_dir="${common_dir%%$'\n'*}"
+	fi
 
 	if [[ -n "$common_dir" && "$common_dir" != /* ]]; then
 		common_dir="$(cd "$cwd" && cd "$common_dir" 2>/dev/null && pwd -P)" || common_dir=""
@@ -133,7 +146,7 @@ onlooker_project_repo_root() {
 	fi
 
 	if [[ -z "$toplevel" ]]; then
-		toplevel=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null || true)
+		toplevel="${out%%$'\n'*}"
 		[[ -n "$toplevel" ]] && toplevel="$(cd "$toplevel" 2>/dev/null && pwd -P)"
 	fi
 
@@ -150,6 +163,12 @@ onlooker_project_repo_root() {
 onlooker_worktree_root() {
 	local cwd="${1:-}"
 	[[ -z "$cwd" || ! -d "$cwd" ]] && return 0
+
+	# config-loader leaves this for the cwd it just resolved; see repo_root.
+	if [[ "${_ONLOOKER_GIT_ROOTS_CWD:-}" == "$cwd" ]]; then
+		printf '%s' "${_ONLOOKER_GIT_ROOTS_TOPLEVEL:-}"
+		return 0
+	fi
 
 	local toplevel
 	toplevel=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || return 0

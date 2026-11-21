@@ -130,6 +130,16 @@ _config_resolve_roots() {
 		fi
 	fi
 
+	# Leave git's own answer for onlooker-project-key.sh, before the non-git
+	# fallback below replaces it with cwd. Hooks load config and then ask for
+	# these same roots, and each rev-parse is ~12ms on a SessionStart where every
+	# hook starts at once (ONL-292). Empty for both means "not a work tree",
+	# which is what onlooker_project_repo_root and onlooker_worktree_root answer
+	# there. Not exported: a child process re-derives its own.
+	_ONLOOKER_GIT_ROOTS_CWD="$cwd"
+	_ONLOOKER_GIT_ROOTS_TOPLEVEL="$_CONFIG_WORKTREE_ROOT"
+	_ONLOOKER_GIT_ROOTS_PARENT="${_CONFIG_PARENT_ROOT:-$_CONFIG_WORKTREE_ROOT}"
+
 	# Outside a repo git answers nothing, but .claude/settings.json is a Claude
 	# Code concept rather than a git one and a plain directory can carry one.
 	# Fall back to cwd so a non-git project keeps its config. There is no upward

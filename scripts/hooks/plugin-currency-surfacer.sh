@@ -102,7 +102,9 @@ plugin_currency_config_load "$REPO_ROOT"
 	_finish ""
 }
 
-onlooker_project_resolve "$CWD"
+# Cached, as the emitter reads it: the key is the same for every hook in a
+# session, and a fresh resolve is a `git remote get-url` (ONL-292).
+onlooker_project_resolve_cached "$CWD"
 PROJECT_KEY="$ONLOOKER_PROJECT_KEY"
 [[ -z "$PROJECT_KEY" ]] && {
 	_emit "onlooker.currency.skipped" '{"skip_reason":"no_git_context"}'
