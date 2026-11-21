@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.82.4](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.82.3...ecosystem-v0.82.4) (2026-11-21)
+
+
+### Bug Fixes
+
+* **counsel:** read the event log past a torn line :mag: ([#619](https://github.com/onlooker-community/ecosystem/issues/619)) ([7e9b73f](https://github.com/onlooker-community/ecosystem/commit/7e9b73f94114086b3d2e98bf341d3b7833f0eba5))
+
 ## [0.82.3](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.82.2...ecosystem-v0.82.3) (2026-11-21)
 
 
