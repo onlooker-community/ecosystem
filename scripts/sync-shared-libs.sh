@@ -26,7 +26,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=./lib-fingerprint.sh
 source "${REPO_ROOT}/scripts/lib-fingerprint.sh"
-SHARED_LIBS=(config-loader.sh hook-health.sh substrate-resolve.sh)
+SHARED_LIBS=(config-loader.sh hook-health.sh substrate-resolve.sh event-append.sh)
 ON_DEMAND_LIBS=(portable-lock.sh watch-unmatched.sh onlooker-project-key.sh onlooker-secret-patterns.sh)
 
 check_only=0

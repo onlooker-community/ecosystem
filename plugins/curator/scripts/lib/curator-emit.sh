@@ -11,6 +11,10 @@ if [[ -f "${_CURATOR_EMIT_LIB_DIR}/substrate-resolve.sh" ]]; then
 	# shellcheck source=plugins/curator/scripts/lib/substrate-resolve.sh
 	source "${_CURATOR_EMIT_LIB_DIR}/substrate-resolve.sh"
 fi
+if [[ -f "${_CURATOR_EMIT_LIB_DIR}/event-append.sh" ]]; then
+	# shellcheck source=plugins/curator/scripts/lib/event-append.sh
+	source "${_CURATOR_EMIT_LIB_DIR}/event-append.sh"
+fi
 
 # Resolve onlooker-event.mjs in the newest cached ecosystem. Honors
 # ONLOOKER_ECOSYSTEM_ROOT (test isolation) and a sibling checkout, both via
@@ -75,5 +79,5 @@ curator_emit() {
 	# over, and turned a path defect into 34 days of silence (ecosystem-449.34).
 	local log_path="${ONLOOKER_EVENTS_LOG:-${ONLOOKER_DIR:-$HOME/.onlooker}/logs/onlooker-events.jsonl}"
 	mkdir -p "$(dirname "$log_path")" 2>/dev/null
-	printf '%s\n' "$event_json" >> "$log_path" 2>/dev/null
+	onlooker_append_line "$log_path" "$event_json" 2>/dev/null
 }

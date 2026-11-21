@@ -12,6 +12,8 @@ _ONLOOKER_EVENT_JS="${_ONLOOKER_EVENT_JS:-${CLAUDE_PLUGIN_ROOT:-}/scripts/lib/on
 # sibling is always the canonical copy.
 # shellcheck source=onlooker-project-key.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/onlooker-project-key.sh"
+# shellcheck source=event-append.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/event-append.sh"
 
 # Export the project dimension for one hook payload's emission.
 #
@@ -36,7 +38,7 @@ onlooker_append_event() {
 	[[ -z "$event_json" ]] && return 0
 
 	ensure_dir_exists "$(dirname "$ONLOOKER_EVENTS_LOG")" || return 1
-	printf '%s\n' "$event_json" >>"$ONLOOKER_EVENTS_LOG" 2>/dev/null
+	onlooker_append_line "$ONLOOKER_EVENTS_LOG" "$event_json" 2>/dev/null
 }
 
 # Build a canonical event from Claude Code hook stdin JSON (prints event or empty).
