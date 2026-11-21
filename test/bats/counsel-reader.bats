@@ -412,3 +412,63 @@ _seed_spread_log() {
   [ "$status" -eq 0 ]
   [ "$output" = '["onlooker_events"]' ]
 }
+
+# ---------------------------------------------------------------------------
+# Torn lines (ONL-301)
+# ---------------------------------------------------------------------------
+
+# Two concurrent writers interleaved on one line, then the tail of one of them
+# on the next: the shape the real log holds at 302106-302107 and 313589-313590.
+# One of those made every brief since 2026-10-24 read zero events.
+_append_torn_line() {
+  local log="$1" ts
+  ts=$(relative_iso_days_ago 2)
+  printf '{"id":"a","event_type":"inspector.check.passed","timestamp":"%s","session_id":"torn-a","pro{"id":"b","event_type":"inspector.check.failed","timestamp":"%s"}\n' "$ts" "$ts" >> "$log"
+  printf '%s\n' 'basis":"remote"}' >> "$log"
+}
+
+@test "window_summary counts the events around a torn line" {
+  local log
+  log=$(_seed_spread_log 20 "tool.file.read")
+  _append_torn_line "$log"
+  local ts i
+  ts=$(relative_iso_days_ago 1)
+  for ((i = 0; i < 5; i++)); do
+    printf '{"event_type":"session.start","timestamp":"%s","session_id":"after%d"}\n' "$ts" "$i" >> "$log"
+  done
+  export ONLOOKER_EVENTS_LOG="$log"
+
+  local summary
+  summary=$(counsel_window_summary "30")
+  [ "$(printf '%s' "$summary" | jq -r '.window.events')" = "25" ] || return 1
+  [ "$(printf '%s' "$summary" | jq -r '.by_type["session.start"]')" = "5" ] || return 1
+  [ "$(printf '%s' "$summary" | jq -r '.window.sessions')" = "25" ]
+}
+
+@test "read_events keeps the events after a torn line" {
+  local log
+  log=$(_seed_spread_log 20 "tool.file.read")
+  _append_torn_line "$log"
+  local ts
+  ts=$(relative_iso_days_ago 1)
+  printf '{"event_type":"session.start","timestamp":"%s","session_id":"after"}\n' "$ts" >> "$log"
+  export ONLOOKER_EVENTS_LOG="$log"
+
+  local sample
+  sample=$(counsel_read_events "30" "60000")
+  [ "$(counsel_count_events "$sample")" -eq 21 ] || return 1
+  printf '%s\n' "$sample" | jq -e 'select(.session == "after")' >/dev/null
+}
+
+@test "window_summary fails, rather than reporting zero, on a log it cannot read" {
+  local log
+  log=$(_seed_spread_log 20 "tool.file.read")
+  chmod 000 "$log"
+  export ONLOOKER_EVENTS_LOG="$log"
+  # Root reads a mode-000 file anyway, which would make this vacuous.
+  if cat "$log" >/dev/null 2>&1; then chmod 644 "$log"; skip "running as a user who can read mode 000"; fi
+
+  run counsel_window_summary "30"
+  chmod 644 "$log"
+  [ "$status" -ne 0 ]
+}

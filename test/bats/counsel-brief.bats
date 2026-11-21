@@ -250,3 +250,33 @@ gen() {
   written=$(find "$BRIEFS_DIR" -name '*.md' -type f | wc -l | tr -d ' ')
   [ "$written" -ge 1 ]
 }
+
+# ---------------------------------------------------------------------------
+# Torn lines (ONL-301)
+# ---------------------------------------------------------------------------
+
+@test "a torn line in the log no longer reads as too few events" {
+  # Two concurrent writers interleaved on one line, as the real log holds.
+  local ts
+  ts=$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null) || ts="2099-01-01T00:00:00Z"
+  printf '{"event_type":"inspector.check.passed","timestamp":"%s","pro{"event_type":"x","timestamp":"%s"}\n%s\n' \
+    "$ts" "$ts" 'basis":"remote"}' >> "$ONLOOKER_EVENTS_LOG"
+
+  gen "sess-torn" "$WORK" force
+  [ "$GEN_STATUS" -eq 0 ] || return 1
+  [ -f "$GEN_OUT" ]
+}
+
+@test "an unreadable log fails the brief instead of skipping it as quiet" {
+  chmod 000 "$ONLOOKER_EVENTS_LOG"
+  if cat "$ONLOOKER_EVENTS_LOG" >/dev/null 2>&1; then
+    chmod 644 "$ONLOOKER_EVENTS_LOG"
+    skip "running as a user who can read mode 000"
+  fi
+
+  gen "sess-unreadable" "$WORK" force
+  chmod 644 "$ONLOOKER_EVENTS_LOG"
+  # 2 is "too few events", which is what a broken read used to look like.
+  [ "$GEN_STATUS" -ne 0 ] || return 1
+  [ "$GEN_STATUS" -ne 2 ]
+}

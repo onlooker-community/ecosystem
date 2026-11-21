@@ -70,10 +70,17 @@ _counsel_cutoff_ts() {
 # by the number of distinct types and days instead, which made the same window
 # 2,859 bytes.
 #
-# Slurped (-s) rather than streamed so group_by does the aggregation. Measured
-# at ~1.3 s against a 259k-line log, the same as a streaming projection, so the
-# clearer form costs nothing. Both passes together run inside counsel's
-# background refresh, behind a synthesis call with a 90 s timeout.
+# Each line is parsed on its own, and one that does not parse is dropped. The
+# log is appended to by every hook at once and holds torn lines, two events
+# interleaved on one: this used to slurp the file with -s, which fails the whole
+# read on the first of them, and the failure read as a quiet month of zero
+# events. Every brief since 2026-10-24 was skipped that way (ONL-301). Each
+# event is cut to the three fields the census uses before it is collected,
+# which also keeps a 200 MB log from being held whole.
+#
+# Fails, printing nothing, when the log exists but jq cannot read it, so the
+# caller can tell a broken read from an empty window. A missing log is still an
+# empty window.
 counsel_window_summary() {
 	local lookback_days="${1:-30}"
 	local log_path="${ONLOOKER_EVENTS_LOG:-${ONLOOKER_DIR:-$HOME/.onlooker}/logs/onlooker-events.jsonl}"
@@ -85,10 +92,13 @@ counsel_window_summary() {
 	cutoff_ts=$(_counsel_cutoff_ts "$lookback_days")
 
 	# `add` on an empty array yields null, hence the `// {}` on both maps.
-	summary=$(jq -sc --arg cutoff "$cutoff_ts" '
-		[ .[]
+	summary=$(jq -nRc --arg cutoff "$cutoff_ts" '
+		[ inputs
+		  | (try fromjson catch empty)
+		  | objects
 		  | select(.timestamp != null)
 		  | select($cutoff == "" or .timestamp >= $cutoff)
+		  | { event_type, timestamp, session_id }
 		] as $ev
 		| { window: {
 		      from:     $cutoff,
@@ -102,7 +112,7 @@ counsel_window_summary() {
 		    by_day:  ($ev | group_by(.timestamp[0:10])
 		                  | map({ (.[0].timestamp[0:10]): length }) | add // {})
 		  }
-	' "$log_path" 2>/dev/null) || summary=""
+	' "$log_path" 2>/dev/null) || return 1
 
 	[[ -z "$summary" || "$summary" == "null" ]] && summary="$empty"
 	printf '%s' "$summary"
@@ -158,12 +168,19 @@ counsel_read_events() {
 	# anywhere in the pipeline must degrade to truncated output rather than
 	# discard every event. The hook and the /counsel skill both set pipefail.
 	#
+	# The first jq parses line by line, for the reason counsel_window_summary
+	# does: a streaming read stops at the first torn line, and the sample is the
+	# newest end of the log, so everything after it was lost (ONL-301).
+	#
 	# The trailing jq re-reads the bytes as raw lines and drops whatever does
 	# not parse, which removes the partial first line `tail -c` leaves behind
 	# and guarantees the result is valid JSONL for counsel_count_events.
 	local summary
 	summary=$(set +o pipefail
-		jq -rc --arg cutoff "$cutoff_ts" '
+		jq -nRrc --arg cutoff "$cutoff_ts" '
+			inputs |
+			(try fromjson catch empty) |
+			objects |
 			select(.timestamp != null) |
 			select($cutoff == "" or .timestamp >= $cutoff) |
 			{
