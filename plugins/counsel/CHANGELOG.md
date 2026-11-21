@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.7](https://github.com/onlooker-community/ecosystem/compare/counsel-v0.13.6...counsel-v0.13.7) (2026-11-21)
+
+
+### Bug Fixes
+
+* **counsel:** read the event log past a torn line :mag: ([#619](https://github.com/onlooker-community/ecosystem/issues/619)) ([7e9b73f](https://github.com/onlooker-community/ecosystem/commit/7e9b73f94114086b3d2e98bf341d3b7833f0eba5))
+
 ## [0.13.6](https://github.com/onlooker-community/ecosystem/compare/counsel-v0.13.5...counsel-v0.13.6) (2026-11-21)
 
 
