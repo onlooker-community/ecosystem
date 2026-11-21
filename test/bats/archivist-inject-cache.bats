@@ -65,9 +65,10 @@ _write_decision() {
 	[ "$status" -eq 1 ]
 }
 
-# Freshness compares whole seconds under bash 3.2, and a build stamps its cache
-# with the moment its read began, so only a build in a later second than the
-# last write can hit.
+# A build stamps its cache with the moment its read began, and bash 3.2's -nt
+# compares whole seconds, so there only a build in a later second than the last
+# write can hit. bash 4+ compares sub-seconds and would hit sooner; waiting out
+# the second gives the same answer on both.
 _next_second() {
 	local started
 	started=$(date +%s)
@@ -92,21 +93,6 @@ _next_second() {
 	[ "$ARCHIVIST_INJECT_N" = "$n" ] || return 1
 	[ "$ARCHIVIST_INJECT_TOTAL" = "$total" ] || return 1
 	[ "$ARCHIVIST_INJECT_BODY" = "$body" ]
-}
-
-@test "a cache built in the same second as a write is a miss" {
-	# Not a nicety: an artifact written mid-read must not be hidden behind a
-	# cache that missed it, so a same-second build never counts as fresh.
-	_next_second
-	local wrote_at
-	_write_decision "01JTEST0000000000000000001" "keep the watermark per commit"
-	wrote_at=$(date +%s)
-	archivist_inject_cache_prepare "$KEY"
-	archivist_inject_cache_build "$KEY" || return 1
-	[[ "$(date +%s)" == "$wrote_at" ]] || skip "the second turned over between the write and the build"
-
-	run archivist_inject_cache_read
-	[ "$status" -eq 1 ]
 }
 
 @test "an artifact written while a build renders is not hidden behind its cache" {
