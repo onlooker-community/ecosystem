@@ -48,7 +48,8 @@ _run_hook() {
 	[ "$status" -eq 0 ]
 	local bc="${ONLOOKER_DIR}/bursar/sessions/${SID}.json"
 	[ -f "$bc" ]
-	[ "$(jq -r '.project_key' "$bc")" = "$KEY" ]
+	[ "$(jq -r '.project_key' "$bc")" = "$KEY" ] || return 1
+	[[ "$(jq -r '.started_at' "$bc")" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]
 }
 
 @test "surfaces no additionalContext when the window is empty" {
@@ -59,9 +60,9 @@ _run_hook() {
 
 @test "emits bursar.rollup.skipped when there is no data" {
 	_run_hook
-	run grep -c '"event_type":"bursar.rollup.skipped"' "$ONLOOKER_EVENTS_LOG"
-	[ "$status" -eq 0 ]
-	[ "$output" -ge 1 ]
+	await_events "bursar.rollup.skipped" 1 || return 1
+	grep '"event_type":"bursar.rollup.skipped"' "$ONLOOKER_EVENTS_LOG" \
+		| jq -e --arg pk "$KEY" '.payload == {reason: "no_data", project_key: $pk}' >/dev/null
 }
 
 @test "surfaces the burned total as SessionStart additionalContext" {
@@ -92,9 +93,52 @@ _run_hook() {
 @test "emits bursar.rollup.surfaced when data exists" {
 	_seed_ledger
 	_run_hook
-	run grep -c '"event_type":"bursar.rollup.surfaced"' "$ONLOOKER_EVENTS_LOG"
-	[ "$status" -eq 0 ]
-	[ "$output" -ge 1 ]
+	await_events "bursar.rollup.surfaced" 1 || return 1
+	grep '"event_type":"bursar.rollup.surfaced"' "$ONLOOKER_EVENTS_LOG" \
+		| jq -e --arg pk "$KEY" '.payload | .project_key == $pk and .window == "rolling_7d"
+			and .total_cost_usd == 0.42 and .session_count == 1 and .total_tokens == 42000
+			and .sessions_with_cost == 1
+			and (.window_start | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"))' >/dev/null
+}
+
+@test "says how many sessions the cost covers when governor ran in only some" {
+	local dir="${ONLOOKER_DIR}/bursar/projects/${KEY}"
+	mkdir -p "$dir"
+	local now
+	now=$(date +%s)
+	{
+		jq -nc --argjson te "$now" '{ts_epoch: $te, session_id: "a", cost_usd: 1.5, tokens: 3100000}'
+		jq -nc --argjson te "$now" '{ts_epoch: $te, session_id: "b", governor_present: false}'
+	} >"${dir}/sessions.jsonl"
+	_run_hook
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" == *'burned $1.50 across 1 of 2 sessions in the last 7 days (~3.1M tokens); enable governor in the rest'* ]]
+}
+
+@test "stays silent when the window's cost is under min_cost_to_surface_usd" {
+	mkdir -p "${HOME}/.claude"
+	printf '%s\n' '{"bursar":{"min_cost_to_surface_usd":0.5}}' >"${HOME}/.claude/settings.json"
+	_seed_ledger
+	_run_hook
+	[ "$status" -eq 0 ] || return 1
+	[ -z "$output" ]
+}
+
+@test "returns without waiting on the event emit" {
+	# A node that takes 5s to start. The emit is the only node call on this
+	# path, so a hook that still waited on it would take at least that long.
+	local stub="${BATS_TEST_TMPDIR}/slow-node"
+	mkdir -p "$stub"
+	printf '#!/usr/bin/env bash\nsleep 5\nexec %q "$@"\n' "$(command -v node)" >"${stub}/node"
+	chmod +x "${stub}/node"
+	_seed_ledger
+	local start
+	start=$(date +%s)
+	PATH="${stub}:${PATH}" _run_hook
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" == *"burned \$0.42"* ]] || return 1
+	[ "$(($(date +%s) - start))" -lt 4 ] || return 1
+	await_events "bursar.rollup.surfaced" 1 20
 }
 
 @test "stays silent at the surface step but still records the breadcrumb when surfacing is disabled" {

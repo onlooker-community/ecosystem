@@ -159,11 +159,27 @@ bursar_window_totals() {
 }
 
 # Human-friendly token count: 1234567 -> "1.2M", 42000 -> "42k", 800 -> "800".
+# Shared as an awk function so bursar_fmt_surface formats in the same process
+# it compares in. Formatting stays in awk rather than bash's printf builtin:
+# bash parses "%f" arguments as long double, which on x86 Linux rounds a total
+# like 1.235 down where awk's double rounds it up.
+_BURSAR_AWK_FMT_TOKENS='function fmt_tokens(n) {
+	if (n >= 1000000) return sprintf("%.1fM", n/1000000);
+	else if (n >= 1000) return sprintf("%.0fk", n/1000);
+	else return sprintf("%d", n);
+}'
+
 bursar_fmt_tokens() {
 	local n="${1:-0}"
-	awk -v n="$n" 'BEGIN {
-		if (n >= 1000000) printf "%.1fM", n/1000000;
-		else if (n >= 1000) printf "%.0fk", n/1000;
-		else printf "%d", n;
+	awk -v n="$n" "${_BURSAR_AWK_FMT_TOKENS}"' BEGIN { printf "%s", fmt_tokens(n) }'
+}
+
+# Everything the SessionStart surface needs from awk, in one process: whether
+# the cost is under the noise threshold (1 or 0), the cost to two places, and
+# the token count. Prints them tab-separated.
+# Usage: bursar_fmt_surface <cost> <tokens> <min_cost>
+bursar_fmt_surface() {
+	awk -v c="${1:-0}" -v n="${2:-0}" -v m="${3:-0}" "${_BURSAR_AWK_FMT_TOKENS}"' BEGIN {
+		printf "%d\t%.2f\t%s\n", (c < m) ? 1 : 0, c, fmt_tokens(n)
 	}'
 }
