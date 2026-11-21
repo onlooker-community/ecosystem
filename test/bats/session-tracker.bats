@@ -425,3 +425,46 @@ teardown() {
   tail -n 1 "$history_file" \
     | ONLOOKER_DIR="$ONLOOKER_DIR" node "${REPO_ROOT}/scripts/lib/onlooker-event.mjs" validate >/dev/null
 }
+
+# ---------------------------------------------------------------------------
+# session_tracker_parent_session_id, called directly (ONL-221)
+# ---------------------------------------------------------------------------
+
+@test "parent_session_id is empty without CLAUDE_PID" {
+  run env -u CLAUDE_PID bash -c 'source "$1"; session_tracker_parent_session_id' _ \
+    "${REPO_ROOT}/scripts/lib/session-tracker.sh"
+  [ "$status" -eq 0 ] || return 1
+  [ -z "$output" ]
+}
+
+@test "parent_session_id is empty for a non-numeric CLAUDE_PID" {
+  CLAUDE_PID='12; echo pwned' run session_tracker_parent_session_id
+  [ "$status" -eq 0 ] || return 1
+  [ -z "$output" ]
+}
+
+@test "parent_session_id reads the id the claude process was launched with" {
+  _start_fake_claude CLAUDE_CODE_SESSION_ID=parent-direct-001
+  CLAUDE_PID="$FAKE_CLAUDE_PID" run session_tracker_parent_session_id
+  [ "$status" -eq 0 ] || return 1
+  [ "$output" = "parent-direct-001" ]
+}
+
+@test "parent_session_id is empty for a claude launched with no session id" {
+  _start_fake_claude
+  CLAUDE_PID="$FAKE_CLAUDE_PID" run session_tracker_parent_session_id
+  [ "$status" -eq 0 ] || return 1
+  [ -z "$output" ]
+}
+
+@test "parent_session_id takes the environment over an argument that looks like it" {
+  # macOS ps -E prints the arguments before the environment, so an argument of
+  # the same shape must not win. /proc/<pid>/environ holds no arguments at all.
+  env -u CLAUDE_CODE_SESSION_ID CLAUDE_CODE_SESSION_ID=parent-real-001 \
+    node -e 'setTimeout(() => {}, 30000)' CLAUDE_CODE_SESSION_ID=decoy-001 &
+  FAKE_CLAUDE_PID=$!
+  sleep 0.3
+  CLAUDE_PID="$FAKE_CLAUDE_PID" run session_tracker_parent_session_id
+  [ "$status" -eq 0 ] || return 1
+  [ "$output" = "parent-real-001" ]
+}
