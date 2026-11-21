@@ -227,7 +227,9 @@ counsel_generate_brief() {
 	# with payloads already dropped - so the sample is necessarily partial and
 	# the summary is what keeps the brief honest about the period it covers.
 	local window_summary events_text
-	window_summary=$(counsel_window_summary "$lookback_days")
+	# A log that exists but cannot be read is a failure, not a quiet period:
+	# reporting it as too few events hid ONL-301 for four weeks.
+	window_summary=$(counsel_window_summary "$lookback_days") || return 1
 	events_text=$(counsel_read_events "$lookback_days" "$chars_max")
 
 	# The TRUE window count, not the sample's. The floor asks whether enough
