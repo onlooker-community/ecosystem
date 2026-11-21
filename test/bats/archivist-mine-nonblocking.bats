@@ -183,3 +183,51 @@ STUB
 		"${ONLOOKER_DIR}/logs/hook-health.jsonl"
 	[ "$output" = "s1" ]
 }
+
+# ---------------------------------------------------------------------------
+# The worker's own exit and checkpoint
+#
+# archivist_mine_worker_exit and archivist_mine_checkpoint are defined inside
+# the worker script, which does its work at the top level, so they are reached
+# through it rather than called by name.
+# ---------------------------------------------------------------------------
+
+_run_worker() {
+	bash "$WORKER" "$KEY" "$REPO" "$REPO" </dev/null >/dev/null 2>&1
+}
+
+@test "the worker releases its lock after mining" {
+	_run_worker
+	[ -f "$(mined_path)" ] || return 1
+	[ ! -d "$(archivist_project_dir "$KEY")/mine.lock" ]
+}
+
+@test "the worker releases its lock when there is nothing left to mine" {
+	_run_worker
+	[ -f "$(mined_path)" ] || return 1
+	# Up to date now, so the second run leaves through the empty-range exit.
+	_run_worker
+	[ ! -d "$(archivist_project_dir "$KEY")/mine.lock" ]
+}
+
+@test "the checkpoint leaves a whole watermark and no temp file" {
+	_run_worker
+	jq -e --arg head "$(git -C "$REPO" rev-parse HEAD)" \
+		'.last_sha == $head and (.at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"))' \
+		"$(mined_path)" >/dev/null || return 1
+	[ -z "$(find "$(archivist_project_dir "$KEY")" -maxdepth 1 -name 'mined.json.tmp.*')" ]
+}
+
+@test "a capped run checkpoints the oldest commit it mined, not HEAD" {
+	local first
+	first=$(git -C "$REPO" rev-parse HEAD)
+	printf 'y\n' > "$REPO/b.txt"
+	git -C "$REPO" add . && git -C "$REPO" commit -q -m "fix(other): a second change
+
+Because one commit cannot show the watermark moving."
+	mkdir -p "${HOME}/.claude"
+	printf '%s\n' '{"archivist":{"mining":{"max_commits_per_run":1}}}' > "${HOME}/.claude/settings.json"
+
+	_run_worker
+	[ "$(jq -r '.last_sha' "$(mined_path)")" = "$first" ]
+}

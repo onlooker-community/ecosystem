@@ -169,3 +169,47 @@ body because reasons")")
 	[ "$status" -eq 0 ] || return 1
 	[[ "$output" =~ ^[0-9A-HJKMNP-TV-Z]{26}$ ]]
 }
+
+# ---------------------------------------------------------------------------
+# archivist_mine_has_rationale (ONL-170)
+#
+# archivist-mine-hook.bats checks the outcome through the worker. These check
+# the predicate itself, which is cheaper to read when one of those fails.
+# ---------------------------------------------------------------------------
+
+@test "has_rationale: prose is a rationale" {
+	archivist_mine_has_rationale "Because the old path dropped events on every restart."
+}
+
+@test "has_rationale: prose before trailers is a rationale" {
+	archivist_mine_has_rationale "$(printf '%s\n\n%s\n' \
+		"Because the old path dropped events." \
+		"Co-authored-by: A Person <a@example.com>")"
+}
+
+@test "has_rationale: an empty detail is not" {
+	run archivist_mine_has_rationale ""
+	[ "$status" -eq 1 ]
+}
+
+@test "has_rationale: whitespace alone is not" {
+	run archivist_mine_has_rationale "$(printf '  \n\t\n')"
+	[ "$status" -eq 1 ]
+}
+
+@test "has_rationale: trailers alone are not, in any case" {
+	run archivist_mine_has_rationale "$(printf '%s\n%s\n%s\n' \
+		"Co-authored-by: A Person <a@example.com>" \
+		"SIGNED-OFF-BY: B Person <b@example.com>" \
+		"Claude-Session: https://claude.ai/code/session_abc")"
+	[ "$status" -eq 1 ]
+}
+
+@test "has_rationale: a separator rule and a trailer are not" {
+	run archivist_mine_has_rationale "$(printf '%s\n%s\n' "---------" "Co-authored-by: bot <bot@example.com>")"
+	[ "$status" -eq 1 ]
+}
+
+@test "has_rationale: a line shaped like a trailer with an unknown key is prose" {
+	archivist_mine_has_rationale "Context: the cap kept a backlog from finishing."
+}

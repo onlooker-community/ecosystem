@@ -27,3 +27,46 @@ setup() {
   [ "$overridden" = "3" ]
   [ -n "$default_model" ]
 }
+
+# ---------------------------------------------------------------------------
+# archivist_config_int (ONL-132)
+#
+# The plain getter returns whatever is configured, so a non-numeric value that
+# reaches arithmetic kills the caller at status 0. This is the getter for
+# anything that does.
+# ---------------------------------------------------------------------------
+
+_set_max_commits() {
+  mkdir -p "${HOME}/.claude"
+  jq -n --argjson v "$1" '{archivist: {mining: {max_commits_per_run: $v}}}' > "${HOME}/.claude/settings.json"
+}
+
+@test "config_int returns the shipped value when nothing overrides it" {
+  archivist_config_load ""
+  [ "$(archivist_config_int '.archivist.injection.max_items' 99)" = "8" ]
+}
+
+@test "config_int returns a numeric override" {
+  _set_max_commits 25
+  archivist_config_load ""
+  [ "$(archivist_config_int '.archivist.mining.max_commits_per_run' 10)" = "25" ]
+}
+
+@test "config_int falls back on a non-numeric override" {
+  _set_max_commits '"ten"'
+  archivist_config_load ""
+  # The plain getter passes the typo straight through, which is the hazard.
+  [ "$(archivist_config_get '.archivist.mining.max_commits_per_run')" = "ten" ] || return 1
+  [ "$(archivist_config_int '.archivist.mining.max_commits_per_run' 10)" = "10" ]
+}
+
+@test "config_int falls back on a negative override" {
+  _set_max_commits -3
+  archivist_config_load ""
+  [ "$(archivist_config_int '.archivist.mining.max_commits_per_run' 10)" = "10" ]
+}
+
+@test "config_int falls back on a path nothing sets" {
+  archivist_config_load ""
+  [ "$(archivist_config_int '.archivist.no_such_key' 7)" = "7" ]
+}
