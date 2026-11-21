@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.7](https://github.com/onlooker-community/ecosystem/compare/bursar-v0.9.6...bursar-v0.9.7) (2026-11-21)
+
+
+### Performance Improvements
+
+* **bursar:** start 14 fewer processes before SessionStart returns :scissors: ([#615](https://github.com/onlooker-community/ecosystem/issues/615)) ([bd6bb51](https://github.com/onlooker-community/ecosystem/commit/bd6bb51556b33293c3df550e4c273a772ca53471))
+
 ## [0.9.6](https://github.com/onlooker-community/ecosystem/compare/bursar-v0.9.5...bursar-v0.9.6) (2026-11-19)
 
 
