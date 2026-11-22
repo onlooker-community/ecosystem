@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.2](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.10.1...tribunal-v1.10.2) (2026-11-22)
+
+
+### Bug Fixes
+
+* write each event in one append so hooks can't tear it :scissors: ([#622](https://github.com/onlooker-community/ecosystem/issues/622)) ([f5e0d30](https://github.com/onlooker-community/ecosystem/commit/f5e0d30779cb3d6951234dd7a6a29f80c4c0e28d))
+
 ## [1.10.1](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.10.0...tribunal-v1.10.1) (2026-11-21)
 
 
