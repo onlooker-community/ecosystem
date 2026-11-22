@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.82.6](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.82.5...ecosystem-v0.82.6) (2026-11-22)
+
+
+### Bug Fixes
+
+* **librarian:** put the project on events the CLI emits :label: ([#625](https://github.com/onlooker-community/ecosystem/issues/625)) ([5336de0](https://github.com/onlooker-community/ecosystem/commit/5336de0ba979fb38b04077cc8f82c347ee8532f8))
+
 ## [0.82.5](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.82.4...ecosystem-v0.82.5) (2026-11-22)
 
 
