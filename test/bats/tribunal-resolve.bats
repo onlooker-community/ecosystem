@@ -154,3 +154,80 @@ setup() {
 	run tribunal_discard "$TASK"
 	[ "$status" -eq 1 ]
 }
+
+# Takes a baseline with a pre-run untracked file and a pre-run edit to a
+# tracked file, for the tests that must leave both byte-for-byte intact.
+_prerun_work() {
+	printf 'mine\n' >> "$REPO/b.txt"
+	printf 'n\n' > "$REPO/notes.txt"
+	tribunal_baseline_write "$TASK" "$REPO" || return 1
+}
+
+_prerun_work_intact() {
+	[ "$(cat "$REPO/notes.txt")" = "n" ] || return 1
+	[ "$(cat "$REPO/b.txt")" = "$(printf 'b\nmine')" ]
+}
+
+@test "discard fails closed on a baseline whose dirty list is not an array" {
+	_prerun_work || return 1
+	jq '.dirty = {}' "$TASK/baseline.json" > "$TASK/b.tmp" || return 1
+	mv "$TASK/b.tmp" "$TASK/baseline.json" || return 1
+	run tribunal_discard "$TASK"
+	[ "$status" -eq 1 ] || return 1
+	_prerun_work_intact
+}
+
+@test "discard fails closed on a baseline that is not JSON" {
+	_prerun_work || return 1
+	printf 'not json' > "$TASK/baseline.json"
+	run tribunal_discard "$TASK"
+	[ "$status" -eq 1 ] || return 1
+	_prerun_work_intact
+}
+
+@test "discard fails closed on a baseline entry without a string hash" {
+	_prerun_work || return 1
+	jq '.dirty[0].hash = 5' "$TASK/baseline.json" > "$TASK/b.tmp" || return 1
+	mv "$TASK/b.tmp" "$TASK/baseline.json" || return 1
+	run tribunal_discard "$TASK"
+	[ "$status" -eq 1 ] || return 1
+	_prerun_work_intact
+}
+
+@test "discard names a tracked file dirty before the run that the actor reverted" {
+	printf 'mine\n' >> "$REPO/b.txt"
+	tribunal_baseline_write "$TASK" "$REPO" || return 1
+	git -C "$REPO" checkout -- b.txt || return 1
+	run tribunal_discard "$TASK"
+	[ "$status" -eq 0 ] || return 1
+	[ "$output" = "$(printf '0 1\nb.txt')" ]
+}
+
+@test "discard names an untracked file from before the run that the actor deleted" {
+	printf 'n\n' > "$REPO/notes.txt"
+	tribunal_baseline_write "$TASK" "$REPO" || return 1
+	rm "$REPO/notes.txt"
+	run tribunal_discard "$TASK"
+	[ "$status" -eq 0 ] || return 1
+	[ "$output" = "$(printf '0 1\nnotes.txt')" ]
+}
+
+@test "discard names a pre-run file with a space that the actor deleted" {
+	printf 'n\n' > "$REPO/my notes.txt"
+	tribunal_baseline_write "$TASK" "$REPO" || return 1
+	rm "$REPO/my notes.txt"
+	run tribunal_discard "$TASK"
+	[ "$output" = "$(printf '0 1\nmy notes.txt')" ]
+}
+
+@test "discard returns 3 and names a path it could not delete" {
+	tribunal_baseline_write "$TASK" "$REPO" || return 1
+	mkdir "$REPO/ro"
+	printf 'x\n' > "$REPO/ro/x.txt"
+	chmod 555 "$REPO/ro"
+	run tribunal_discard "$TASK"
+	chmod 755 "$REPO/ro"
+	[ "$status" -eq 3 ] || return 1
+	printf '%s\n' "$output" | grep -qF "tribunal: could not restore ro/x.txt" || return 1
+	[ -e "$REPO/ro/x.txt" ]
+}
