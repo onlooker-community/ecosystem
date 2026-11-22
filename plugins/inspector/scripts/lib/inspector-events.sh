@@ -16,6 +16,10 @@ if [[ -f "${_INSPECTOR_EVENTS_LIB_DIR}/substrate-resolve.sh" ]]; then
 	# shellcheck source=plugins/inspector/scripts/lib/substrate-resolve.sh
 	source "${_INSPECTOR_EVENTS_LIB_DIR}/substrate-resolve.sh"
 fi
+if [[ -f "${_INSPECTOR_EVENTS_LIB_DIR}/event-append.sh" ]]; then
+	# shellcheck source=plugins/inspector/scripts/lib/event-append.sh
+	source "${_INSPECTOR_EVENTS_LIB_DIR}/event-append.sh"
+fi
 
 _inspector_event_js_path() {
 	if [[ -n "${_ONLOOKER_EVENT_JS:-}" && -f "$_ONLOOKER_EVENT_JS" ]]; then
@@ -99,5 +103,5 @@ inspector_emit_event() {
 
 	local log_path="${ONLOOKER_EVENTS_LOG:-${ONLOOKER_DIR:-$HOME/.onlooker}/logs/onlooker-events.jsonl}"
 	mkdir -p "$(dirname "$log_path")" 2>/dev/null || return 1
-	printf '%s\n' "$event" >>"$log_path"
+	onlooker_append_line "$log_path" "$event"
 }

@@ -32,6 +32,8 @@ export ONLOOKER_PROMPT_RULES_SESSIONS_DIR="$ONLOOKER_PROMPT_RULES_DIR/sessions"
 # emit path instead of a silent no-op.
 _PROMPT_RULES_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _PROMPT_RULES_EVENT_JS="$_PROMPT_RULES_LIB_DIR/onlooker-event.mjs"
+# shellcheck source=event-append.sh
+source "$_PROMPT_RULES_LIB_DIR/event-append.sh"
 
 # Path to the global rules file.
 # Usage: path=$(prompt_rules_global_path)
@@ -201,7 +203,7 @@ prompt_rules_emit() {
   [[ -z "$event" ]] && return 1
 
   ensure_file_exists "$ONLOOKER_EVENTS_LOG" || return 1
-  printf '%s\n' "$event" >> "$ONLOOKER_EVENTS_LOG"
+  onlooker_append_line "$ONLOOKER_EVENTS_LOG" "$event"
 }
 
 # Print a human-readable table of merged rules with their fired status.

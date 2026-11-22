@@ -28,6 +28,10 @@ if [[ -f "${_TRIBUNAL_EVENTS_LIB_DIR}/substrate-resolve.sh" ]]; then
 	# shellcheck source=plugins/tribunal/scripts/lib/substrate-resolve.sh
 	source "${_TRIBUNAL_EVENTS_LIB_DIR}/substrate-resolve.sh"
 fi
+if [[ -f "${_TRIBUNAL_EVENTS_LIB_DIR}/event-append.sh" ]]; then
+	# shellcheck source=plugins/tribunal/scripts/lib/event-append.sh
+	source "${_TRIBUNAL_EVENTS_LIB_DIR}/event-append.sh"
+fi
 
 # Resolve the ecosystem onlooker-event.mjs even when CLAUDE_PLUGIN_ROOT points
 # at the tribunal plugin (the wrapper script lives under ecosystem/scripts/lib).
@@ -114,5 +118,5 @@ tribunal_emit_event() {
 
 	local log_path="${ONLOOKER_EVENTS_LOG:-${ONLOOKER_DIR:-$HOME/.onlooker}/logs/onlooker-events.jsonl}"
 	mkdir -p "$(dirname "$log_path")" 2>/dev/null || return 1
-	printf '%s\n' "$event" >>"$log_path"
+	onlooker_append_line "$log_path" "$event"
 }
