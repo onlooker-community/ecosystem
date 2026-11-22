@@ -360,6 +360,21 @@ _seed_held_via_promote() {
 	_events librarian.lesson.vetoed | jq -e '.payload.reason_given == false' >/dev/null
 }
 
+# The envelope's project comes from ONLOOKER_PROJECT_KEY, which only
+# onlooker_project_resolve exports. The CLI resolved its key inside $(...), so
+# the export died in the subshell and every veto reached the bus unattributed:
+# ONL-198's criterion 3 could only be measured by joining on lesson_id. The cwd
+# is the fixture repo while bats runs from this checkout, so resolving from
+# pwd instead of the cwd argument would attribute it to the wrong project.
+@test "a veto's envelope carries the project it was vetoed in" {
+	_seed_held_via_promote 01M33440PGTWP4QMMG1BVA52DR
+	unset ONLOOKER_PROJECT_KEY ONLOOKER_PROJECT_BASIS
+	run librarian_cli lessons veto 01M33440PGTWP4QMMG1BVA52DR "why" "$PROJECT_REPO"
+	[ "$status" -eq 0 ] || return 1
+	_events librarian.lesson.vetoed | jq -e --arg k "$PROJECT_KEY" '
+		.project == $k and .project_basis == "remote"' >/dev/null
+}
+
 @test "a refused veto emits nothing" {
 	run librarian_cli lessons veto 01M33440PGTWP4QMMG1BVA52DR "why" "$PROJECT_REPO"
 	[ "$status" -eq 1 ] || return 1

@@ -343,6 +343,35 @@ ${long}"
     | jq -e --arg h "$expected_hash" '.payload.body_hash == $h' >/dev/null
 }
 
+# The envelope's project rides on ONLOOKER_PROJECT_KEY, which a key resolved
+# inside $(...) never exports. Every reject and its tombstone reached the bus
+# unattributed until the CLI resolved in its own shell (ONL-198). Called through
+# the dispatcher, as the skill does, from this checkout rather than the fixture
+# repo, so resolving from pwd would attribute the event to the wrong project.
+@test "reject's events carry the project of the cwd it was given" {
+  _seed_proposal "01REJECTPROPOSAL00000000000" \
+    "feedback" "Some idea" "feedback_some_idea.md" "Body."
+  unset ONLOOKER_PROJECT_KEY ONLOOKER_PROJECT_BASIS
+
+  run librarian_cli reject "01REJECTPROPOSAL00000000000" "stale" "$PROJECT_REPO"
+  [ "$status" -eq 0 ] || return 1
+
+  local events
+  events=$(grep -E '"event_type":"librarian\.(proposal\.rejected|tombstone\.created)"' "$ONLOOKER_EVENTS_LOG")
+  [ "$(printf '%s\n' "$events" | grep -c .)" -eq 2 ] || return 1
+  printf '%s\n' "$events" | jq -se --arg k "$PROJECT_KEY" '
+    all(.project == $k and .project_basis == "remote")' >/dev/null
+}
+
+# Twenty call sites resolve the key, and every one that emits needs the export.
+# A single site written back as key=$(...) would silently drop attribution for
+# its verb, and only the two verbs above have a behavioral test.
+@test "no librarian CLI call site resolves its project key in a subshell" {
+  run grep -nE '=\$\((_librarian_cli_project_key|onlooker_project_key|onlooker_project_resolve)\b' \
+    "${PLUGIN_ROOT}/scripts/lib/librarian-cli.sh"
+  [ "$status" -eq 1 ]
+}
+
 @test "defer stamps the proposal but leaves it pending" {
   _seed_proposal "01DEFERPROPOSAL000000000000" \
     "user" "Maybe later" "user_maybe.md" "Body."
