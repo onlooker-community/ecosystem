@@ -340,12 +340,16 @@ exec "${real_node}" "\$@"
 STUBEOF
 	chmod +x "${slow}/node"
 
+	# Milliseconds, not `date +%s`: whole seconds read a 1.1s run that crosses a
+	# second boundary as 2, which failed this under load. A blocking hook takes
+	# at least the stub's 3s, so 2000ms keeps a full second of margin either way.
+	source "${REPO_ROOT}/scripts/lib/hook-health.sh"
 	local start end
-	start=$(date -u +%s)
+	start=$(_hook_health_now_ms)
 	run bash -c "printf '%s' '$(_input)' | PATH='${slow}:$PATH' '$HOOK'"
-	end=$(date -u +%s)
+	end=$(_hook_health_now_ms)
 	[ "$status" -eq 0 ] || return 1
-	[ "$((end - start))" -lt 2 ] || return 1
+	[ "$((end - start))" -lt 2000 ] || { echo "hook took $((end - start))ms"; return 1; }
 	[ -n "$(_context)" ] || return 1
 	await_events onlooker.currency.stale 1 15 || return 1
 	await_events onlooker.currency.skipped 1 15
