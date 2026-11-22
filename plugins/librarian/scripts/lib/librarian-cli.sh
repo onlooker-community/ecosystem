@@ -470,6 +470,10 @@ librarian_cli_lessons_show() {
 		(if .auto_refusal then
 			"refused:     \(.auto_refusal.reason // "(no reason given)")"
 		 else empty end),
+		# A person corrected the text the transform wrote, at confirm (ONL-307).
+		(if .confirm_edits then
+			"edited:      \(.confirm_edits.fields | join(", ")), by a person at confirm"
+		 else empty end),
 		# A person held it against the unattended stage (ONL-112).
 		(if .auto_hold then
 			"held:        by \(.auto_hold.by) at \(.auto_hold.at); the unattended stage leaves it alone"
@@ -486,7 +490,7 @@ librarian_cli_lessons_confirm() {
 	local lesson_id="${1:-}"
 	local visibility="${2:-}"
 	[[ -z "$lesson_id" || -z "$visibility" ]] && {
-		printf 'usage: librarian_cli lessons confirm <lesson_id> <private|org|public> [--justification TEXT] [cwd]\n'
+		printf 'usage: librarian_cli lessons confirm <lesson_id> <private|org|public> [--justification TEXT] [--claim TEXT] [--rationale TEXT] [cwd]\n'
 		return 1
 	}
 	shift 2
@@ -495,12 +499,19 @@ librarian_cli_lessons_confirm() {
 	# commits a lesson toward leaving this machine, so a caller who supplies
 	# cwd but omits justification must never have cwd silently misread as the
 	# justification that flips scope to version_independent.
+	#
+	# --claim and --rationale replace the transform's text before the jury
+	# reads it (ONL-307). They are named flags for the same reason.
 	local justification="" justification_given=0 cwd=""
+	local claim="" claim_given=0 rationale="" rationale_given=0
 	while [[ $# -gt 0 ]]; do
 		case "$1" in
-			--justification)
-				justification="${2:-}"
-				justification_given=1
+			--justification | --claim | --rationale)
+				case "$1" in
+					--justification) justification="${2:-}"; justification_given=1 ;;
+					--claim) claim="${2:-}"; claim_given=1 ;;
+					--rationale) rationale="${2:-}"; rationale_given=1 ;;
+				esac
 				if [[ $# -ge 2 ]]; then
 					shift 2
 				else
@@ -534,12 +545,24 @@ librarian_cli_lessons_confirm() {
 		printf 'justification is blank after trimming whitespace; omit --justification instead of passing an empty value.\n' >&2
 		return 1
 	fi
+	# The same holds for an edit: a blank --claim or --rationale would either
+	# fail the validator or, worse, be read downstream as "no edit" while the
+	# caller believes the text was replaced.
+	if [[ "$claim_given" -eq 1 ]] && [[ "$claim" =~ ^[[:space:]]*$ ]]; then
+		printf 'claim is blank after trimming whitespace; omit --claim to keep the transform'"'"'s claim.\n' >&2
+		return 1
+	fi
+	if [[ "$rationale_given" -eq 1 ]] && [[ "$rationale" =~ ^[[:space:]]*$ ]]; then
+		printf 'rationale is blank after trimming whitespace; omit --rationale to keep the transform'"'"'s rationale.\n' >&2
+		return 1
+	fi
 
 	local key
 	_librarian_cli_project_key key "$cwd"
 	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
 
-	librarian_lesson_confirm "$key" "$lesson_id" "$visibility" "$justification" || return 1
+	librarian_lesson_confirm "$key" "$lesson_id" "$visibility" "$justification" human \
+		"$claim" "$rationale" || return 1
 	printf 'Confirmed %s at %s visibility.\n' "$lesson_id" "$visibility"
 }
 

@@ -128,7 +128,7 @@ _librarian_lesson_valid_visibility() {
 
 # Confirm a candidate for the jury.
 #
-# Usage: librarian_lesson_confirm <key> <lesson_id> <visibility> [justification] [asserted_by]
+# Usage: librarian_lesson_confirm <key> <lesson_id> <visibility> [justification] [asserted_by] [claim] [rationale]
 #
 # With a justification, the candidate's scope is rewritten to
 # version_independent. That branch is refused at private visibility: private
@@ -142,12 +142,23 @@ _librarian_lesson_valid_visibility() {
 # refused rather than written through: an unrecognized value here would
 # silently fall back to whatever the readers default to, and that default is
 # "human" — the least scrutiny, not the most.
+#
+# A claim or rationale replaces the transform's text before the jury reads it
+# (ONL-307). The transform writes both from the source artifact, and a person
+# who catches a factual error in them otherwise has nowhere to fix it: the
+# jury judges the text as written and fails it on grounding. Only a human may
+# edit — the unattended path's text is what ADR-004's review of lesson_auto
+# measures. The edit is snapshotted like a justification, so unconfirm puts
+# the transform's text back, and .confirm_edits names the fields changed so a
+# reviewer can tell an edited lesson from one the transform wrote alone.
 librarian_lesson_confirm() {
 	local key="$1"
 	local lesson_id="$2"
 	local visibility="${3:-}"
 	local justification="${4:-}"
 	local asserted_by="${5:-human}"
+	local new_claim="${6:-}"
+	local new_rationale="${7:-}"
 	[[ -z "$key" || -z "$lesson_id" ]] && return 1
 
 	_librarian_lesson_valid_visibility "$visibility" || {
@@ -162,6 +173,11 @@ librarian_lesson_confirm() {
 			return 1
 			;;
 	esac
+
+	if [[ "$asserted_by" == "model" ]] && [[ -n "$new_claim" || -n "$new_rationale" ]]; then
+		printf 'only a human may edit a claim or rationale at confirm: the unattended path is measured on the text the transform wrote\n' >&2
+		return 1
+	fi
 
 	if [[ -n "$justification" && "$visibility" == "private" ]]; then
 		printf 'version_independent requires org or public visibility: a private lesson runs no jury, so its justification would go unchecked and the lesson would never expire\n' >&2
@@ -192,12 +208,22 @@ librarian_lesson_confirm() {
 	# Only when we actually rewrite: a plain confirm never touches .candidate,
 	# so a snapshot there would be dead weight that unconfirm has to reason
 	# about. Absence of the field means "nothing was mutated".
-	local candidate_before=""
-	if [[ -n "$justification" ]]; then
+	local candidate_before="" edited_fields="[]"
+	if [[ -n "$justification" || -n "$new_claim" || -n "$new_rationale" ]]; then
 		candidate_before="$candidate"
+	fi
+	if [[ -n "$justification" ]]; then
 		candidate=$(printf '%s' "$candidate" | jq -c \
 			--arg j "$justification" \
 			'.applies_to.scope = {kind: "version_independent", justification: $j}' 2>/dev/null) || return 1
+	fi
+	if [[ -n "$new_claim" || -n "$new_rationale" ]]; then
+		candidate=$(printf '%s' "$candidate" | jq -c \
+			--arg c "$new_claim" --arg r "$new_rationale" '
+			(if $c != "" then .claim = $c else . end)
+			| (if $r != "" then .rationale = $r else . end)' 2>/dev/null) || return 1
+		edited_fields=$(jq -cn --arg c "$new_claim" --arg r "$new_rationale" \
+			'[(if $c != "" then "claim" else empty end), (if $r != "" then "rationale" else empty end)]')
 	fi
 
 	# Authoritative guard: check the RESULTING state, not just this call's
@@ -260,10 +286,12 @@ librarian_lesson_confirm() {
 		updated=$(printf '%s' "$proposal" | jq \
 			--arg v "$visibility" --arg t "$now" --arg ab "$asserted_by" \
 			--argjson c "$candidate" --argjson cb "$candidate_before" \
+			--argjson ef "$edited_fields" \
 			'. * {status: "confirmed", visibility: $v, confirmed_at: $t}
 			 | .candidate = $c
 			 | .candidate_before_confirm = $cb
 			 | .asserted_by = $ab
+			 | (if ($ef | length) > 0 then .confirm_edits = {fields: $ef, at: $t} else del(.confirm_edits) end)
 			 | del(.auto_hold)' 2>/dev/null) || return 1
 	else
 		# No rewrite happened, so there is nothing to snapshot — and any field
@@ -277,7 +305,7 @@ librarian_lesson_confirm() {
 			--arg v "$visibility" --arg t "$now" --arg ab "$asserted_by" --argjson c "$candidate" \
 			'. * {status: "confirmed", visibility: $v, confirmed_at: $t}
 			 | .candidate = $c
-			 | del(.candidate_before_confirm, .auto_hold)
+			 | del(.candidate_before_confirm, .confirm_edits, .auto_hold)
 			 | .asserted_by = $ab' 2>/dev/null) || return 1
 	fi
 	[[ -z "$updated" || "$updated" == "null" ]] && return 1
@@ -370,16 +398,17 @@ librarian_lesson_unconfirm() {
 	# the snapshot either way. A stale snapshot left on a pending proposal is
 	# indistinguishable from a live one at the next confirm, and would
 	# silently revert a later legitimate rewrite. asserted_by is confirm-only
-	# state too — a pending proposal never carries it — so it comes off here
-	# for the same reason: leaving it behind would make a pending lesson
-	# reached only through unconfirm indistinguishable from one that was
-	# always pending.
+	# state too — a pending proposal never carries it — and so is
+	# .confirm_edits, which describes an edit the restored candidate no longer
+	# has. Both come off here for the same reason: leaving either behind would
+	# make a pending lesson reached only through unconfirm indistinguishable
+	# from one that was always pending.
 	local updated
 	local now
 	now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 	updated=$(jq --arg t "$now" '
 		(if has("candidate_before_confirm") then .candidate = .candidate_before_confirm else . end)
-		| del(.candidate_before_confirm, .visibility, .confirmed_at, .asserted_by)
+		| del(.candidate_before_confirm, .confirm_edits, .visibility, .confirmed_at, .asserted_by)
 		| .status = "pending"
 		| .auto_hold = {by: "unconfirm", at: $t}
 	' "$path" 2>/dev/null) || return 1
