@@ -180,3 +180,28 @@ tribunal_discard() {
 	[ "$failed" -eq 0 ] || return 3
 	return 0
 }
+
+# Usage: tribunal_resolved_payload <task_id> <outcome> <decision> [<restored> <left>]
+# Prints the tribunal.session.resolved payload. The counts are included only for
+# a discard. Returns 1 for an empty task id, or an outcome or decision the event
+# does not allow, so a typo fails here: the skill only warns when an emission is
+# rejected, and the answer would be lost.
+tribunal_resolved_payload() {
+	local task_id="$1" outcome="$2" decision="$3" restored="${4:-}" left="${5:-}"
+	[ -n "$task_id" ] || return 1
+	case "$outcome" in
+		rejected | exhausted_iterations) ;;
+		*) return 1 ;;
+	esac
+	case "$decision" in
+		kept | retried) restored="" left="" ;;
+		discarded) ;;
+		*) return 1 ;;
+	esac
+	jq -cn --arg t "$task_id" --arg o "$outcome" --arg d "$decision" \
+		--arg r "$restored" --arg l "$left" '
+		{task_id: $t, outcome: $o, decision: $d}
+		+ (if $r != "" then {files_restored: ($r | tonumber)} else {} end)
+		+ (if $l != "" then {files_left: ($l | tonumber)} else {} end)
+	'
+}

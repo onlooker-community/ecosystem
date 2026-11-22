@@ -231,3 +231,38 @@ _prerun_work_intact() {
 	printf '%s\n' "$output" | grep -qF "tribunal: could not restore ro/x.txt" || return 1
 	[ -e "$REPO/ro/x.txt" ]
 }
+
+@test "payload for a keep carries no counts" {
+	run tribunal_resolved_payload T1 rejected kept 3 1
+	[ "$status" -eq 0 ] || return 1
+	[ "$output" = '{"task_id":"T1","outcome":"rejected","decision":"kept"}' ]
+}
+
+@test "payload for a retry carries no counts" {
+	run tribunal_resolved_payload T1 exhausted_iterations retried
+	[ "$output" = '{"task_id":"T1","outcome":"exhausted_iterations","decision":"retried"}' ]
+}
+
+@test "payload for a discard carries both counts as numbers" {
+	run tribunal_resolved_payload T1 rejected discarded 3 1
+	[ "$output" = '{"task_id":"T1","outcome":"rejected","decision":"discarded","files_restored":3,"files_left":1}' ]
+}
+
+@test "payload refuses an outcome the event does not resolve" {
+	local o
+	for o in accepted aborted bogus; do
+		run tribunal_resolved_payload T1 "$o" kept
+		[ "$status" -eq 1 ] || return 1
+		[ -z "$output" ] || return 1
+	done
+}
+
+@test "payload refuses an unknown decision" {
+	run tribunal_resolved_payload T1 rejected ignored
+	[ "$status" -eq 1 ]
+}
+
+@test "payload refuses an empty task id" {
+	run tribunal_resolved_payload "" rejected kept
+	[ "$status" -eq 1 ]
+}
