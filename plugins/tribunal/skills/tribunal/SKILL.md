@@ -56,7 +56,7 @@ tribunal_write_task_manifest "$project_key" "$task_id" "$task_summary" "$rubric_
 
 Emit `tribunal.session.start` with the resolved config (`judge_types`, `gate_policy`, `score_threshold`, `max_iterations`, model IDs).
 
-Then record what is already dirty in the worktree, so that a discard at the end of the run can leave it alone:
+For a new run, record what is already dirty in the worktree, so that a discard at the end of the run can leave it alone. A retry doesn't run this block; see below.
 
 ```bash
 task_dir=$(tribunal_task_dir "$project_key" "$task_id")
@@ -65,7 +65,10 @@ tribunal_baseline_write "$task_dir" "$(pwd)"
 
 Remember whether it succeeded. It fails outside a git worktree or before the first commit, and then the end-of-run question doesn't offer Discard.
 
-On a retry (see "Resolving a run the jury did not accept"), copy the previous run's baseline instead of writing a new one: `cp "$previous_task_dir/baseline.json" "$task_dir/"`. The previous run's edits are on disk by then. A fresh baseline would count them as work from before the run, and a later discard would never remove them.
+On a retry (see "Resolving a run the jury did not accept"), never write a fresh baseline. The previous run's edits are on disk by then, so a fresh baseline would count them as work from before the run, and a later discard would never remove them. Instead, before computing the new `task_dir`, note the earlier run's `task_dir` as `previous_task_dir`. Then:
+
+- If the earlier run had a baseline, copy it into the new task directory: `cp "$previous_task_dir/baseline.json" "$task_dir/"`.
+- If the earlier run had none, write none for the retry either. The retry's end-of-run question then doesn't offer Discard.
 
 ## The loop
 
@@ -179,23 +182,38 @@ When the outcome is `rejected` or `exhausted_iterations`, the actor's changes ar
 Then act on the answer:
 
 - **Keep:** emit `decision: kept`. This is the override a calibrator reads.
-- **Discard:** run `tribunal_discard "$task_dir"`.
+- **Discard:** run `tribunal_discard "$task_dir"`, capturing the exit code, stdout and stderr separately (see the block below).
   - **Exit 0:** the first line is `<restored> <left>`. Each remaining line is a file that had changes before the run and that the actor changed again. Tell the person how many files were restored, and name each file that was left alone so they can sort it out by hand. Emit `decision: discarded` with both counts.
-  - **Exit 2:** `HEAD` moved during the run, so the actor committed. Tell the person nothing was restored, and that the commit has to be undone by hand. Emit nothing: the discard they chose didn't happen.
-  - **Exit 1:** the baseline is missing or unreadable. Tell the person nothing was restored, and emit nothing.
-  - **Exit 3:** some files couldn't be restored. They're named on stderr as `tribunal: could not restore <path>`. Stdout is as for exit 0. Tell the person what was restored, which files are left alone, and which couldn't be restored, so they can fix those by hand. Emit `decision: discarded` with the stdout counts, since a discard did happen.
-- **Retry:** emit `decision: retried`. Then start again from "Per-task initialization", with the same task description, rubric and config, carrying the baseline forward as described there. The new run has its own `task_id`.
+  - **Exit 2:** `HEAD` moved during the run, most likely because the actor committed. Tell the person nothing was restored, and that any commit has to be undone by hand. Emit nothing: the discard they chose didn't happen. Then ask again (see below).
+  - **Exit 1:** the baseline is missing or unreadable. Tell the person nothing was restored, and emit nothing. Then ask again (see below).
+  - **Exit 3:** some files couldn't be restored. They're named in `discard.err` as `tribunal: could not restore <path>`. Stdout is as for exit 0. Tell the person what was restored, which files are left alone, and which couldn't be restored, so they can fix those by hand. Emit `decision: discarded` with the stdout counts, since a discard did happen.
+- **Retry:** emit `decision: retried`, with the `task_id` of the run being resolved. Then start again from "Per-task initialization", with the same task description, rubric and config, carrying the baseline forward as described there. The new run has its own `task_id`.
 - **No answer** (dismissed, or a reply that is none of the three): emit nothing. A rejection without `tribunal.session.resolved` reads as unanswered. Never record a guess.
 
-Emit a keep or a retry with three arguments, and a discard with its two counts:
+When discard exits 1 or 2, nothing was restored, so the person's choice didn't happen. After telling them, ask again with `AskUserQuestion`, offering only Keep and Retry, and act on that answer as above. If they dismiss it, emit nothing.
+
+Each block runs in a new shell, and the Setup block runs under `set -u`. Before each one, set `project_key`, `task_id`, `task_dir` and `outcome` again from the values you noted. `task_id` and `task_dir` are those of the run being resolved, not of a retry's new run. An unset `$outcome` makes every `payload=$(...)` fail.
+
+Emit a keep or a retry with three arguments:
 
 ```bash
-payload=$(tribunal_resolved_payload "$task_id" "$outcome" kept)
+payload=$(tribunal_resolved_payload "$task_id" "$outcome" kept)   # or: retried
+tribunal_emit_event "tribunal.session.resolved" "$payload"
+```
+
+For a discard, capture the exit code, stdout and stderr separately. On exit 0 or 3, send the counts:
+
+```bash
+rc=0
+out=$(tribunal_discard "$task_dir" 2>"$task_dir/discard.err") || rc=$?
+read -r restored left <<<"${out%%$'\n'*}"
+left_paths=$(printf '%s\n' "$out" | tail -n +2)   # one path per line
+# rc 3: the files that could not be restored are in "$task_dir/discard.err"
 payload=$(tribunal_resolved_payload "$task_id" "$outcome" discarded "$restored" "$left")
 tribunal_emit_event "tribunal.session.resolved" "$payload"
 ```
 
-The Setup block runs under `set -u`, so don't pass `"$restored" "$left"` when they were never set. Each block runs in a new shell, so set `project_key`, `task_id` and `task_dir` again from the values you noted.
+Run the last two lines only when `rc` is 0 or 3. For 1 or 2, `$out` is empty, so `$restored` and `$left` are never set and passing them would fail under `set -u`.
 
 Never ask after `accepted` or `aborted`.
 
