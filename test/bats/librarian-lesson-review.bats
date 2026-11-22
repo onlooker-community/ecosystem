@@ -1253,3 +1253,164 @@ SHIM
 
 	[ "$(wc -l <"${BATS_TEST_TMPDIR}/jq-starts" | tr -d ' ')" -eq 1 ]
 }
+
+# ── confirm-time edits to claim and rationale (ONL-307) ──────────────────────
+#
+# The transform writes a candidate's claim and rationale. A person confirming
+# it could rewrite the scope but not that text, so a factual error they had
+# already caught went to the jury as written and failed grounding there.
+# Confirm now takes a corrected claim and rationale, on the human path only:
+# the unattended path's text is what ADR-004's review of lesson_auto measures.
+
+_proposal_path() { printf '%s' "${LESSONS_DIR}/proposals/${1}.json"; }
+
+@test "confirm with an edited claim and rationale rewrites both on the candidate" {
+	_review_setup
+	id=$(_seed_pending)
+	run librarian_lesson_confirm "$PROJECT_KEY" "$id" "org" "" human \
+		"corrected claim" "corrected rationale"
+	[ "$status" -eq 0 ] || return 1
+	jq -e '.status == "confirmed"
+	       and .candidate.claim == "corrected claim"
+	       and .candidate.rationale == "corrected rationale"' \
+		"$(_proposal_path "$id")" >/dev/null
+}
+
+@test "confirm with an edit snapshots the transform's text so unconfirm can restore it" {
+	_review_setup
+	id=$(_seed_pending)
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "org" "" human "corrected claim" ""
+	jq -e '.candidate_before_confirm.claim == "c"' "$(_proposal_path "$id")" >/dev/null || return 1
+
+	librarian_lesson_unconfirm "$PROJECT_KEY" "$id"
+	jq -e '.status == "pending" and .candidate.claim == "c" and .candidate.rationale == "r"' \
+		"$(_proposal_path "$id")" >/dev/null
+}
+
+@test "confirm records which fields a person edited" {
+	_review_setup
+	id=$(_seed_pending)
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "org" "" human "" "corrected rationale"
+	jq -e '.confirm_edits.fields == ["rationale"] and (.confirm_edits.at | length) > 0' \
+		"$(_proposal_path "$id")" >/dev/null || return 1
+	# Only the edited field changes; the claim stays as the transform wrote it.
+	jq -e '.candidate.claim == "c"' "$(_proposal_path "$id")" >/dev/null
+}
+
+@test "confirm records both fields when both are edited, alongside a justification" {
+	_review_setup
+	id=$(_seed_pending)
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "org" "git behavior is stable across versions." human \
+		"corrected claim" "corrected rationale"
+	jq -e '.confirm_edits.fields == ["claim", "rationale"]
+	       and .candidate.applies_to.scope.kind == "version_independent"
+	       and .candidate_before_confirm.applies_to.scope.kind == "versioned"' \
+		"$(_proposal_path "$id")" >/dev/null
+}
+
+@test "a confirm with no edit records no edit" {
+	_review_setup
+	id=$(_seed_pending)
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "org" "git behavior is stable across versions."
+	run jq -e 'has("confirm_edits")' "$(_proposal_path "$id")"
+	[ "$status" -ne 0 ]
+}
+
+@test "unconfirm clears the edit record along with the snapshot" {
+	_review_setup
+	id=$(_seed_pending)
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "org" "" human "corrected claim" ""
+	librarian_lesson_unconfirm "$PROJECT_KEY" "$id"
+	run jq -e 'has("confirm_edits")' "$(_proposal_path "$id")"
+	[ "$status" -ne 0 ]
+}
+
+@test "a plain confirm clears an edit record the proposal arrived with" {
+	_review_setup
+	id=$(_seed_pending)
+	# Seeded directly: no shipped verb leaves this on a pending proposal, but a
+	# stale one surviving a plain confirm would report an edit nobody made.
+	tmp="${BATS_TEST_TMPDIR}/stale.json"
+	jq '.confirm_edits = {fields: ["claim"], at: "2026-01-01T00:00:00Z"}' \
+		"$(_proposal_path "$id")" > "$tmp"
+	mv "$tmp" "$(_proposal_path "$id")"
+
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "org"
+	run jq -e 'has("confirm_edits")' "$(_proposal_path "$id")"
+	[ "$status" -ne 0 ]
+}
+
+@test "the model may not edit a claim or rationale at confirm" {
+	_review_setup
+	id=$(_seed_pending)
+	run librarian_lesson_confirm "$PROJECT_KEY" "$id" "org" "" model "a model's claim" ""
+	[ "$status" -ne 0 ] || return 1
+	[[ "$output" == *"human"* ]] || return 1
+	jq -e '.status == "pending" and .candidate.claim == "c"' "$(_proposal_path "$id")" >/dev/null
+}
+
+@test "an identical repeat confirm with the same edit is idempotent" {
+	_review_setup
+	id=$(_seed_pending)
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "org" "" human "corrected claim" ""
+	run librarian_lesson_confirm "$PROJECT_KEY" "$id" "org" "" human "corrected claim" ""
+	[ "$status" -eq 0 ]
+}
+
+@test "a repeat confirm with a different edit is refused" {
+	_review_setup
+	id=$(_seed_pending)
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" "org" "" human "corrected claim" ""
+	run librarian_lesson_confirm "$PROJECT_KEY" "$id" "org" "" human "another claim" ""
+	[ "$status" -ne 0 ] || return 1
+	jq -e '.candidate.claim == "corrected claim"' "$(_proposal_path "$id")" >/dev/null
+}
+
+@test "lessons confirm threads --claim and --rationale through to the candidate" {
+	_cli_setup
+	id=$(_seed_pending)
+	run librarian_cli lessons confirm "$id" org \
+		--claim "corrected claim" --rationale "corrected rationale" "$PROJECT_REPO"
+	[ "$status" -eq 0 ] || return 1
+	jq -e '.candidate.claim == "corrected claim"
+	       and .candidate.rationale == "corrected rationale"
+	       and .asserted_by == "human"' \
+		"$(_proposal_path "$id")" >/dev/null
+}
+
+@test "lessons confirm refuses a whitespace-only --rationale instead of blanking it" {
+	_cli_setup
+	id=$(_seed_pending)
+	run librarian_cli lessons confirm "$id" org --rationale "   " "$PROJECT_REPO"
+	[ "$status" -ne 0 ] || return 1
+	jq -e '.status == "pending" and .candidate.rationale == "r"' "$(_proposal_path "$id")" >/dev/null
+}
+
+@test "lessons confirm refuses a whitespace-only --claim instead of blanking it" {
+	_cli_setup
+	id=$(_seed_pending)
+	run librarian_cli lessons confirm "$id" org --claim "" "$PROJECT_REPO"
+	[ "$status" -ne 0 ] || return 1
+	jq -e '.status == "pending" and .candidate.claim == "c"' "$(_proposal_path "$id")" >/dev/null
+}
+
+@test "the jury's input carries the corrected text, not the transform's" {
+	_cli_setup
+	id=$(_seed_pending)
+	librarian_cli lessons confirm "$id" org --rationale "corrected rationale" "$PROJECT_REPO" >/dev/null
+	# lessons list --confirmed --json is what the judge walk reads its
+	# candidates from, so this is the text a judge is handed.
+	run librarian_cli lessons list --confirmed --json "$PROJECT_REPO"
+	[ "$status" -eq 0 ] || return 1
+	printf '%s' "$output" | jq -e --arg id "$id" \
+		'.[] | select(.id == $id) | .candidate.rationale == "corrected rationale"' >/dev/null
+}
+
+@test "lessons show says which fields a person edited at confirm" {
+	_cli_setup
+	id=$(_seed_pending)
+	librarian_cli lessons confirm "$id" org --claim "corrected claim" "$PROJECT_REPO" >/dev/null
+	run librarian_cli lessons show "$id" "$PROJECT_REPO"
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" == *"edited:      claim, by a person at confirm"* ]]
+}
