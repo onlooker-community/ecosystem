@@ -20,7 +20,7 @@ Tribunal is a sibling plugin to [`ecosystem`](../../) and assumes the Onlooker o
 
 | Surface | What tribunal does |
 |---|---|
-| `/tribunal <task>` skill | Orchestrates a full Actor → Jury → Meta → Gate loop, retrying the Actor with Judge critiques until the gate passes or `max_iterations` is reached. Emits the full canonical event stream. |
+| `/tribunal <task>` skill | Orchestrates a full Actor → Jury → Meta → Gate loop, retrying the Actor with Judge critiques until the gate passes or `max_iterations` is reached. Emits the full canonical event stream. When a run ends rejected or out of iterations, it asks whether to keep the changes, discard them, or retry, and records the answer as `tribunal.session.resolved`. Discard restores only the files that were clean when the run started. |
 | `Stop` hook (opt-in) | When `tribunal.stop_hook.enabled` is true, runs a single advisory pass on the just-finished turn's output and writes a verdict for review on the next session. No retry — the main session has already ended. The judge sees only the files this session's transcript shows it editing (Edit, Write, MultiEdit, NotebookEdit) that are still uncommitted, never another session's work in the same checkout; with `skip_if_no_file_changes` (default true), a session with none spends no model call. A file changed only through Bash is not attributed. |
 | `Stop` nudge (on by default) | Makes no model call. When a session's edits are numerous or touch a sensitive path, shows one line suggesting `/tribunal`. See [Nudge](#nudge). |
 
@@ -158,6 +158,7 @@ Limitations:
     ├── manifest.json
     ├── session-start.json
     ├── session-complete.json
+    ├── baseline.json                   # files already dirty when the run started
     └── iteration-<iteration_id>/       # ULID per iteration
         ├── actor.md
         ├── jury.json
@@ -175,7 +176,7 @@ Project keying mirrors `archivist`: SHA256 of `git remote get-url origin` (first
 
 Tribunal emits the full canonical `tribunal.*` event surface from [`@onlooker-community/schema`](https://github.com/onlooker-community/schema) (v2.1.0+):
 
-`session.start`, `iteration.start`, `actor.start`, `actor.complete`, `jury.empaneled`, `judge.start`, `verdict` (one per judge), `meta.start`, `meta.complete`, `consensus.reached`, `dissent.recorded` (when judges disagree), `gate.passed` / `gate.blocked`, `session.complete`, and the nudge's `nudge.shown` / `nudge.skipped` (schema v3.10.0+).
+`session.start`, `iteration.start`, `actor.start`, `actor.complete`, `jury.empaneled`, `judge.start`, `verdict` (one per judge), `meta.start`, `meta.complete`, `consensus.reached`, `dissent.recorded` (when judges disagree), `gate.passed` / `gate.blocked`, `session.complete`, `session.resolved` (schema v3.11.0+, after a rejected or exhausted run), and the nudge's `nudge.shown` / `nudge.skipped` (schema v3.10.0+).
 
 All events land in `~/.onlooker/logs/onlooker-events.jsonl` and are validated against the schema before write.
 
