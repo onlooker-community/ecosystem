@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.83.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.82.6...ecosystem-v0.83.0) (2026-11-22)
+
+
+### Features
+
+* **librarian:** let a person correct a lesson's text at confirm :pencil2: ([#627](https://github.com/onlooker-community/ecosystem/issues/627)) ([0ba1907](https://github.com/onlooker-community/ecosystem/commit/0ba190776cb6ac30a7356b266d7cf47ef2b33fd5))
+
 ## [0.82.6](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.82.5...ecosystem-v0.82.6) (2026-11-22)
 
 
