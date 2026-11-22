@@ -30,10 +30,21 @@
 # Project key + memory store path resolution
 # ----------------------------------------------------------------------------
 
+# Resolve the project key for cwd into the variable named by the first argument.
+#
+# Assigns rather than prints, so a call site never wraps it in $(...). The
+# event envelope takes its project from the ONLOOKER_PROJECT_KEY and
+# ONLOOKER_PROJECT_BASIS that onlooker_project_resolve exports, and inside a
+# command substitution those exports die with the subshell. Every vetoed,
+# rejected and attended-judged event reached the bus with no project that way,
+# so ONL-198 could attribute a veto only by joining on lesson_id.
+#
+# Usage: _librarian_cli_project_key <var> [cwd]
 _librarian_cli_project_key() {
-	local cwd="${1:-}"
+	local cwd="${2:-}"
 	[[ -z "$cwd" ]] && cwd="$(pwd)"
-	onlooker_project_key "$cwd"
+	onlooker_project_resolve "$cwd"
+	printf -v "$1" '%s' "$ONLOOKER_PROJECT_KEY"
 }
 
 _librarian_cli_memory_dir() {
@@ -178,7 +189,7 @@ _librarian_cli_set_proposal_status() {
 librarian_cli_list() {
 	local cwd="${1:-}"
 	local key
-	key=$(_librarian_cli_project_key "$cwd")
+	_librarian_cli_project_key key "$cwd"
 	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 0; }
 
 	local pending
@@ -216,7 +227,7 @@ librarian_cli_show() {
 	[[ -z "$proposal_id" ]] && { printf 'usage: librarian_cli show <proposal_id>\n'; return 1; }
 
 	local key
-	key=$(_librarian_cli_project_key "$cwd")
+	_librarian_cli_project_key key "$cwd"
 	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
 
 	local path
@@ -250,7 +261,7 @@ librarian_cli_accept() {
 	[[ -z "$proposal_id" ]] && { printf 'usage: librarian_cli accept <proposal_id>\n'; return 1; }
 
 	local key session_id
-	key=$(_librarian_cli_project_key "$cwd")
+	_librarian_cli_project_key key "$cwd"
 	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
 	session_id="${CLAUDE_SESSION_ID:-cli}"
 
@@ -291,7 +302,7 @@ librarian_cli_reject() {
 	[[ -z "$proposal_id" ]] && { printf 'usage: librarian_cli reject <proposal_id> [reason]\n'; return 1; }
 
 	local key session_id
-	key=$(_librarian_cli_project_key "$cwd")
+	_librarian_cli_project_key key "$cwd"
 	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
 	session_id="${CLAUDE_SESSION_ID:-cli}"
 
@@ -336,7 +347,7 @@ librarian_cli_defer() {
 	[[ -z "$proposal_id" ]] && { printf 'usage: librarian_cli defer <proposal_id>\n'; return 1; }
 
 	local key
-	key=$(_librarian_cli_project_key "$cwd")
+	_librarian_cli_project_key key "$cwd"
 	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
 
 	local path
@@ -353,7 +364,7 @@ librarian_cli_defer() {
 librarian_cli_status() {
 	local cwd="${1:-}"
 	local key
-	key=$(_librarian_cli_project_key "$cwd")
+	_librarian_cli_project_key key "$cwd"
 	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 0; }
 
 	local all
@@ -400,7 +411,7 @@ librarian_cli_lessons_list() {
 	done
 
 	local key rows
-	key=$(_librarian_cli_project_key "$cwd")
+	_librarian_cli_project_key key "$cwd"
 	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
 	rows=$(librarian_lesson_list_by_status "$key" "$status")
 
@@ -431,7 +442,7 @@ librarian_cli_lessons_show() {
 	[[ -z "$lesson_id" ]] && { printf 'usage: librarian_cli lessons show <lesson_id>\n'; return 1; }
 
 	local key path
-	key=$(_librarian_cli_project_key "$cwd")
+	_librarian_cli_project_key key "$cwd"
 	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
 	path="$(librarian_lessons_dir "$key")/proposals/${lesson_id}.json"
 	[[ -f "$path" ]] || { printf 'Lesson %s not found.\n' "$lesson_id"; return 1; }
@@ -525,7 +536,7 @@ librarian_cli_lessons_confirm() {
 	fi
 
 	local key
-	key=$(_librarian_cli_project_key "$cwd")
+	_librarian_cli_project_key key "$cwd"
 	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
 
 	librarian_lesson_confirm "$key" "$lesson_id" "$visibility" "$justification" || return 1
@@ -551,7 +562,7 @@ librarian_cli_lessons_pass() {
 	esac
 
 	local key
-	key=$(_librarian_cli_project_key "$cwd")
+	_librarian_cli_project_key key "$cwd"
 	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
 
 	librarian_lesson_pass "$key" "$lesson_id" "$reason" || return 1
@@ -578,7 +589,7 @@ librarian_cli_lessons_unconfirm() {
 	esac
 
 	local key
-	key=$(_librarian_cli_project_key "$cwd")
+	_librarian_cli_project_key key "$cwd"
 	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
 
 	# Read the status before the call so the message can tell "took back a
@@ -634,7 +645,7 @@ librarian_cli_lessons_judge() {
 	fi
 
 	local key
-	key=$(_librarian_cli_project_key "$cwd")
+	_librarian_cli_project_key key "$cwd"
 	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
 
 	librarian_lesson_judge "$key" "$lesson_id" "$verdicts"
@@ -687,7 +698,7 @@ librarian_cli_lessons_promote() {
 	[[ -z "$lesson_id" ]] && { printf 'usage: librarian_cli lessons promote <lesson_id> [cwd]\n'; return 1; }
 
 	local key
-	key=$(_librarian_cli_project_key "$cwd")
+	_librarian_cli_project_key key "$cwd"
 	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
 
 	librarian_lesson_promote "$key" "$lesson_id" || return 1
@@ -705,7 +716,7 @@ librarian_cli_lessons_defer() {
 	[[ -z "$lesson_id" ]] && { printf 'usage: librarian_cli lessons defer <lesson_id> [cwd]\n'; return 1; }
 
 	local key
-	key=$(_librarian_cli_project_key "$cwd")
+	_librarian_cli_project_key key "$cwd"
 	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
 
 	librarian_lesson_hold "$key" "$lesson_id" defer 2>&1 || return 1
@@ -731,7 +742,7 @@ librarian_cli_lessons_defer() {
 librarian_cli_lessons_status() {
 	local cwd="${1:-}"
 	local key
-	key=$(_librarian_cli_project_key "$cwd")
+	_librarian_cli_project_key key "$cwd"
 	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
 
 	local s counts=()
@@ -782,7 +793,7 @@ librarian_cli_lessons_reconsider() {
 	esac
 
 	local key
-	key=$(_librarian_cli_project_key "$cwd")
+	_librarian_cli_project_key key "$cwd"
 	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
 
 	local ids
@@ -861,7 +872,7 @@ librarian_cli_lessons_queue() {
 	done
 
 	local key
-	key=$(_librarian_cli_project_key "$cwd")
+	_librarian_cli_project_key key "$cwd"
 	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
 
 	local dir held_dir file id shippable claim found=0
@@ -905,7 +916,7 @@ librarian_cli_lessons_veto() {
 	[[ -z "$lesson_id" ]] && { printf 'usage: librarian_cli lessons veto <lesson_id> [reason] [cwd]\n'; return 1; }
 
 	local key
-	key=$(_librarian_cli_project_key "$cwd")
+	_librarian_cli_project_key key "$cwd"
 	[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
 
 	local held_dir path dir artifact_id
@@ -980,7 +991,7 @@ librarian_cli_lessons_rubric() {
 		private | org | public) visibility="$target" ;;
 		*)
 			local key path
-			key=$(_librarian_cli_project_key "$cwd")
+			_librarian_cli_project_key key "$cwd"
 			[[ -z "$key" ]] && { printf 'No project key resolvable from this directory.\n'; return 1; }
 			path="$(librarian_lessons_dir "$key")/proposals/${target}.json"
 			[[ -f "$path" ]] || { printf 'Lesson %s not found.\n' "$target"; return 1; }
