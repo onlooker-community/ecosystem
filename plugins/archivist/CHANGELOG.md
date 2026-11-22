@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.10](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.10.9...archivist-v0.10.10) (2026-11-22)
+
+
+### Bug Fixes
+
+* write each event in one append so hooks can't tear it :scissors: ([#622](https://github.com/onlooker-community/ecosystem/issues/622)) ([f5e0d30](https://github.com/onlooker-community/ecosystem/commit/f5e0d30779cb3d6951234dd7a6a29f80c4c0e28d))
+
 ## [0.10.9](https://github.com/onlooker-community/ecosystem/compare/archivist-v0.10.8...archivist-v0.10.9) (2026-11-21)
 
 

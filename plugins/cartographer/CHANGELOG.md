@@ -2,6 +2,13 @@
 
 All notable changes to the Cartographer plugin are documented here.
 
+## [0.13.8](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.13.7...cartographer-v0.13.8) (2026-11-22)
+
+
+### Bug Fixes
+
+* write each event in one append so hooks can't tear it :scissors: ([#622](https://github.com/onlooker-community/ecosystem/issues/622)) ([f5e0d30](https://github.com/onlooker-community/ecosystem/commit/f5e0d30779cb3d6951234dd7a6a29f80c4c0e28d))
+
 ## [0.13.7](https://github.com/onlooker-community/ecosystem/compare/cartographer-v0.13.6...cartographer-v0.13.7) (2026-11-21)
 
 

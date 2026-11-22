@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.7](https://github.com/onlooker-community/ecosystem/compare/curator-v0.8.6...curator-v0.8.7) (2026-11-22)
+
+
+### Bug Fixes
+
+* write each event in one append so hooks can't tear it :scissors: ([#622](https://github.com/onlooker-community/ecosystem/issues/622)) ([f5e0d30](https://github.com/onlooker-community/ecosystem/commit/f5e0d30779cb3d6951234dd7a6a29f80c4c0e28d))
+
 ## [0.8.6](https://github.com/onlooker-community/ecosystem/compare/curator-v0.8.5...curator-v0.8.6) (2026-11-21)
 
 
