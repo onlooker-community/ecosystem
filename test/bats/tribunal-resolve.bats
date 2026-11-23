@@ -194,6 +194,30 @@ _prerun_work_intact() {
 	_prerun_work_intact
 }
 
+# A corrupt index makes git status exit non-zero having listed nothing. Read
+# as "nothing is dirty", that is a baseline which would let a later discard
+# delete the person's untracked files and revert their edits.
+@test "baseline fails, writing nothing, when git status fails" {
+	printf 'mine\n' >> "$REPO/b.txt"
+	printf 'n\n' > "$REPO/notes.txt"
+	printf 'garbage' > "$REPO/.git/index"
+	run tribunal_baseline_write "$TASK" "$REPO"
+	[ "$status" -eq 1 ] || return 1
+	[ ! -e "$TASK/baseline.json" ] || return 1
+	[ -z "$(find "$TASK" -type f 2>/dev/null)" ]
+}
+
+@test "discard fails closed, touching nothing, when git status fails" {
+	_prerun_work || return 1
+	printf 'actor\n' >> "$REPO/a.txt"
+	printf 'garbage' > "$REPO/.git/index"
+	run tribunal_discard "$TASK"
+	[ "$status" -eq 1 ] || return 1
+	_prerun_work_intact || return 1
+	[ "$(cat "$REPO/a.txt")" = "$(printf 'a\nactor')" ] || return 1
+	[ "$(find "$TASK" -type f | wc -l | tr -d ' ')" = "1" ]
+}
+
 @test "discard names a tracked file dirty before the run that the actor reverted" {
 	printf 'mine\n' >> "$REPO/b.txt"
 	tribunal_baseline_write "$TASK" "$REPO" || return 1
@@ -246,6 +270,35 @@ _prerun_work_intact() {
 @test "payload for a discard carries both counts as numbers" {
 	run tribunal_resolved_payload T1 rejected discarded 3 1
 	[ "$output" = '{"task_id":"T1","outcome":"rejected","decision":"discarded","files_restored":3,"files_left":1}' ]
+}
+
+# The skill emits whatever this returns, so a discard whose counts did not
+# arrive must fail here rather than record a discard that never happened.
+@test "payload for a discard refuses missing or non-integer counts" {
+	run tribunal_resolved_payload T1 rejected discarded
+	[ "$status" -ne 0 ] || return 1
+	[ -z "$output" ] || return 1
+	run tribunal_resolved_payload T1 rejected discarded 3
+	[ "$status" -ne 0 ] || return 1
+	[ -z "$output" ] || return 1
+	run tribunal_resolved_payload T1 rejected discarded "" ""
+	[ "$status" -ne 0 ] || return 1
+	[ -z "$output" ] || return 1
+	local bad
+	for bad in -1 -2 1.5 1e3 nan abc ""; do
+		run tribunal_resolved_payload T1 rejected discarded "$bad" 0
+		[ "$status" -ne 0 ] || return 1
+		[ -z "$output" ] || return 1
+		run tribunal_resolved_payload T1 rejected discarded 0 "$bad"
+		[ "$status" -ne 0 ] || return 1
+		[ -z "$output" ] || return 1
+	done
+}
+
+@test "payload for a discard accepts zero counts" {
+	run tribunal_resolved_payload T1 rejected discarded 0 0
+	[ "$status" -eq 0 ] || return 1
+	[ "$output" = '{"task_id":"T1","outcome":"rejected","decision":"discarded","files_restored":0,"files_left":0}' ]
 }
 
 @test "payload refuses an outcome the event does not resolve" {

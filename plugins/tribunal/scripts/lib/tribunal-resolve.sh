@@ -40,18 +40,29 @@ _tribunal_content_hash() {
 # Writes <task_dir>/baseline.json: the worktree root, HEAD, and every path that
 # is dirty or untracked right now, with the hash of its contents ("" for a file
 # deleted from the worktree). Returns 1 and writes nothing outside a git
-# worktree or before the first commit. There is then nothing to restore to, and
-# the skill does not offer Discard.
+# worktree, before the first commit, or when git status fails. There is then
+# nothing to restore to, and the skill does not offer Discard.
+#
+# The status is read through a file so its exit code is seen. A process
+# substitution would hide it, and a status that failed having listed nothing
+# would become a baseline saying nothing was dirty: a later discard would then
+# delete the person's untracked files and revert their edits.
 tribunal_baseline_write() {
-	local task_dir="$1" worktree="$2" root head entry path tmp
+	local task_dir="$1" worktree="$2" root head entry path tmp listed
 	local -a args=()
 	root=$(git -C "$worktree" rev-parse --show-toplevel 2>/dev/null) || return 1
 	head=$(git -C "$root" rev-parse --verify --quiet HEAD) || return 1
+	mkdir -p "$task_dir" || return 1
+	listed=$(mktemp "${task_dir}/status.XXXXXX") || return 1
+	if ! _tribunal_dirty_entries "$root" > "$listed"; then
+		rm -f "$listed"
+		return 1
+	fi
 	while IFS= read -r -d '' entry; do
 		path="${entry:3}"
 		args+=("$path" "$(_tribunal_content_hash "$root" "$path")")
-	done < <(_tribunal_dirty_entries "$root")
-	mkdir -p "$task_dir" || return 1
+	done < "$listed"
+	rm -f "$listed"
 	# Written to a temp file and moved into place only when jq succeeds, so a
 	# failed run leaves no empty or partial baseline.json.
 	tmp=$(mktemp "${task_dir}/baseline.XXXXXX") || return 1
@@ -83,7 +94,8 @@ tribunal_baseline_write() {
 #
 # Returns:
 #   0  success
-#   1  no baseline, or one that does not validate; nothing touched
+#   1  no baseline, one that does not validate, or git status failed; nothing
+#      touched
 #   2  HEAD moved since the baseline; nothing touched. The actor committed, and
 #      restoring to the new HEAD would keep its commit while reporting a discard
 #   3  one or more paths could not be restored or deleted
@@ -94,7 +106,7 @@ tribunal_baseline_write() {
 # with jq -j, which works on jq 1.6 (--raw-output0 needs 1.7).
 tribunal_discard() {
 	local baseline="$1/baseline.json" root head entry status path i found hash
-	local restored=0 left=0 failed=0 loaded
+	local restored=0 left=0 failed=0 loaded listed
 	local -a entries=() left_paths=() base_paths=() base_hashes=() base_seen=()
 	[ -f "$baseline" ] || return 1
 	jq -e '
@@ -125,10 +137,18 @@ tribunal_discard() {
 
 	# Read in full before changing anything. git status can hold index.lock
 	# while it refreshes the index, and a restore running against a status
-	# still streaming would fail on that lock.
+	# still streaming would fail on that lock. Read through a file, as the
+	# baseline is, so a failed status is seen: read as an empty one, it would
+	# name every baseline entry as changed and restore nothing the actor did.
+	listed=$(mktemp "$1/status.XXXXXX") || return 1
+	if ! _tribunal_dirty_entries "$root" > "$listed"; then
+		rm -f "$listed"
+		return 1
+	fi
 	while IFS= read -r -d '' entry; do
 		entries+=("$entry")
-	done < <(_tribunal_dirty_entries "$root")
+	done < "$listed"
+	rm -f "$listed"
 
 	for entry in ${entries[@]+"${entries[@]}"}; do
 		status="${entry:0:2}"
@@ -183,9 +203,12 @@ tribunal_discard() {
 
 # Usage: tribunal_resolved_payload <task_id> <outcome> <decision> [<restored> <left>]
 # Prints the tribunal.session.resolved payload. The counts are included only for
-# a discard. Returns 1 for an empty task id, or an outcome or decision the event
-# does not allow, so a typo fails here: the skill only warns when an emission is
-# rejected, and the answer would be lost.
+# a discard, and are ignored for a keep or a retry. Returns 1, printing nothing,
+# for an empty task id, an outcome or decision the event does not allow, or a
+# discard without both counts as non-negative integers. A typo fails here: the
+# skill only warns when an emission is rejected, and the answer would be lost.
+# A discard without counts is a discard that did not run, and recording one
+# would report a decision that never happened.
 tribunal_resolved_payload() {
 	local task_id="$1" outcome="$2" decision="$3" restored="${4:-}" left="${5:-}"
 	[ -n "$task_id" ] || return 1
@@ -195,7 +218,10 @@ tribunal_resolved_payload() {
 	esac
 	case "$decision" in
 		kept | retried) restored="" left="" ;;
-		discarded) ;;
+		discarded)
+			case "$restored" in '' | *[!0-9]*) return 1 ;; esac
+			case "$left" in '' | *[!0-9]*) return 1 ;; esac
+			;;
 		*) return 1 ;;
 	esac
 	jq -cn --arg t "$task_id" --arg o "$outcome" --arg d "$decision" \
