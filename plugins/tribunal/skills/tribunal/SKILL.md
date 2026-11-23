@@ -56,19 +56,29 @@ tribunal_write_task_manifest "$project_key" "$task_id" "$task_summary" "$rubric_
 
 Emit `tribunal.session.start` with the resolved config (`judge_types`, `gate_policy`, `score_threshold`, `max_iterations`, model IDs).
 
-For a new run, record what is already dirty in the worktree, so that a discard at the end of the run can leave it alone. A retry doesn't run this block; see below.
+For a new run, record what is already dirty in the worktree, so that a discard at the end of the run can leave it alone. A retry runs a different block instead; see below.
 
 ```bash
 task_dir=$(tribunal_task_dir "$project_key" "$task_id")
 tribunal_baseline_write "$task_dir" "$(pwd)"
 ```
 
-Remember whether it succeeded. It fails outside a git worktree or before the first commit, and then the end-of-run question doesn't offer Discard.
+It fails outside a git worktree, before the first commit, or when `git status` fails, and then writes no `baseline.json`. The end-of-run question then doesn't offer Discard. It decides that by checking for the file, so you don't need to remember the result.
 
-On a retry (see "Resolving a run the jury did not accept"), never write a fresh baseline. The previous run's edits are on disk by then, so a fresh baseline would count them as work from before the run, and a later discard would never remove them. Instead, before computing the new `task_dir`, note the earlier run's `task_dir` as `previous_task_dir`. Then:
+On a retry (see "Resolving a run the jury did not accept"), never write a fresh baseline. The previous run's edits are on disk by then, so a fresh baseline would count them as work from before the run, and a later discard would never remove them. Carry the earlier run's baseline forward instead:
 
-- If the earlier run had a baseline, copy it into the new task directory: `cp "$previous_task_dir/baseline.json" "$task_dir/"`.
-- If the earlier run had none, write none for the retry either. The retry's end-of-run question then doesn't offer Discard.
+1. Before running the per-task initialization block for the retry, note the `task_id` of the run being retried as `previous_task_id`. That block then mints the retry's own `task_id`, and creates its task directory when it writes the task manifest.
+2. In place of the baseline block above, run this one, with `project_key`, the retry's `task_id` and `previous_task_id` set from the values you noted:
+
+```bash
+task_dir=$(tribunal_task_dir "$project_key" "$task_id")
+previous_task_dir=$(tribunal_task_dir "$project_key" "$previous_task_id")
+if [ -f "$previous_task_dir/baseline.json" ]; then
+  cp "$previous_task_dir/baseline.json" "$task_dir/"
+fi
+```
+
+If the earlier run had no baseline, this copies nothing and the retry has none either, so its end-of-run question doesn't offer Discard. Never fall back to `tribunal_baseline_write` on a retry.
 
 ## The loop
 
@@ -172,27 +182,35 @@ Keep the summary terse. The artifacts on disk are the long form.
 
 ## Resolving a run the jury did not accept
 
-When the outcome is `rejected` or `exhausted_iterations`, the actor's changes are still on disk. After the summary, ask the person what to do with them, in one `AskUserQuestion`:
+When the outcome is `rejected` or `exhausted_iterations`, the actor's changes are still on disk. After the summary, ask the person what to do with them.
+
+Each block in this section runs in a new shell, and the Setup block runs under `set -u`. Before each one, set `project_key`, `task_id`, `task_dir` and `outcome` again from the values you noted. `task_id`, `task_dir` and `outcome` are those of the run whose `tribunal.session.complete` you just emitted. After a retry, that is the retry's own run, not the run it retried. An unset `$outcome` makes every `payload=$(...)` fail.
+
+First check whether this run has a baseline. Decide from what this prints, not from memory:
+
+```bash
+if [ -f "$task_dir/baseline.json" ]; then echo "baseline=yes"; else echo "baseline=no"; fi
+```
+
+Then ask, in one `AskUserQuestion`:
 
 - **Question:** "The jury didn't accept this. What should happen to the changes?"
 - **Keep the changes:** "Leave everything as it is."
-- **Discard them:** "Restore the files this run changed. Files that already had changes before it started are left alone." Offer this only when the baseline was written.
+- **Discard them:** "Restore the files this run changed. Files that already had changes before it started are left alone." Offer this only when the check printed `baseline=yes`.
 - **Retry:** "Run the task again with the same settings, for up to `<max_iterations>` more iterations."
 
 Then act on the answer:
 
 - **Keep:** emit `decision: kept`. This is the override a calibrator reads.
-- **Discard:** run `tribunal_discard "$task_dir"`, capturing the exit code, stdout and stderr separately (see the block below).
-  - **Exit 0:** the first line is `<restored> <left>`. Each remaining line is a file that had changes before the run and that the actor changed again. Tell the person how many files were restored, and name each file that was left alone so they can sort it out by hand. Emit `decision: discarded` with both counts.
-  - **Exit 2:** `HEAD` moved during the run, most likely because the actor committed. Tell the person nothing was restored, and that any commit has to be undone by hand. Emit nothing: the discard they chose didn't happen. Then ask again (see below).
-  - **Exit 1:** the baseline is missing or unreadable. Tell the person nothing was restored, and emit nothing. Then ask again (see below).
-  - **Exit 3:** some files couldn't be restored. They're named in `discard.err` as `tribunal: could not restore <path>`. Stdout is as for exit 0. Tell the person what was restored, which files are left alone, and which couldn't be restored, so they can fix those by hand. Emit `decision: discarded` with the stdout counts, since a discard did happen.
-- **Retry:** emit `decision: retried`, with the `task_id` of the run being resolved. Then start again from "Per-task initialization", with the same task description, rubric and config, carrying the baseline forward as described there. The new run has its own `task_id`.
+- **Discard:** run the discard block below. Its first line of output is `rc=<exit code>`. Act on that:
+  - **Exit 0:** the next line is `<restored> <left>`. Each line after it is a file that had changes before the run and that the actor changed again. Tell the person how many files were restored, and name each file that was left alone so they can sort it out by hand. The block has emitted `decision: discarded` with both counts.
+  - **Exit 2:** `HEAD` moved during the run, most likely because the actor committed. Tell the person nothing was restored, and that any commit has to be undone by hand. The block emitted nothing, because the discard they chose didn't happen. Then ask again (see below).
+  - **Exit 1:** the baseline is missing or unreadable, or `git status` failed. Tell the person nothing was restored; any `git` error is printed after the `rc=` line. The block emitted nothing. Then ask again (see below).
+  - **Exit 3:** some files couldn't be restored. They're printed after the counts and the left-alone paths, as `tribunal: could not restore <path>`. Tell the person what was restored, which files were left alone, and which couldn't be restored, so they can fix those by hand. The block has emitted `decision: discarded` with the counts, since a discard did happen.
+- **Retry:** emit `decision: retried`, with the `task_id` of the run being resolved. Note that `task_id` as `previous_task_id`. Then start again from "Per-task initialization", with the same task description, rubric and config, carrying the baseline forward as described there. The new run has its own `task_id`.
 - **No answer** (dismissed, or a reply that is none of the three): emit nothing. A rejection without `tribunal.session.resolved` reads as unanswered. Never record a guess.
 
 When discard exits 1 or 2, nothing was restored, so the person's choice didn't happen. After telling them, ask again with `AskUserQuestion`, offering only Keep and Retry, and act on that answer as above. If they dismiss it, emit nothing.
-
-Each block runs in a new shell, and the Setup block runs under `set -u`. Before each one, set `project_key`, `task_id`, `task_dir` and `outcome` again from the values you noted. `task_id` and `task_dir` are those of the run being resolved, not of a retry's new run. An unset `$outcome` makes every `payload=$(...)` fail.
 
 Emit a keep or a retry with three arguments:
 
@@ -201,19 +219,24 @@ payload=$(tribunal_resolved_payload "$task_id" "$outcome" kept)   # or: retried
 tribunal_emit_event "tribunal.session.resolved" "$payload"
 ```
 
-For a discard, capture the exit code, stdout and stderr separately. On exit 0 or 3, send the counts:
+Run a discard with this block, as one call. It prints the exit code, then the discard's stdout, then its stderr, and emits `decision: discarded` itself only on exit 0 or 3. Don't emit a discard any other way.
 
 ```bash
 rc=0
 out=$(tribunal_discard "$task_dir" 2>"$task_dir/discard.err") || rc=$?
-read -r restored left <<<"${out%%$'\n'*}"
-left_paths=$(printf '%s\n' "$out" | tail -n +2)   # one path per line
-# rc 3: the files that could not be restored are in "$task_dir/discard.err"
-payload=$(tribunal_resolved_payload "$task_id" "$outcome" discarded "$restored" "$left")
-tribunal_emit_event "tribunal.session.resolved" "$payload"
+printf 'rc=%s\n%s\n' "$rc" "$out"
+cat "$task_dir/discard.err" 2>/dev/null
+if [ "$rc" -eq 0 ] || [ "$rc" -eq 3 ]; then
+  read -r restored left <<<"${out%%$'\n'*}"
+  if payload=$(tribunal_resolved_payload "$task_id" "$outcome" discarded "$restored" "$left"); then
+    tribunal_emit_event "tribunal.session.resolved" "$payload"
+  else
+    echo "tribunal: no counts from the discard, so nothing was emitted" >&2
+  fi
+fi
 ```
 
-Run the last two lines only when `rc` is 0 or 3. For 1 or 2, `$out` is empty, so `$restored` and `$left` are never set and passing them would fail under `set -u`.
+The left-alone paths are the lines after `<restored> <left>` in that output; the block keeps no other copy of them.
 
 Never ask after `accepted` or `aborted`.
 
