@@ -52,7 +52,10 @@ remote=$(onlooker_project_remote_url "$(pwd)")
 repo_root=$(onlooker_project_repo_root "$(pwd)")
 tribunal_write_project_manifest "$project_key" "$remote" "$repo_root"
 tribunal_write_task_manifest "$project_key" "$task_id" "$task_summary" "$rubric_id" "$rubric"
+printf 'task_id=%s\nproject_key=%s\n' "$task_id" "$project_key"
 ```
+
+Note the printed `task_id` and `project_key`. Every later block runs in a new shell and needs them set again, and a retry needs this run's `task_id` as its `previous_task_id`.
 
 Emit `tribunal.session.start` with the resolved config (`judge_types`, `gate_policy`, `score_threshold`, `max_iterations`, model IDs).
 
