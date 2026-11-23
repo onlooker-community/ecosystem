@@ -20,6 +20,8 @@ setup() {
 
 	# shellcheck disable=SC1091
 	source "${PLUGIN_ROOT}/scripts/lib/tribunal-events.sh"
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/tribunal-resolve.sh"
 
 	export CLAUDE_SESSION_ID="bats-session-$$"
 }
@@ -201,6 +203,33 @@ JUDGE_ID="01J000000000000000000000JJ"
 	tribunal_emit_event "tribunal.session.complete" "$p"
 	run _validate_latest_event
 	[ "$status" -eq 0 ]
+}
+
+# Checks the line was appended as well as valid: _validate_latest_event reads
+# the last line, which is the previous event's when an emission is rejected.
+_latest_is_resolved() { # <decision>
+	[ "$(tail -n 1 "$ONLOOKER_EVENTS_LOG" | jq -r '.event_type + " " + .payload.decision')" = "tribunal.session.resolved $1" ]
+}
+
+@test "session.resolved validates for each decision" {
+	local d p
+	for d in kept retried; do
+		p=$(tribunal_resolved_payload "$TASK_ID" rejected "$d") || return 1
+		tribunal_emit_event "tribunal.session.resolved" "$p"
+		_latest_is_resolved "$d" || return 1
+		_validate_latest_event || return 1
+	done
+	p=$(tribunal_resolved_payload "$TASK_ID" exhausted_iterations discarded 2 1) || return 1
+	tribunal_emit_event "tribunal.session.resolved" "$p"
+	_latest_is_resolved discarded || return 1
+	run _validate_latest_event
+	[ "$status" -eq 0 ]
+}
+
+@test "session.resolved with an unknown decision is rejected by the schema" {
+	expect_emission_rejected tribunal_emit_event "tribunal.session.resolved" \
+		'{"task_id":"x","outcome":"rejected","decision":"ignored"}'
+	[ "$status" -ne 0 ]
 }
 
 @test "emission fails loudly on bogus event_type (schema rejects)" {
