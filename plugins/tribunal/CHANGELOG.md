@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.0](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.10.2...tribunal-v1.11.0) (2026-11-24)
+
+
+### Features
+
+* **tribunal:** ask what to do with rejected work :scales: ([#629](https://github.com/onlooker-community/ecosystem/issues/629)) ([c0eaa76](https://github.com/onlooker-community/ecosystem/commit/c0eaa76fee3360af32c09e3d2ad28df20c659698))
+
 ## [1.10.2](https://github.com/onlooker-community/ecosystem/compare/tribunal-v1.10.1...tribunal-v1.10.2) (2026-11-22)
 
 
