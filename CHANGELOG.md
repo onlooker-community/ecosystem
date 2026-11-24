@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.84.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.83.0...ecosystem-v0.84.0) (2026-11-24)
+
+
+### Features
+
+* **tribunal:** ask what to do with rejected work :scales: ([#629](https://github.com/onlooker-community/ecosystem/issues/629)) ([c0eaa76](https://github.com/onlooker-community/ecosystem/commit/c0eaa76fee3360af32c09e3d2ad28df20c659698))
+
 ## [0.83.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.82.6...ecosystem-v0.83.0) (2026-11-22)
 
 
