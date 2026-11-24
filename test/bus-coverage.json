@@ -101,6 +101,7 @@
     "tribunal.nudge.shown",
     "tribunal.nudge.skipped",
     "tribunal.session.complete",
+    "tribunal.session.resolved",
     "tribunal.session.start",
     "tribunal.verdict",
     "warden.gate.blocked",
