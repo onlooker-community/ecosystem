@@ -55,6 +55,24 @@ librarian_lesson_auto_justify() {
 		printf '%s\n' '</candidate>'
 	} > "$prompt_file" || { rm -f "$prompt_file"; return 0; }
 
+	local response
+	response=$(_librarian_lesson_auto_ask "$prompt_file" "$model")
+	rm -f "$prompt_file"
+
+	# Collapse to one line and trim: a justification is a single sentence, and
+	# a stray newline would corrupt the envelope's shape.
+	printf '%s' "$response" | tr '\n' ' ' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
+}
+
+# One single-turn `claude -p` on a prompt file, under the transform's
+# timeout. Prints the raw response, or nothing on any failure: an empty answer
+# is infrastructure, and each caller decides what that means. Shared by the
+# justify call and the self-check so the two can't drift apart in how they
+# reach the model.
+#
+# Usage: _librarian_lesson_auto_ask <prompt_file> [model]
+_librarian_lesson_auto_ask() {
+	local prompt_file="$1" model="${2:-}"
 	local args=(-p --max-turns 1 --settings '{"disableAllHooks":true}')
 	[[ -n "$model" ]] && args+=(--model "$model")
 
@@ -69,12 +87,7 @@ librarian_lesson_auto_justify() {
 	else
 		response=$(claude "${args[@]}" < "$prompt_file" 2>/dev/null) || response=""
 	fi
-
-	rm -f "$prompt_file"
-
-	# Collapse to one line and trim: a justification is a single sentence, and
-	# a stray newline would corrupt the envelope's shape.
-	printf '%s' "$response" | tr '\n' ' ' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
+	printf '%s' "$response"
 }
 
 # Everything the justification prompt says before the candidate.
@@ -109,6 +122,90 @@ _librarian_lesson_auto_justify_preamble() {
 librarian_lesson_auto_justify_fingerprint() {
 	librarian_body_hash "$(_librarian_lesson_auto_justify_preamble)
 model: ${1:-}"
+}
+
+# The self-check (ONL-311). A second call that reads the justification the
+# justify call just wrote, beside the claim it is meant to defend.
+#
+# The justify prompt already says not to restate the claim as a more general
+# principle. Five of the six lessons a person vetoed after jury approval did
+# it anyway, inside the call told not to, and both judges then scored the
+# principle. So the comparison is a separate question to a fresh call. The
+# second check comes from 01M6FJ2S: both judges passed a claim that rested on
+# two Claude Code behaviors, because neither asked what had to stay true.
+#
+# Only the claim and stack are shown, not the rationale: the question is
+# whether the justification defends this claim, and the rationale's
+# project-specific detail is what invites the general principle.
+_librarian_lesson_auto_self_check_preamble() {
+	printf '%s\n' 'You are checking a justification written for a lesson, before a jury sees it.'
+	printf '%s\n' 'Output PASS, or FAIL: followed by ONE sentence saying which check failed and why.'
+	printf '%s\n\n' 'No markdown, no preamble.'
+	printf '%s\n' 'The justification is meant to show that the claim, as written, holds'
+	printf '%s\n\n' 'regardless of version. Check two things.'
+	printf '%s\n' '1. Does the justification argue for the claim as written, or for a'
+	printf '%s\n' 'more general principle the claim is one instance of? A justification that'
+	printf '%s\n' 'would defend a different claim built on the same principle just as well'
+	printf '%s\n\n' 'is arguing for the principle. FAIL it.'
+	printf '%s\n' '2. Work out which behaviors of external tools the claim relies on: the'
+	printf '%s\n' 'tools in its stack, and any tool the claim itself names. If any of those'
+	printf '%s\n' 'behaviors is something a release of that tool could change, the claim'
+	printf '%s\n\n' 'is not version-independent. FAIL it.'
+	printf '%s\n' 'PASS only when both checks pass.'
+}
+
+# The whole self-check prompt for one candidate and its justification.
+# Extracted so the measurement harness sends the text production sends.
+#
+# Usage: librarian_lesson_auto_self_check_prompt <candidate_json> <justification>
+librarian_lesson_auto_self_check_prompt() {
+	local candidate="${1:-}" justification="${2:-}"
+	[[ -z "$candidate" || -z "$justification" ]] && return 0
+	_librarian_lesson_auto_self_check_preamble
+	printf '%s\n' '<lesson>'
+	printf '%s' "$candidate" | jq -r '"claim: \(.claim)\nstack: \(.applies_to.stack | join(", "))"' 2>/dev/null
+	printf 'justification: %s\n' "$justification"
+	printf '%s\n' '</lesson>'
+}
+
+# Ask the self-check. Prints the answer on one trimmed line, or nothing.
+#
+# Usage: librarian_lesson_auto_self_check <candidate_json> <justification> [model]
+librarian_lesson_auto_self_check() {
+	local candidate="$1" justification="$2" model="${3:-}"
+	[[ -z "$candidate" || -z "$justification" ]] && return 0
+	command -v claude >/dev/null 2>&1 || return 0
+
+	local prompt_file
+	prompt_file=$(mktemp -t librarian-self-check.XXXXXX 2>/dev/null) \
+		|| prompt_file="/tmp/librarian-self-check.$$"
+	# No EXIT trap, for the reason librarian_lesson_auto_justify gives.
+	librarian_lesson_auto_self_check_prompt "$candidate" "$justification" > "$prompt_file" \
+		|| { rm -f "$prompt_file"; return 0; }
+
+	local response
+	response=$(_librarian_lesson_auto_ask "$prompt_file" "$model")
+	rm -f "$prompt_file"
+	printf '%s' "$response" | tr '\n' ' ' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
+}
+
+# Identify the question a self-check failure answered. Both preambles are in
+# it: the failure judged a justification the justify prompt wrote, so a
+# rewritten justify prompt is owed a fresh attempt as much as a rewritten
+# check is. Same mechanism as librarian_lesson_auto_justify_fingerprint.
+#
+# Usage: librarian_lesson_auto_self_check_fingerprint [model]
+librarian_lesson_auto_self_check_fingerprint() {
+	librarian_body_hash "$(_librarian_lesson_auto_self_check_preamble)
+$(_librarian_lesson_auto_justify_preamble)
+model: ${1:-}"
+}
+
+# Off unless the project sets the literal true. It ships off so ONL-198's
+# review measures the pipeline as it ran; whether to turn it on is that
+# review's decision.
+_librarian_lesson_auto_self_check_enabled() {
+	[[ "$(librarian_config_get '.librarian.lesson_auto.self_check.enabled' 2>/dev/null)" == "true" ]]
 }
 
 # Record a refusal on the proposal so the review walk can show why the model
