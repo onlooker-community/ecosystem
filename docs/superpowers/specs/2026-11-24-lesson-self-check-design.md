@@ -212,16 +212,25 @@ judge dispatch. The measurement goes in
   through the production prompt builder, with `--output-format json` to read
   `total_cost_usd`.
 - **Recall:** the six vetoed lessons. Each should `FAIL`.
-- **False fails:** every lesson the jury approved and nobody vetoed, found in
-  `approved_held/` and `approved/` with `asserted_by == "model"`. Each should
-  `PASS`.
-- **Cost:** median `total_cost_usd` per self-check, against the per-judge cost
-  in `2026-10-24-hooks-off/`.
+- **False fails:** lessons the jury approved that nobody vetoed. The store
+  holds only one model-asserted lesson like that (01M5KDAW), so the control set
+  also takes the four version-independent lessons a person justified that the
+  jury approved: five lessons in all. Each should `PASS`. Five is thin, and the
+  README says so.
+- **Held early (optional):** the 39 model-asserted lessons the jury rejected.
+  These have no ground truth, so the run reports only how many the self-check
+  would have held before paying for a jury.
+- **Cost:** median `total_cost_usd` per self-check, against the judge cost in
+  `2026-10-24-unattended-run/` ($0.056–0.081 per judge, and $0.063 for the
+  justify call). Expect roughly half the cost of a two-judge jury, not a small
+  fraction of it.
 - The README records the counts, the cost ratio, and every false fail verbatim.
 
-This makes about 10 to 15 real Haiku calls. It runs once the prompt is pinned
-and before the PR opens. If recall is low or false fails are high, the prompt
-is revised and the run repeated. The flag stays off either way.
+The recall and false-fail groups are 11 real Haiku calls, about $0.70. The
+held-early group adds 39 calls, about $2.50, and runs only with a separate
+go-ahead. Everything runs once the prompt is pinned and before the PR opens.
+If recall is low or false fails are high, the prompt is revised and the run
+repeated. The flag stays off either way.
 
 ## Risks
 
