@@ -174,3 +174,30 @@ _count() { _events "$1" | grep -c . || true; }
 	run _librarian_lesson_auto_self_check_enabled
 	[ "$status" -eq 0 ]
 }
+
+# --- the review walk --------------------------------------------------------
+
+@test "lessons show prints the self-check's reason and the justification it rejected" {
+	id=$(_seed_parked "c")
+	jq '.auto_self_check = {reason: "It defends batching in general.", justification: "Batching always helps.",
+	                        failed_at: "2026-11-24T00:00:00Z", fingerprint: "f"}' \
+		"$(_proposal "$id")" > "${BATS_TEST_TMPDIR}/p.json" && mv "${BATS_TEST_TMPDIR}/p.json" "$(_proposal "$id")"
+	run librarian_cli lessons show "$id" "$PROJECT_REPO"
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" == *"self-check:  It defends batching in general."* ]] || return 1
+	[[ "$output" == *"justification: Batching always helps."* ]]
+}
+
+@test "lessons show says when the self-check gave no reason" {
+	id=$(_seed_parked "c")
+	jq '.auto_self_check = {reason: null, justification: "j", failed_at: "2026-11-24T00:00:00Z", fingerprint: "f"}' \
+		"$(_proposal "$id")" > "${BATS_TEST_TMPDIR}/p.json" && mv "${BATS_TEST_TMPDIR}/p.json" "$(_proposal "$id")"
+	run librarian_cli lessons show "$id" "$PROJECT_REPO"
+	[[ "$output" == *"self-check:  (no reason given)"* ]]
+}
+
+@test "lessons show prints no self-check line when nothing failed" {
+	id=$(_seed_parked "c")
+	run librarian_cli lessons show "$id" "$PROJECT_REPO"
+	[[ "$output" != *"self-check:"* ]]
+}

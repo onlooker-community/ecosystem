@@ -470,6 +470,12 @@ librarian_cli_lessons_show() {
 		(if .auto_refusal then
 			"refused:     \(.auto_refusal.reason // "(no reason given)")"
 		 else empty end),
+		# The unattended path wrote a justification and its own self-check
+		# rejected it (ONL-311). The justification is printed because the
+		# reason objects to it.
+		(if .auto_self_check then
+			"self-check:  \(.auto_self_check.reason // "(no reason given)")\n             justification: \(.auto_self_check.justification)"
+		 else empty end),
 		# A person corrected the text the transform wrote, at confirm (ONL-307).
 		(if .confirm_edits then
 			"edited:      \(.confirm_edits.fields | join(", ")), by a person at confirm"
