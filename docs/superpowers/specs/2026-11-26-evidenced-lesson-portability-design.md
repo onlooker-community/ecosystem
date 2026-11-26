@@ -90,8 +90,12 @@ For an observed version `X.Y.Z`:
 
 - `X >= 1`: `>=X.Y.Z <X+1`, the rest of the same major.
 - `X == 0`: `>=0.Y.Z <0.Y+1`, the rest of the same minor.
-- A version that doesn't parse as at least `X.Y` stays in `observed_on` and
-  goes in `unresolved` (D6). No range is invented for it.
+- A version that doesn't parse as at least `X.Y` (BSD awk's `20200816`)
+  stays in `observed_on`, and the entry is left out of `scope.versions`. No
+  range is invented for it. It does not go in `unresolved`, which is only
+  for entries no source could version (D6). Evidence records what was
+  observed. Whether a range follows from it is computed when needed, so the
+  rule can change later without rewriting stored lessons.
 
 This leans on semver's promise, which is the same promise a person relies on
 when they upgrade within a major. A lesson that breaks within a major is a
