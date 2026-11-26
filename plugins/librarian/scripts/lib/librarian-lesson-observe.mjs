@@ -219,7 +219,8 @@ const PROBES = {
   awk: ['awk', ['--version']],
   grep: ['grep', ['--version']],
   sed: ['sed', ['--version']],
-  macos: ['uname', ['-r']],
+  // uname -r is the Darwin kernel, not the macOS release; sw_vers is the release.
+  macos: ['sw_vers', ['-productVersion']],
   darwin: ['uname', ['-r']],
   linux: ['uname', ['-r']],
 };
@@ -245,7 +246,8 @@ function probeTool(key) {
   const version = line.match(/\d+\.\d+(?:\.\d+)?|\d{8}/)?.[0];
   if (!version) return null;
   const result = { version, source: 'probe', basis: 'machine' };
-  if (FLAVORED.has(key)) result.flavor = /\bGNU\b/.test(line) ? 'gnu' : 'bsd';
+  // BSD grep says "(BSD grep, GNU compatible)", so BSD is checked first.
+  if (FLAVORED.has(key)) result.flavor = line.includes('BSD') ? 'bsd' : line.includes('GNU') ? 'gnu' : 'bsd';
   return result;
 }
 

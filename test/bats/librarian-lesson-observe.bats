@@ -216,3 +216,27 @@ _observe_stubbed() {
 	run _observe_stubbed '["bats"]'
 	printf '%s' "$output" | jq -e '.observed_on.bats.source == "mise"' >/dev/null
 }
+
+@test "BSD grep is told apart from GNU grep by what its version line says" {
+	_stub grep 'echo "grep (BSD grep, GNU compatible) 2.6.0-FreeBSD"'
+	run _observe_stubbed '["grep"]'
+	printf '%s' "$output" | jq -e '.observed_on.grep == {version: "2.6.0", source: "probe", basis: "machine", flavor: "bsd"}' >/dev/null
+}
+
+@test "GNU grep is recorded as gnu" {
+	_stub grep 'echo "grep (GNU grep) 3.11"'
+	run _observe_stubbed '["grep"]'
+	printf '%s' "$output" | jq -e '.observed_on.grep == {version: "3.11", source: "probe", basis: "machine", flavor: "gnu"}' >/dev/null
+}
+
+@test "macOS is read from sw_vers, not the Darwin kernel" {
+	_stub sw_vers 'echo "26.1"'
+	run _observe_stubbed '["macos"]'
+	printf '%s' "$output" | jq -e '.observed_on.macos.version == "26.1"' >/dev/null
+}
+
+@test "darwin is still read from uname" {
+	_stub uname 'echo "25.0.0"'
+	run _observe_stubbed '["darwin"]'
+	printf '%s' "$output" | jq -e '.observed_on.darwin.version == "25.0.0"' >/dev/null
+}
