@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.85.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.84.0...ecosystem-v0.85.0) (2026-11-26)
+
+
+### Features
+
+* **librarian:** read a lesson's versions from the project ([#632](https://github.com/onlooker-community/ecosystem/issues/632)) ([741a972](https://github.com/onlooker-community/ecosystem/commit/741a9726cd369d301780f795f62810b9928964f1))
+
 ## [0.84.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.83.0...ecosystem-v0.84.0) (2026-11-24)
 
 

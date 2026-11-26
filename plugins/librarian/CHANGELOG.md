@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.0](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.29.0...librarian-v0.30.0) (2026-11-26)
+
+
+### Features
+
+* **librarian:** read a lesson's versions from the project ([#632](https://github.com/onlooker-community/ecosystem/issues/632)) ([741a972](https://github.com/onlooker-community/ecosystem/commit/741a9726cd369d301780f795f62810b9928964f1))
+
 ## [0.29.0](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.28.4...librarian-v0.29.0) (2026-11-22)
 
 
