@@ -201,3 +201,131 @@ _count() { _events "$1" | grep -c . || true; }
 	run librarian_cli lessons show "$id" "$PROJECT_REPO"
 	[[ "$output" != *"self-check:"* ]]
 }
+
+# --- in the stage -----------------------------------------------------------
+
+@test "with the flag off, nothing calls the self-check" {
+	_settings '{"enabled": true, "max_juries_per_scan": 0}'
+	id=$(_seed_parked "c self-check-fail")
+	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	[ "$output" = "confirmed:${id}" ] || return 1
+	[ "$(_calls self_check)" = "0" ] || return 1
+	[ "$(_count librarian.lesson.self_checked)" = "0" ] || return 1
+	jq -e 'has("auto_self_check") | not' "$(_proposal "$id")" >/dev/null
+}
+
+@test "a passing self-check confirms the candidate and says so" {
+	id=$(_seed_parked "c")
+	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	[ "$output" = "confirmed:${id}" ] || return 1
+	[ "$(_calls justify)" = "1" ] && [ "$(_calls self_check)" = "1" ] || return 1
+	jq -e '.status == "confirmed" and .asserted_by == "model"' "$(_proposal "$id")" >/dev/null || return 1
+	_events librarian.lesson.self_checked \
+		| jq -e --arg id "$id" '.payload == {lesson_id: $id, outcome: "passed"}' >/dev/null
+}
+
+@test "a failing self-check leaves the candidate pending, with reason and justification" {
+	id=$(_seed_parked "c self-check-fail")
+	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	[ "$output" = "skipped:self_check_failed" ] || return 1
+	jq -e '.status == "pending"
+	   and .auto_self_check.reason == "The justification argues for batching in general, not for this claim."
+	   and .auto_self_check.justification == "The failure is a property of the exec boundary, not of any release."
+	   and (.auto_self_check.failed_at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T"))
+	   and (.auto_self_check.fingerprint | type == "string")' \
+		"$(_proposal "$id")" >/dev/null
+}
+
+@test "a self-check failure is never a decline, even under the decline policy" {
+	_settings '{"enabled": true, "max_juries_per_scan": 0, "on_refusal": "decline", "self_check": {"enabled": true}}'
+	id=$(_seed_parked "c self-check-fail")
+	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	[ "$output" = "skipped:self_check_failed" ] || return 1
+	[ ! -s "${LESSONS_DIR}/declined.jsonl" ] || return 1
+	jq -e '.status == "pending"' "$(_proposal "$id")" >/dev/null
+}
+
+@test "a failure emits failed with reason_given, and never the reason" {
+	id=$(_seed_parked "c self-check-fail")
+	librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id" >/dev/null
+	_events librarian.lesson.self_checked \
+		| jq -e --arg id "$id" '.payload == {lesson_id: $id, outcome: "failed", reason_given: true}' >/dev/null || return 1
+	! grep -q "batching in general" "$EVENTS_LOG"
+}
+
+@test "a bare FAIL is recorded with no reason" {
+	id=$(_seed_parked "c self-check-bare")
+	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	[ "$output" = "skipped:self_check_failed" ] || return 1
+	jq -e '.auto_self_check.reason == null' "$(_proposal "$id")" >/dev/null || return 1
+	_events librarian.lesson.self_checked | jq -e '.payload.reason_given == false' >/dev/null
+}
+
+@test "a held failure is not paid for again, and is reported as held" {
+	id=$(_seed_parked "c self-check-fail")
+	librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id" >/dev/null
+	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	[ "$output" = "skipped:self_check_held" ] || return 1
+	[ "$(_calls justify)" = "1" ] && [ "$(_calls self_check)" = "1" ] || return 1
+	[ "$(_count librarian.lesson.self_checked)" = "1" ]
+}
+
+@test "a model change asks a held candidate again, once" {
+	id=$(_seed_parked "c self-check-fail")
+	librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id" >/dev/null
+	_settings '{"enabled": true, "max_juries_per_scan": 0, "self_check": {"enabled": true}}' "claude-other-model"
+	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	[ "$output" = "skipped:self_check_failed" ] || return 1
+	[ "$(_calls self_check)" = "2" ] || return 1
+	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	[ "$output" = "skipped:self_check_held" ]
+}
+
+@test "a later pass clears the recorded failure" {
+	id=$(_seed_parked "c")
+	jq --arg f "stale" '.auto_self_check = {reason: "old", justification: "j", failed_at: "2026-11-01T00:00:00Z", fingerprint: $f}' \
+		"$(_proposal "$id")" > "${BATS_TEST_TMPDIR}/p.json" && mv "${BATS_TEST_TMPDIR}/p.json" "$(_proposal "$id")"
+	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	[ "$output" = "confirmed:${id}" ] || return 1
+	jq -e 'has("auto_self_check") | not' "$(_proposal "$id")" >/dev/null
+}
+
+@test "with the flag off, a stored failure is ignored" {
+	id=$(_seed_parked "c self-check-fail")
+	librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id" >/dev/null
+	_settings '{"enabled": true, "max_juries_per_scan": 0}'
+	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	[ "$output" = "confirmed:${id}" ]
+}
+
+@test "an answer that is neither PASS nor FAIL is unavailable and writes nothing" {
+	id=$(_seed_parked "c self-check-garbage")
+	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	[ "$output" = "unavailable" ] || return 1
+	jq -e '.status == "pending" and (has("auto_self_check") | not)' "$(_proposal "$id")" >/dev/null || return 1
+	_events librarian.lesson.self_checked | jq -e '.payload.outcome == "unavailable"' >/dev/null
+}
+
+@test "an empty self-check answer is unavailable and writes nothing" {
+	id=$(_seed_parked "c self-check-empty")
+	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	[ "$output" = "unavailable" ] || return 1
+	jq -e '.status == "pending" and (has("auto_self_check") | not)' "$(_proposal "$id")" >/dev/null
+}
+
+@test "a versioned candidate is never self-checked" {
+	candidate=$(_candidate "c self-check-fail" | jq -c '.applies_to.scope = {kind: "versioned", versions: {vite: "<6"}}')
+	id=$(librarian_lesson_write_proposal "$PROJECT_KEY" "$candidate" "01M3B87J7046SJE5BECNMP670K")
+	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	[ "$output" = "confirmed:${id}" ] || return 1
+	[ "$(_calls self_check)" = "0" ]
+}
+
+@test "the stage counts a fresh failure once, and never as a refusal" {
+	_seed_parked "c self-check-fail" >/dev/null
+	librarian_lesson_auto_stage "$PROJECT_KEY"
+	librarian_lesson_auto_stage "$PROJECT_KEY"
+	[ "$(_count librarian.autojury.complete)" = "2" ] || return 1
+	_events librarian.autojury.complete | jq -s -e \
+		'[.[].payload.self_check_failed] == [1, 0] and [.[].payload.refused] == [0, 0]' >/dev/null
+}

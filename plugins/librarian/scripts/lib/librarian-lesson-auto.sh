@@ -304,6 +304,42 @@ _librarian_lesson_auto_emit_asserted() {
 	librarian_lesson_emit "librarian.lesson.asserted" "$payload"
 }
 
+# Record a self-check failure on the proposal (ONL-311). The justification
+# is kept beside the reason because the reason is an objection to it, and a
+# person reading `lessons show` needs to see what was objected to.
+#
+# Deliberately NOT a decline, under any on_refusal policy: a refusal is the
+# model's judgment of the claim, a failure is a judgment of one sentence it
+# wrote about the claim, and a later prompt or model may write a better one.
+# Best effort, like the refusal record.
+#
+# Usage: _librarian_lesson_auto_record_self_check <path> <response> <justification> <fingerprint>
+_librarian_lesson_auto_record_self_check() {
+	local path="$1" response="$2" justification="$3" fingerprint="$4"
+	local reason now updated
+	reason=$(printf '%s' "$response" | sed -E 's/^FAIL[[:space:]]*:?[[:space:]]*//')
+	now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+	updated=$(jq --arg r "$reason" --arg j "$justification" --arg at "$now" --arg f "$fingerprint" \
+		'.auto_self_check = {reason: (if $r == "" then null else $r end),
+		                     justification: $j, failed_at: $at, fingerprint: $f}' \
+		"$path" 2>/dev/null) || return 0
+	librarian_lesson_write_atomic "$path" "$updated" >/dev/null 2>&1 || true
+}
+
+# Usage: _librarian_lesson_auto_emit_self_checked <lesson_id> <outcome> [response]
+_librarian_lesson_auto_emit_self_checked() {
+	local id="$1" outcome="$2" response="${3:-}" payload
+	if [[ "$outcome" == "failed" ]]; then
+		local reason
+		reason=$(printf '%s' "$response" | sed -E 's/^FAIL[[:space:]]*:?[[:space:]]*//')
+		payload=$(jq -cn --arg id "$id" --argjson g "$([[ -n "$reason" ]] && echo true || echo false)" \
+			'{lesson_id: $id, outcome: "failed", reason_given: $g}')
+	else
+		payload=$(jq -cn --arg id "$id" --arg o "$outcome" '{lesson_id: $id, outcome: $o}')
+	fi
+	librarian_lesson_emit "librarian.lesson.self_checked" "$payload"
+}
+
 # Auto-confirm one pending candidate. Prints exactly one of:
 #   confirmed:<id>             a parked candidate the model justified, or a
 #                              versioned one, which needs no justification;
@@ -318,6 +354,10 @@ _librarian_lesson_auto_emit_asserted() {
 #                              the hold policy
 #   declined:refused           the same, under the decline policy: retired
 #                              without asking again
+#   skipped:self_check_failed  the justification failed the self-check; left
+#                              pending, recorded as .auto_self_check, and
+#                              never declined (ONL-311)
+#   skipped:self_check_held    already failed under these prompts and model
 #   unavailable                infrastructure, or a lesson_auto.visibility
 #                              confirm would refuse; nothing written
 #
@@ -326,7 +366,8 @@ _librarian_lesson_auto_emit_asserted() {
 # the backlog those skips left under the hold policy, retired at no cost.
 # None of them asks the model, so none emits librarian.lesson.asserted.
 #
-# Every other outcome emits librarian.lesson.asserted.
+# Every other outcome emits librarian.lesson.asserted, except the two
+# self-check outcomes, whose account is librarian.lesson.self_checked.
 #
 # Usage: librarian_lesson_auto_confirm_one <key> <lesson_id>
 librarian_lesson_auto_confirm_one() {
@@ -399,6 +440,18 @@ librarian_lesson_auto_confirm_one() {
 		return 0
 	fi
 
+	# Off, a stored failure is ignored: the candidate goes through as it did
+	# before the self-check existed.
+	local self_check_fp=""
+	if _librarian_lesson_auto_self_check_enabled; then
+		self_check_fp=$(librarian_lesson_auto_self_check_fingerprint "$model")
+		if [[ -n "$self_check_fp" ]] && jq -e --arg f "$self_check_fp" \
+			'.auto_self_check.fingerprint == $f' "$path" >/dev/null 2>&1; then
+			printf 'skipped:self_check_held'
+			return 0
+		fi
+	fi
+
 	justification=$(librarian_lesson_auto_justify "$candidate" "$model")
 
 	# Empty is infrastructure, not a verdict — the same distinction
@@ -414,6 +467,35 @@ librarian_lesson_auto_confirm_one() {
 			printf 'skipped:no_justification'
 		fi
 		return 0
+	fi
+
+	if [[ -n "$self_check_fp" ]]; then
+		local verdict
+		verdict=$(librarian_lesson_auto_self_check "$candidate" "$justification" "$model")
+		case "$verdict" in
+			PASS | PASS.)
+				_librarian_lesson_auto_emit_self_checked "$lesson_id" passed
+				if jq -e 'has("auto_self_check")' "$path" >/dev/null 2>&1; then
+					local cleared
+					cleared=$(jq 'del(.auto_self_check)' "$path" 2>/dev/null) \
+						&& librarian_lesson_write_atomic "$path" "$cleared" >/dev/null 2>&1
+				fi
+				;;
+			FAIL*)
+				_librarian_lesson_auto_record_self_check "$path" "$verdict" "$justification" "$self_check_fp"
+				_librarian_lesson_auto_emit_self_checked "$lesson_id" failed "$verdict"
+				printf 'skipped:self_check_failed'
+				return 0
+				;;
+			*)
+				# Empty or malformed is infrastructure: passing it would send a
+				# candidate to the jury on noise, failing it would hold one on
+				# noise. Nothing is written, so the next scan asks again.
+				_librarian_lesson_auto_emit_self_checked "$lesson_id" unavailable
+				printf 'unavailable'
+				return 0
+				;;
+		esac
 	fi
 
 	librarian_lesson_confirm "$key" "$lesson_id" "$visibility" "$justification" model \
@@ -599,13 +681,14 @@ librarian_lesson_auto_stage() {
 	local started_ms
 	started_ms=$(_librarian_lesson_now_ms)
 
-	local id result asserted=0 refused=0 unavailable=0
+	local id result asserted=0 refused=0 unavailable=0 self_check_failed=0
 	while IFS= read -r id; do
 		[[ -z "$id" ]] && continue
 		result=$(librarian_lesson_auto_confirm_one "$key" "$id")
 		case "$result" in
 			confirmed:*) asserted=$((asserted + 1)) ;;
 			skipped:no_justification | declined:no_justification) refused=$((refused + 1)) ;;
+			skipped:self_check_failed) self_check_failed=$((self_check_failed + 1)) ;;
 			unavailable) unavailable=$((unavailable + 1)) ;;
 		esac
 	done < <(librarian_lesson_list_pending "$key" | jq -r '.[].id' 2>/dev/null)
@@ -651,8 +734,10 @@ librarian_lesson_auto_stage() {
 		--argjson asserted "$asserted" --argjson refused "$refused" \
 		--argjson unavailable "$unavailable" --argjson juried "$juried" \
 		--argjson deferred "$deferred" --argjson duration_ms "$duration_ms" \
+		--argjson self_check_failed "$self_check_failed" \
 		'{asserted: $asserted, refused: $refused, unavailable: $unavailable,
-		  juried: $juried, deferred_by_cap: $deferred, duration_ms: $duration_ms}')"
+		  juried: $juried, deferred_by_cap: $deferred,
+		  self_check_failed: $self_check_failed, duration_ms: $duration_ms}')"
 
 	return 0
 }

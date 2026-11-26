@@ -53,6 +53,7 @@
     "librarian.candidate.proposed",
     "librarian.classifier.errored",
     "librarian.lesson.asserted",
+    "librarian.lesson.self_checked",
     "librarian.lesson.judged",
     "librarian.lesson.promoted",
     "librarian.lesson.shipped",
