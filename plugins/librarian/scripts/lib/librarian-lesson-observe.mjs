@@ -203,9 +203,50 @@ export function observe({ onlookerDir, projectKey, observedAt, stack, probe = tr
   return { observed_on, unresolved };
 }
 
-// Filled in by Task 5.
-function probeTool(_key) {
-  return null;
+const PROBE_TIMEOUT_MS = 2000;
+
+// Only these are ever run. Each is the tool's own version flag, so probing
+// one can't do anything else. The machine is read when the transform runs,
+// not when the session did, which is why every probe says basis "machine".
+const PROBES = {
+  bash: ['bash', ['--version']],
+  git: ['git', ['--version']],
+  node: ['node', ['--version']],
+  npm: ['npm', ['--version']],
+  jq: ['jq', ['--version']],
+  sqlite: ['sqlite3', ['--version']],
+  sqlite3: ['sqlite3', ['--version']],
+  awk: ['awk', ['--version']],
+  grep: ['grep', ['--version']],
+  sed: ['sed', ['--version']],
+  macos: ['uname', ['-r']],
+  darwin: ['uname', ['-r']],
+  linux: ['uname', ['-r']],
+};
+
+// awk, grep and sed differ between BSD and GNU builds in ways a lesson can
+// depend on, and a version number alone doesn't say which.
+const FLAVORED = new Set(['awk', 'grep', 'sed']);
+
+function probeTool(key) {
+  const probe = PROBES[key];
+  if (!probe) return null;
+  let out;
+  try {
+    out = execFileSync(probe[0], probe[1], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: PROBE_TIMEOUT_MS,
+    });
+  } catch {
+    return null;
+  }
+  const line = out.split('\n').find((l) => l.trim()) ?? '';
+  const version = line.match(/\d+\.\d+(?:\.\d+)?|\d{8}/)?.[0];
+  if (!version) return null;
+  const result = { version, source: 'probe', basis: 'machine' };
+  if (FLAVORED.has(key)) result.flavor = /\bGNU\b/.test(line) ? 'gnu' : 'bsd';
+  return result;
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {

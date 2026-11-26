@@ -163,3 +163,56 @@ _observe() {
 	[ -n "$output" ] || return 1
 	printf '%s' "$output" | jq -e '.observed_on.vite.version == "5.4.21" and .unresolved == [1, null]' >/dev/null
 }
+
+_stub() {
+	mkdir -p "${BATS_TEST_TMPDIR}/stub"
+	printf '#!/usr/bin/env bash\n%s\n' "$2" > "${BATS_TEST_TMPDIR}/stub/$1"
+	chmod +x "${BATS_TEST_TMPDIR}/stub/$1"
+}
+
+_observe_stubbed() {
+	PATH="${BATS_TEST_TMPDIR}/stub:${PATH}" librarian_lesson_observe "$KEY" "$SESSION" "$1"
+}
+
+@test "a tool on the allowlist is probed when no manifest has it" {
+	_stub sqlite3 'echo "3.43.2 2023-10-10 13:08:14 abc"'
+	run _observe_stubbed '["sqlite3"]'
+	printf '%s' "$output" | jq -e '.observed_on.sqlite3 == {version: "3.43.2", source: "probe", basis: "machine"}' >/dev/null
+}
+
+@test "sqlite is probed under either name" {
+	_stub sqlite3 'echo "3.43.2 2023-10-10"'
+	run _observe_stubbed '["SQLite"]'
+	printf '%s' "$output" | jq -e '.observed_on.SQLite.version == "3.43.2"' >/dev/null
+}
+
+@test "a GNU awk is recorded with its flavor" {
+	_stub awk 'echo "GNU Awk 5.3.0, API 4.0"'
+	run _observe_stubbed '["awk"]'
+	printf '%s' "$output" | jq -e '.observed_on.awk == {version: "5.3.0", source: "probe", basis: "machine", flavor: "gnu"}' >/dev/null
+}
+
+@test "a BSD awk's date-shaped version is kept" {
+	_stub awk 'echo "awk version 20200816"'
+	run _observe_stubbed '["awk"]'
+	printf '%s' "$output" | jq -e '.observed_on.awk == {version: "20200816", source: "probe", basis: "machine", flavor: "bsd"}' >/dev/null
+}
+
+@test "a probe that fails leaves the entry unresolved" {
+	_stub npm 'exit 1'
+	run _observe_stubbed '["npm"]'
+	printf '%s' "$output" | jq -e '.unresolved == ["npm"]' >/dev/null
+}
+
+@test "a tool off the allowlist is never run" {
+	_stub vitest 'touch "'"${BATS_TEST_TMPDIR}"'/ran"; echo "vitest/9.0.0"'
+	run _observe_stubbed '["vitest"]'
+	[ ! -e "${BATS_TEST_TMPDIR}/ran" ] || return 1
+	printf '%s' "$output" | jq -e '.unresolved == ["vitest"]' >/dev/null
+}
+
+@test "a manifest pin wins over the probe" {
+	_stub bats 'echo "Bats 9.9.9"'
+	run _observe_stubbed '["bats"]'
+	printf '%s' "$output" | jq -e '.observed_on.bats.source == "mise"' >/dev/null
+}
