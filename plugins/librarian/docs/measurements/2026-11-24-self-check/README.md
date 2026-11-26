@@ -18,8 +18,9 @@ The design that replaces it is
 | samples | one call per lesson per attempt |
 
 `run.sh <group>...` appends one row per lesson to `results.jsonl`. It sources
-the self-check prompt builder, which exists only on the ONL-311 branch at
-`f77aef9e` plus the prompt edits below; it does not run on `main`. Each
+the self-check prompt builder, which exists only at `f77aef9e` on the
+`archive/onl-311-self-check` branch, plus the prompt edits below. It does
+not run on `main`. Each
 attempt's output is committed as `results-attempt-<n>.jsonl`.
 
 ## Results
