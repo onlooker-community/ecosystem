@@ -192,10 +192,10 @@ _observe_stubbed() {
 	printf '%s' "$output" | jq -e '.observed_on.awk == {version: "5.3.0", source: "probe", basis: "machine", flavor: "gnu"}' >/dev/null
 }
 
-@test "a BSD awk's date-shaped version is kept" {
+@test "a BSD awk's date-shaped version is kept, and named bsd" {
 	_stub awk 'echo "awk version 20200816"'
 	run _observe_stubbed '["awk"]'
-	printf '%s' "$output" | jq -e '.observed_on.awk == {version: "20200816", source: "probe", basis: "machine"}' >/dev/null
+	printf '%s' "$output" | jq -e '.observed_on.awk == {version: "20200816", source: "probe", basis: "machine", flavor: "bsd"}' >/dev/null
 }
 
 @test "a probe that fails leaves the entry unresolved" {

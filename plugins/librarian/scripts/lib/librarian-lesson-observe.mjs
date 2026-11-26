@@ -279,9 +279,12 @@ function probeTool(key) {
   const version = line.match(/\d+\.\d+(?:\.\d+)?|\d{8}/)?.[0];
   if (!version) return null;
   const result = { version, source: 'probe', basis: 'machine' };
-  // BSD grep says "(BSD grep, GNU compatible)", so BSD is checked first.
+  // BSD grep says "(BSD grep, GNU compatible)", so BSD is checked first. The
+  // one true awk, macOS's and FreeBSD's, names no build but prints its
+  // version as a date: "awk version 20200816".
   if (FLAVORED.has(key)) {
-    const flavor = line.includes('BSD') ? 'bsd' : line.includes('GNU') ? 'gnu' : null;
+    const bsd = line.includes('BSD') || (key === 'awk' && /^awk version \d{8}\b/.test(line));
+    const flavor = bsd ? 'bsd' : line.includes('GNU') ? 'gnu' : null;
     if (flavor) result.flavor = flavor;
   }
   return result;
