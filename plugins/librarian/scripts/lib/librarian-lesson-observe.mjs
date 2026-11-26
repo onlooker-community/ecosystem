@@ -174,6 +174,12 @@ export function observe({ onlookerDir, projectKey, observedAt, stack, probe = tr
   }
 
   for (const entry of stack) {
+    // The stack is model-written JSON; a non-string must not throw away the
+    // entries that are fine.
+    if (typeof entry !== 'string') {
+      unresolved.push(entry);
+      continue;
+    }
     const key = normalize(entry);
     const hit = ownIndex.get(key);
     if (hit) {

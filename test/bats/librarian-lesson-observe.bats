@@ -156,3 +156,10 @@ _observe() {
 	run _observe '["vite", "Sentry"]'
 	[ "$(find "${ONLOOKER_DIR}" -type f | sort)" = "$before" ]
 }
+
+@test "a non-string stack element is unresolved and does not void the rest" {
+	run _observe '["vite", 1, null]'
+	[ "$status" -eq 0 ] || return 1
+	[ -n "$output" ] || return 1
+	printf '%s' "$output" | jq -e '.observed_on.vite.version == "5.4.21" and .unresolved == [1, null]' >/dev/null
+}
