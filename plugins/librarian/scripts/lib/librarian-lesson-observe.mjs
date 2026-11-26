@@ -66,7 +66,7 @@ export function commitAt(repo, observedAt) {
 }
 
 // A later source never replaces an exact one with a declared range.
-const RANK = { manifest: 1, lockfile: 2, mise: 2, workflow: 2, component: 2 };
+const RANK = { manifest: 1, lockfile: 2, mise: 2, component: 2 };
 
 function miseTools(text) {
   const tools = {};
@@ -80,11 +80,12 @@ function miseTools(text) {
     if (!m) continue;
     // "aqua:BurntSushi/ripgrep" -> "ripgrep"
     const name = m[1].split(/[:/]/).pop();
-    const version = m[2]
-      .replace(/["[\]]/g, '')
-      .split(',')[0]
-      .trim();
-    if (version) tools[name] = version;
+    // A string, or an inline table's version. Anything else is not read.
+    const value = m[2].trim();
+    const version = value.startsWith('{')
+      ? value.match(/\bversion\s*=\s*["']([^"']+)["']/)?.[1]
+      : value.match(/^["']([^"']*)["']/)?.[1];
+    if (version) tools[name] = version.trim();
   }
   return tools;
 }
@@ -104,11 +105,12 @@ export function indexAt(repo, sha, { componentsOnly = false } = {}) {
   const aliases = new Map();
   index.aliases = aliases;
   const put = (name, version, source, rank = RANK[source]) => {
-    if (!name || !version) return;
+    if (typeof name !== 'string' || typeof version !== 'string' || !name || !version) return;
     const key = normalize(name);
     const prev = index.get(key);
     if (!prev || rank > prev.rank) index.set(key, { version, source, rank });
-    const scoped = key.match(/^@[^/]+\/(.+)$/);
+    // @types/node describes node, it is not node.
+    const scoped = key.match(/^@(?!types\/)[^/]+\/(.+)$/);
     if (scoped) {
       if (!aliases.has(scoped[1])) aliases.set(scoped[1], new Set());
       aliases.get(scoped[1]).add(key);
@@ -122,6 +124,8 @@ export function indexAt(repo, sha, { componentsOnly = false } = {}) {
 
   for (const p of files) {
     const base = path.posix.basename(p);
+    // Another project's repo is read only for what it says about itself.
+    if (componentsOnly && base !== 'plugin.json' && base !== 'package.json') continue;
     if (base === 'plugin.json' && p.includes('.claude-plugin/')) {
       const j = parseJson(show(p));
       put(j?.name, j?.version, 'component');
@@ -135,7 +139,6 @@ export function indexAt(repo, sha, { componentsOnly = false } = {}) {
       for (const field of ['dependencies', 'devDependencies', 'peerDependencies']) {
         for (const [n, v] of Object.entries(j?.[field] ?? {})) put(n, v, 'manifest');
       }
-    } else if (componentsOnly) {
     } else if (base === 'package-lock.json') {
       const j = parseJson(show(p));
       for (const [k, v] of Object.entries(j?.packages ?? {})) {
@@ -153,15 +156,11 @@ export function indexAt(repo, sha, { componentsOnly = false } = {}) {
       // Only the four-space lines under a specs: block are resolved gems;
       // six-space lines are their dependency constraints.
       for (const m of (show(p) ?? '').matchAll(/^ {4}([A-Za-z0-9_.-]+) \(([^)]+)\)$/gm)) {
-        put(m[1], m[2], 'lockfile');
+        // A platform gem is "2.10.1-aarch64-linux"; the version is "2.10.1".
+        put(m[1], m[2].replace(/-(?:aarch64|arm64|arm|x86_64|x86|universal)-[a-z0-9_]+$|-java$/, ''), 'lockfile');
       }
     } else if (base === 'mise.toml' || base === '.mise.toml') {
       for (const [n, v] of Object.entries(miseTools(show(p) ?? ''))) put(n, v, 'mise');
-    } else if (/^\.github\/workflows\/[^/]+\.ya?ml$/.test(p)) {
-      for (const m of (show(p) ?? '').matchAll(/uses:\s*([^@\s]+)@([^\s#]+)/g)) {
-        const action = m[1].split('/')[1] ?? m[1];
-        put(action.replace(/-action$/, ''), m[2].replace(/^v/, ''), 'workflow');
-      }
     }
   }
 
@@ -169,11 +168,11 @@ export function indexAt(repo, sha, { componentsOnly = false } = {}) {
   return index;
 }
 
-// An exact match first; otherwise the one scoped package whose unscoped name
-// this is. Two packages sharing a name resolve neither.
-function lookup(index, key) {
-  const exact = index.get(key);
-  if (exact) return exact;
+const exactIn = (index, key) => index.get(key);
+
+// The one scoped package whose unscoped name this is. Two packages sharing a
+// name resolve neither, and an exact match anywhere has already been tried.
+function aliasIn(index, key) {
   const scoped = index.aliases?.get(key);
   return scoped?.size === 1 ? index.get([...scoped][0]) : undefined;
 }
@@ -202,20 +201,33 @@ export function observe({ onlookerDir, projectKey, observedAt, stack, probe = tr
       continue;
     }
     const key = normalize(entry);
-    const hit = lookup(ownIndex, key);
+    const hit = exactIn(ownIndex, key);
     if (hit) {
       observed_on[entry] = { version: hit.version, source: hit.source, basis: ownAt.basis };
       continue;
     }
-    const elsewhere = others.find((o) => lookup(o.index, key));
+    const elsewhere = others.find((o) => exactIn(o.index, key));
     if (elsewhere) {
-      const c = lookup(elsewhere.index, key);
+      const c = exactIn(elsewhere.index, key);
       observed_on[entry] = { version: c.version, source: 'component', basis: elsewhere.basis };
       continue;
     }
     const probed = probe ? probeTool(key) : null;
     if (probed) {
       observed_on[entry] = probed;
+      continue;
+    }
+    // Last, because "node" is not @types/node's version and "core" is not
+    // @babel/core's: a better source for the same name always wins.
+    const aliased = aliasIn(ownIndex, key);
+    if (aliased) {
+      observed_on[entry] = { version: aliased.version, source: aliased.source, basis: ownAt.basis };
+      continue;
+    }
+    const aliasedElsewhere = others.find((o) => aliasIn(o.index, key));
+    if (aliasedElsewhere) {
+      const c = aliasIn(aliasedElsewhere.index, key);
+      observed_on[entry] = { version: c.version, source: 'component', basis: aliasedElsewhere.basis };
       continue;
     }
     unresolved.push(entry);
@@ -251,8 +263,8 @@ const PROBES = {
 const FLAVORED = new Set(['awk', 'grep', 'sed']);
 
 function probeTool(key) {
+  if (!Object.hasOwn(PROBES, key)) return null;
   const probe = PROBES[key];
-  if (!probe) return null;
   let out;
   try {
     out = execFileSync(probe[0], probe[1], {
@@ -268,7 +280,10 @@ function probeTool(key) {
   if (!version) return null;
   const result = { version, source: 'probe', basis: 'machine' };
   // BSD grep says "(BSD grep, GNU compatible)", so BSD is checked first.
-  if (FLAVORED.has(key)) result.flavor = line.includes('BSD') ? 'bsd' : line.includes('GNU') ? 'gnu' : 'bsd';
+  if (FLAVORED.has(key)) {
+    const flavor = line.includes('BSD') ? 'bsd' : line.includes('GNU') ? 'gnu' : null;
+    if (flavor) result.flavor = flavor;
+  }
   return result;
 }
 

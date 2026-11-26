@@ -86,9 +86,9 @@ _observe() {
 	printf '%s' "$output" | jq -e '.observed_on.bats == {version: "1.12.0", source: "mise", basis: "session_commit"} and .observed_on.ripgrep.version == "15.1.0"' >/dev/null
 }
 
-@test "a workflow action pin versions the action, without its -action suffix" {
+@test "a workflow action pin is not a version of the tool, so it stays unresolved" {
 	run _observe '["release-please"]'
-	printf '%s' "$output" | jq -e '.observed_on["release-please"] == {version: "4", source: "workflow", basis: "session_commit"}' >/dev/null
+	printf '%s' "$output" | jq -e '.observed_on == {} and .unresolved == ["release-please"]' >/dev/null
 }
 
 @test "the project's own plugin is a component" {
@@ -195,7 +195,7 @@ _observe_stubbed() {
 @test "a BSD awk's date-shaped version is kept" {
 	_stub awk 'echo "awk version 20200816"'
 	run _observe_stubbed '["awk"]'
-	printf '%s' "$output" | jq -e '.observed_on.awk == {version: "20200816", source: "probe", basis: "machine", flavor: "bsd"}' >/dev/null
+	printf '%s' "$output" | jq -e '.observed_on.awk == {version: "20200816", source: "probe", basis: "machine"}' >/dev/null
 }
 
 @test "a probe that fails leaves the entry unresolved" {
@@ -292,4 +292,73 @@ _commit_before_session() {
 	_commit_before_session
 	run _observe '["auth-core","auth-react"]'
 	printf '%s' "$output" | jq -e '.observed_on["auth-core"].version == "0.0.1" and .observed_on["auth-react"].version == "0.0.2"' >/dev/null
+}
+
+@test "a scoped alias does not beat the probe" {
+	_write "$REPO" package-lock.json '{"packages":{"":{},"node_modules/@scope/sqlite3":{"version":"7.0.0"}}}'
+	_commit_before_session
+	_stub sqlite3 'echo "3.43.2 2023-10-10"'
+	run _observe_stubbed '["sqlite3"]'
+	printf '%s' "$output" | jq -e '.observed_on.sqlite3 == {version: "3.43.2", source: "probe", basis: "machine"}' >/dev/null
+}
+
+@test "a @types package never aliases to the tool it describes" {
+	_write "$REPO" package-lock.json '{"packages":{"":{},"node_modules/@types/sqlite3":{"version":"5.1.0"},"node_modules/@types/express":{"version":"4.17.0"}}}'
+	_commit_before_session
+	_stub sqlite3 'echo "3.43.2 2023-10-10"'
+	run _observe_stubbed '["sqlite3","express"]'
+	printf '%s' "$output" | jq -e '.observed_on.sqlite3.source == "probe" and .unresolved == ["express"]' >/dev/null
+}
+
+@test "a scoped alias does not beat another repo's exact component" {
+	OTHER="${BATS_TEST_TMPDIR}/other"
+	_init_repo "$OTHER"
+	_register "bbbbbbbbbbbb" "$OTHER"
+	_write "$OTHER" package.json '{"name":"shared","version":"2.0.0"}'
+	_commit "$OTHER" "$OLD"
+	_write "$REPO" package-lock.json '{"packages":{"":{},"node_modules/@scope/shared":{"version":"1.0.0"}}}'
+	_commit_before_session
+	run _observe '["shared"]'
+	printf '%s' "$output" | jq -e '.observed_on.shared == {version: "2.0.0", source: "component", basis: "session_commit"}' >/dev/null
+}
+
+@test "a stack entry named after an Object property is unresolved" {
+	run _observe '["constructor","__proto__","toString"]'
+	printf '%s' "$output" | jq -e '.observed_on == {} and (.unresolved | length) == 3' >/dev/null
+}
+
+@test "a version line naming neither BSD nor GNU records no flavor" {
+	_stub grep 'echo "grep (busybox 1.36.1)"'
+	run _observe_stubbed '["grep"]'
+	printf '%s' "$output" | jq -e '.observed_on.grep == {version: "1.36.1", source: "probe", basis: "machine"}' >/dev/null
+}
+
+@test "a pnpm v9 lockfile is read from its packages and snapshots" {
+	_write "$REPO" pnpm-lock.yaml $'lockfileVersion: \'9.0\'\n\npackages:\n\n  \'@babel/core@7.24.0\':\n    resolution: {integrity: sha512-abc}\n    engines: {node: \'>=6.9.0\'}\n\n  vitest@4.1.9:\n    resolution: {integrity: sha512-def}\n\nsnapshots:\n\n  vitest@4.1.9(@types/node@20.1.0)(vite@5.4.21):\n    dependencies:\n      vite: 5.4.21\n'
+	_write "$REPO" package-lock.json '{}'
+	_commit_before_session
+	run _observe '["vitest","@babel/core"]'
+	printf '%s' "$output" | jq -e '.observed_on.vitest.version == "4.1.9" and .observed_on["@babel/core"].version == "7.24.0"' >/dev/null
+}
+
+@test "a malformed package.json does not void a valid lockfile" {
+	_write "$REPO" packages/bad/package.json '{"name":5,"version":"1.0.0","dependencies":{"x":7,"y":null}}'
+	_commit_before_session
+	run _observe '["vite"]'
+	[ "$status" -eq 0 ] || return 1
+	printf '%s' "$output" | jq -e '.observed_on.vite.version == "6.0.0"' >/dev/null
+}
+
+@test "a Gemfile.lock platform suffix is not part of the version" {
+	_write "$REPO" Gemfile.lock $'GEM\n  specs:\n    commonmarker (2.10.1-aarch64-linux)\n    nokogiri (1.16.0-arm64-darwin)\n    rails (8.0.1)\n'
+	_commit_before_session
+	run _observe '["commonmarker","nokogiri","rails"]'
+	printf '%s' "$output" | jq -e '.observed_on.commonmarker.version == "2.10.1" and .observed_on.nokogiri.version == "1.16.0" and .observed_on.rails.version == "8.0.1"' >/dev/null
+}
+
+@test "a mise inline table is read for its version, and one without is skipped" {
+	_write "$REPO" mise.toml $'[tools]\nnode = { version = "20.11.0" }\nopaque = { path = "/x" }\nbats = "1.12.0"\n'
+	_commit_before_session
+	run _observe '["node","opaque","bats"]'
+	printf '%s' "$output" | jq -e '.observed_on.node == {version: "20.11.0", source: "mise", basis: "session_commit"} and .unresolved == ["opaque"] and .observed_on.bats.version == "1.12.0"' >/dev/null
 }
