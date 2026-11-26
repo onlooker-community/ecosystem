@@ -99,11 +99,20 @@ export function indexAt(repo, sha, { componentsOnly = false } = {}) {
   if (cache.has(cacheKey)) return cache.get(cacheKey);
 
   const index = new Map();
-  const put = (name, version, source) => {
+  // "@scope/name" is also reachable as "name", but only while exactly one
+  // scoped package carries that name. unscoped name -> the scoped keys.
+  const aliases = new Map();
+  index.aliases = aliases;
+  const put = (name, version, source, rank = RANK[source]) => {
     if (!name || !version) return;
     const key = normalize(name);
     const prev = index.get(key);
-    if (!prev || RANK[source] > RANK[prev.source]) index.set(key, { version, source });
+    if (!prev || rank > prev.rank) index.set(key, { version, source, rank });
+    const scoped = key.match(/^@[^/]+\/(.+)$/);
+    if (scoped) {
+      if (!aliases.has(scoped[1])) aliases.set(scoped[1], new Set());
+      aliases.get(scoped[1]).add(key);
+    }
   };
   const show = (p) => git(repo, ['show', `${sha}:${p}`]);
 
@@ -120,6 +129,9 @@ export function indexAt(repo, sha, { componentsOnly = false } = {}) {
       const j = parseJson(show(p));
       put(j?.name, j?.version, 'component');
       if (componentsOnly) continue;
+      // "pnpm@11.0.9+sha512...": an exact pin, so it ranks with a lockfile.
+      const pm = typeof j?.packageManager === 'string' ? j.packageManager.match(/^([^@]+)@([^+]+)/) : null;
+      if (pm) put(pm[1], pm[2], 'manifest', RANK.lockfile);
       for (const field of ['dependencies', 'devDependencies', 'peerDependencies']) {
         for (const [n, v] of Object.entries(j?.[field] ?? {})) put(n, v, 'manifest');
       }
@@ -157,6 +169,15 @@ export function indexAt(repo, sha, { componentsOnly = false } = {}) {
   return index;
 }
 
+// An exact match first; otherwise the one scoped package whose unscoped name
+// this is. Two packages sharing a name resolve neither.
+function lookup(index, key) {
+  const exact = index.get(key);
+  if (exact) return exact;
+  const scoped = index.aliases?.get(key);
+  return scoped?.size === 1 ? index.get([...scoped][0]) : undefined;
+}
+
 export function observe({ onlookerDir, projectKey, observedAt, stack, probe = true }) {
   const observed_on = {};
   const unresolved = [];
@@ -181,14 +202,14 @@ export function observe({ onlookerDir, projectKey, observedAt, stack, probe = tr
       continue;
     }
     const key = normalize(entry);
-    const hit = ownIndex.get(key);
+    const hit = lookup(ownIndex, key);
     if (hit) {
       observed_on[entry] = { version: hit.version, source: hit.source, basis: ownAt.basis };
       continue;
     }
-    const elsewhere = others.find((o) => o.index.get(key));
+    const elsewhere = others.find((o) => lookup(o.index, key));
     if (elsewhere) {
-      const c = elsewhere.index.get(key);
+      const c = lookup(elsewhere.index, key);
       observed_on[entry] = { version: c.version, source: 'component', basis: elsewhere.basis };
       continue;
     }

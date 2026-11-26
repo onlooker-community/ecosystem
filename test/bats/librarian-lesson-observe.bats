@@ -240,3 +240,56 @@ _observe_stubbed() {
 	run _observe_stubbed '["darwin"]'
 	printf '%s' "$output" | jq -e '.observed_on.darwin.version == "25.0.0"' >/dev/null
 }
+
+# A commit dated before the session, on top of the fixture's two.
+_commit_before_session() {
+	_commit "$REPO" "$(relative_iso_days_ago 8)"
+}
+
+@test "packageManager is read as an exact pin" {
+	_write "$REPO" package.json '{"name":"fixture","packageManager":"pnpm@11.0.9"}'
+	_commit_before_session
+	run _observe '["pnpm"]'
+	printf '%s' "$output" | jq -e '.observed_on.pnpm == {version: "11.0.9", source: "manifest", basis: "session_commit"} and .unresolved == []' >/dev/null
+}
+
+@test "packageManager drops a +sha suffix" {
+	_write "$REPO" package.json '{"name":"fixture","packageManager":"pnpm@11.0.9+sha512.abcdef"}'
+	_commit_before_session
+	run _observe '["pnpm"]'
+	printf '%s' "$output" | jq -e '.observed_on.pnpm.version == "11.0.9"' >/dev/null
+}
+
+@test "packageManager outranks a declared range for the same tool" {
+	_write "$REPO" package.json '{"name":"fixture","devDependencies":{"pnpm":"^9.0.0"},"packageManager":"pnpm@9.15.4"}'
+	_commit_before_session
+	run _observe '["pnpm"]'
+	printf '%s' "$output" | jq -e '.observed_on.pnpm.version == "9.15.4"' >/dev/null
+}
+
+@test "an unscoped name matches the one scoped package that carries it" {
+	run _observe '["vite-plugin"]'
+	printf '%s' "$output" | jq -e '.observed_on["vite-plugin"].version == "1.42.0" and .unresolved == []' >/dev/null
+}
+
+@test "an unscoped name shared by two scoped packages stays unresolved" {
+	_write "$REPO" package.json '{"name":"fixture","dependencies":{"@a/core":"1.0.0","@b/core":"2.0.0"}}'
+	_commit_before_session
+	run _observe '["core"]'
+	printf '%s' "$output" | jq -e '.observed_on == {} and .unresolved == ["core"]' >/dev/null
+}
+
+@test "an exact match wins over an unscoped fallback" {
+	_write "$REPO" package.json '{"name":"fixture","dependencies":{"@a/core":"1.0.0","core":"3.0.0"}}'
+	_commit_before_session
+	run _observe '["core"]'
+	printf '%s' "$output" | jq -e '.observed_on.core.version == "3.0.0"' >/dev/null
+}
+
+@test "a workspace package is matched by its unscoped name" {
+	_write "$REPO" packages/auth-core/package.json '{"name":"@fixture/auth-core","version":"0.0.1"}'
+	_write "$REPO" packages/auth-react/package.json '{"name":"@fixture/auth-react","version":"0.0.2"}'
+	_commit_before_session
+	run _observe '["auth-core","auth-react"]'
+	printf '%s' "$output" | jq -e '.observed_on["auth-core"].version == "0.0.1" and .observed_on["auth-react"].version == "0.0.2"' >/dev/null
+}
