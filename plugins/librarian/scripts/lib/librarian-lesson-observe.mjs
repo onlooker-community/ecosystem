@@ -1,0 +1,299 @@
+#!/usr/bin/env node
+// The versions a lesson's stack entries were observed on. See
+// librarian-lesson-observe.sh for the contract. Reads git objects only, so a
+// working-tree edit made after the session is never mistaken for what the
+// session ran on.
+//
+// Usage: node librarian-lesson-observe.mjs <onlooker_dir> <project_key> <observed_at> <stack_json>
+
+import { execFileSync } from 'node:child_process';
+import { readdirSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const GIT_TIMEOUT_MS = 5000;
+
+// Lowercase, then drop a trailing ".js" or "js": "Vite.js" and "vite" are
+// the same entry, as are "Next.js" and "next".
+export const normalize = (name) => name.toLowerCase().replace(/\.?js$/, '') || name.toLowerCase();
+
+const git = (repo, args) => {
+  try {
+    return execFileSync('git', ['-C', repo, ...args], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: GIT_TIMEOUT_MS,
+    });
+  } catch {
+    return null;
+  }
+};
+
+const parseJson = (text) => {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+};
+
+// project_key -> repo_root, from each librarian store's manifest.json.
+export function registeredRepos(onlookerDir) {
+  const repos = new Map();
+  const root = path.join(onlookerDir, 'librarian');
+  let keys = [];
+  try {
+    keys = readdirSync(root);
+  } catch {
+    return repos;
+  }
+  for (const key of keys) {
+    let manifest = null;
+    try {
+      manifest = parseJson(readFileSync(path.join(root, key, 'manifest.json'), 'utf8'));
+    } catch {}
+    if (manifest?.repo_root) repos.set(key, manifest.repo_root);
+  }
+  return repos;
+}
+
+// The last commit at or before the session, or HEAD when there is none.
+export function commitAt(repo, observedAt) {
+  const sha = git(repo, ['rev-list', '-1', `--before=${observedAt}`, 'HEAD'])?.trim();
+  if (sha) return { sha, basis: 'session_commit' };
+  const head = git(repo, ['rev-parse', 'HEAD'])?.trim();
+  return head ? { sha: head, basis: 'head' } : null;
+}
+
+// A later source never replaces an exact one with a declared range.
+const RANK = { manifest: 1, lockfile: 2, mise: 2, component: 2 };
+
+function miseTools(text) {
+  const tools = {};
+  let inTools = false;
+  for (const line of text.split('\n')) {
+    if (/^\s*\[/.test(line)) {
+      inTools = /^\s*\[tools\]\s*$/.test(line);
+      continue;
+    }
+    const m = inTools && line.match(/^\s*"?([^"=\s]+)"?\s*=\s*(.+)$/);
+    if (!m) continue;
+    // "aqua:BurntSushi/ripgrep" -> "ripgrep"
+    const name = m[1].split(/[:/]/).pop();
+    // A string, or an inline table's version. Anything else is not read.
+    const value = m[2].trim();
+    const version = value.startsWith('{')
+      ? value.match(/\bversion\s*=\s*["']([^"']+)["']/)?.[1]
+      : value.match(/^["']([^"']*)["']/)?.[1];
+    if (version) tools[name] = version.trim();
+  }
+  return tools;
+}
+
+const cache = new Map();
+
+// normalized name -> {version, source}, from the manifests at one commit.
+// componentsOnly restricts it to what a repo says about itself, which is all
+// another project's repo is consulted for.
+export function indexAt(repo, sha, { componentsOnly = false } = {}) {
+  const cacheKey = `${repo}\0${sha}\0${componentsOnly}`;
+  if (cache.has(cacheKey)) return cache.get(cacheKey);
+
+  const index = new Map();
+  // "@scope/name" is also reachable as "name", but only while exactly one
+  // scoped package carries that name. unscoped name -> the scoped keys.
+  const aliases = new Map();
+  index.aliases = aliases;
+  const put = (name, version, source, rank = RANK[source]) => {
+    if (typeof name !== 'string' || typeof version !== 'string' || !name || !version) return;
+    const key = normalize(name);
+    const prev = index.get(key);
+    if (!prev || rank > prev.rank) index.set(key, { version, source, rank });
+    // @types/node describes node, it is not node.
+    const scoped = key.match(/^@(?!types\/)[^/]+\/(.+)$/);
+    if (scoped) {
+      if (!aliases.has(scoped[1])) aliases.set(scoped[1], new Set());
+      aliases.get(scoped[1]).add(key);
+    }
+  };
+  const show = (p) => git(repo, ['show', `${sha}:${p}`]);
+
+  const files = (git(repo, ['ls-tree', '-r', '--name-only', sha]) ?? '')
+    .split('\n')
+    .filter((p) => p && !p.split('/').includes('node_modules') && p.split('/').length <= 6);
+
+  for (const p of files) {
+    const base = path.posix.basename(p);
+    // Another project's repo is read only for what it says about itself.
+    if (componentsOnly && base !== 'plugin.json' && base !== 'package.json') continue;
+    if (base === 'plugin.json' && p.includes('.claude-plugin/')) {
+      const j = parseJson(show(p));
+      put(j?.name, j?.version, 'component');
+    } else if (base === 'package.json') {
+      const j = parseJson(show(p));
+      put(j?.name, j?.version, 'component');
+      if (componentsOnly) continue;
+      // "pnpm@11.0.9+sha512...": an exact pin, so it ranks with a lockfile.
+      const pm = typeof j?.packageManager === 'string' ? j.packageManager.match(/^([^@]+)@([^+]+)/) : null;
+      if (pm) put(pm[1], pm[2], 'manifest', RANK.lockfile);
+      for (const field of ['dependencies', 'devDependencies', 'peerDependencies']) {
+        for (const [n, v] of Object.entries(j?.[field] ?? {})) put(n, v, 'manifest');
+      }
+    } else if (base === 'package-lock.json') {
+      const j = parseJson(show(p));
+      for (const [k, v] of Object.entries(j?.packages ?? {})) {
+        if (k.startsWith('node_modules/')) put(k.replace(/^.*node_modules\//, ''), v?.version, 'lockfile');
+      }
+    } else if (base === 'pnpm-lock.yaml') {
+      for (const m of (show(p) ?? '').matchAll(/^\s{2}'?\/?((?:@[^/@\s]+\/)?[^@\s'/]+)@(\d[^(:'\s]*)/gm)) {
+        put(m[1], m[2], 'lockfile');
+      }
+    } else if (base === 'uv.lock') {
+      for (const m of (show(p) ?? '').matchAll(/^name = "([^"]+)"\nversion = "([^"]+)"/gm)) {
+        put(m[1], m[2], 'lockfile');
+      }
+    } else if (base === 'Gemfile.lock') {
+      // Only the four-space lines under a specs: block are resolved gems;
+      // six-space lines are their dependency constraints.
+      for (const m of (show(p) ?? '').matchAll(/^ {4}([A-Za-z0-9_.-]+) \(([^)]+)\)$/gm)) {
+        // A platform gem is "2.10.1-aarch64-linux"; the version is "2.10.1".
+        put(m[1], m[2].replace(/-(?:aarch64|arm64|arm|x86_64|x86|universal)-[a-z0-9_]+$|-java$/, ''), 'lockfile');
+      }
+    } else if (base === 'mise.toml' || base === '.mise.toml') {
+      for (const [n, v] of Object.entries(miseTools(show(p) ?? ''))) put(n, v, 'mise');
+    }
+  }
+
+  cache.set(cacheKey, index);
+  return index;
+}
+
+const exactIn = (index, key) => index.get(key);
+
+// The one scoped package whose unscoped name this is. Two packages sharing a
+// name resolve neither, and an exact match anywhere has already been tried.
+function aliasIn(index, key) {
+  const scoped = index.aliases?.get(key);
+  return scoped?.size === 1 ? index.get([...scoped][0]) : undefined;
+}
+
+export function observe({ onlookerDir, projectKey, observedAt, stack, probe = true }) {
+  const observed_on = {};
+  const unresolved = [];
+  const repos = registeredRepos(onlookerDir);
+
+  const own = repos.get(projectKey);
+  const ownAt = own ? commitAt(own, observedAt) : null;
+  const ownIndex = ownAt ? indexAt(own, ownAt.sha) : new Map();
+
+  const others = [];
+  for (const [key, repo] of repos) {
+    if (key === projectKey || repo === own) continue;
+    const at = commitAt(repo, observedAt);
+    if (at) others.push({ index: indexAt(repo, at.sha, { componentsOnly: true }), basis: at.basis });
+  }
+
+  for (const entry of stack) {
+    // The stack is model-written JSON; a non-string must not throw away the
+    // entries that are fine.
+    if (typeof entry !== 'string') {
+      unresolved.push(entry);
+      continue;
+    }
+    const key = normalize(entry);
+    const hit = exactIn(ownIndex, key);
+    if (hit) {
+      observed_on[entry] = { version: hit.version, source: hit.source, basis: ownAt.basis };
+      continue;
+    }
+    const elsewhere = others.find((o) => exactIn(o.index, key));
+    if (elsewhere) {
+      const c = exactIn(elsewhere.index, key);
+      observed_on[entry] = { version: c.version, source: 'component', basis: elsewhere.basis };
+      continue;
+    }
+    const probed = probe ? probeTool(key) : null;
+    if (probed) {
+      observed_on[entry] = probed;
+      continue;
+    }
+    // Last, because "node" is not @types/node's version and "core" is not
+    // @babel/core's: a better source for the same name always wins.
+    const aliased = aliasIn(ownIndex, key);
+    if (aliased) {
+      observed_on[entry] = { version: aliased.version, source: aliased.source, basis: ownAt.basis };
+      continue;
+    }
+    const aliasedElsewhere = others.find((o) => aliasIn(o.index, key));
+    if (aliasedElsewhere) {
+      const c = aliasIn(aliasedElsewhere.index, key);
+      observed_on[entry] = { version: c.version, source: 'component', basis: aliasedElsewhere.basis };
+      continue;
+    }
+    unresolved.push(entry);
+  }
+
+  return { observed_on, unresolved };
+}
+
+const PROBE_TIMEOUT_MS = 2000;
+
+// Only these are ever run. Each is the tool's own version flag, so probing
+// one can't do anything else. The machine is read when the transform runs,
+// not when the session did, which is why every probe says basis "machine".
+const PROBES = {
+  bash: ['bash', ['--version']],
+  git: ['git', ['--version']],
+  node: ['node', ['--version']],
+  npm: ['npm', ['--version']],
+  jq: ['jq', ['--version']],
+  sqlite: ['sqlite3', ['--version']],
+  sqlite3: ['sqlite3', ['--version']],
+  awk: ['awk', ['--version']],
+  grep: ['grep', ['--version']],
+  sed: ['sed', ['--version']],
+  // uname -r is the Darwin kernel, not the macOS release; sw_vers is the release.
+  macos: ['sw_vers', ['-productVersion']],
+  darwin: ['uname', ['-r']],
+  linux: ['uname', ['-r']],
+};
+
+// awk, grep and sed differ between BSD and GNU builds in ways a lesson can
+// depend on, and a version number alone doesn't say which.
+const FLAVORED = new Set(['awk', 'grep', 'sed']);
+
+function probeTool(key) {
+  if (!Object.hasOwn(PROBES, key)) return null;
+  const probe = PROBES[key];
+  let out;
+  try {
+    out = execFileSync(probe[0], probe[1], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: PROBE_TIMEOUT_MS,
+    });
+  } catch {
+    return null;
+  }
+  const line = out.split('\n').find((l) => l.trim()) ?? '';
+  const version = line.match(/\d+\.\d+(?:\.\d+)?|\d{8}/)?.[0];
+  if (!version) return null;
+  const result = { version, source: 'probe', basis: 'machine' };
+  // BSD grep says "(BSD grep, GNU compatible)", so BSD is checked first. The
+  // one true awk, macOS's and FreeBSD's, names no build but prints its
+  // version as a date: "awk version 20200816".
+  if (FLAVORED.has(key)) {
+    const bsd = line.includes('BSD') || (key === 'awk' && /^awk version \d{8}\b/.test(line));
+    const flavor = bsd ? 'bsd' : line.includes('GNU') ? 'gnu' : null;
+    if (flavor) result.flavor = flavor;
+  }
+  return result;
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+  const [onlookerDir, projectKey, observedAt, stackJson] = process.argv.slice(2);
+  const stack = parseJson(stackJson);
+  if (onlookerDir && projectKey && observedAt && Array.isArray(stack)) {
+    process.stdout.write(`${JSON.stringify(observe({ onlookerDir, projectKey, observedAt, stack }))}\n`);
+  }
+}

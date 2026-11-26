@@ -1,0 +1,364 @@
+#!/usr/bin/env bats
+# librarian_lesson_observe: a stack entry's version, read from the project at
+# the session's commit, from a component's home repo, or from a probe of the
+# machine. No model call, and nothing written.
+
+setup() {
+	source "${BATS_TEST_DIRNAME}/../helpers/setup.bash"
+	setup_test_env
+
+	PLUGIN_ROOT="${REPO_ROOT}/plugins/librarian"
+	export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-observe.sh"
+
+	KEY="aaaaaaaaaaaa"
+	REPO="${BATS_TEST_TMPDIR}/project"
+	_init_repo "$REPO"
+	_register "$KEY" "$REPO"
+
+	# Two commits: the session ran between them, so the first is the one
+	# that counts and the second must be ignored.
+	OLD=$(relative_iso_days_ago 10)
+	SESSION=$(relative_iso_days_ago 5)
+	NEW=$(relative_iso_days_ago 2)
+
+	_write "$REPO" package-lock.json '{"packages":{"":{},"node_modules/vite":{"version":"5.4.21"},"node_modules/@cloudflare/vite-plugin":{"version":"1.42.0"}}}'
+	_write "$REPO" package.json '{"name":"fixture","dependencies":{"react":"^18.2.0"}}'
+	_write "$REPO" mise.toml $'[tools]\nbats = "1.12.0"\n"aqua:BurntSushi/ripgrep" = "15.1.0"\n'
+	_write "$REPO" .github/workflows/release.yml $'jobs:\n  r:\n    steps:\n      - uses: googleapis/release-please-action@v4\n'
+	_write "$REPO" plugins/fixture-plugin/.claude-plugin/plugin.json '{"name":"fixture-plugin","version":"0.3.1"}'
+	_commit "$REPO" "$OLD"
+
+	_write "$REPO" package-lock.json '{"packages":{"":{},"node_modules/vite":{"version":"6.0.0"}}}'
+	_commit "$REPO" "$NEW"
+}
+
+_init_repo() {
+	mkdir -p "$1"
+	git -C "$1" init -q
+	git -C "$1" config user.email t@example.com
+	git -C "$1" config user.name Test
+}
+
+_register() {
+	mkdir -p "${ONLOOKER_DIR}/librarian/$1"
+	jq -n --arg k "$1" --arg r "$2" '{project_key: $k, repo_root: $r}' \
+		> "${ONLOOKER_DIR}/librarian/$1/manifest.json"
+}
+
+_write() {
+	mkdir -p "$(dirname "$1/$2")"
+	printf '%s' "$3" > "$1/$2"
+}
+
+_commit() {
+	git -C "$1" add -A
+	GIT_AUTHOR_DATE="$2" GIT_COMMITTER_DATE="$2" git -C "$1" commit -q -m c
+}
+
+_observe() {
+	librarian_lesson_observe "$KEY" "$SESSION" "$1"
+}
+
+@test "a lockfile version is read at the session's commit, not HEAD" {
+	run _observe '["vite"]'
+	[ "$status" -eq 0 ] || return 1
+	printf '%s' "$output" | jq -e '.observed_on.vite == {version: "5.4.21", source: "lockfile", basis: "session_commit"} and .unresolved == []' >/dev/null
+}
+
+@test "a scoped package name is matched as written" {
+	run _observe '["@cloudflare/vite-plugin"]'
+	printf '%s' "$output" | jq -e '.observed_on["@cloudflare/vite-plugin"].version == "1.42.0"' >/dev/null
+}
+
+@test "names are matched without case or a .js suffix" {
+	run _observe '["Vite.js"]'
+	printf '%s' "$output" | jq -e '.observed_on["Vite.js"].version == "5.4.21"' >/dev/null
+}
+
+@test "a session before the first commit falls back to HEAD and says so" {
+	run librarian_lesson_observe "$KEY" "$(relative_iso_days_ago 30)" '["vite"]'
+	printf '%s' "$output" | jq -e '.observed_on.vite == {version: "6.0.0", source: "lockfile", basis: "head"}' >/dev/null
+}
+
+@test "a mise pin is read, including a backend-prefixed tool" {
+	run _observe '["bats", "ripgrep"]'
+	printf '%s' "$output" | jq -e '.observed_on.bats == {version: "1.12.0", source: "mise", basis: "session_commit"} and .observed_on.ripgrep.version == "15.1.0"' >/dev/null
+}
+
+@test "a workflow action pin is not a version of the tool, so it stays unresolved" {
+	run _observe '["release-please"]'
+	printf '%s' "$output" | jq -e '.observed_on == {} and .unresolved == ["release-please"]' >/dev/null
+}
+
+@test "the project's own plugin is a component" {
+	run _observe '["fixture-plugin"]'
+	printf '%s' "$output" | jq -e '.observed_on["fixture-plugin"] == {version: "0.3.1", source: "component", basis: "session_commit"}' >/dev/null
+}
+
+@test "a dependency with no lockfile entry keeps its declared range" {
+	run _observe '["react"]'
+	printf '%s' "$output" | jq -e '.observed_on.react == {version: "^18.2.0", source: "manifest", basis: "session_commit"}' >/dev/null
+}
+
+@test "a component from another registered repo is read at its own commit" {
+	OTHER="${BATS_TEST_TMPDIR}/other"
+	_init_repo "$OTHER"
+	_register "bbbbbbbbbbbb" "$OTHER"
+	_write "$OTHER" plugins/tribunal/.claude-plugin/plugin.json '{"name":"tribunal","version":"1.2.3"}'
+	_commit "$OTHER" "$OLD"
+	_write "$OTHER" plugins/tribunal/.claude-plugin/plugin.json '{"name":"tribunal","version":"2.0.0"}'
+	_commit "$OTHER" "$NEW"
+
+	run _observe '["tribunal"]'
+	printf '%s' "$output" | jq -e '.observed_on.tribunal == {version: "1.2.3", source: "component", basis: "session_commit"}' >/dev/null
+}
+
+@test "a resolved gem is read from Gemfile.lock, not its dependency constraints" {
+	_write "$REPO" Gemfile.lock $'GEM\n  remote: https://rubygems.org/\n  specs:\n    rails (7.1.3)\n      rack (>= 2.2.4)\n    rack (3.0.9)\n'
+	_commit "$REPO" "$(relative_iso_days_ago 6)"
+	run _observe '["rails", "rack"]'
+	printf '%s' "$output" | jq -e '.observed_on.rails.version == "7.1.3" and .observed_on.rack.version == "3.0.9"' >/dev/null
+}
+
+@test "a Python package is read from uv.lock" {
+	_write "$REPO" uv.lock $'version = 1\n\n[[package]]\nname = "httpx"\nversion = "0.27.0"\nsource = { registry = "https://pypi.org/simple" }\n'
+	_commit "$REPO" "$(relative_iso_days_ago 6)"
+	run _observe '["httpx"]'
+	printf '%s' "$output" | jq -e '.observed_on.httpx == {version: "0.27.0", source: "lockfile", basis: "session_commit"}' >/dev/null
+}
+
+@test "an entry no source knows is unresolved" {
+	run _observe '["vite", "Sentry"]'
+	printf '%s' "$output" | jq -e '(.observed_on | keys) == ["vite"] and .unresolved == ["Sentry"]' >/dev/null
+}
+
+@test "an unregistered project leaves every entry unresolved" {
+	run librarian_lesson_observe "cccccccccccc" "$SESSION" '["vite"]'
+	[ "$status" -eq 0 ] || return 1
+	printf '%s' "$output" | jq -e '.observed_on == {} and .unresolved == ["vite"]' >/dev/null
+}
+
+@test "a working-tree edit is never read" {
+	_write "$REPO" package-lock.json '{"packages":{"node_modules/vite":{"version":"9.9.9"}}}'
+	run _observe '["vite"]'
+	printf '%s' "$output" | jq -e '.observed_on.vite.version == "5.4.21"' >/dev/null
+}
+
+@test "a missing argument prints nothing" {
+	run librarian_lesson_observe "$KEY" "" '["vite"]'
+	[ "$status" -eq 0 ] || return 1
+	[ -z "$output" ]
+}
+
+@test "nothing is written to the librarian store" {
+	before=$(find "${ONLOOKER_DIR}" -type f | sort)
+	run _observe '["vite", "Sentry"]'
+	[ "$(find "${ONLOOKER_DIR}" -type f | sort)" = "$before" ]
+}
+
+@test "a non-string stack element is unresolved and does not void the rest" {
+	run _observe '["vite", 1, null]'
+	[ "$status" -eq 0 ] || return 1
+	[ -n "$output" ] || return 1
+	printf '%s' "$output" | jq -e '.observed_on.vite.version == "5.4.21" and .unresolved == [1, null]' >/dev/null
+}
+
+_stub() {
+	mkdir -p "${BATS_TEST_TMPDIR}/stub"
+	printf '#!/usr/bin/env bash\n%s\n' "$2" > "${BATS_TEST_TMPDIR}/stub/$1"
+	chmod +x "${BATS_TEST_TMPDIR}/stub/$1"
+}
+
+_observe_stubbed() {
+	PATH="${BATS_TEST_TMPDIR}/stub:${PATH}" librarian_lesson_observe "$KEY" "$SESSION" "$1"
+}
+
+@test "a tool on the allowlist is probed when no manifest has it" {
+	_stub sqlite3 'echo "3.43.2 2023-10-10 13:08:14 abc"'
+	run _observe_stubbed '["sqlite3"]'
+	printf '%s' "$output" | jq -e '.observed_on.sqlite3 == {version: "3.43.2", source: "probe", basis: "machine"}' >/dev/null
+}
+
+@test "sqlite is probed under either name" {
+	_stub sqlite3 'echo "3.43.2 2023-10-10"'
+	run _observe_stubbed '["SQLite"]'
+	printf '%s' "$output" | jq -e '.observed_on.SQLite.version == "3.43.2"' >/dev/null
+}
+
+@test "a GNU awk is recorded with its flavor" {
+	_stub awk 'echo "GNU Awk 5.3.0, API 4.0"'
+	run _observe_stubbed '["awk"]'
+	printf '%s' "$output" | jq -e '.observed_on.awk == {version: "5.3.0", source: "probe", basis: "machine", flavor: "gnu"}' >/dev/null
+}
+
+@test "a BSD awk's date-shaped version is kept, and named bsd" {
+	_stub awk 'echo "awk version 20200816"'
+	run _observe_stubbed '["awk"]'
+	printf '%s' "$output" | jq -e '.observed_on.awk == {version: "20200816", source: "probe", basis: "machine", flavor: "bsd"}' >/dev/null
+}
+
+@test "a probe that fails leaves the entry unresolved" {
+	_stub npm 'exit 1'
+	run _observe_stubbed '["npm"]'
+	printf '%s' "$output" | jq -e '.unresolved == ["npm"]' >/dev/null
+}
+
+@test "a tool off the allowlist is never run" {
+	_stub vitest 'touch "'"${BATS_TEST_TMPDIR}"'/ran"; echo "vitest/9.0.0"'
+	run _observe_stubbed '["vitest"]'
+	[ ! -e "${BATS_TEST_TMPDIR}/ran" ] || return 1
+	printf '%s' "$output" | jq -e '.unresolved == ["vitest"]' >/dev/null
+}
+
+@test "a manifest pin wins over the probe" {
+	_stub bats 'echo "Bats 9.9.9"'
+	run _observe_stubbed '["bats"]'
+	printf '%s' "$output" | jq -e '.observed_on.bats.source == "mise"' >/dev/null
+}
+
+@test "BSD grep is told apart from GNU grep by what its version line says" {
+	_stub grep 'echo "grep (BSD grep, GNU compatible) 2.6.0-FreeBSD"'
+	run _observe_stubbed '["grep"]'
+	printf '%s' "$output" | jq -e '.observed_on.grep == {version: "2.6.0", source: "probe", basis: "machine", flavor: "bsd"}' >/dev/null
+}
+
+@test "GNU grep is recorded as gnu" {
+	_stub grep 'echo "grep (GNU grep) 3.11"'
+	run _observe_stubbed '["grep"]'
+	printf '%s' "$output" | jq -e '.observed_on.grep == {version: "3.11", source: "probe", basis: "machine", flavor: "gnu"}' >/dev/null
+}
+
+@test "macOS is read from sw_vers, not the Darwin kernel" {
+	_stub sw_vers 'echo "26.1"'
+	run _observe_stubbed '["macos"]'
+	printf '%s' "$output" | jq -e '.observed_on.macos.version == "26.1"' >/dev/null
+}
+
+@test "darwin is still read from uname" {
+	_stub uname 'echo "25.0.0"'
+	run _observe_stubbed '["darwin"]'
+	printf '%s' "$output" | jq -e '.observed_on.darwin.version == "25.0.0"' >/dev/null
+}
+
+# A commit dated before the session, on top of the fixture's two.
+_commit_before_session() {
+	_commit "$REPO" "$(relative_iso_days_ago 8)"
+}
+
+@test "packageManager is read as an exact pin" {
+	_write "$REPO" package.json '{"name":"fixture","packageManager":"pnpm@11.0.9"}'
+	_commit_before_session
+	run _observe '["pnpm"]'
+	printf '%s' "$output" | jq -e '.observed_on.pnpm == {version: "11.0.9", source: "manifest", basis: "session_commit"} and .unresolved == []' >/dev/null
+}
+
+@test "packageManager drops a +sha suffix" {
+	_write "$REPO" package.json '{"name":"fixture","packageManager":"pnpm@11.0.9+sha512.abcdef"}'
+	_commit_before_session
+	run _observe '["pnpm"]'
+	printf '%s' "$output" | jq -e '.observed_on.pnpm.version == "11.0.9"' >/dev/null
+}
+
+@test "packageManager outranks a declared range for the same tool" {
+	_write "$REPO" package.json '{"name":"fixture","devDependencies":{"pnpm":"^9.0.0"},"packageManager":"pnpm@9.15.4"}'
+	_commit_before_session
+	run _observe '["pnpm"]'
+	printf '%s' "$output" | jq -e '.observed_on.pnpm.version == "9.15.4"' >/dev/null
+}
+
+@test "an unscoped name matches the one scoped package that carries it" {
+	run _observe '["vite-plugin"]'
+	printf '%s' "$output" | jq -e '.observed_on["vite-plugin"].version == "1.42.0" and .unresolved == []' >/dev/null
+}
+
+@test "an unscoped name shared by two scoped packages stays unresolved" {
+	_write "$REPO" package.json '{"name":"fixture","dependencies":{"@a/core":"1.0.0","@b/core":"2.0.0"}}'
+	_commit_before_session
+	run _observe '["core"]'
+	printf '%s' "$output" | jq -e '.observed_on == {} and .unresolved == ["core"]' >/dev/null
+}
+
+@test "an exact match wins over an unscoped fallback" {
+	_write "$REPO" package.json '{"name":"fixture","dependencies":{"@a/core":"1.0.0","core":"3.0.0"}}'
+	_commit_before_session
+	run _observe '["core"]'
+	printf '%s' "$output" | jq -e '.observed_on.core.version == "3.0.0"' >/dev/null
+}
+
+@test "a workspace package is matched by its unscoped name" {
+	_write "$REPO" packages/auth-core/package.json '{"name":"@fixture/auth-core","version":"0.0.1"}'
+	_write "$REPO" packages/auth-react/package.json '{"name":"@fixture/auth-react","version":"0.0.2"}'
+	_commit_before_session
+	run _observe '["auth-core","auth-react"]'
+	printf '%s' "$output" | jq -e '.observed_on["auth-core"].version == "0.0.1" and .observed_on["auth-react"].version == "0.0.2"' >/dev/null
+}
+
+@test "a scoped alias does not beat the probe" {
+	_write "$REPO" package-lock.json '{"packages":{"":{},"node_modules/@scope/sqlite3":{"version":"7.0.0"}}}'
+	_commit_before_session
+	_stub sqlite3 'echo "3.43.2 2023-10-10"'
+	run _observe_stubbed '["sqlite3"]'
+	printf '%s' "$output" | jq -e '.observed_on.sqlite3 == {version: "3.43.2", source: "probe", basis: "machine"}' >/dev/null
+}
+
+@test "a @types package never aliases to the tool it describes" {
+	_write "$REPO" package-lock.json '{"packages":{"":{},"node_modules/@types/sqlite3":{"version":"5.1.0"},"node_modules/@types/express":{"version":"4.17.0"}}}'
+	_commit_before_session
+	_stub sqlite3 'echo "3.43.2 2023-10-10"'
+	run _observe_stubbed '["sqlite3","express"]'
+	printf '%s' "$output" | jq -e '.observed_on.sqlite3.source == "probe" and .unresolved == ["express"]' >/dev/null
+}
+
+@test "a scoped alias does not beat another repo's exact component" {
+	OTHER="${BATS_TEST_TMPDIR}/other"
+	_init_repo "$OTHER"
+	_register "bbbbbbbbbbbb" "$OTHER"
+	_write "$OTHER" package.json '{"name":"shared","version":"2.0.0"}'
+	_commit "$OTHER" "$OLD"
+	_write "$REPO" package-lock.json '{"packages":{"":{},"node_modules/@scope/shared":{"version":"1.0.0"}}}'
+	_commit_before_session
+	run _observe '["shared"]'
+	printf '%s' "$output" | jq -e '.observed_on.shared == {version: "2.0.0", source: "component", basis: "session_commit"}' >/dev/null
+}
+
+@test "a stack entry named after an Object property is unresolved" {
+	run _observe '["constructor","__proto__","toString"]'
+	printf '%s' "$output" | jq -e '.observed_on == {} and (.unresolved | length) == 3' >/dev/null
+}
+
+@test "a version line naming neither BSD nor GNU records no flavor" {
+	_stub grep 'echo "grep (busybox 1.36.1)"'
+	run _observe_stubbed '["grep"]'
+	printf '%s' "$output" | jq -e '.observed_on.grep == {version: "1.36.1", source: "probe", basis: "machine"}' >/dev/null
+}
+
+@test "a pnpm v9 lockfile is read from its packages and snapshots" {
+	_write "$REPO" pnpm-lock.yaml $'lockfileVersion: \'9.0\'\n\npackages:\n\n  \'@babel/core@7.24.0\':\n    resolution: {integrity: sha512-abc}\n    engines: {node: \'>=6.9.0\'}\n\n  vitest@4.1.9:\n    resolution: {integrity: sha512-def}\n\nsnapshots:\n\n  vitest@4.1.9(@types/node@20.1.0)(vite@5.4.21):\n    dependencies:\n      vite: 5.4.21\n'
+	_write "$REPO" package-lock.json '{}'
+	_commit_before_session
+	run _observe '["vitest","@babel/core"]'
+	printf '%s' "$output" | jq -e '.observed_on.vitest.version == "4.1.9" and .observed_on["@babel/core"].version == "7.24.0"' >/dev/null
+}
+
+@test "a malformed package.json does not void a valid lockfile" {
+	_write "$REPO" packages/bad/package.json '{"name":5,"version":"1.0.0","dependencies":{"x":7,"y":null}}'
+	_commit_before_session
+	run _observe '["vite"]'
+	[ "$status" -eq 0 ] || return 1
+	printf '%s' "$output" | jq -e '.observed_on.vite.version == "6.0.0"' >/dev/null
+}
+
+@test "a Gemfile.lock platform suffix is not part of the version" {
+	_write "$REPO" Gemfile.lock $'GEM\n  specs:\n    commonmarker (2.10.1-aarch64-linux)\n    nokogiri (1.16.0-arm64-darwin)\n    rails (8.0.1)\n'
+	_commit_before_session
+	run _observe '["commonmarker","nokogiri","rails"]'
+	printf '%s' "$output" | jq -e '.observed_on.commonmarker.version == "2.10.1" and .observed_on.nokogiri.version == "1.16.0" and .observed_on.rails.version == "8.0.1"' >/dev/null
+}
+
+@test "a mise inline table is read for its version, and one without is skipped" {
+	_write "$REPO" mise.toml $'[tools]\nnode = { version = "20.11.0" }\nopaque = { path = "/x" }\nbats = "1.12.0"\n'
+	_commit_before_session
+	run _observe '["node","opaque","bats"]'
+	printf '%s' "$output" | jq -e '.observed_on.node == {version: "20.11.0", source: "mise", basis: "session_commit"} and .unresolved == ["opaque"] and .observed_on.bats.version == "1.12.0"' >/dev/null
+}

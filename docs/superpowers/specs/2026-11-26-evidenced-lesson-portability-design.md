@@ -90,8 +90,12 @@ For an observed version `X.Y.Z`:
 
 - `X >= 1`: `>=X.Y.Z <X+1`, the rest of the same major.
 - `X == 0`: `>=0.Y.Z <0.Y+1`, the rest of the same minor.
-- A version that doesn't parse as at least `X.Y` stays in `observed_on` and
-  goes in `unresolved` (D6). No range is invented for it.
+- A version that doesn't parse as at least `X.Y` (BSD awk's `20200816`)
+  stays in `observed_on`, and the entry is left out of `scope.versions`. No
+  range is invented for it. It does not go in `unresolved`, which is only
+  for entries no source could version (D6). Evidence records what was
+  observed. Whether a range follows from it is computed when needed, so the
+  rule can change later without rewriting stored lessons.
 
 This leans on semver's promise, which is the same promise a person relies on
 when they upgrade within a major. A lesson that breaks within a major is a
@@ -239,7 +243,7 @@ The contract changes land first, in the onlooker repo, because
 - When Observe can't find the repo for a project key, every entry is
   `unresolved` and the candidate stays local. It never fails the transform.
 - When `git rev-list --before` finds no commit, it falls back to HEAD and
-  records `"source": "head"`.
+  records `"basis": "head"`.
 - A probe that exits non-zero or prints nothing leaves the entry
   `unresolved`.
 - None of this runs at SessionEnd. The transform is already detached
