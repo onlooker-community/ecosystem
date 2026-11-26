@@ -10,7 +10,7 @@ repos, writes nothing to either, and makes no model call.
 | | |
 | --- | --- |
 | date | 2026-11-26 |
-| ecosystem checkout | `0085f7f5` on `meagan/onl-313-observe-versions` (includes the `packageManager` and scoped-name fix below) |
+| ecosystem checkout | `f3c31024` on `meagan/onl-313-observe-versions` (includes the resolver fixes described below) |
 | store | `~/.onlooker/librarian`, 215 candidates across 9 projects |
 | probe | read **this machine**, as of the run, not the session's |
 | script | `run.mjs`; `concepts.txt` lists the stack entries that name a concept, not a versioned thing |
@@ -18,10 +18,12 @@ repos, writes nothing to either, and makes no model call.
 `node run.mjs` reproduces the committed numbers. For a comparison run, pass a
 different concepts file as the second argument and set `RESULTS_OUT=none`.
 
-A first run, before the resolver fixes, scored 163 of 215 (76%). Reading it
-turned up two real gaps, fixed in `0085f7f5` with tests first: `pnpm` is pinned
-in `package.json`'s `packageManager` field, and `biome` or `auth-core` name a
-package the manifests write as `@scope/name`. The numbers below are after that fix.
+Two review rounds changed the resolver after a first run scored 163 of 215
+(76%). Reading that run turned up two real gaps, fixed in `0085f7f5` with tests
+first (172 of 215, 80%): `pnpm` is pinned in `package.json`'s `packageManager`
+field, and `biome` or `auth-core` name a package the manifests write as
+`@scope/name`. The second round, `f3c31024`, is below. The numbers in the
+tables are after both.
 
 ## Result against the 39% baseline
 
@@ -31,12 +33,12 @@ counted the same way. The candidate total is the same, 215.
 
 | | fully_resolved | concepts_only | partly | none | headline |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| with `concepts.txt` (25 entries) | 153 | 19 | 13 | 30 | **172 of 215 (80%)** |
-| empty concepts file | 143 | 0 | 28 | 44 | **143 of 215 (67%)** |
+| with `concepts.txt` (25 entries) | 146 | 19 | 17 | 33 | **165 of 215 (77%)** |
+| empty concepts file | 136 | 0 | 32 | 47 | **136 of 215 (63%)** |
 
 The topics split is worth 29 candidates (13 points) by itself: those stacks are
 concepts, and once rollout step 3 moves them to `topics` they stop counting
-against resolution. The other 67% is Observe, with no help from the split. Both
+against resolution. The other 63% is Observe, with no help from the split. Both
 clear the spec's 60 to 70% estimate; with the split the result is above it.
 
 Stack entries that were not strings: 0.
@@ -47,11 +49,10 @@ From the run with `concepts.txt`, counting entries rather than candidates:
 
 | source | basis | entries |
 | --- | --- | ---: |
-| component | session_commit | 73 |
+| component | session_commit | 74 |
 | lockfile | session_commit | 61 |
 | probe | machine | 58 |
 | mise | session_commit | 10 |
-| workflow | session_commit | 8 |
 | manifest | session_commit | 3 |
 
 Components and lockfiles carry most of it. Manifests, which is all the
@@ -60,12 +61,20 @@ version outranks a manifest's range.
 
 ## What is still unresolved
 
-43 candidates, with `concepts.txt` applied. Entries that name a hosted service:
+50 candidates, with `concepts.txt` applied. Entries that name a hosted service:
 
-- Cloudflare Workers (7), Sentry (7), Cloudflare (3), D1 (2),
-  cloudflare-workers, GitHub, GitHub Apps. GitHub Actions (4) is the same: the
-  workflow files are read only for the `uses:` actions, not the runner. This is
-  open question 2 and is left alone.
+- Cloudflare Workers (7), Sentry (7), GitHub Actions (4), Cloudflare (3), D1 (2),
+  cloudflare-workers, GitHub, GitHub Apps. This is open question 2 and is left
+  alone.
+
+Workflow pins are deliberately left unresolved too. A `uses:` pin is the
+action's version, not the tool's: `release-please` was recorded as `4` and
+`mise` as a commit SHA. Observe no longer reads `.github/workflows` at all,
+pending open question 2 (`workflow` stays in the contract's enum). That costs 7
+candidates, all with `release-please` in the stack, which is why the headline
+fell from 172 to 165. The `@types/*` scope is excluded from the unscoped-name
+alias, because `@types/node` is not node's version, and the alias runs last,
+after the probe, so a better source for the same name always wins.
 
 Concepts added during Step 4, because they name nothing with a version: email,
 monitoring, documentation, deployment, API validation, API contracts,
@@ -92,8 +101,9 @@ named here.
   HEAD's history, so a rebased branch can change the answer.
 - A manifest range is recorded as written, for example `^2.4.11`. The
   observation says what the project declared, which is not always what ran.
-- `results.jsonl` holds 214 rows, not 215. One candidate comes from a repo
-  outside `github.com/meaganwaller/` and `github.com/onlooker-community/`, and
+- `results.jsonl` holds 214 rows, not 215, and `run.mjs` filters them by the
+  manifest's remote, so rerunning it reproduces the file exactly. One candidate comes from a repo
+  outside `github.com/meaganewaller/` and `github.com/onlooker-community/`, and
   this repo is public, so its row is dropped. The counts above cover all 215.
 
 ## What rollout step 3 should take from it

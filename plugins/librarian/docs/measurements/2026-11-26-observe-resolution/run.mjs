@@ -3,6 +3,9 @@
 // candidate's stack. Reads the lesson store and the repos; writes only
 // results.jsonl beside this file. No model call.
 //
+// Only rows from the owner's own repos are written to results.jsonl; the
+// tally still counts every candidate and says how many rows were withheld.
+//
 // Usage: node run.mjs [onlooker_dir] [concepts_file]
 //   onlooker_dir   default: ~/.onlooker
 //   concepts_file  default: concepts.txt beside this file
@@ -58,9 +61,22 @@ for (const key of readdirSync(store)) {
     });
   }
 }
+// This repo is public, so only rows from the owner's own repos are written:
+// the manifest's remote must be under github.com/meaganewaller/ or
+// github.com/onlooker-community/. No manifest, or no remote, is withheld too.
+const OWNED = /github\.com[:/](?:meaganewaller|onlooker-community)\//;
+const isOwned = (key) => {
+  try {
+    const m = JSON.parse(readFileSync(path.join(store, key, 'manifest.json'), 'utf8'));
+    return typeof m.remote_url === 'string' && OWNED.test(m.remote_url);
+  } catch {
+    return false;
+  }
+};
+const written = rows.filter((r) => isOwned(r.key));
 if (process.env.RESULTS_OUT !== 'none') {
   const out = process.env.RESULTS_OUT ?? path.join(here, 'results.jsonl');
-  writeFileSync(out, `${rows.map((r) => JSON.stringify(r)).join('\n')}\n`);
+  writeFileSync(out, `${written.map((r) => JSON.stringify(r)).join('\n')}\n`);
 }
 
 const tally = (xs) =>
@@ -84,6 +100,7 @@ console.log(
   JSON.stringify(
     {
       candidates: rows.length,
+      rows_withheld_from_results: rows.length - written.length,
       non_string_stack_elements: nonString,
       outcomes: tally(rows.map(outcome)),
       observed_by_source: tally(entries),

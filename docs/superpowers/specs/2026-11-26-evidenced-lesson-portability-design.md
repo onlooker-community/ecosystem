@@ -243,7 +243,7 @@ The contract changes land first, in the onlooker repo, because
 - When Observe can't find the repo for a project key, every entry is
   `unresolved` and the candidate stays local. It never fails the transform.
 - When `git rev-list --before` finds no commit, it falls back to HEAD and
-  records `"source": "head"`.
+  records `"basis": "head"`.
 - A probe that exits non-zero or prints nothing leaves the entry
   `unresolved`.
 - None of this runs at SessionEnd. The transform is already detached
