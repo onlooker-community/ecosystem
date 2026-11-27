@@ -436,7 +436,9 @@ librarian_cli_lessons_list() {
 	printf '%s' "$rows" | jq -r '.[]
 		| "\(.id)  \(.candidate.claim)"
 		  + (if .candidate.applies_to.scope.kind == "unscoped"
-		     then " — needs scope" else "" end)'
+		     then " — needs scope"
+		     elif .candidate.applies_to.scope.kind == "no_stack"
+		     then " — no tool" else "" end)'
 }
 
 librarian_cli_lessons_show() {
@@ -466,7 +468,14 @@ librarian_cli_lessons_show() {
 		"scope:       \(.candidate.applies_to.scope | tojson)"
 			+ (if .candidate.applies_to.scope.kind == "unscoped"
 			   then "   — needs a justification, at org or public visibility"
+			   elif .candidate.applies_to.scope.kind == "no_stack"
+			   then "   — no tool; needs no justification"
 			   else "" end),
+		# Entries no source could version: why the unattended path left this
+		# candidate for a person (D6).
+		(if ((.candidate.evidence.unresolved // []) | length) > 0 then
+			"unresolved:  \(.candidate.evidence.unresolved | join(", "))"
+		 else empty end),
 		# Why the unattended path declined to assert version-independence
 		# (ONL-183). Shown so the human deciding knows what the model
 		# objected to; absent when nothing refused it.

@@ -5,11 +5,13 @@
 # Everything here makes LLM calls, so it runs ONLY from the detached classify
 # worker — never on the SessionEnd path (ADR-003).
 #
-# The trust boundary is unchanged from the attended path. The transform still
-# emits scope {kind: unscoped}; this file calls the same
-# librarian_lesson_confirm a human's walk calls, and records asserted_by so the
-# assertion is judged harder (librarian_lesson_rubric_id_for_visibility) and
-# held longer (librarian_lesson_promote).
+# The trust boundary is unchanged from the attended path. The transform now
+# derives scope from what Observe saw, and this stage confirms nothing that
+# carries an unresolved entry: a stack entry no source versioned stays for a
+# person (D6). This file calls the same librarian_lesson_confirm a human's walk
+# calls, and records asserted_by so the assertion is judged harder
+# (librarian_lesson_rubric_id_for_visibility) and held longer
+# (librarian_lesson_promote).
 
 # Ask for one sentence saying why the claim holds regardless of version, or a
 # refusal with one sentence saying why not. A refusal is a real answer and
@@ -209,10 +211,14 @@ _librarian_lesson_auto_emit_asserted() {
 
 # Auto-confirm one pending candidate. Prints exactly one of:
 #   confirmed:<id>             a parked candidate the model justified, or a
-#                              versioned one, which needs no justification;
-#                              either is model-asserted and awaits a jury
+#                              versioned or no_stack one, which needs no
+#                              justification; either is model-asserted and
+#                              awaits a jury
 #   skipped:not_pending        already confirmed, judged, passed or declined
-#   skipped:not_parked         neither unscoped nor versioned; nothing to assert
+#   skipped:not_parked         none of unscoped, versioned or no_stack; nothing
+#                              to assert
+#   skipped:unresolved         an entry no source versioned (D6); left for a
+#                              person
 #   skipped:no_justification   the model refused under the hold policy; left
 #                              pending for a human, recorded as .auto_refusal
 #   declined:no_justification  the model refused under the decline policy
@@ -260,9 +266,17 @@ librarian_lesson_auto_confirm_one() {
 	local scope_kind
 	scope_kind=$(printf '%s' "$candidate" | jq -r '.applies_to.scope.kind // ""' 2>/dev/null)
 	case "$scope_kind" in
-		unscoped | versioned) ;;
+		unscoped | versioned | no_stack) ;;
 		*) printf 'skipped:not_parked'; return 0 ;;
 	esac
+
+	# D6: an entry no source could version keeps the lesson local until a
+	# person supplies the version. Checked before any model call, so a held
+	# candidate costs nothing on later scans either.
+	if printf '%s' "$candidate" | jq -e '(.evidence.unresolved // []) | length > 0' >/dev/null 2>&1; then
+		printf 'skipped:unresolved'
+		return 0
+	fi
 
 	# Checked before the model call, not after: librarian_lesson_confirm refuses
 	# a justification at private visibility, so a misconfigured value used to
@@ -278,8 +292,9 @@ librarian_lesson_auto_confirm_one() {
 	# A versioned candidate already names the versions it holds for, so there
 	# is nothing for the model to justify and no call to pay for. Only the
 	# confirm was waiting on a person, and model-asserted it is judged on the
-	# harder rubric and held for the veto window.
-	if [[ "$scope_kind" == "versioned" ]]; then
+	# harder rubric and held for the veto window. A no_stack candidate has
+	# nothing to version either.
+	if [[ "$scope_kind" == "versioned" || "$scope_kind" == "no_stack" ]]; then
 		librarian_lesson_confirm "$key" "$lesson_id" "$visibility" "" model \
 			>/dev/null 2>&1 || { _librarian_lesson_auto_emit_asserted "$lesson_id" unavailable; printf 'unavailable'; return 0; }
 		_librarian_lesson_auto_emit_asserted "$lesson_id" asserted

@@ -184,7 +184,10 @@ STUB
 
 @test "auto_confirm_one confirms a parked candidate as model-asserted" {
 	_auto_setup; _auto_stub
-	id=$(_seed_pending_unscoped)
+	# unresolved: [] -- every stack entry was versioned, so nothing holds it back.
+	id=$(librarian_lesson_write_proposal "$PROJECT_KEY" \
+		"$(_candidate "$(_unscoped)" | jq -c '.evidence.unresolved = []')" \
+		"01M3B87J7046SJE5BECNMP670K")
 	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
 	[ "$status" -eq 0 ]
 	[ "$output" = "confirmed:${id}" ]
@@ -287,6 +290,73 @@ _on_refusal() {
 	jq -e '.status == "confirmed" and .asserted_by == "model" and .visibility == "org"
 	   and .candidate.applies_to.scope.kind == "versioned"' \
 		"${LESSONS_DIR}/proposals/${id}.json"
+}
+
+# D6: a candidate with an entry no source could version stays pending for a
+# person. Checked before any model call and before any event.
+
+# Usage: _seed_with <scope_json> <stack_json> <unresolved_json|none>
+_seed_with() {
+	local cand
+	cand=$(_candidate "$1" | jq -c --argjson st "$2" '.applies_to.stack = $st')
+	if [[ "$3" != "none" ]]; then
+		cand=$(printf '%s' "$cand" | jq -c --argjson u "$3" '.evidence.unresolved = $u')
+	fi
+	librarian_lesson_write_proposal "$PROJECT_KEY" "$cand" "01KZ45MKAM734ZS7JK24D2DK0R"
+}
+
+_claude_marker_stub() {
+	STUB_BIN="${BATS_TEST_TMPDIR}/bin"
+	mkdir -p "$STUB_BIN"
+	cat > "${STUB_BIN}/claude" <<'STUB'
+#!/usr/bin/env bash
+touch "${STUB_CALLED_MARKER}"
+printf '%s' 'The failure is a property of the exec boundary, not of any release.'
+STUB
+	chmod +x "${STUB_BIN}/claude"
+	export PATH="${STUB_BIN}:${PATH}"
+	export STUB_CALLED_MARKER="${BATS_TEST_TMPDIR}/claude-called"
+}
+
+@test "a versioned candidate with an unresolved entry is left for a person" {
+	_auto_setup; _claude_marker_stub
+	id=$(_seed_with "$(_versioned)" '["vite","Sentry"]' '["Sentry"]')
+	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	[ "$output" = "skipped:unresolved" ] || return 1
+	jq -e '.status == "pending"' "${LESSONS_DIR}/proposals/${id}.json" >/dev/null || return 1
+	[ ! -f "$STUB_CALLED_MARKER" ] || return 1
+	n=$(grep -c '"event_type":"librarian.lesson.asserted"' "$ONLOOKER_EVENTS_LOG" 2>/dev/null || true)
+	[ "${n:-0}" = "0" ] || return 1
+}
+
+@test "a no_stack candidate with nothing unresolved confirms as model-asserted, with no model call" {
+	_auto_setup; _claude_marker_stub
+	id=$(_seed_with '{"kind":"no_stack"}' '[]' '[]')
+	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	[ "$output" = "confirmed:${id}" ] || return 1
+	[ ! -f "$STUB_CALLED_MARKER" ] || return 1
+	jq -e '.status == "confirmed" and .asserted_by == "model" and .visibility == "org"
+	   and .candidate.applies_to.scope.kind == "no_stack"' \
+		"${LESSONS_DIR}/proposals/${id}.json"
+}
+
+@test "a parked candidate with an unresolved entry makes no justify call" {
+	_auto_setup; _claude_marker_stub
+	id=$(_seed_with "$(_unscoped)" '["release-please"]' '["release-please"]')
+	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	[ "$output" = "skipped:unresolved" ] || return 1
+	[ ! -f "$STUB_CALLED_MARKER" ] || return 1
+	jq -e '.status == "pending"' "${LESSONS_DIR}/proposals/${id}.json" >/dev/null
+}
+
+@test "a candidate written before unresolved existed behaves as it did" {
+	_auto_setup; _claude_marker_stub
+	id=$(_seed_with "$(_versioned)" '["vite"]' none)
+	jq -e '.candidate.evidence | has("unresolved") | not' \
+		"${LESSONS_DIR}/proposals/${id}.json" >/dev/null || return 1
+	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	[ "$output" = "confirmed:${id}" ] || return 1
+	[ ! -f "$STUB_CALLED_MARKER" ] || return 1
 }
 
 # ----------------------------------------------------------------------------

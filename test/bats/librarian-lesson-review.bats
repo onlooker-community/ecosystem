@@ -159,6 +159,18 @@ _seed_pending_unscoped() {
 		"${LESSONS_DIR}/proposals/${id}.json" >/dev/null
 }
 
+@test "confirm accepts a no_stack candidate at private with no justification" {
+	_review_setup
+	id=$(librarian_lesson_write_proposal "$PROJECT_KEY" \
+		"$(_candidate '{"kind":"no_stack"}' | jq -c '.applies_to.stack = []')" \
+		"01KZ45MKAM734ZS7JK24D2DK0R")
+	run librarian_lesson_confirm "$PROJECT_KEY" "$id" "private"
+	[ "$status" -eq 0 ] || return 1
+	jq -e '.status == "confirmed" and .visibility == "private"
+	   and .candidate.applies_to.scope.kind == "no_stack"' \
+		"${LESSONS_DIR}/proposals/${id}.json" >/dev/null
+}
+
 @test "confirm refuses an empty visibility and leaves the proposal pending" {
 	_review_setup
 	id=$(_seed_pending)
