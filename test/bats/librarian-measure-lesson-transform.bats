@@ -47,8 +47,10 @@ _seed_artifact() {
 		> "${CORPUS}/${name}.json"
 }
 
-# An artifact whose candidate stack (bats) Observe cannot resolve, so the
-# candidate comes back parked as `unscoped`.
+# An artifact whose stubbed candidate names the stack ["bats"]. Paired with
+# `_register_repo bats 1.0.0-beta.1`, Observe reads a version D4 gives no range,
+# so the candidate comes back parked as `unscoped` with nothing unresolved:
+# the one shape that still reaches the justification call.
 # Usage: _seed_artifact_unversioned <name>
 _seed_artifact_unversioned() {
 	local name="$1" id
@@ -60,6 +62,33 @@ _seed_artifact_unversioned() {
 		  session_id: "s1", source: "test", trigger: "t",
 		  created_at: $created_at, updated_at: $created_at}' \
 		> "${CORPUS}/${name}.json"
+}
+
+# Register a repo for project <key> whose committed package-lock.json gives
+# <package> the version <version>, committed before every seeded artifact's
+# created_at so Observe reads it at the session's commit. The harness copies
+# the manifest into its sandbox.
+#
+# Without one, Observe versions nothing, every stack entry is unresolved, and
+# D6 holds the candidate before any judge: auto_confirm_one answers
+# skipped:unresolved, exactly as production would.
+#
+# Usage: _register_repo <package> <version> [project_key]
+_register_repo() {
+	local pkg="$1" version="$2" key="${3:-$PROJECT_KEY}"
+	local repo="${BATS_TEST_TMPDIR}/repo-${key}"
+	mkdir -p "$repo" "${ONLOOKER_DIR}/librarian/${key}"
+	git -C "$repo" init -q
+	git -C "$repo" config user.email t@example.com
+	git -C "$repo" config user.name Test
+	jq -n --arg p "node_modules/${pkg}" --arg v "$version" \
+		'{lockfileVersion: 3, packages: {"": {}, ($p): {version: $v}}}' \
+		> "${repo}/package-lock.json"
+	git -C "$repo" add package-lock.json
+	GIT_AUTHOR_DATE="$(relative_iso_days_ago 30)" GIT_COMMITTER_DATE="$(relative_iso_days_ago 30)" \
+		git -C "$repo" commit -q -m lock
+	jq -n --arg k "$key" --arg r "$repo" '{project_key: $k, repo_root: $r}' \
+		> "${ONLOOKER_DIR}/librarian/${key}/manifest.json"
 }
 
 # A `claude` whose transform answers with a PARKED candidate, whose
@@ -179,6 +208,7 @@ STUB
 
 @test "a full run writes samples and stats for every candidate" {
 	_stub_claude
+	_register_repo vite 5.4.21
 	_seed_artifact A1 5
 	_seed_artifact A2 10
 	_seed_artifact A3 15
@@ -219,6 +249,7 @@ STUB
 	# the adversarial column — the entire point of ONL-110 — would be empty
 	# and the panel would look unanimous.
 	_stub_claude
+	_register_repo vite 5.4.21
 	_seed_artifact A1 5
 
 	run "$HARNESS" --samples 1 --project-key "$PROJECT_KEY" \
@@ -237,6 +268,7 @@ STUB
 	# adversarial score is pushed low enough that only a mean-based bug could
 	# pass it... and high enough that `min` and `mean` disagree on grounding.
 	_stub_claude 0.40
+	_register_repo vite 5.4.21
 	_seed_artifact A1 5
 
 	run "$HARNESS" --samples 1 --project-key "$PROJECT_KEY" \
@@ -330,6 +362,7 @@ fi
 STUB
 	chmod +x "${STUB_BIN}/claude"
 	export PATH="${STUB_BIN}:${PATH}"
+	_register_repo vite 5.4.21
 	_seed_artifact A1 5
 
 	run "$HARNESS" --samples 1 --project-key "$PROJECT_KEY" \
@@ -352,6 +385,7 @@ STUB
 	# direction every time.
 	_stub_parked_claude
 	_seed_artifact_unversioned A1
+	_register_repo bats 1.0.0-beta.1
 
 	run "$HARNESS" --samples 1 --project-key "$PROJECT_KEY" \
 		--artifacts-from "$CORPUS" --out "$OUT"
@@ -371,6 +405,7 @@ STUB
 	# arm (9 of 9) cited exactly that missing support.
 	_stub_parked_claude "Assertions on the log hold whatever the tool versions are."
 	_seed_artifact_unversioned A1
+	_register_repo bats 1.0.0-beta.1
 
 	run "$HARNESS" --samples 1 --project-key "$PROJECT_KEY" \
 		--artifacts-from "$CORPUS" --out "$OUT"
@@ -390,6 +425,7 @@ STUB
 	# panel production never convenes.
 	_stub_parked_claude "REFUSE"
 	_seed_artifact_unversioned A1
+	_register_repo bats 1.0.0-beta.1
 
 	run "$HARNESS" --samples 1 --project-key "$PROJECT_KEY" \
 		--artifacts-from "$CORPUS" --out "$OUT"
@@ -406,6 +442,7 @@ STUB
 	# which needs the reason beside the claim it refused (ONL-183).
 	_stub_parked_claude "REFUSE: The stack names only internal plugins."
 	_seed_artifact_unversioned A1
+	_register_repo bats 1.0.0-beta.1
 
 	run "$HARNESS" --samples 1 --project-key "$PROJECT_KEY" \
 		--artifacts-from "$CORPUS" --out "$OUT"
@@ -418,6 +455,7 @@ STUB
 @test "a candidate nobody refused records a null refusal reason" {
 	_stub_parked_claude
 	_seed_artifact_unversioned A1
+	_register_repo bats 1.0.0-beta.1
 
 	run "$HARNESS" --samples 1 --project-key "$PROJECT_KEY" \
 		--artifacts-from "$CORPUS" --out "$OUT"
@@ -430,6 +468,7 @@ STUB
 @test "--raw-scope reproduces the pre-fix shape for comparison" {
 	_stub_parked_claude
 	_seed_artifact_unversioned A1
+	_register_repo bats 1.0.0-beta.1
 
 	run "$HARNESS" --samples 1 --raw-scope --project-key "$PROJECT_KEY" \
 		--artifacts-from "$CORPUS" --out "$OUT"
@@ -460,18 +499,7 @@ STUB
 
 	# A registered repo whose lockfile resolves vite, committed before the
 	# artifact's created_at; the harness copies the manifest into its sandbox.
-	local repo="${BATS_TEST_TMPDIR}/observed-repo"
-	mkdir -p "$repo" "${ONLOOKER_DIR}/librarian/${PROJECT_KEY}"
-	git -C "$repo" init -q
-	git -C "$repo" config user.email t@example.com
-	git -C "$repo" config user.name Test
-	printf '%s' '{"lockfileVersion":3,"packages":{"":{},"node_modules/vite":{"version":"5.4.21"}}}' \
-		> "${repo}/package-lock.json"
-	git -C "$repo" add package-lock.json
-	GIT_AUTHOR_DATE="$(relative_iso_days_ago 30)" GIT_COMMITTER_DATE="$(relative_iso_days_ago 30)" \
-		git -C "$repo" commit -q -m lock
-	jq -n --arg k "$PROJECT_KEY" --arg r "$repo" '{project_key: $k, repo_root: $r}' \
-		> "${ONLOOKER_DIR}/librarian/${PROJECT_KEY}/manifest.json"
+	_register_repo vite 5.4.21
 
 	run "$HARNESS" --samples 1 --project-key "$PROJECT_KEY" \
 		--artifacts-from "$CORPUS" --out "$OUT"
@@ -537,10 +565,93 @@ fi
 STUB
 	chmod +x "${STUB_BIN}/claude"
 	export PATH="${STUB_BIN}:${PATH}"
+	_register_repo vite 5.4.21
 
 	run "$HARNESS" --samples 1 --project-key "$PROJECT_KEY" \
 		--artifacts-from "$CORPUS" --out "$OUT"
 	[ "$status" -eq 0 ] || return 1
 	jq -e '.candidates[0].candidate != null and .candidates[0].verdicts == [] and .candidates[0].gate == null' \
 		"${OUT}/samples.json" >/dev/null
+}
+
+@test "a candidate with an unresolved entry is recorded as not judged, never reaching a judge" {
+	# D6: auto_confirm_one holds a candidate carrying a stack entry no source
+	# versioned, before any model call, and production never juries it. vite
+	# resolves and gets a range, so the candidate is versioned; zzz-no-such-tool
+	# does not. The harness used to judge every versioned candidate raw.
+	STUB_BIN="${BATS_TEST_TMPDIR}/bin"
+	mkdir -p "$STUB_BIN"
+	cat > "${STUB_BIN}/claude" <<STUB
+#!/usr/bin/env bash
+args="\$*"
+cat > /dev/null
+if [[ "\$args" == *"--agent"* ]]; then
+	touch "${BATS_TEST_TMPDIR}/JUDGED"
+	printf '%s' '{"score":0.9,"passed":true,"judge_type":"standard","feedback_summary":"f","criterion_scores":{"grounding":0.9,"scope_accuracy":0.9,"generality":0.9,"disclosure":0.95}}'
+else
+	printf '%s' '{"claim":"c","rationale":"r","evidence":{"resolution":"Pin vitest to 3.x."},"applies_to":{"stack":["vite","zzz-no-such-tool"],"topics":["testing"],"file_patterns":[],"task_kinds":[]}}'
+fi
+STUB
+	chmod +x "${STUB_BIN}/claude"
+	export PATH="${STUB_BIN}:${PATH}"
+	_register_repo vite 5.4.21
+	_seed_artifact A1 5
+
+	run "$HARNESS" --samples 1 --project-key "$PROJECT_KEY" \
+		--artifacts-from "$CORPUS" --out "$OUT"
+	[ "$status" -eq 0 ] || return 1
+
+	jq -e '.candidates[0].candidate.applies_to.scope.kind == "versioned"' \
+		"${OUT}/samples.json" >/dev/null || return 1
+	jq -e '.candidates[0].candidate.evidence.unresolved == ["zzz-no-such-tool"]' \
+		"${OUT}/samples.json" >/dev/null || return 1
+	jq -e '.candidates[0].confirm_outcome == "skipped:unresolved"' \
+		"${OUT}/samples.json" >/dev/null || return 1
+	jq -e '.candidates[0].unjudged_reason == "unresolved"' \
+		"${OUT}/samples.json" >/dev/null || return 1
+	jq -e '.candidates[0].verdicts == [] and .candidates[0].judged_scope_kind == null' \
+		"${OUT}/samples.json" >/dev/null || return 1
+	jq -e '.n == 0 and .transform.proposed == 1' "${OUT}/stats.json" >/dev/null || return 1
+	[ ! -e "${BATS_TEST_TMPDIR}/JUDGED" ]
+}
+
+@test "a judged candidate records no unjudged reason" {
+	_stub_claude
+	_register_repo vite 5.4.21
+	_seed_artifact A1 5
+
+	run "$HARNESS" --samples 1 --project-key "$PROJECT_KEY" \
+		--artifacts-from "$CORPUS" --out "$OUT"
+	[ "$status" -eq 0 ] || return 1
+	jq -e '.candidates[0] | has("unjudged_reason") and .unjudged_reason == null
+		and (.confirm_outcome | startswith("confirmed:"))' "${OUT}/samples.json" >/dev/null
+}
+
+@test "the sandbox sees every registered repo, not only the measured project's" {
+	# Observe versions an entry from what ANOTHER registered repo says about
+	# itself, a component, and finds that repo through its own manifest. With
+	# only the measured project's manifest copied, vite here is unresolved.
+	_stub_claude
+	_seed_artifact A1 5
+	local other="${BATS_TEST_TMPDIR}/vite-repo" other_key="bbbbbbbbbbbb"
+	mkdir -p "$other" "${ONLOOKER_DIR}/librarian/${other_key}"
+	git -C "$other" init -q
+	git -C "$other" config user.email t@example.com
+	git -C "$other" config user.name Test
+	printf '%s' '{"name":"vite","version":"5.4.21"}' > "${other}/package.json"
+	git -C "$other" add package.json
+	GIT_AUTHOR_DATE="$(relative_iso_days_ago 30)" GIT_COMMITTER_DATE="$(relative_iso_days_ago 30)" \
+		git -C "$other" commit -q -m init
+	jq -n --arg k "$other_key" --arg r "$other" '{project_key: $k, repo_root: $r}' \
+		> "${ONLOOKER_DIR}/librarian/${other_key}/manifest.json"
+	before=$(find "$ONLOOKER_DIR" -type f | sort | xargs shasum -a 256)
+
+	run "$HARNESS" --samples 1 --project-key "$PROJECT_KEY" \
+		--artifacts-from "$CORPUS" --out "$OUT"
+	[ "$status" -eq 0 ] || return 1
+	jq -e '.candidates[0].candidate.evidence.observed_on.vite.source == "component"' \
+		"${OUT}/samples.json" >/dev/null || return 1
+	jq -e '.candidates[0].judged_scope_kind == "versioned"' "${OUT}/samples.json" >/dev/null || return 1
+	# Read only: nothing in the real store changed.
+	[ "$(find "$ONLOOKER_DIR" -type f | sort | xargs shasum -a 256)" = "$before" ]
 }
