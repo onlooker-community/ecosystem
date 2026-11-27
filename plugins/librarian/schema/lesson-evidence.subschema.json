@@ -45,36 +45,18 @@
           },
           "source": {
             "type": "string",
-            "enum": [
-              "lockfile",
-              "manifest",
-              "mise",
-              "workflow",
-              "component",
-              "probe"
-            ]
+            "enum": ["lockfile", "manifest", "mise", "workflow", "component", "probe"]
           },
           "basis": {
             "type": "string",
-            "enum": [
-              "session_commit",
-              "head",
-              "machine"
-            ]
+            "enum": ["session_commit", "head", "machine"]
           },
           "flavor": {
             "type": "string",
-            "enum": [
-              "gnu",
-              "bsd"
-            ]
+            "enum": ["gnu", "bsd"]
           }
         },
-        "required": [
-          "version",
-          "source",
-          "basis"
-        ],
+        "required": ["version", "source", "basis"],
         "additionalProperties": false
       }
     },
@@ -87,12 +69,6 @@
       }
     }
   },
-  "required": [
-    "artifact_ids",
-    "session_ids",
-    "project_key",
-    "observed_at",
-    "resolution"
-  ],
+  "required": ["artifact_ids", "session_ids", "project_key", "observed_at", "resolution"],
   "additionalProperties": false
 }

@@ -4,6 +4,9 @@
 // never hand-edited, so it can't drift from the contract it shadows.
 //
 // Usage: node scripts/lib/derive-pending-applies-to.mjs --write
+// then ./node_modules/.bin/biome format --write plugins/librarian/schema/*.json,
+// since lint:check holds these files to biome layout (the test compares parsed
+// JSON, so formatting never changes what it checks).
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';

@@ -34,10 +34,7 @@
                   "minProperties": 1
                 }
               },
-              "required": [
-                "kind",
-                "versions"
-              ],
+              "required": ["kind", "versions"],
               "additionalProperties": false
             },
             {
@@ -48,9 +45,7 @@
                   "const": "unscoped"
                 }
               },
-              "required": [
-                "kind"
-              ],
+              "required": ["kind"],
               "additionalProperties": false
             }
           ]
@@ -78,12 +73,7 @@
           }
         }
       },
-      "required": [
-        "stack",
-        "scope",
-        "file_patterns",
-        "task_kinds"
-      ],
+      "required": ["stack", "scope", "file_patterns", "task_kinds"],
       "additionalProperties": false,
       "title": "with_stack"
     },
@@ -106,9 +96,7 @@
               "const": "no_stack"
             }
           },
-          "required": [
-            "kind"
-          ],
+          "required": ["kind"],
           "additionalProperties": false
         },
         "file_patterns": {
@@ -134,12 +122,7 @@
           }
         }
       },
-      "required": [
-        "stack",
-        "scope",
-        "file_patterns",
-        "task_kinds"
-      ],
+      "required": ["stack", "scope", "file_patterns", "task_kinds"],
       "additionalProperties": false,
       "title": "no_stack"
     }
