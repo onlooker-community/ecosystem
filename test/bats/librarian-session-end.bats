@@ -286,9 +286,9 @@ _settings() {
     '$base * $overlay' > "${PROJECT_REPO}/.claude/settings.json"
 }
 
-# Carries the marker phrase the durability filter wants AND a version token,
-# without which the lesson pregate rejects it before any model call and the
-# budget tests could not tell the two states apart.
+# Carries the marker phrase the durability filter wants AND a version token, so
+# the budget tests can tell a lesson that reaches the model from one the
+# filter drops.
 _seed_lessonable() {
   _seed_artifact "decisions" "01LESSONBUDGETARTIFACT000" \
     "User prefers functional patterns prefer-functional-stub" \

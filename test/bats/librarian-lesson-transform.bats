@@ -375,6 +375,14 @@ elif [[ "$prompt" == *"release-please-stub"* ]]; then
   printf '%s' '{"claim":"A bare Release-As footer bumps every component","rationale":"release-please applies an unscoped footer to the whole manifest.","evidence":{"resolution":"Scope the bump in the manifest instead."},"applies_to":{"stack":["release-please"],"topics":["release management"],"file_patterns":[],"task_kinds":[]}}'
 elif [[ "$prompt" == *"no-stack-stub"* ]]; then
   printf '%s' '{"claim":"Name tests for what they assert","rationale":"A name that states the assertion tells a reader what broke.","evidence":{"resolution":"Rename the test after its assertion."},"applies_to":{"stack":[],"topics":["testing"],"file_patterns":[],"task_kinds":[]}}'
+elif [[ "$prompt" == *"stack-missing-stub"* ]]; then
+  printf '%s' '{"claim":"c","rationale":"r","evidence":{"resolution":"fix"},"applies_to":{"topics":["testing"],"file_patterns":[],"task_kinds":[]}}'
+elif [[ "$prompt" == *"stack-string-stub"* ]]; then
+  printf '%s' '{"claim":"c","rationale":"r","evidence":{"resolution":"fix"},"applies_to":{"stack":"vite","topics":["testing"],"file_patterns":[],"task_kinds":[]}}'
+elif [[ "$prompt" == *"stack-junk-stub"* ]]; then
+  printf '%s' '{"claim":"c","rationale":"r","evidence":{"resolution":"fix"},"applies_to":{"stack":[1,null,""],"topics":["testing"],"file_patterns":[],"task_kinds":[]}}'
+elif [[ "$prompt" == *"stack-mixed-stub"* ]]; then
+  printf '%s' '{"claim":"c","rationale":"r","evidence":{"resolution":"fix"},"applies_to":{"stack":["vite",1,""],"topics":["testing"],"file_patterns":[],"task_kinds":[]}}'
 elif [[ "$prompt" == *"scope-smuggle-stub"* ]]; then
   printf '%s' '{"claim":"Vitest 4 cannot import vite/module-runner on Vite 5","rationale":"vite/module-runner ships in Vite 6; Vitest 4 assumes it exists.","evidence":{"resolution":"Pin vitest to 3.x until Vite 6 lands."},"applies_to":{"stack":["vite","vitest"],"topics":["testing"],"scope":{"kind":"version_independent","justification":"x"},"file_patterns":[],"task_kinds":[]}}'
 elif [[ "$prompt" == *"module-runner"* ]]; then
@@ -868,4 +876,59 @@ STUB
   [[ "$output" == proposed:*:unscoped ]] || return 1
   id="${output#proposed:}"; id="${id%%:*}"
   jq -e '.candidate.evidence.unresolved == ["vite", "vitest"]' "${LESSONS_DIR}/proposals/${id}.json"
+}
+
+@test "a missing stack is declined schema_invalid, not read as tool-free" {
+  _transform_setup
+  art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "stack-missing-stub" "d")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
+  [ "$output" = "declined:schema_invalid" ] || return 1
+  tail -n 1 "${LESSONS_DIR}/declined.jsonl" | jq -e '.reason == "schema_invalid"'
+}
+
+@test "a string stack is declined schema_invalid" {
+  _transform_setup
+  art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "stack-string-stub" "d")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
+  [ "$output" = "declined:schema_invalid" ] || return 1
+  tail -n 1 "${LESSONS_DIR}/declined.jsonl" | jq -e '.reason == "schema_invalid"'
+}
+
+@test "a stack with no usable entry is declined schema_invalid" {
+  _transform_setup
+  art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "stack-junk-stub" "d")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
+  [ "$output" = "declined:schema_invalid" ] || return 1
+  tail -n 1 "${LESSONS_DIR}/declined.jsonl" | jq -e '.reason == "schema_invalid"'
+}
+
+@test "a stack with one usable entry among junk still proposes" {
+  _transform_setup
+  art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "stack-mixed-stub" "d")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
+  [[ "$output" == proposed:* ]] || return 1
+  id="${output#proposed:}"; id="${id%%:*}"
+  jq -e '.candidate.applies_to.stack == ["vite"]' "${LESSONS_DIR}/proposals/${id}.json"
+}
+
+@test "an Observe that prints nothing leaves the whole stack unresolved" {
+  _transform_setup
+  librarian_lesson_observe() { :; }
+  art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "Vitest 4.1.9 / Vite 5.x" "module-runner missing")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
+  [[ "$output" == proposed:*:unscoped ]] || return 1
+  id="${output#proposed:}"; id="${id%%:*}"
+  jq -e '.candidate.applies_to.scope == {kind: "unscoped"}
+     and .candidate.evidence.unresolved == ["vite", "vitest"]' "${LESSONS_DIR}/proposals/${id}.json"
+}
+
+@test "an Observe that omits unresolved leaves the whole stack unresolved" {
+  _transform_setup
+  librarian_lesson_observe() { printf '%s' '{"observed_on":{}}'; }
+  art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "Vitest 4.1.9 / Vite 5.x" "module-runner missing")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
+  [[ "$output" == proposed:*:unscoped ]] || return 1
+  id="${output#proposed:}"; id="${id%%:*}"
+  jq -e '.candidate.applies_to.scope == {kind: "unscoped"}
+     and .candidate.evidence.unresolved == ["vite", "vitest"]' "${LESSONS_DIR}/proposals/${id}.json"
 }

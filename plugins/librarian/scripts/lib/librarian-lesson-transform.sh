@@ -312,8 +312,15 @@ librarian_lesson_transform_one() {
 		 | .evidence.project_key = $pk
 		 | .evidence.observed_at = $at
 		 # A model-written stack is JSON from a model: keep the non-empty
-		 # strings, once each. A scope it wrote anyway is not its to write.
-		 | .applies_to.stack = ([.applies_to.stack[]? | select(type == "string" and length > 0)] | unique)
+		 # strings, once each. A stack that is not an array, or whose entries
+		 # all fail, is left as written so validation declines it; only a
+		 # stack the model wrote as [] may mean "no tool". A scope it wrote
+		 # anyway is not its to write.
+		 | (.applies_to.stack // null) as $st
+		 | if ($st | type) == "array"
+		      and (($st | length) == 0 or ([$st[] | select(type == "string" and length > 0)] | length) > 0)
+		   then .applies_to.stack = ([$st[] | select(type == "string" and length > 0)] | unique)
+		   else . end
 		 | .applies_to.topics = ([.applies_to.topics[]? | select(type == "string" and length > 0)] | unique)
 		 | del(.applies_to.scope)' 2>/dev/null) || candidate=""
 
@@ -325,23 +332,28 @@ librarian_lesson_transform_one() {
 
 	# Versions are read, not asked for (D2). Observe prints nothing when node
 	# is missing or an argument is, and then every entry is unresolved: the
-	# candidate stays local rather than failing (D6).
+	# candidate stays local rather than failing (D6). A stack that is still
+	# malformed here skips this and is declined by validation below.
 	local stack observation scope
-	stack=$(printf '%s' "$candidate" | jq -c '.applies_to.stack')
-	observation=$(librarian_lesson_observe "$project_key" "$created_at" "$stack")
-	printf '%s' "$observation" | jq -e '.observed_on | type == "object"' >/dev/null 2>&1 \
-		|| observation=$(jq -cn --argjson s "$stack" '{observed_on: {}, unresolved: $s}')
-	scope=$(librarian_lesson_scope_from_observation "$stack" "$observation")
-	candidate=$(printf '%s' "$candidate" | jq -c \
-		--argjson o "$observation" --argjson sc "$scope" \
-		'.evidence.observed_on = $o.observed_on
-		 | .evidence.unresolved = [$o.unresolved[] | strings]
-		 | .applies_to.scope = $sc') || candidate=""
+	if printf '%s' "$candidate" | jq -e '.applies_to.stack | type == "array"' >/dev/null 2>&1 \
+		&& printf '%s' "$candidate" | jq -e '.applies_to.stack | all(.[]; type == "string" and length > 0)' >/dev/null 2>&1; then
+		stack=$(printf '%s' "$candidate" | jq -c '.applies_to.stack')
+		observation=$(librarian_lesson_observe "$project_key" "$created_at" "$stack")
+		printf '%s' "$observation" \
+			| jq -e '(.observed_on | type == "object") and (.unresolved | type == "array")' >/dev/null 2>&1 \
+			|| observation=$(jq -cn --argjson s "$stack" '{observed_on: {}, unresolved: $s}')
+		scope=$(librarian_lesson_scope_from_observation "$stack" "$observation")
+		candidate=$(printf '%s' "$candidate" | jq -c \
+			--argjson o "$observation" --argjson sc "$scope" \
+			'.evidence.observed_on = $o.observed_on
+			 | .evidence.unresolved = [$o.unresolved[]? | strings]
+			 | .applies_to.scope = $sc') || candidate=""
 
-	if [[ -z "$candidate" ]]; then
-		librarian_lesson_append_declined "$key" "$artifact_id" "transform_invalid"
-		printf 'declined:transform_invalid'
-		return 0
+		if [[ -z "$candidate" ]]; then
+			librarian_lesson_append_declined "$key" "$artifact_id" "transform_invalid"
+			printf 'declined:transform_invalid'
+			return 0
+		fi
 	fi
 
 	if ! librarian_lesson_validate_candidate "$candidate" 2>/dev/null; then
