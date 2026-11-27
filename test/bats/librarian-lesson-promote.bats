@@ -636,3 +636,60 @@ _promote_refuses_shape() {
 	run librarian_lesson_seen "$PROJECT_KEY" "art-never-declined"
 	[ "$status" -ne 0 ]
 }
+
+# ── observed versions carry through promote (ONL-314) ─────────────────────────
+#
+# promote copies candidate.applies_to and candidate.evidence whole into the
+# pool entry, so topics, observed_on and unresolved reach ZLesson without any
+# field-by-field mapping. Nothing pinned that until now: a future mapping that
+# rebuilt applies_to or evidence from a subset would drop these silently. The
+# assertions compare the whole objects, so a dropped or renamed key fails.
+
+# Rewrite a seeded proposal's candidate with jq. $1 = id, $2 = jq program.
+_mutate_proposal() {
+	local id="$1" mutate="$2"
+	local p="$(_dir)/proposals/${id}.json"
+	local tmp="${BATS_TEST_TMPDIR}/${id}.json"
+	jq "$mutate" "$p" > "$tmp" && mv "$tmp" "$p"
+}
+
+@test "promote carries topics, observed_on and unresolved through to the pool entry" {
+	_seed_judged "obs01" "org" "approved" "$(_two_passing)"
+	_mutate_proposal "obs01" '
+		.candidate.applies_to = {stack: ["vite"], topics: ["bundling"],
+		                         scope: {kind: "versioned", versions: {vite: ">=5.4.21 <6"}},
+		                         file_patterns: [], task_kinds: []}
+		| .candidate.evidence.observed_on = {vite: {version: "5.4.21",
+		                                            source: "lockfile",
+		                                            basis: "session_commit"}}
+		| .candidate.evidence.unresolved = []'
+
+	run librarian_lesson_promote "$PROJECT_KEY" "obs01"
+	[ "$status" -eq 0 ] || return 1
+
+	local pool="$(_dir)/approved/obs01.json"
+	jq -e '.applies_to == {stack: ["vite"], topics: ["bundling"],
+	                       scope: {kind: "versioned", versions: {vite: ">=5.4.21 <6"}},
+		                         file_patterns: [], task_kinds: []}' "$pool" >/dev/null || return 1
+	jq -e '.evidence == {resolution: "Applied and verified",
+	                     observed_on: {vite: {version: "5.4.21", source: "lockfile", basis: "session_commit"}},
+	                     unresolved: []}' "$pool" >/dev/null || return 1
+}
+
+@test "promote carries a no_stack scope with an empty stack through to the pool entry" {
+	_seed_judged "nost01" "org" "approved" "$(_two_passing)"
+	_mutate_proposal "nost01" '
+		.candidate.applies_to = {stack: [], topics: ["testing"],
+		                         scope: {kind: "no_stack"}, file_patterns: [], task_kinds: []}
+		| .candidate.evidence.observed_on = {}
+		| .candidate.evidence.unresolved = []'
+
+	run librarian_lesson_promote "$PROJECT_KEY" "nost01"
+	[ "$status" -eq 0 ] || return 1
+
+	local pool="$(_dir)/approved/nost01.json"
+	jq -e '.applies_to.stack == []' "$pool" >/dev/null || return 1
+	jq -e '.applies_to.scope == {kind: "no_stack"}' "$pool" >/dev/null || return 1
+	jq -e '.applies_to == {stack: [], topics: ["testing"], scope: {kind: "no_stack"}, file_patterns: [], task_kinds: []}' "$pool" >/dev/null || return 1
+	jq -e '.evidence == {resolution: "Applied and verified", observed_on: {}, unresolved: []}' "$pool" >/dev/null || return 1
+}
