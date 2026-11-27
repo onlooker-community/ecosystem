@@ -171,6 +171,32 @@ _seed_pending_unscoped() {
 		"${LESSONS_DIR}/proposals/${id}.json" >/dev/null
 }
 
+@test "confirm refuses a justification for a no_stack candidate, saying why" {
+	# No tool means no version, so a justification has nothing to be about.
+	# Without this refusal the candidate declined as a bare schema_invalid.
+	_review_setup
+	id=$(librarian_lesson_write_proposal "$PROJECT_KEY" \
+		"$(_candidate '{"kind":"no_stack"}' | jq -c '.applies_to.stack = []')" \
+		"01KZ45MKAM734ZS7JK24D2DK0R")
+	run librarian_lesson_confirm "$PROJECT_KEY" "$id" org "holds regardless of version"
+	[ "$status" -ne 0 ] || return 1
+	[[ "$output" == *"this lesson names no tool, so it has no version to justify: confirm it without --justification"* ]] || return 1
+	jq -e '.status == "pending" and .candidate.applies_to.scope.kind == "no_stack"' \
+		"${LESSONS_DIR}/proposals/${id}.json" >/dev/null
+}
+
+@test "the no_stack justification refusal goes to stderr, not stdout" {
+	_review_setup
+	id=$(librarian_lesson_write_proposal "$PROJECT_KEY" \
+		"$(_candidate '{"kind":"no_stack"}' | jq -c '.applies_to.stack = []')" \
+		"01KZ45MKAM734ZS7JK24D2DK0R")
+	local out err
+	err="${BATS_TEST_TMPDIR}/err"
+	out=$(librarian_lesson_confirm "$PROJECT_KEY" "$id" org "holds regardless" 2>"$err") && return 1
+	[ -z "$out" ] || return 1
+	grep -qF "names no tool, so it has no version to justify" "$err"
+}
+
 @test "confirm refuses an empty visibility and leaves the proposal pending" {
 	_review_setup
 	id=$(_seed_pending)
@@ -1078,6 +1104,54 @@ _set_status() {
 	run librarian_cli lessons list "$PROJECT_REPO"
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"needs scope"* ]]
+}
+
+@test "lessons list marks a pending candidate with an unresolved entry" {
+	# D6: the unattended path never confirms one, so the person reading the
+	# list is its only way out and the row has to say why it is waiting.
+	_cli_setup
+	librarian_lesson_write_proposal "$PROJECT_KEY" \
+		"$(_candidate "$(_versioned)" | jq -c '.applies_to.stack = ["vite", "mystery"]
+			| .evidence.unresolved = ["mystery"]')" \
+		"01KZ45MKAM734ZS7JK24D2DK0R" >/dev/null
+	run librarian_cli lessons list "$PROJECT_REPO"
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" == *"  c — unresolved"* ]]
+}
+
+@test "lessons list does not mark a candidate whose unresolved list is empty" {
+	_cli_setup
+	librarian_lesson_write_proposal "$PROJECT_KEY" \
+		"$(_candidate "$(_versioned)" | jq -c '.evidence.unresolved = []')" \
+		"01KZ45MKAM734ZS7JK24D2DK0R" >/dev/null
+	run librarian_cli lessons list "$PROJECT_REPO"
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" == *"  c"* ]] || return 1
+	[[ "$output" != *"unresolved"* ]]
+}
+
+@test "lessons list --confirmed does not mark an unresolved entry a person already decided" {
+	# The marker says why a candidate is still waiting; a confirmed one is not.
+	_cli_setup
+	id=$(librarian_lesson_write_proposal "$PROJECT_KEY" \
+		"$(_candidate "$(_versioned)" | jq -c '.applies_to.stack = ["vite", "mystery"]
+			| .evidence.unresolved = ["mystery"]')" \
+		"01KZ45MKAM734ZS7JK24D2DK0R")
+	librarian_lesson_confirm "$PROJECT_KEY" "$id" org >/dev/null 2>&1 || return 1
+	run librarian_cli lessons list --confirmed "$PROJECT_REPO"
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" == *"${id}  c"* ]] || return 1
+	[[ "$output" != *"unresolved"* ]]
+}
+
+@test "lessons list carries both markers on a parked candidate with an unresolved entry" {
+	_cli_setup
+	librarian_lesson_write_proposal "$PROJECT_KEY" \
+		"$(_candidate "$(_unscoped)" | jq -c '.evidence.unresolved = ["vite"]')" \
+		"01M3B87J7046SJE5BECNMP670K" >/dev/null
+	run librarian_cli lessons list "$PROJECT_REPO"
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" == *"needs scope — unresolved"* ]]
 }
 
 @test "lessons show says a parked candidate needs a justification" {

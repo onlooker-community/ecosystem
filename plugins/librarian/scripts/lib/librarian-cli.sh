@@ -433,12 +433,20 @@ librarian_cli_lessons_list() {
 	# A parked candidate is marked, because the walk has to ask for a
 	# justification on one and must not offer private. Without the marker the
 	# only signal is a refusal after the fact.
-	printf '%s' "$rows" | jq -r '.[]
+	#
+	# A pending candidate with an unresolved entry is marked too: the unattended
+	# path never confirms one (D6), so the person reading this list is its only
+	# way out, and nothing else on the row says why it is still waiting.
+	printf '%s' "$rows" | jq -r --arg status "$status" '.[]
 		| "\(.id)  \(.candidate.claim)"
 		  + (if .candidate.applies_to.scope.kind == "unscoped"
 		     then " — needs scope"
 		     elif .candidate.applies_to.scope.kind == "no_stack"
-		     then " — no tool" else "" end)'
+		     then " — no tool" else "" end)
+		  + (if $status == "pending"
+		        and ((.candidate.evidence | objects | .unresolved) | type) == "array"
+		        and (.candidate.evidence.unresolved | length) > 0
+		     then " — unresolved" else "" end)'
 }
 
 librarian_cli_lessons_show() {
