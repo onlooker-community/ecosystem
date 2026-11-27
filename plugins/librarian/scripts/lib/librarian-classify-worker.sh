@@ -537,9 +537,6 @@ unset _fid
 LESSON_PROPOSED=0
 LESSON_DECLINED=0
 LESSONS_SKIPPED=0
-# Candidates this scan whose stack had nothing rangeable, parked for a human to
-# scope. A count only; nothing is capped on it.
-LESSON_UNSCOPED=0
 
 LESSON_BUDGET_MS=$(librarian_config_int '.librarian.lesson_transform.total_budget_ms' 600000 2>/dev/null)
 LESSON_START_MS=$(librarian_now_ms)
@@ -555,10 +552,7 @@ for ((li = 0; li < KEPT_COUNT; li++)); do
 
 	LESSON_RESULT=$(librarian_lesson_transform_one "$PROJECT_KEY" "$LESSON_ARTIFACT")
 	case "$LESSON_RESULT" in
-		proposed:*:unscoped)
-			LESSON_PROPOSED=$((LESSON_PROPOSED + 1))
-			LESSON_UNSCOPED=$((LESSON_UNSCOPED + 1))
-			;;
+		# proposed:<id> and proposed:<id>:unscoped alike.
 		proposed:*) LESSON_PROPOSED=$((LESSON_PROPOSED + 1)) ;;
 		declined:*) LESSON_DECLINED=$((LESSON_DECLINED + 1)) ;;
 	esac

@@ -316,13 +316,20 @@ librarian_lesson_transform_one() {
 		 # all fail, is left as written so validation declines it; only a
 		 # stack the model wrote as [] may mean "no tool". A scope it wrote
 		 # anyway is not its to write.
-		 | (.applies_to.stack // null) as $st
-		 | if ($st | type) == "array"
-		      and (($st | length) == 0 or ([$st[] | select(type == "string" and length > 0)] | length) > 0)
-		   then .applies_to.stack = ([$st[] | select(type == "string" and length > 0)] | unique)
-		   else . end
-		 | .applies_to.topics = ([.applies_to.topics[]? | select(type == "string" and length > 0)] | unique)
-		 | del(.applies_to.scope)' 2>/dev/null) || candidate=""
+		 #
+		 # All of it only on an object: indexing a string or array applies_to
+		 # throws, which declined the candidate transform_invalid while the
+		 # same fault in a stack declined schema_invalid. Left as written, a
+		 # non-object applies_to is declined by validation, like a bad stack.
+		 | if (.applies_to | type) == "object" then
+		     (.applies_to.stack // null) as $st
+		     | (if ($st | type) == "array"
+		          and (($st | length) == 0 or ([$st[] | select(type == "string" and length > 0)] | length) > 0)
+		        then .applies_to.stack = ([$st[] | select(type == "string" and length > 0)] | unique)
+		        else . end)
+		     | .applies_to.topics = ([.applies_to.topics[]? | select(type == "string" and length > 0)] | unique)
+		     | del(.applies_to.scope)
+		   else . end' 2>/dev/null) || candidate=""
 
 	if [[ -z "$candidate" ]]; then
 		librarian_lesson_append_declined "$key" "$artifact_id" "transform_invalid"

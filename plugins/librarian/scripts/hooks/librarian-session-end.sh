@@ -64,10 +64,6 @@ source "${PLUGIN_ROOT}/scripts/lib/librarian-conflict-detector.sh"
 source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-validate.sh"
 # shellcheck source=../lib/librarian-lesson-storage.sh
 source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-storage.sh"
-# shellcheck source=../lib/librarian-lesson-observe.sh
-source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-observe.sh"
-# shellcheck source=../lib/librarian-lesson-scope.sh
-source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-scope.sh"
 # shellcheck source=../lib/librarian-lesson-transform.sh
 source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-transform.sh"
 

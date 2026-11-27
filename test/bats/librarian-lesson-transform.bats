@@ -381,6 +381,10 @@ elif [[ "$prompt" == *"stack-string-stub"* ]]; then
   printf '%s' '{"claim":"c","rationale":"r","evidence":{"resolution":"fix"},"applies_to":{"stack":"vite","topics":["testing"],"file_patterns":[],"task_kinds":[]}}'
 elif [[ "$prompt" == *"stack-junk-stub"* ]]; then
   printf '%s' '{"claim":"c","rationale":"r","evidence":{"resolution":"fix"},"applies_to":{"stack":[1,null,""],"topics":["testing"],"file_patterns":[],"task_kinds":[]}}'
+elif [[ "$prompt" == *"applies-to-string-stub"* ]]; then
+  printf '%s' '{"claim":"c","rationale":"r","evidence":{"resolution":"fix"},"applies_to":"vite"}'
+elif [[ "$prompt" == *"applies-to-array-stub"* ]]; then
+  printf '%s' '{"claim":"c","rationale":"r","evidence":{"resolution":"fix"},"applies_to":["vite"]}'
 elif [[ "$prompt" == *"stack-mixed-stub"* ]]; then
   printf '%s' '{"claim":"c","rationale":"r","evidence":{"resolution":"fix"},"applies_to":{"stack":["vite",1,""],"topics":["testing"],"file_patterns":[],"task_kinds":[]}}'
 elif [[ "$prompt" == *"scope-smuggle-stub"* ]]; then
@@ -897,6 +901,25 @@ STUB
 @test "a stack with no usable entry is declined schema_invalid" {
   _transform_setup
   art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "stack-junk-stub" "d")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
+  [ "$output" = "declined:schema_invalid" ] || return 1
+  tail -n 1 "${LESSONS_DIR}/declined.jsonl" | jq -e '.reason == "schema_invalid"'
+}
+
+# A non-object applies_to is the same model fault as a malformed stack, so it
+# declines for the same reason. Indexing it used to throw in the stitch, which
+# declined it transform_invalid instead.
+@test "a string applies_to is declined schema_invalid, like a malformed stack" {
+  _transform_setup
+  art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "applies-to-string-stub" "d")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
+  [ "$output" = "declined:schema_invalid" ] || return 1
+  tail -n 1 "${LESSONS_DIR}/declined.jsonl" | jq -e '.reason == "schema_invalid"'
+}
+
+@test "an array applies_to is declined schema_invalid, like a malformed stack" {
+  _transform_setup
+  art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "applies-to-array-stub" "d")
   run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
   [ "$output" = "declined:schema_invalid" ] || return 1
   tail -n 1 "${LESSONS_DIR}/declined.jsonl" | jq -e '.reason == "schema_invalid"'
