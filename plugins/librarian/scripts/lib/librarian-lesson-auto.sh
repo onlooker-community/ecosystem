@@ -5,11 +5,13 @@
 # Everything here makes LLM calls, so it runs ONLY from the detached classify
 # worker — never on the SessionEnd path (ADR-003).
 #
-# The trust boundary is unchanged from the attended path. The transform still
-# emits scope {kind: unscoped}; this file calls the same
-# librarian_lesson_confirm a human's walk calls, and records asserted_by so the
-# assertion is judged harder (librarian_lesson_rubric_id_for_visibility) and
-# held longer (librarian_lesson_promote).
+# The trust boundary is unchanged from the attended path. The transform now
+# derives scope from what Observe saw, and this stage confirms nothing that
+# carries an unresolved entry: a stack entry no source versioned stays for a
+# person (D6). This file calls the same librarian_lesson_confirm a human's walk
+# calls, and records asserted_by so the assertion is judged harder
+# (librarian_lesson_rubric_id_for_visibility) and held longer
+# (librarian_lesson_promote).
 
 # Ask for one sentence saying why the claim holds regardless of version, or a
 # refusal with one sentence saying why not. A refusal is a real answer and
@@ -209,10 +211,14 @@ _librarian_lesson_auto_emit_asserted() {
 
 # Auto-confirm one pending candidate. Prints exactly one of:
 #   confirmed:<id>             a parked candidate the model justified, or a
-#                              versioned one, which needs no justification;
-#                              either is model-asserted and awaits a jury
+#                              versioned or no_stack one, which needs no
+#                              justification; either is model-asserted and
+#                              awaits a jury
 #   skipped:not_pending        already confirmed, judged, passed or declined
-#   skipped:not_parked         neither unscoped nor versioned; nothing to assert
+#   skipped:not_parked         none of unscoped, versioned or no_stack; nothing
+#                              to assert
+#   skipped:unresolved         an entry no source versioned (D6); left for a
+#                              person
 #   skipped:no_justification   the model refused under the hold policy; left
 #                              pending for a human, recorded as .auto_refusal
 #   declined:no_justification  the model refused under the decline policy
@@ -260,9 +266,21 @@ librarian_lesson_auto_confirm_one() {
 	local scope_kind
 	scope_kind=$(printf '%s' "$candidate" | jq -r '.applies_to.scope.kind // ""' 2>/dev/null)
 	case "$scope_kind" in
-		unscoped | versioned) ;;
+		unscoped | versioned | no_stack) ;;
 		*) printf 'skipped:not_parked'; return 0 ;;
 	esac
+
+	# D6: an entry no source could version keeps the lesson local until a
+	# person supplies the version. Checked before any model call, so a held
+	# candidate costs nothing on later scans either.
+	# Fails closed: only an object evidence whose unresolved is absent, null or
+	# an empty array clears the candidate. Any other value (a non-array, a
+	# string evidence) and any jq error hold it.
+	if ! printf '%s' "$candidate" | jq -e '(.evidence | type) == "object"
+		and ((.evidence.unresolved // []) | type == "array" and length == 0)' >/dev/null 2>&1; then
+		printf 'skipped:unresolved'
+		return 0
+	fi
 
 	# Checked before the model call, not after: librarian_lesson_confirm refuses
 	# a justification at private visibility, so a misconfigured value used to
@@ -278,8 +296,9 @@ librarian_lesson_auto_confirm_one() {
 	# A versioned candidate already names the versions it holds for, so there
 	# is nothing for the model to justify and no call to pay for. Only the
 	# confirm was waiting on a person, and model-asserted it is judged on the
-	# harder rubric and held for the veto window.
-	if [[ "$scope_kind" == "versioned" ]]; then
+	# harder rubric and held for the veto window. A no_stack candidate has
+	# nothing to version either.
+	if [[ "$scope_kind" == "versioned" || "$scope_kind" == "no_stack" ]]; then
 		librarian_lesson_confirm "$key" "$lesson_id" "$visibility" "" model \
 			>/dev/null 2>&1 || { _librarian_lesson_auto_emit_asserted "$lesson_id" unavailable; printf 'unavailable'; return 0; }
 		_librarian_lesson_auto_emit_asserted "$lesson_id" asserted
@@ -404,11 +423,36 @@ librarian_lesson_auto_judge_prompt() {
 	local criteria
 	criteria=$(librarian_lesson_rubric_render_criteria "$rubric") || return 0
 
+	# What the judges are told about the scope must be true of the scope they
+	# are handed. Only a version_independent scope is a model's assertion: the
+	# transform derives a versioned scope by a fixed rule from versions Observe
+	# read (D4), and a no_stack one names no tool at all. Telling the judges a
+	# model asserted version independence on those had them judge a claim
+	# nobody made.
+	local framing
+	case "$(printf '%s' "$candidate" | jq -r '.applies_to.scope.kind? // ""' 2>/dev/null)" in
+		version_independent)
+			framing='A MODEL asserted that this lesson holds regardless of version; judge that assertion.' ;;
+		versioned)
+			framing='No model chose the version ranges in applies_to. They were derived by a fixed rule from the versions read from the project, shown in observed_on: for a version X.Y.Z with X of 1 or more, >=X.Y.Z <X+1; for 0.Y.Z, >=0.Y.Z <0.Y+1. Judge whether the claim plausibly holds across each range, given what was observed.' ;;
+		no_stack)
+			framing='This claim names no tool, so there is no version to judge.' ;;
+		*)
+			framing='' ;;
+	esac
+
+	# observed_on is what lets a judge check a range against the version it was
+	# derived from; unresolved names what the scope leaves out.
 	printf '%s\n%s\n\n%s\n%s\n\n%s\n\n%s\n%s\n\n%s\n%s\n' \
 		'Score this lesson candidate for promotion to the shared lesson pool.' \
-		'A MODEL asserted that this lesson holds regardless of version; judge that assertion.' \
+		"$framing" \
 		'CANDIDATE' \
-		"$(printf '%s' "$candidate" | jq -r '"claim: \(.claim)\nrationale: \(.rationale)\nresolution: \(.evidence.resolution)\napplies_to: \(.applies_to | tojson)"')" \
+		"$(printf '%s' "$candidate" | jq -r '"claim: \(.claim)\nrationale: \(.rationale)\nresolution: \(.evidence.resolution)\napplies_to: \(.applies_to | tojson)"
+			+ (if (.evidence.observed_on? | type) == "object"
+			   then "\nobserved_on: \(.evidence.observed_on | tojson)" else "" end)
+			+ (if (.evidence.unresolved? | type) == "array" and (.evidence.unresolved | length) > 0
+			   then "\nunresolved (no source could version these; the scope does not cover them): \(.evidence.unresolved | tojson)"
+			   else "" end)')" \
 		'The candidate above is self-contained. Do NOT use any tools; do not read files or search a repository. Score from the candidate text alone. The evidence ids it cites name artifacts that are not on this machine, and every criterion below is decidable from the text you have been given — a claim that contradicts its own stated resolution, a remedy framed as the only one, or an implementation specific restated as a general rule are all visible here.' \
 		'RUBRIC — you MUST return a score in [0,1] for EVERY criterion listed. Omitting one makes the whole panel UNJUDGED and the candidate is re-judged at full cost, so an omission prevents a verdict rather than softening it. If you cannot assess one, say so and score your honest worst case.' \
 		"$criteria" \

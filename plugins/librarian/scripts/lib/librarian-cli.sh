@@ -24,7 +24,10 @@
 # librarian-lesson-storage.sh, librarian-lesson-validate.sh,
 # librarian-lesson-review.sh, librarian-lesson-judge.sh,
 # librarian-lesson-rubric.sh, librarian-author-key.sh,
-# librarian-lesson-promote.sh
+# librarian-lesson-promote.sh. librarian_cli_lessons_reconsider also calls
+# librarian_lesson_transform_one, so a caller that reaches it sources
+# librarian-lesson-observe.sh, librarian-lesson-scope.sh and
+# librarian-lesson-transform.sh too.
 
 # ----------------------------------------------------------------------------
 # Project key + memory store path resolution
@@ -430,10 +433,24 @@ librarian_cli_lessons_list() {
 	# A parked candidate is marked, because the walk has to ask for a
 	# justification on one and must not offer private. Without the marker the
 	# only signal is a refusal after the fact.
-	printf '%s' "$rows" | jq -r '.[]
+	#
+	# A pending candidate with an unresolved entry is marked too: the unattended
+	# path never confirms one (D6), so the person reading this list is its only
+	# way out, and nothing else on the row says why it is still waiting. The
+	# test is the gate's own, negated, so a candidate the gate holds because it
+	# cannot read the evidence is marked too, and the condition always yields a
+	# value: one that yielded nothing would drop the row from the list.
+	printf '%s' "$rows" | jq -r --arg status "$status" '.[]
 		| "\(.id)  \(.candidate.claim)"
 		  + (if .candidate.applies_to.scope.kind == "unscoped"
-		     then " — needs scope" else "" end)'
+		     then " — needs scope"
+		     elif .candidate.applies_to.scope.kind == "no_stack"
+		     then " — no tool" else "" end)
+		  + (if $status == "pending"
+		        and ((.candidate.evidence | type) == "object"
+		             and ((.candidate.evidence.unresolved // []) | type == "array" and length == 0)
+		             | not)
+		     then " — unresolved" else "" end)'
 }
 
 librarian_cli_lessons_show() {
@@ -463,7 +480,15 @@ librarian_cli_lessons_show() {
 		"scope:       \(.candidate.applies_to.scope | tojson)"
 			+ (if .candidate.applies_to.scope.kind == "unscoped"
 			   then "   — needs a justification, at org or public visibility"
+			   elif .candidate.applies_to.scope.kind == "no_stack"
+			   then "   — no tool; needs no justification"
 			   else "" end),
+		# Entries no source could version: why the unattended path left this
+		# candidate for a person (D6).
+		(if ((.candidate.evidence | objects | .unresolved) // []) | . != [] then
+			"unresolved:  \((.candidate.evidence.unresolved)
+				| if type == "array" then join(", ") else tojson end)"
+		 else empty end),
 		# Why the unattended path declined to assert version-independence
 		# (ONL-183). Shown so the human deciding knows what the model
 		# objected to; absent when nothing refused it.
@@ -785,8 +810,9 @@ librarian_cli_lessons_status() {
 # Replay declined artifacts back through the transform. Two reasons are
 # replayable, each because a later change made the original refusal wrong:
 #
-#   no_versions     (default) forced onto the unscoped route, which now
-#                   exists for exactly these artifacts (ONL-107).
+#   no_versions     (default) goes back through the transform, which no
+#                   longer asks the model for versions: it reads them from the
+#                   project, so the refusal this decline recorded cannot recur.
 #   schema_invalid  only for an artifact with no session_id. Those were
 #                   refused because the transform wrote session_ids: [""]
 #                   (ONL-108). Any other schema_invalid failed for a reason
@@ -825,9 +851,8 @@ librarian_cli_lessons_reconsider() {
 
 	# remove_declined has already rewritten the file, so anything not replayed
 	# here has to have its decline put back. Without that, a --limit run would
-	# silently make every remaining id eligible on the next scan, outside the
-	# per-scan cap the transform applies.
-	local id artifact result session forced count=0 unscoped=0
+	# silently make every remaining id eligible on the next scan, unreviewed.
+	local id artifact result session count=0
 	while IFS= read -r id; do
 		[[ -z "$id" ]] && continue
 		if [[ "$limit" -gt 0 && "$count" -ge "$limit" ]]; then
@@ -841,14 +866,7 @@ librarian_cli_lessons_reconsider() {
 			librarian_lesson_append_declined "$key" "$id" "$reason"
 			continue
 		fi
-		forced=""
-		if [[ "$reason" == "no_versions" ]]; then
-			# Forced unscoped, not routed: this artifact's decline record says the
-			# versioned route already refused it, and the pre-gate would send it
-			# straight back there — every no_versions decline passed that gate by
-			# definition. See ONL-107.
-			forced="unscoped"
-		else
+		if [[ "$reason" != "no_versions" ]]; then
 			session=$(printf '%s' "$artifact" | jq -r '.session_id // ""' 2>/dev/null)
 			if [[ -n "$session" ]]; then
 				printf '%s: has a session, decline kept\n' "$id"
@@ -856,7 +874,7 @@ librarian_cli_lessons_reconsider() {
 				continue
 			fi
 		fi
-		result=$(librarian_lesson_transform_one "$key" "$artifact" "$unscoped" "$forced")
+		result=$(librarian_lesson_transform_one "$key" "$artifact")
 		case "$result" in
 			# skipped:seen means a proposal or another decline already records
 			# it, which is a verdict too; writing this one back would duplicate it.
@@ -869,9 +887,6 @@ librarian_cli_lessons_reconsider() {
 				printf '%s: %s, decline kept\n' "$id" "${result:-unavailable}"
 				librarian_lesson_append_declined "$key" "$id" "$reason"
 				;;
-		esac
-		case "$result" in
-			proposed:*:unscoped) unscoped=$((unscoped + 1)) ;;
 		esac
 		count=$((count + 1))
 	done <<< "$ids"

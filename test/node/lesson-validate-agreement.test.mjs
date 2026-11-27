@@ -5,6 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import Ajv from 'ajv';
+import { derivePending } from '../../scripts/lib/derive-pending-applies-to.mjs';
 
 // Drives the same candidate corpus through two independent validation
 // mechanisms and asserts they agree:
@@ -241,5 +242,98 @@ describe('unscoped is a pending-only shape', () => {
     candidate.applies_to.scope = { kind: 'unscoped', versions: { vite: '<6' } };
     assert.equal(jqAccepts(candidate), false);
     assert.equal(pendingSchemaAccepts(candidate), false);
+  });
+});
+
+describe('lesson-contract 2.2.0 shapes', () => {
+  const noStack = () => {
+    const c = baseCandidate();
+    c.applies_to = { stack: [], scope: { kind: 'no_stack' }, file_patterns: [], task_kinds: [], topics: ['testing'] };
+    return c;
+  };
+  const observed = (extra = {}) =>
+    withEvidence({
+      observed_on: { vite: { version: '5.4.21', source: 'lockfile', basis: 'session_commit' } },
+      unresolved: [],
+      ...extra,
+    });
+
+  it('the pending schema is exactly the derivation of the vendored one', () => {
+    assert.deepEqual(appliesToPendingSchema, derivePending(appliesToSchema));
+  });
+
+  it('agree that a no_stack candidate with topics is accepted', () => {
+    assertAgree('no_stack', noStack(), true);
+    assert.equal(jqAccepts(noStack(), 'librarian_lesson_validate_confirmed'), true);
+    assert.equal(pendingSchemaAccepts(noStack()), true);
+  });
+
+  it('agree that an empty stack under versioned is rejected', () => {
+    assertAgree('empty stack versioned', withAppliesTo({ stack: [] }), false);
+  });
+
+  it('agree that no_stack beside a non-empty stack is rejected', () => {
+    assertAgree('no_stack with stack', withAppliesTo({ scope: { kind: 'no_stack' } }), false);
+  });
+
+  it('agree that topics on a with-stack candidate are accepted', () => {
+    assertAgree('topics', withAppliesTo({ topics: ['bundling'] }), true);
+  });
+
+  it('agree that an empty topic is rejected', () => {
+    assertAgree('empty topic', withAppliesTo({ topics: [''] }), false);
+  });
+
+  it('agree that observed_on and unresolved are accepted', () => {
+    assertAgree('observed', observed(), true);
+  });
+
+  it('agree that an observation with a flavor is accepted', () => {
+    assertAgree(
+      'flavor',
+      observed({ observed_on: { vite: { version: '20200816', source: 'probe', basis: 'machine', flavor: 'bsd' } } }),
+      true,
+    );
+  });
+
+  for (const [name, obs] of [
+    ['an unknown source', { version: '1.0.0', source: 'guess', basis: 'head' }],
+    ['a truncated source', { version: '1.0.0', source: 'lock', basis: 'head' }],
+    ['a non-string source', { version: '1.0.0', source: 7, basis: 'head' }],
+    ['an unknown basis', { version: '1.0.0', source: 'lockfile', basis: 'today' }],
+    ['an empty version', { version: '', source: 'lockfile', basis: 'head' }],
+    ['an extra observation key', { version: '1.0.0', source: 'lockfile', basis: 'head', note: 'x' }],
+    ['a missing basis', { version: '1.0.0', source: 'lockfile' }],
+  ]) {
+    it(`agree that ${name} is rejected`, () => {
+      assertAgree(name, observed({ observed_on: { vite: obs } }), false);
+    });
+  }
+
+  // JSON Schema can't express these, so jq alone enforces them, mirroring the
+  // contract's ingest rules in onlooker apps/api/src/lessons/rules.ts.
+  it('jq refuses an observed_on key outside stack', () => {
+    const c = observed({ observed_on: { react: { version: '18.2.0', source: 'manifest', basis: 'head' } } });
+    assert.equal(schemaAccepts(c), true);
+    assert.equal(jqAccepts(c), false);
+  });
+
+  it('jq refuses an unresolved entry outside stack', () => {
+    const c = observed({ unresolved: ['Sentry'] });
+    assert.equal(schemaAccepts(c), true);
+    assert.equal(jqAccepts(c), false);
+  });
+
+  it('jq refuses an entry both observed and unresolved', () => {
+    const c = observed({ unresolved: ['vite'] });
+    assert.equal(schemaAccepts(c), true);
+    assert.equal(jqAccepts(c), false);
+  });
+
+  it('the pending schema refuses unscoped beside an empty stack', () => {
+    const c = noStack();
+    c.applies_to.scope = { kind: 'unscoped' };
+    assert.equal(pendingSchemaAccepts(c), false);
+    assert.equal(jqAccepts(c), false);
   });
 });

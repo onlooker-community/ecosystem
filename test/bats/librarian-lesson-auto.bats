@@ -184,7 +184,10 @@ STUB
 
 @test "auto_confirm_one confirms a parked candidate as model-asserted" {
 	_auto_setup; _auto_stub
-	id=$(_seed_pending_unscoped)
+	# unresolved: [] -- every stack entry was versioned, so nothing holds it back.
+	id=$(librarian_lesson_write_proposal "$PROJECT_KEY" \
+		"$(_candidate "$(_unscoped)" | jq -c '.evidence.unresolved = []')" \
+		"01M3B87J7046SJE5BECNMP670K")
 	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
 	[ "$status" -eq 0 ]
 	[ "$output" = "confirmed:${id}" ]
@@ -287,6 +290,125 @@ _on_refusal() {
 	jq -e '.status == "confirmed" and .asserted_by == "model" and .visibility == "org"
 	   and .candidate.applies_to.scope.kind == "versioned"' \
 		"${LESSONS_DIR}/proposals/${id}.json"
+}
+
+# D6: a candidate with an entry no source could version stays pending for a
+# person. Checked before any model call and before any event.
+
+# Usage: _seed_with <scope_json> <stack_json> <unresolved_json|none>
+_seed_with() {
+	local cand
+	cand=$(_candidate "$1" | jq -c --argjson st "$2" '.applies_to.stack = $st')
+	if [[ "$3" != "none" ]]; then
+		cand=$(printf '%s' "$cand" | jq -c --argjson u "$3" '.evidence.unresolved = $u')
+	fi
+	librarian_lesson_write_proposal "$PROJECT_KEY" "$cand" "01KZ45MKAM734ZS7JK24D2DK0R"
+}
+
+_claude_marker_stub() {
+	STUB_BIN="${BATS_TEST_TMPDIR}/bin"
+	mkdir -p "$STUB_BIN"
+	cat > "${STUB_BIN}/claude" <<'STUB'
+#!/usr/bin/env bash
+touch "${STUB_CALLED_MARKER}"
+printf '%s' 'The failure is a property of the exec boundary, not of any release.'
+STUB
+	chmod +x "${STUB_BIN}/claude"
+	export PATH="${STUB_BIN}:${PATH}"
+	export STUB_CALLED_MARKER="${BATS_TEST_TMPDIR}/claude-called"
+	# The emitter, so the event assertions below are not vacuous.
+	export ONLOOKER_ECOSYSTEM_ROOT="$REPO_ROOT"
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-emit.sh"
+	EVENTS_LOG="${ONLOOKER_DIR}/logs/onlooker-events.jsonl"
+	mkdir -p "$(dirname "$EVENTS_LOG")"
+	: >"$EVENTS_LOG"
+}
+
+@test "a versioned candidate with an unresolved entry is left for a person" {
+	_auto_setup; _claude_marker_stub
+	id=$(_seed_with "$(_versioned)" '["vite","Sentry"]' '["Sentry"]')
+	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	[ "$output" = "skipped:unresolved" ] || return 1
+	jq -e '.status == "pending"' "${LESSONS_DIR}/proposals/${id}.json" >/dev/null || return 1
+	[ ! -f "$STUB_CALLED_MARKER" ] || return 1
+	[ -f "$EVENTS_LOG" ] || return 1
+	n=$(grep -c '"event_type":"librarian.lesson.asserted"' "$EVENTS_LOG" 2>/dev/null || true)
+	[ "${n:-0}" = "0" ] || return 1
+}
+
+@test "a no_stack candidate with nothing unresolved confirms as model-asserted, with no model call" {
+	_auto_setup; _claude_marker_stub
+	id=$(_seed_with '{"kind":"no_stack"}' '[]' '[]')
+	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	[ "$output" = "confirmed:${id}" ] || return 1
+	[ ! -f "$STUB_CALLED_MARKER" ] || return 1
+	jq -e '.status == "confirmed" and .asserted_by == "model" and .visibility == "org"
+	   and .candidate.applies_to.scope.kind == "no_stack"' \
+		"${LESSONS_DIR}/proposals/${id}.json" >/dev/null || return 1
+	# Positive control: the pattern and log path the held test relies on are real.
+	n=$(grep -c '"event_type":"librarian.lesson.asserted"' "$EVENTS_LOG" 2>/dev/null || true)
+	[ "${n:-0}" -ge 1 ]
+}
+
+@test "a parked candidate with an unresolved entry makes no justify call" {
+	_auto_setup; _claude_marker_stub
+	id=$(_seed_with "$(_unscoped)" '["release-please"]' '["release-please"]')
+	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	[ "$output" = "skipped:unresolved" ] || return 1
+	[ ! -f "$STUB_CALLED_MARKER" ] || return 1
+	jq -e '.status == "pending"' "${LESSONS_DIR}/proposals/${id}.json" >/dev/null
+}
+
+# The gate fails closed: anything but an absent, null or empty-array unresolved
+# holds the candidate, as does an evidence that is not an object.
+# Usage: _assert_held <jq_filter_applied_to_candidate>
+_assert_held() {
+	local id
+	id=$(librarian_lesson_write_proposal "$PROJECT_KEY" \
+		"$(_candidate "$(_versioned)" | jq -c "$1")" "01KZ45MKAM734ZS7JK24D2DK0R")
+	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	[ "$output" = "skipped:unresolved" ] || return 1
+	jq -e '.status == "pending"' "${LESSONS_DIR}/proposals/${id}.json" >/dev/null || return 1
+	[ ! -f "$STUB_CALLED_MARKER" ]
+}
+
+@test "an unresolved of {} holds the candidate" {
+	_auto_setup; _claude_marker_stub
+	_assert_held '.evidence.unresolved = {}'
+}
+
+@test "an unresolved of 0 holds the candidate" {
+	_auto_setup; _claude_marker_stub
+	_assert_held '.evidence.unresolved = 0'
+}
+
+@test "an evidence that is a string holds the candidate" {
+	_auto_setup; _claude_marker_stub
+	_assert_held '.evidence = "oops"'
+}
+
+@test "an unresolved candidate is held before the visibility check, so no unavailable event" {
+	_auto_setup; _claude_marker_stub
+	mkdir -p "${PROJECT_REPO}/.claude"
+	printf '%s' '{"librarian":{"lesson_auto":{"visibility":"private"}}}' \
+		> "${PROJECT_REPO}/.claude/settings.json"
+	librarian_config_load "$PROJECT_REPO"
+	id=$(_seed_with "$(_versioned)" '["vite","Sentry"]' '["Sentry"]')
+	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	[ "$output" = "skipped:unresolved" ] || return 1
+	n=$(grep -c '"event_type":"librarian.lesson.asserted"' "$EVENTS_LOG" 2>/dev/null || true)
+	[ "${n:-0}" = "0" ]
+}
+
+@test "a candidate written before unresolved existed behaves as it did" {
+	_auto_setup; _claude_marker_stub
+	id=$(_seed_with "$(_versioned)" '["vite"]' none)
+	jq -e '.candidate.evidence | has("unresolved") | not' \
+		"${LESSONS_DIR}/proposals/${id}.json" >/dev/null || return 1
+	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	[ "$output" = "confirmed:${id}" ] || return 1
+	[ ! -f "$STUB_CALLED_MARKER" ] || return 1
 }
 
 # ----------------------------------------------------------------------------
@@ -524,6 +646,69 @@ STUB
 	[[ "$output" == *"CLAIM-MARKER"* ]] || return 1
 	[[ "$output" == *"Pin vitest to 3.x."* ]] || return 1
 	[[ "$output" == *"versioned"* ]] || return 1
+}
+
+# What the prompt tells the judges about the scope has to be true of it. Only a
+# version_independent scope is a model's assertion; the transform derives a
+# versioned one by D4 from observed versions, and no_stack names no tool.
+
+@test "the judge prompt frames a version_independent scope as a model's assertion" {
+	_auto_setup
+	rubric=$(librarian_lesson_rubric_get lesson-promotion-public-auto)
+	run librarian_lesson_auto_judge_prompt \
+		"$(_candidate '{"kind":"version_independent","justification":"j"}')" "$rubric"
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" == *"A MODEL asserted that this lesson holds regardless of version"* ]] || return 1
+	[[ "$output" != *"No model chose"* ]]
+}
+
+@test "the judge prompt frames a versioned scope as derived by rule, not asserted" {
+	_auto_setup
+	rubric=$(librarian_lesson_rubric_get lesson-promotion-public-auto)
+	run librarian_lesson_auto_judge_prompt "$(_candidate "$(_versioned)")" "$rubric"
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" != *"A MODEL asserted"* ]] || return 1
+	[[ "$output" == *"No model chose the version ranges"* ]] || return 1
+	# The D4 rule itself, both branches, so a judge can check a range by hand.
+	[[ "$output" == *">=X.Y.Z <X+1"* ]] || return 1
+	[[ "$output" == *">=0.Y.Z <0.Y+1"* ]] || return 1
+	[[ "$output" == *"plausibly holds across each range"* ]]
+}
+
+@test "the judge prompt says a no_stack claim has no version to judge" {
+	_auto_setup
+	rubric=$(librarian_lesson_rubric_get lesson-promotion-public-auto)
+	candidate=$(_candidate '{"kind":"no_stack"}' | jq -c '.applies_to.stack = []')
+	run librarian_lesson_auto_judge_prompt "$candidate" "$rubric"
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" != *"A MODEL asserted"* ]] || return 1
+	[[ "$output" != *"No model chose"* ]] || return 1
+	[[ "$output" == *"names no tool, so there is no version to judge"* ]]
+}
+
+@test "the judge prompt shows the versions a range was derived from" {
+	_auto_setup
+	rubric=$(librarian_lesson_rubric_get lesson-promotion-public-auto)
+	candidate=$(_candidate "$(_versioned)" | jq -c \
+		'.evidence.observed_on = {vite: {version: "5.4.21", source: "lockfile", basis: "session_commit"}}
+		 | .evidence.unresolved = []')
+	run librarian_lesson_auto_judge_prompt "$candidate" "$rubric"
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" == *'observed_on: {"vite":{"version":"5.4.21","source":"lockfile","basis":"session_commit"}}'* ]] || return 1
+	# An empty unresolved list is not rendered: there is nothing to say.
+	[[ "$output" != *"unresolved"* ]]
+}
+
+@test "the judge prompt names the entries no source could version" {
+	_auto_setup
+	rubric=$(librarian_lesson_rubric_get lesson-promotion-public-auto)
+	candidate=$(_candidate "$(_versioned)" | jq -c \
+		'.applies_to.stack = ["vite", "mystery"]
+		 | .evidence.observed_on = {vite: {version: "5.4.21", source: "lockfile", basis: "session_commit"}}
+		 | .evidence.unresolved = ["mystery"]')
+	run librarian_lesson_auto_judge_prompt "$candidate" "$rubric"
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" == *'the scope does not cover them): ["mystery"]'* ]]
 }
 
 @test "the judge prompt builder refuses missing arguments" {

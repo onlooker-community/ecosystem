@@ -30,16 +30,17 @@
 # rates after the prompt changed.
 #
 # IT JUDGES THE SHAPE PRODUCTION CONFIRMS INTO. librarian_lesson_auto_stage runs
-# auto_confirm_one BEFORE auto_judge_one, and that step rewrites a parked
-# candidate's scope from {"kind":"unscoped"} to
-# {"kind":"version_independent","justification":<one sentence>}. The judge
-# prompt then asserts "a MODEL asserted that this lesson holds regardless of
-# version" — true of the confirmed shape, false of the raw one. Judging the raw
-# candidate asserts a claim it does not make, and it costs real score: measured
-# on three candidates, scope_accuracy fell ~0.11 and grounding ~0.05, in the
-# same direction every time. So a parked candidate is confirmed here by calling
-# auto_confirm_one itself, which is safe because the store is the sandbox's.
-# `--raw-scope` turns that off to reproduce the pre-fix measurement.
+# auto_confirm_one BEFORE auto_judge_one, on every pending candidate, so every
+# candidate is put through auto_confirm_one here too, which is safe because the
+# store is the sandbox's. For a parked candidate that step rewrites the scope
+# from {"kind":"unscoped"} to
+# {"kind":"version_independent","justification":<one sentence>}, and the judge
+# prompt tells the panel a MODEL asserted exactly that. Judging the raw
+# candidate under that framing asserts a claim it does not make, and it costs
+# real score: measured on three candidates, scope_accuracy fell ~0.11 and
+# grounding ~0.05, in the same direction every time. A versioned or no_stack
+# candidate confirms with no model call and its scope unchanged.
+# `--raw-scope` turns all of that off to reproduce the pre-fix measurement.
 #
 # The justification call IS reproduced. An earlier version rewrote the scope to
 # a bare {"kind":"version_independent"} and skipped the call on the grounds
@@ -49,10 +50,14 @@
 # 13-panel run cited that missing support. A refusal (REFUSE) leaves the
 # candidate pending in production, never juried, so it is not judged here.
 #
-# THE UNSCOPED COST CAP IS BYPASSED, deliberately: unscoped_per_scan (3) is
-# cost control on a live scan, not a quality mechanism, and leaving it on would
-# silently truncate the batch to three parked candidates. Every call passes
-# unscoped_so_far=0.
+# Nor is a candidate D6 holds. auto_confirm_one answers skipped:unresolved for
+# one carrying a stack entry no source could version, before any model call,
+# and production leaves it for a person. Judging it here would measure a panel
+# production never convenes, so its record says unjudged_reason "unresolved".
+#
+# THERE IS NO UNSCOPED COST CAP ANY MORE: the transform no longer routes by
+# version token, so every artifact takes the same path and nothing truncates
+# the batch.
 #
 # NOT WIRED INTO npm test. A full N=12 run costs 12 transform calls plus 24
 # judge calls. test/bats/librarian-measure-lesson-transform.bats covers the
@@ -90,7 +95,7 @@ while [[ $# -gt 0 ]]; do
 		--artifacts-from) ARTIFACTS_FROM="${2:-}"; shift 2 ;;
 		--raw-scope) CONFIRM_SHAPE=0; shift ;;
 		--dry-run) DRY_RUN=1; shift ;;
-		-h|--help) sed -n '2,46p' "${BASH_SOURCE[0]}"; exit 0 ;;
+		-h|--help) sed -n '2,71p' "${BASH_SOURCE[0]}"; exit 0 ;;
 		*) printf 'unknown option: %s\n' "$1" >&2; exit 2 ;;
 	esac
 done
@@ -112,7 +117,8 @@ esac
 for lib in onlooker-project-key librarian-ulid librarian-storage \
 	librarian-lesson-storage librarian-lesson-validate librarian-config \
 	librarian-author-key librarian-lesson-review librarian-lesson-rubric \
-	librarian-lesson-judge librarian-lesson-promote librarian-lesson-transform \
+	librarian-lesson-judge librarian-lesson-promote librarian-lesson-observe \
+	librarian-lesson-scope librarian-lesson-transform \
 	librarian-lesson-auto; do
 	# shellcheck disable=SC1090
 	source "${PLUGIN_ROOT}/scripts/lib/${lib}.sh" || {
@@ -249,6 +255,19 @@ SANDBOX=$(mktemp -d 2>/dev/null) || { printf 'cannot create a sandbox\n' >&2; ex
 trap 'rm -rf "$SANDBOX"' EXIT
 export ONLOOKER_DIR="$SANDBOX"
 librarian_lesson_storage_init "$PROJECT_KEY"
+# The transform reads each lesson's versions from the project's repo, and finds
+# that repo through the librarian manifest, which the sandbox does not have.
+# Copy it, or every candidate would measure as unscoped. Copy every project's,
+# not just this one's: Observe also versions an entry from what another
+# registered repo says about itself (a component), and finds those repos
+# through their manifests too. Read from the real store, written only into the
+# sandbox.
+for _manifest in "${REAL_ONLOOKER_DIR}"/librarian/*/manifest.json; do
+	[[ -f "$_manifest" ]] || continue
+	_mkey=$(basename "$(dirname "$_manifest")")
+	mkdir -p "${SANDBOX}/librarian/${_mkey}" \
+		&& cp "$_manifest" "${SANDBOX}/librarian/${_mkey}/manifest.json"
+done
 
 printf 'measuring %d candidates (rubric %s)\n' "$SAMPLES" "$RUBRIC_ID" >&2
 
@@ -260,8 +279,7 @@ for f in "${SELECTED[@]}"; do
 	aid=$(printf '%s' "$artifact" | jq -r '.id // ""')
 	detail_len=$(printf '%s' "$artifact" | jq -r '((.detail // "") | length)')
 
-	# unscoped_so_far=0 every time: see the header on the cost cap.
-	outcome=$(librarian_lesson_transform_one "$PROJECT_KEY" "$artifact" 0)
+	outcome=$(librarian_lesson_transform_one "$PROJECT_KEY" "$artifact")
 
 	lesson_id=""
 	parked=0
@@ -282,17 +300,23 @@ for f in "${SELECTED[@]}"; do
 
 	judged_scope_kind=""
 	confirm_outcome=""
+	unjudged_reason=""
 	judgeable=0
 	if [[ "$candidate" != "null" && -n "$candidate" ]]; then
 		judgeable=1
-		if [[ "$CONFIRM_SHAPE" -eq 1 && "$parked" -eq 1 ]]; then
-			# A refused or unavailable confirmation keeps the raw candidate in
-			# the record, so what was refused stays readable, but it is not
-			# judged: production never convenes a panel for it.
+		if [[ "$CONFIRM_SHAPE" -eq 1 ]]; then
+			# Every candidate, as librarian_lesson_auto_stage does: it costs no
+			# model call for a versioned or no_stack one, and it is where D6
+			# holds a candidate with an unresolved entry. Anything not confirmed
+			# keeps the raw candidate in the record, so what was held or refused
+			# stays readable, but it is not judged: production never convenes a
+			# panel for it.
 			confirm_outcome=$(librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$lesson_id")
 			case "$confirm_outcome" in
 				confirmed:*) candidate=$(jq -c '.candidate' "$path" 2>/dev/null) || candidate='null' ;;
-				*) judgeable=0 ;;
+				skipped:unresolved) judgeable=0; unjudged_reason="unresolved" ;;
+				*:no_justification) judgeable=0; unjudged_reason="no_justification" ;;
+				*) judgeable=0; unjudged_reason="not_confirmed" ;;
 			esac
 		fi
 		[[ "$judgeable" -eq 1 ]] \
@@ -327,8 +351,10 @@ for f in "${SELECTED[@]}"; do
 		fi
 	# skipped: under the hold policy, declined: under the decline policy. Both
 	# are the same refusal, so both are measured as one.
-	elif [[ "$confirm_outcome" == *":no_justification" ]]; then
+	elif [[ "$unjudged_reason" == "no_justification" ]]; then
 		printf 'r' >&2
+	elif [[ "$unjudged_reason" == "unresolved" ]]; then
+		printf 'h' >&2
 	else
 		printf '%s' "${outcome:0:1}" >&2
 	fi
@@ -342,6 +368,7 @@ for f in "${SELECTED[@]}"; do
 
 	jq --arg aid "$aid" --arg lid "$lesson_id" --arg out "$outcome" \
 		--arg jsk "$judged_scope_kind" --arg co "$confirm_outcome" \
+		--arg ur "$unjudged_reason" \
 		--argjson rr "${refusal_reason:-null}" \
 		--argjson parked "$parked" --argjson dl "$detail_len" \
 		--argjson cand "$candidate" --argjson v "$verdicts" \
@@ -350,6 +377,7 @@ for f in "${SELECTED[@]}"; do
 		       parked: ($parked == 1), detail_length: $dl,
 		       judged_scope_kind: (if $jsk == "" then null else $jsk end),
 		       confirm_outcome: (if $co == "" then null else $co end),
+		       unjudged_reason: (if $ur == "" then null else $ur end),
 		       refusal_reason: $rr,
 		       candidate: $cand, verdicts: $v, aggregate: $agg, gate: $g}]' \
 		"$ACC" > "${ACC}.next" && mv "${ACC}.next" "$ACC"

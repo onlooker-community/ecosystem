@@ -204,6 +204,15 @@ librarian_lesson_confirm() {
 		return 1
 	fi
 
+	# The converse: a no_stack candidate names no tool, so there is no version
+	# for a justification to be about. Refused here for the same reason as
+	# above, so the message says what to do instead of a bare schema_invalid.
+	if [[ -n "$justification" ]] && printf '%s' "$candidate" \
+		| jq -e '.applies_to.scope.kind == "no_stack"' >/dev/null 2>&1; then
+		printf 'this lesson names no tool, so it has no version to justify: confirm it without --justification\n' >&2
+		return 1
+	fi
+
 	# Snapshot the candidate before the rewrite, so unconfirm can put it back.
 	# Only when we actually rewrite: a plain confirm never touches .candidate,
 	# so a snapshot there would be dead weight that unconfirm has to reason

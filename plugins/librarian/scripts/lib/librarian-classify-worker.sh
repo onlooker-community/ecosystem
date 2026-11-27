@@ -82,6 +82,10 @@ source "${PLUGIN_ROOT}/scripts/lib/librarian-conflict-detector.sh"
 source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-validate.sh"
 # shellcheck source=librarian-lesson-storage.sh
 source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-storage.sh"
+# shellcheck source=librarian-lesson-observe.sh
+source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-observe.sh"
+# shellcheck source=librarian-lesson-scope.sh
+source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-scope.sh"
 # shellcheck source=librarian-lesson-transform.sh
 source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-transform.sh"
 # shellcheck source=librarian-author-key.sh
@@ -533,11 +537,6 @@ unset _fid
 LESSON_PROPOSED=0
 LESSON_DECLINED=0
 LESSONS_SKIPPED=0
-# Parked candidates this scan, and artifacts the cap turned away. The first is
-# what transform_one compares against .unscoped_per_scan; the second is only
-# reported, since a capped artifact records nothing and returns on a later scan.
-LESSON_UNSCOPED=0
-LESSON_CAPPED=0
 
 LESSON_BUDGET_MS=$(librarian_config_int '.librarian.lesson_transform.total_budget_ms' 600000 2>/dev/null)
 LESSON_START_MS=$(librarian_now_ms)
@@ -551,15 +550,11 @@ for ((li = 0; li < KEPT_COUNT; li++)); do
 	LESSON_ARTIFACT=$(printf '%s' "$KEPT" | jq -c ".[$li]")
 	[[ -z "$LESSON_ARTIFACT" || "$LESSON_ARTIFACT" == "null" ]] && continue
 
-	LESSON_RESULT=$(librarian_lesson_transform_one "$PROJECT_KEY" "$LESSON_ARTIFACT" "$LESSON_UNSCOPED")
+	LESSON_RESULT=$(librarian_lesson_transform_one "$PROJECT_KEY" "$LESSON_ARTIFACT")
 	case "$LESSON_RESULT" in
-		proposed:*:unscoped)
-			LESSON_PROPOSED=$((LESSON_PROPOSED + 1))
-			LESSON_UNSCOPED=$((LESSON_UNSCOPED + 1))
-			;;
+		# proposed:<id> and proposed:<id>:unscoped alike.
 		proposed:*) LESSON_PROPOSED=$((LESSON_PROPOSED + 1)) ;;
 		declined:*) LESSON_DECLINED=$((LESSON_DECLINED + 1)) ;;
-		skipped:unscoped_cap) LESSON_CAPPED=$((LESSON_CAPPED + 1)) ;;
 	esac
 done
 

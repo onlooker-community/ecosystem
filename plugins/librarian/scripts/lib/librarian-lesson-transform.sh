@@ -7,7 +7,8 @@
 # stages, so this never produces a schema-complete Lesson and cannot be
 # validated against the full lesson schema.
 #
-# Requires librarian-lesson-validate.sh, librarian-lesson-storage.sh, and
+# Requires librarian-lesson-validate.sh, librarian-lesson-storage.sh,
+# librarian-lesson-observe.sh, librarian-lesson-scope.sh, and
 # librarian-config.sh (librarian_config_get).
 #
 # Config inputs (read via librarian_config_get from librarian_lesson_call):
@@ -39,14 +40,12 @@ _LIBRARIAN_LESSON_EXTRACT_MAX_CHARS=8192
 # processes a response full of `{"` fragments can cost.
 _LIBRARIAN_LESSON_EXTRACT_MAX_ATTEMPTS=8
 
-# Usage: librarian_lesson_build_prompt <artifact_json> [mode]
+# Usage: librarian_lesson_build_prompt <artifact_json>
 #
-# mode is "versioned" (default) or "unscoped", chosen by the caller from
-# librarian_lesson_pregate. The two differ in one section only: whether a claim
-# that cannot be bound to a version range is refused or parked for a human.
+# The model names the stack and the topics. It is never asked for a version or
+# a scope: versions are read from the project by librarian_lesson_observe.
 librarian_lesson_build_prompt() {
 	local artifact="$1"
-	local mode="${2:-versioned}"
 	local summary detail files_list artifact_id session_id project_key created_at
 
 	summary=$(printf '%s' "$artifact" | jq -r '.summary // ""')
@@ -57,54 +56,21 @@ librarian_lesson_build_prompt() {
 	project_key=$(printf '%s' "$artifact" | jq -r '.project_key // ""')
 	created_at=$(printf '%s' "$artifact" | jq -r '.created_at // ""')
 
-	local scope_rules
-	if [[ "$mode" == "unscoped" ]]; then
-		# No version token anywhere in the artifact, so asking for a range
-		# would only invite invention. The model states the claim and leaves
-		# the scope open; a human decides whether it truly holds regardless of
-		# version, and a jury checks that. no_versions is unreachable in this
-		# mode by construction — there is nothing to refuse for.
-		scope_rules='SCOPE — this artifact carries no version information.
-Do NOT invent a version range. Output scope exactly:
-  "scope": { "kind": "unscoped" }
-The scope object must contain nothing but that one key. A human will decide
-whether this lesson holds regardless of version; you are not asserting that.
-
-Refuse ONLY with "no_resolution" if the artifact records a problem but not
-what resolved it.'
-	else
-		scope_rules='SCOPE — VERSION RANGE RULES, strict, a violation is discarded:
-  "scope": { "kind": "versioned", "versions": { "<stack entry>": "<range>" } }
-- Allowed: "<6", "<=6", "=6", ">4", ">=4", or two-sided ">=4 <6".
-- FORBIDDEN: npm syntax. Never "^5.4.21", "~5", "5.x", or a bare "5.4.21".
-- FORBIDDEN: ">=0", ">=0.0", ">=0.0.0". An unbounded lower bound matches
-  everything and would never expire.
-- Every key in versions MUST also appear in stack.
-- Generalize honestly. Observing a break on vite 5.4.21 with vitest 4.1.9
-  supports {"vite": "<6", "vitest": ">=4"} only if the cause is the missing
-  API rather than that exact build.
-
-There is no version-independent option. If the claim is not bound to a
-version range, refuse with "no_versions".'
-	fi
-
 	cat <<EOF
 You are turning a session artifact into a shareable lesson, or refusing to.
 
-A lesson states something that was learned, why it follows, and the exact
-version range in which it holds. It is shared with other people, so a wrong
+A lesson states something that was learned, why it follows, and which tools
+it depends on. It is shared with other people, so a wrong
 lesson actively misleads. Refusing is the safe answer.
 
 Output ONLY one JSON object on one line. No markdown fences, no prose.
 
-REFUSE when either is true, by outputting exactly:
+REFUSE when the following is true, by outputting exactly:
   { "eligible": false, "reason": "no_resolution" }
-  { "eligible": false, "reason": "no_versions" }
 
 - "no_resolution": the artifact records a problem but not what resolved it.
   "This breaks" without "and this fixed it" is a warning, not a lesson.
   Never invent a resolution that is not in the artifact.
-- "no_versions": you cannot determine which versions the claim is bound to.
 
 Otherwise output:
 {
@@ -112,8 +78,8 @@ Otherwise output:
   "rationale": "<why the claim follows from the evidence>",
   "evidence": { "resolution": "<what actually resolved it, from the artifact>" },
   "applies_to": {
-    "stack": ["<tool or package name>", "<another tool or package name>"],
-    "scope": <exactly as the SCOPE section below directs>,
+    "stack": ["<a package, CLI or service the claim depends on>"],
+    "topics": ["<a concept the lesson is about>"],
     "file_patterns": [],
     "task_kinds": []
   }
@@ -130,12 +96,14 @@ CLAIM RULES — a judge checks each of these against the artifact:
 - file_patterns is usually []. Add a glob only when the lesson is about a
   kind of file (for example "*.bats"), never one of this project's paths, and
   never a glob broader than the files the artifact names.
-- stack always lists at least one tool or package; an empty stack is
-  discarded.
+- stack lists only things with a version: a package, a CLI, a hosted
+  service, or a component. List every one the claim depends on. Concepts
+  have no version and go in topics: "CSS", "SQL", "testing",
+  "rate-limiting", "authentication", "database migrations", "API design".
+  stack is [] only when the claim names no tool at all; that is rare, and
+  an empty stack on a claim about a tool is wrong.
+- Do not output a scope. Versions are read from the project, not inferred.
 
-${scope_rules}
-
-<scope-mode>${mode}</scope-mode>
 <artifact>
 id: ${artifact_id}
 summary: ${summary}
@@ -199,7 +167,6 @@ _librarian_lesson_extract_json_object() {
 librarian_lesson_call() {
 	local artifact="$1"
 	local model="${2:-}"
-	local mode="${3:-versioned}"
 
 	command -v claude >/dev/null 2>&1 || return 0
 	[[ -z "$artifact" ]] && return 0
@@ -213,7 +180,7 @@ librarian_lesson_call() {
 	# lock (ONL-118). Every path out removes the file itself; a killed call
 	# leaks one small file under $TMPDIR, which costs nothing next to a lock
 	# that blocks its queue for good.
-	librarian_lesson_build_prompt "$artifact" "$mode" > "$prompt_file" \
+	librarian_lesson_build_prompt "$artifact" > "$prompt_file" \
 		|| { rm -f "$prompt_file"; return 0; }
 
 	local args=(-p --max-turns 1 --settings '{"disableAllHooks":true}')
@@ -264,31 +231,25 @@ librarian_lesson_call() {
 }
 
 # Transform one artifact. Always exits 0. Prints exactly one of:
-#   proposed:<ulid>       candidate written
-#   proposed:<ulid>:unscoped  a PARKED candidate, awaiting a human's scope
-#   declined:<reason>     a real verdict, recorded in declined.jsonl
-#   skipped:seen          already handled
-#   skipped:unscoped_cap  cost control; nothing recorded, so it comes back
-#   unavailable           infrastructure failure; nothing recorded
+#   proposed:<ulid>           candidate written
+#   proposed:<ulid>:unscoped  a PARKED candidate: nothing in its stack could be
+#                             given a range, so a human decides its scope
+#   declined:<reason>         a real verdict, recorded in declined.jsonl;
+#                             reason is no_resolution, transform_invalid or
+#                             schema_invalid
+#   skipped:seen              already handled
+#   unavailable               infrastructure failure; nothing recorded
 #
-# Usage: librarian_lesson_transform_one <key> <artifact_json> [unscoped_so_far] [forced_mode]
+# The model writes the claim, the stack and the topics, never a scope. The scope
+# is derived: librarian_lesson_observe reads the version of each stack entry
+# from the project at the session's commit, and
+# librarian_lesson_scope_from_observation turns that into no_stack, versioned
+# or unscoped (D4, D5). A scope the model writes anyway is deleted.
 #
-# unscoped_so_far is how many artifacts this scan has already routed to the
-# unscoped path. The caller owns the count, so this function keeps no
-# cross-invocation state and the cap stays directly testable. Omitted, it
-# defaults to 0, so a direct caller gets one parked candidate and no surprise.
-#
-# forced_mode skips the pre-gate. Only "unscoped" is accepted, and only
-# reconsider passes it: an artifact already declined no_versions is by
-# construction one that PASSED the pre-gate — that is how it reached the model
-# to be refused — so replaying it would route versioned and be refused again.
-# The decline record is the evidence that route already failed on this artifact,
-# which is what earns skipping the gate rather than second-guessing it.
+# Usage: librarian_lesson_transform_one <key> <artifact_json>
 librarian_lesson_transform_one() {
 	local key="$1"
 	local artifact="$2"
-	local unscoped_so_far="${3:-0}"
-	local forced_mode="${4:-}"
 	[[ -z "$key" || -z "$artifact" ]] && { printf 'unavailable'; return 0; }
 
 	local artifact_id session_id project_key created_at
@@ -303,35 +264,10 @@ librarian_lesson_transform_one() {
 		return 0
 	fi
 
-	# The pre-gate routes, it does not gate. A version-shaped token means a
-	# range is plausibly bindable, so ask for one; its absence means asking
-	# would invite invention, so park the claim for a human instead. Nothing is
-	# dropped without a record any more — see ONL-107.
-	local mode="versioned"
-	if [[ "$forced_mode" == "unscoped" ]]; then
-		mode="unscoped"
-	else
-		librarian_lesson_pregate "$artifact" || mode="unscoped"
-	fi
-
-	if [[ "$mode" == "unscoped" ]]; then
-		local unscoped_cap
-		unscoped_cap=$(librarian_config_int '.librarian.lesson_transform.unscoped_per_scan' 3 2>/dev/null)
-		if [[ "$unscoped_so_far" -ge "$unscoped_cap" ]]; then
-			# Deliberately writes NO decline record. A decline is terminal
-			# (librarian_lesson_seen reads declined.jsonl), so recording one for
-			# a cost-control skip would destroy the candidate permanently.
-			# Skipping means the artifact is reconsidered on a later scan, which
-			# is the direction this stage already treats as safe.
-			printf 'skipped:unscoped_cap'
-			return 0
-		fi
-	fi
-
 	local model raw
 	model=$(librarian_config_get '.librarian.lesson_transform.model')
 
-	raw=$(librarian_lesson_call "$artifact" "$model" "$mode")
+	raw=$(librarian_lesson_call "$artifact" "$model")
 
 	# Empty means infrastructure, not verdict. Leave the artifact untouched.
 	if [[ -z "$raw" ]]; then
@@ -353,7 +289,7 @@ librarian_lesson_transform_one() {
 	if printf '%s' "$raw" | jq -e '.eligible == false' >/dev/null 2>&1; then
 		reason=$(printf '%s' "$raw" | jq -r '.reason // "transform_invalid"')
 		case "$reason" in
-			no_resolution|no_versions) ;;
+			no_resolution) ;;
 			*) reason="transform_invalid" ;;
 		esac
 		librarian_lesson_append_declined "$key" "$artifact_id" "$reason"
@@ -374,12 +310,57 @@ librarian_lesson_transform_one() {
 		'.evidence.artifact_ids = [$aid]
 		 | .evidence.session_ids = (if $sid == "" then [] else [$sid] end)
 		 | .evidence.project_key = $pk
-		 | .evidence.observed_at = $at' 2>/dev/null) || candidate=""
+		 | .evidence.observed_at = $at
+		 # A model-written stack is JSON from a model: keep the non-empty
+		 # strings, once each. A stack that is not an array, or whose entries
+		 # all fail, is left as written so validation declines it; only a
+		 # stack the model wrote as [] may mean "no tool". A scope it wrote
+		 # anyway is not its to write.
+		 #
+		 # All of it only on an object: indexing a string or array applies_to
+		 # throws, which declined the candidate transform_invalid while the
+		 # same fault in a stack declined schema_invalid. Left as written, a
+		 # non-object applies_to is declined by validation, like a bad stack.
+		 | if (.applies_to | type) == "object" then
+		     (.applies_to.stack // null) as $st
+		     | (if ($st | type) == "array"
+		          and (($st | length) == 0 or ([$st[] | select(type == "string" and length > 0)] | length) > 0)
+		        then .applies_to.stack = ([$st[] | select(type == "string" and length > 0)] | unique)
+		        else . end)
+		     | .applies_to.topics = ([.applies_to.topics[]? | select(type == "string" and length > 0)] | unique)
+		     | del(.applies_to.scope)
+		   else . end' 2>/dev/null) || candidate=""
 
 	if [[ -z "$candidate" ]]; then
 		librarian_lesson_append_declined "$key" "$artifact_id" "transform_invalid"
 		printf 'declined:transform_invalid'
 		return 0
+	fi
+
+	# Versions are read, not asked for (D2). Observe prints nothing when node
+	# is missing or an argument is, and then every entry is unresolved: the
+	# candidate stays local rather than failing (D6). A stack that is still
+	# malformed here skips this and is declined by validation below.
+	local stack observation scope
+	if printf '%s' "$candidate" | jq -e '.applies_to.stack | type == "array"' >/dev/null 2>&1 \
+		&& printf '%s' "$candidate" | jq -e '.applies_to.stack | all(.[]; type == "string" and length > 0)' >/dev/null 2>&1; then
+		stack=$(printf '%s' "$candidate" | jq -c '.applies_to.stack')
+		observation=$(librarian_lesson_observe "$project_key" "$created_at" "$stack")
+		printf '%s' "$observation" \
+			| jq -e '(.observed_on | type == "object") and (.unresolved | type == "array")' >/dev/null 2>&1 \
+			|| observation=$(jq -cn --argjson s "$stack" '{observed_on: {}, unresolved: $s}')
+		scope=$(librarian_lesson_scope_from_observation "$stack" "$observation")
+		candidate=$(printf '%s' "$candidate" | jq -c \
+			--argjson o "$observation" --argjson sc "$scope" \
+			'.evidence.observed_on = $o.observed_on
+			 | .evidence.unresolved = [$o.unresolved[]? | strings]
+			 | .applies_to.scope = $sc') || candidate=""
+
+		if [[ -z "$candidate" ]]; then
+			librarian_lesson_append_declined "$key" "$artifact_id" "transform_invalid"
+			printf 'declined:transform_invalid'
+			return 0
+		fi
 	fi
 
 	if ! librarian_lesson_validate_candidate "$candidate" 2>/dev/null; then
@@ -399,7 +380,7 @@ librarian_lesson_transform_one() {
 	# the worker's loop. `proposed:*` still matches both forms, so no existing
 	# caller or matcher breaks — but anything extracting the id has to strip
 	# twice for a parked result.
-	if [[ "$mode" == "unscoped" ]]; then
+	if printf '%s' "$candidate" | jq -e '.applies_to.scope.kind == "unscoped"' >/dev/null 2>&1; then
 		printf 'proposed:%s:unscoped' "$id"
 	else
 		printf 'proposed:%s' "$id"
