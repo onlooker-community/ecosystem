@@ -648,6 +648,69 @@ STUB
 	[[ "$output" == *"versioned"* ]] || return 1
 }
 
+# What the prompt tells the judges about the scope has to be true of it. Only a
+# version_independent scope is a model's assertion; the transform derives a
+# versioned one by D4 from observed versions, and no_stack names no tool.
+
+@test "the judge prompt frames a version_independent scope as a model's assertion" {
+	_auto_setup
+	rubric=$(librarian_lesson_rubric_get lesson-promotion-public-auto)
+	run librarian_lesson_auto_judge_prompt \
+		"$(_candidate '{"kind":"version_independent","justification":"j"}')" "$rubric"
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" == *"A MODEL asserted that this lesson holds regardless of version"* ]] || return 1
+	[[ "$output" != *"No model chose"* ]]
+}
+
+@test "the judge prompt frames a versioned scope as derived by rule, not asserted" {
+	_auto_setup
+	rubric=$(librarian_lesson_rubric_get lesson-promotion-public-auto)
+	run librarian_lesson_auto_judge_prompt "$(_candidate "$(_versioned)")" "$rubric"
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" != *"A MODEL asserted"* ]] || return 1
+	[[ "$output" == *"No model chose the version ranges"* ]] || return 1
+	# The D4 rule itself, both branches, so a judge can check a range by hand.
+	[[ "$output" == *">=X.Y.Z <X+1"* ]] || return 1
+	[[ "$output" == *">=0.Y.Z <0.Y+1"* ]] || return 1
+	[[ "$output" == *"plausibly holds across each range"* ]]
+}
+
+@test "the judge prompt says a no_stack claim has no version to judge" {
+	_auto_setup
+	rubric=$(librarian_lesson_rubric_get lesson-promotion-public-auto)
+	candidate=$(_candidate '{"kind":"no_stack"}' | jq -c '.applies_to.stack = []')
+	run librarian_lesson_auto_judge_prompt "$candidate" "$rubric"
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" != *"A MODEL asserted"* ]] || return 1
+	[[ "$output" != *"No model chose"* ]] || return 1
+	[[ "$output" == *"names no tool, so there is no version to judge"* ]]
+}
+
+@test "the judge prompt shows the versions a range was derived from" {
+	_auto_setup
+	rubric=$(librarian_lesson_rubric_get lesson-promotion-public-auto)
+	candidate=$(_candidate "$(_versioned)" | jq -c \
+		'.evidence.observed_on = {vite: {version: "5.4.21", source: "lockfile", basis: "session_commit"}}
+		 | .evidence.unresolved = []')
+	run librarian_lesson_auto_judge_prompt "$candidate" "$rubric"
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" == *'observed_on: {"vite":{"version":"5.4.21","source":"lockfile","basis":"session_commit"}}'* ]] || return 1
+	# An empty unresolved list is not rendered: there is nothing to say.
+	[[ "$output" != *"unresolved"* ]]
+}
+
+@test "the judge prompt names the entries no source could version" {
+	_auto_setup
+	rubric=$(librarian_lesson_rubric_get lesson-promotion-public-auto)
+	candidate=$(_candidate "$(_versioned)" | jq -c \
+		'.applies_to.stack = ["vite", "mystery"]
+		 | .evidence.observed_on = {vite: {version: "5.4.21", source: "lockfile", basis: "session_commit"}}
+		 | .evidence.unresolved = ["mystery"]')
+	run librarian_lesson_auto_judge_prompt "$candidate" "$rubric"
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" == *'the scope does not cover them): ["mystery"]'* ]]
+}
+
 @test "the judge prompt builder refuses missing arguments" {
 	_auto_setup
 	run librarian_lesson_auto_judge_prompt "" ""

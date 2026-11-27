@@ -423,11 +423,36 @@ librarian_lesson_auto_judge_prompt() {
 	local criteria
 	criteria=$(librarian_lesson_rubric_render_criteria "$rubric") || return 0
 
+	# What the judges are told about the scope must be true of the scope they
+	# are handed. Only a version_independent scope is a model's assertion: the
+	# transform derives a versioned scope by a fixed rule from versions Observe
+	# read (D4), and a no_stack one names no tool at all. Telling the judges a
+	# model asserted version independence on those had them judge a claim
+	# nobody made.
+	local framing
+	case "$(printf '%s' "$candidate" | jq -r '.applies_to.scope.kind? // ""' 2>/dev/null)" in
+		version_independent)
+			framing='A MODEL asserted that this lesson holds regardless of version; judge that assertion.' ;;
+		versioned)
+			framing='No model chose the version ranges in applies_to. They were derived by a fixed rule from the versions read from the project, shown in observed_on: for a version X.Y.Z with X of 1 or more, >=X.Y.Z <X+1; for 0.Y.Z, >=0.Y.Z <0.Y+1. Judge whether the claim plausibly holds across each range, given what was observed.' ;;
+		no_stack)
+			framing='This claim names no tool, so there is no version to judge.' ;;
+		*)
+			framing='' ;;
+	esac
+
+	# observed_on is what lets a judge check a range against the version it was
+	# derived from; unresolved names what the scope leaves out.
 	printf '%s\n%s\n\n%s\n%s\n\n%s\n\n%s\n%s\n\n%s\n%s\n' \
 		'Score this lesson candidate for promotion to the shared lesson pool.' \
-		'A MODEL asserted that this lesson holds regardless of version; judge that assertion.' \
+		"$framing" \
 		'CANDIDATE' \
-		"$(printf '%s' "$candidate" | jq -r '"claim: \(.claim)\nrationale: \(.rationale)\nresolution: \(.evidence.resolution)\napplies_to: \(.applies_to | tojson)"')" \
+		"$(printf '%s' "$candidate" | jq -r '"claim: \(.claim)\nrationale: \(.rationale)\nresolution: \(.evidence.resolution)\napplies_to: \(.applies_to | tojson)"
+			+ (if (.evidence.observed_on? | type) == "object"
+			   then "\nobserved_on: \(.evidence.observed_on | tojson)" else "" end)
+			+ (if (.evidence.unresolved? | type) == "array" and (.evidence.unresolved | length) > 0
+			   then "\nunresolved (no source could version these; the scope does not cover them): \(.evidence.unresolved | tojson)"
+			   else "" end)')" \
 		'The candidate above is self-contained. Do NOT use any tools; do not read files or search a repository. Score from the candidate text alone. The evidence ids it cites name artifacts that are not on this machine, and every criterion below is decidable from the text you have been given — a claim that contradicts its own stated resolution, a remedy framed as the only one, or an implementation specific restated as a general rule are all visible here.' \
 		'RUBRIC — you MUST return a score in [0,1] for EVERY criterion listed. Omitting one makes the whole panel UNJUDGED and the candidate is re-judged at full cost, so an omission prevents a verdict rather than softening it. If you cannot assess one, say so and score your honest worst case.' \
 		"$criteria" \
