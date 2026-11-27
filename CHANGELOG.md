@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.86.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.85.0...ecosystem-v0.86.0) (2026-11-27)
+
+
+### Features
+
+* **librarian:** derive a lesson's scope from observed versions ([#635](https://github.com/onlooker-community/ecosystem/issues/635)) ([d19f3ca](https://github.com/onlooker-community/ecosystem/commit/d19f3ca4f0598ff2fc7a17c15611c971e38cded0))
+
 ## [0.85.0](https://github.com/onlooker-community/ecosystem/compare/ecosystem-v0.84.0...ecosystem-v0.85.0) (2026-11-26)
 
 
