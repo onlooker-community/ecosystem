@@ -273,7 +273,11 @@ librarian_lesson_auto_confirm_one() {
 	# D6: an entry no source could version keeps the lesson local until a
 	# person supplies the version. Checked before any model call, so a held
 	# candidate costs nothing on later scans either.
-	if printf '%s' "$candidate" | jq -e '(.evidence.unresolved // []) | length > 0' >/dev/null 2>&1; then
+	# Fails closed: only an object evidence whose unresolved is absent, null or
+	# an empty array clears the candidate. Any other value (a non-array, a
+	# string evidence) and any jq error hold it.
+	if ! printf '%s' "$candidate" | jq -e '(.evidence | type) == "object"
+		and ((.evidence.unresolved // []) | type == "array" and length == 0)' >/dev/null 2>&1; then
 		printf 'skipped:unresolved'
 		return 0
 	fi

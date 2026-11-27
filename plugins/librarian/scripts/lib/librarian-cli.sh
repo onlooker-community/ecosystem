@@ -473,8 +473,9 @@ librarian_cli_lessons_show() {
 			   else "" end),
 		# Entries no source could version: why the unattended path left this
 		# candidate for a person (D6).
-		(if ((.candidate.evidence.unresolved // []) | length) > 0 then
-			"unresolved:  \(.candidate.evidence.unresolved | join(", "))"
+		(if ((.candidate.evidence | objects | .unresolved) // []) | . != [] then
+			"unresolved:  \((.candidate.evidence.unresolved)
+				| if type == "array" then join(", ") else tojson end)"
 		 else empty end),
 		# Why the unattended path declined to assert version-independence
 		# (ONL-183). Shown so the human deciding knows what the model

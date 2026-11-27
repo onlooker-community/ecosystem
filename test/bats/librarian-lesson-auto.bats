@@ -316,6 +316,13 @@ STUB
 	chmod +x "${STUB_BIN}/claude"
 	export PATH="${STUB_BIN}:${PATH}"
 	export STUB_CALLED_MARKER="${BATS_TEST_TMPDIR}/claude-called"
+	# The emitter, so the event assertions below are not vacuous.
+	export ONLOOKER_ECOSYSTEM_ROOT="$REPO_ROOT"
+	# shellcheck disable=SC1091
+	source "${PLUGIN_ROOT}/scripts/lib/librarian-emit.sh"
+	EVENTS_LOG="${ONLOOKER_DIR}/logs/onlooker-events.jsonl"
+	mkdir -p "$(dirname "$EVENTS_LOG")"
+	: >"$EVENTS_LOG"
 }
 
 @test "a versioned candidate with an unresolved entry is left for a person" {
@@ -325,7 +332,8 @@ STUB
 	[ "$output" = "skipped:unresolved" ] || return 1
 	jq -e '.status == "pending"' "${LESSONS_DIR}/proposals/${id}.json" >/dev/null || return 1
 	[ ! -f "$STUB_CALLED_MARKER" ] || return 1
-	n=$(grep -c '"event_type":"librarian.lesson.asserted"' "$ONLOOKER_EVENTS_LOG" 2>/dev/null || true)
+	[ -f "$EVENTS_LOG" ] || return 1
+	n=$(grep -c '"event_type":"librarian.lesson.asserted"' "$EVENTS_LOG" 2>/dev/null || true)
 	[ "${n:-0}" = "0" ] || return 1
 }
 
@@ -337,7 +345,10 @@ STUB
 	[ ! -f "$STUB_CALLED_MARKER" ] || return 1
 	jq -e '.status == "confirmed" and .asserted_by == "model" and .visibility == "org"
 	   and .candidate.applies_to.scope.kind == "no_stack"' \
-		"${LESSONS_DIR}/proposals/${id}.json"
+		"${LESSONS_DIR}/proposals/${id}.json" >/dev/null || return 1
+	# Positive control: the pattern and log path the held test relies on are real.
+	n=$(grep -c '"event_type":"librarian.lesson.asserted"' "$EVENTS_LOG" 2>/dev/null || true)
+	[ "${n:-0}" -ge 1 ]
 }
 
 @test "a parked candidate with an unresolved entry makes no justify call" {
@@ -347,6 +358,47 @@ STUB
 	[ "$output" = "skipped:unresolved" ] || return 1
 	[ ! -f "$STUB_CALLED_MARKER" ] || return 1
 	jq -e '.status == "pending"' "${LESSONS_DIR}/proposals/${id}.json" >/dev/null
+}
+
+# The gate fails closed: anything but an absent, null or empty-array unresolved
+# holds the candidate, as does an evidence that is not an object.
+# Usage: _assert_held <jq_filter_applied_to_candidate>
+_assert_held() {
+	local id
+	id=$(librarian_lesson_write_proposal "$PROJECT_KEY" \
+		"$(_candidate "$(_versioned)" | jq -c "$1")" "01KZ45MKAM734ZS7JK24D2DK0R")
+	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	[ "$output" = "skipped:unresolved" ] || return 1
+	jq -e '.status == "pending"' "${LESSONS_DIR}/proposals/${id}.json" >/dev/null || return 1
+	[ ! -f "$STUB_CALLED_MARKER" ]
+}
+
+@test "an unresolved of {} holds the candidate" {
+	_auto_setup; _claude_marker_stub
+	_assert_held '.evidence.unresolved = {}'
+}
+
+@test "an unresolved of 0 holds the candidate" {
+	_auto_setup; _claude_marker_stub
+	_assert_held '.evidence.unresolved = 0'
+}
+
+@test "an evidence that is a string holds the candidate" {
+	_auto_setup; _claude_marker_stub
+	_assert_held '.evidence = "oops"'
+}
+
+@test "an unresolved candidate is held before the visibility check, so no unavailable event" {
+	_auto_setup; _claude_marker_stub
+	mkdir -p "${PROJECT_REPO}/.claude"
+	printf '%s' '{"librarian":{"lesson_auto":{"visibility":"private"}}}' \
+		> "${PROJECT_REPO}/.claude/settings.json"
+	librarian_config_load "$PROJECT_REPO"
+	id=$(_seed_with "$(_versioned)" '["vite","Sentry"]' '["Sentry"]')
+	run librarian_lesson_auto_confirm_one "$PROJECT_KEY" "$id"
+	[ "$output" = "skipped:unresolved" ] || return 1
+	n=$(grep -c '"event_type":"librarian.lesson.asserted"' "$EVENTS_LOG" 2>/dev/null || true)
+	[ "${n:-0}" = "0" ]
 }
 
 @test "a candidate written before unresolved existed behaves as it did" {
