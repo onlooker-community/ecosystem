@@ -28,8 +28,71 @@
     "resolution": {
       "type": "string",
       "minLength": 1
+    },
+    "observed_on": {
+      "description": "Keyed by stack entry. Every key must be in applies_to.stack.",
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "lockfile",
+              "manifest",
+              "mise",
+              "workflow",
+              "component",
+              "probe"
+            ]
+          },
+          "basis": {
+            "type": "string",
+            "enum": [
+              "session_commit",
+              "head",
+              "machine"
+            ]
+          },
+          "flavor": {
+            "type": "string",
+            "enum": [
+              "gnu",
+              "bsd"
+            ]
+          }
+        },
+        "required": [
+          "version",
+          "source",
+          "basis"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "unresolved": {
+      "description": "Stack entries no source could version. An entry that was observed but whose version yields no range belongs in observed_on, not here.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
     }
   },
-  "required": ["artifact_ids", "session_ids", "project_key", "observed_at", "resolution"],
+  "required": [
+    "artifact_ids",
+    "session_ids",
+    "project_key",
+    "observed_at",
+    "resolution"
+  ],
   "additionalProperties": false
 }

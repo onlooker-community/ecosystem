@@ -82,7 +82,7 @@ _LIBRARIAN_LESSON_STRUCTURAL='
 	(.claim | type) == "string" and (.claim | length) > 0
 	and (.rationale | type) == "string" and (.rationale | length) > 0
 	and (.evidence | type) == "object"
-	and ((.evidence | keys) - ["artifact_ids", "session_ids", "project_key", "observed_at", "resolution"] | length) == 0
+	and ((.evidence | keys) - ["artifact_ids", "session_ids", "project_key", "observed_at", "resolution", "observed_on", "unresolved"] | length) == 0
 	and (.evidence.artifact_ids | type) == "array" and (.evidence.artifact_ids | length) > 0
 	and (.evidence.artifact_ids | all(type == "string" and test("^[0-9A-HJKMNP-TV-Z]{26}$")))
 	# session_ids may be empty: a lesson mined from a commit has no session
@@ -94,14 +94,33 @@ _LIBRARIAN_LESSON_STRUCTURAL='
 	and (.evidence.observed_at | type) == "string"
 	and (.evidence.observed_at | test("^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"))
 	and (.evidence.resolution | type) == "string" and (.evidence.resolution | length) > 0
+	and ((.evidence | has("observed_on") | not)
+		or ((.evidence.observed_on | type) == "object"
+			and (.evidence.observed_on | to_entries | all(
+				(.key | length) > 0
+				and (.value | type) == "object"
+				and ((.value | keys) - ["version", "source", "basis", "flavor"] | length) == 0
+				and (.value.version | type) == "string" and (.value.version | length) > 0
+				and (.value.source | IN("lockfile", "manifest", "mise", "workflow", "component", "probe"))
+				and (.value.basis | IN("session_commit", "head", "machine"))
+				and ((.value | has("flavor") | not) or (.value.flavor | IN("gnu", "bsd")))
+			))))
+	and ((.evidence | has("unresolved") | not)
+		or ((.evidence.unresolved | type) == "array"
+			and (.evidence.unresolved | all(type == "string" and length > 0))))
 	and (.applies_to | type) == "object"
-	and ((.applies_to | keys) - ["stack", "scope", "file_patterns", "task_kinds"] | length) == 0
-	and (.applies_to.stack | type) == "array" and (.applies_to.stack | length) > 0
+	and ((.applies_to | keys) - ["stack", "scope", "file_patterns", "task_kinds", "topics"] | length) == 0
+	and (.applies_to.stack | type) == "array"
+	# D5: an empty stack and the no_stack kind come together or not at all.
+	and (((.applies_to.stack | length) == 0) == (.applies_to.scope.kind == "no_stack"))
 	and (.applies_to.stack | all(type == "string" and length > 0))
 	and (.applies_to.file_patterns | type) == "array"
 	and (.applies_to.file_patterns | all(type == "string" and length > 0))
 	and (.applies_to.task_kinds | type) == "array"
 	and (.applies_to.task_kinds | all(type == "string" and length > 0))
+	and ((.applies_to | has("topics") | not)
+		or ((.applies_to.topics | type) == "array"
+			and (.applies_to.topics | all(type == "string" and length > 0))))
 '
 
 # The versioned branch, shared by both validators.
@@ -126,6 +145,27 @@ _LIBRARIAN_LESSON_SCOPE_UNSCOPED='
 	.applies_to.scope.kind == "unscoped"
 	and ((.applies_to.scope | keys) - ["kind"] | length) == 0
 '
+
+# The no_stack branch, legal in both validators. It needs no justification:
+# with nothing in the stack, there is nothing to have a version (D5).
+_LIBRARIAN_LESSON_SCOPE_NO_STACK='
+	.applies_to.scope.kind == "no_stack"
+	and ((.applies_to.scope | keys) - ["kind"] | length) == 0
+'
+
+# The three cross-field evidence rules JSON Schema can't express, mirroring
+# onlooker's ingest (apps/api/src/lessons/rules.ts): an observed or unresolved
+# entry names something in stack, and no entry is both.
+_librarian_lesson_check_observation() {
+	printf '%s' "$1" | jq -e '
+		.applies_to.stack as $s
+		| ((.evidence.observed_on // {}) | keys) as $o
+		| (.evidence.unresolved // []) as $u
+		| ($o - $s | length) == 0
+		and ($u - $s | length) == 0
+		and ([$o[] | select(. as $k | $u | index($k))] | length) == 0
+	' >/dev/null 2>&1
+}
 
 # Checks that only apply to a versioned candidate: the cross-field rule JSON
 # Schema cannot express, and the range pattern on each value.
@@ -158,7 +198,7 @@ librarian_lesson_validate_candidate() {
 	local candidate="${1:-}"
 	[[ -z "$candidate" ]] && { printf 'schema_invalid\n' >&2; return 1; }
 
-	# versioned or unscoped, never version_independent. This is the guarantee
+	# versioned, unscoped or no_stack, never version_independent. This is the guarantee
 	# that stops the transform minting lessons that never expire: private
 	# lessons run no jury, so nothing downstream would catch a bad
 	# version_independent claim. A human may assert that branch — see
@@ -171,6 +211,7 @@ librarian_lesson_validate_candidate() {
 		(
 			('"${_LIBRARIAN_LESSON_SCOPE_VERSIONED}"')
 			or ('"${_LIBRARIAN_LESSON_SCOPE_UNSCOPED}"')
+			or ('"${_LIBRARIAN_LESSON_SCOPE_NO_STACK}"')
 		)
 	'
 
@@ -180,6 +221,11 @@ librarian_lesson_validate_candidate() {
 		printf 'schema_invalid\n' >&2
 		return 1
 	fi
+
+	_librarian_lesson_check_observation "$candidate" || {
+		printf 'schema_invalid\n' >&2
+		return 1
+	}
 
 	# Range and subset rules apply only to the versioned branch — an unscoped
 	# candidate has no .versions for them to read.
@@ -210,12 +256,13 @@ librarian_lesson_validate_confirmed() {
 	local candidate="${1:-}"
 	[[ -z "$candidate" ]] && { printf 'schema_invalid\n' >&2; return 1; }
 
-	# versioned or version_independent. unscoped is deliberately absent: it is
+	# versioned, version_independent or no_stack. unscoped is deliberately absent: it is
 	# a pending-only shape, and permitting it here would let a parked claim
 	# reach the jury and the pool with nobody having asserted anything.
 	local scope_clause='
 		(
 			('"${_LIBRARIAN_LESSON_SCOPE_VERSIONED}"')
+			or ('"${_LIBRARIAN_LESSON_SCOPE_NO_STACK}"')
 			or (
 				.applies_to.scope.kind == "version_independent"
 				and ((.applies_to.scope | keys) - ["kind", "justification"] | length) == 0
@@ -231,6 +278,11 @@ librarian_lesson_validate_confirmed() {
 		printf 'schema_invalid\n' >&2
 		return 1
 	fi
+
+	_librarian_lesson_check_observation "$candidate" || {
+		printf 'schema_invalid\n' >&2
+		return 1
+	}
 
 	# Range and subset rules apply only to the versioned branch.
 	if printf '%s' "$candidate" | jq -e '.applies_to.scope.kind == "versioned"' >/dev/null 2>&1; then

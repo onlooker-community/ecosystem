@@ -11,14 +11,15 @@ test('provenance pins schema_version 2', () => {
 
 test('applies_to keeps a two-branch scope union', () => {
   const appliesTo = read('lesson-applies-to.subschema.json');
-  const branches = appliesTo.properties.scope.oneOf;
+  const branches = appliesTo.anyOf.find((b) => b.title === 'with_stack').properties.scope.oneOf;
   assert.equal(branches.length, 2);
   assert.deepEqual(branches.map((b) => b.properties.kind.const).sort(), ['version_independent', 'versioned']);
 });
 
 test('the versioned branch requires at least one version and carries the range pattern', () => {
   const appliesTo = read('lesson-applies-to.subschema.json');
-  const versioned = appliesTo.properties.scope.oneOf.find((b) => b.properties.kind.const === 'versioned');
+  const withStack = appliesTo.anyOf.find((b) => b.title === 'with_stack');
+  const versioned = withStack.properties.scope.oneOf.find((b) => b.properties.kind.const === 'versioned');
   assert.equal(versioned.properties.versions.minProperties, 1);
   assert.ok(versioned.properties.versions.additionalProperties.pattern);
 });

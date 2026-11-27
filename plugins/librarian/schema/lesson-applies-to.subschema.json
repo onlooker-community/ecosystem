@@ -1,74 +1,154 @@
 {
-  "type": "object",
-  "properties": {
-    "stack": {
-      "minItems": 1,
-      "type": "array",
-      "items": {
-        "type": "string",
-        "minLength": 1
-      }
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "stack": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "scope": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "versioned"
+                },
+                "versions": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "additionalProperties": {
+                    "type": "string",
+                    "pattern": "^((<|<=|=)\\d+(\\.\\d+)?(\\.\\d+)?|(>|>=)(\\d*[1-9]\\d*(\\.\\d+)?(\\.\\d+)?|0+\\.\\d*[1-9]\\d*(\\.\\d+)?|0+\\.0+\\.\\d*[1-9]\\d*)|(>|>=)\\d+(\\.\\d+)?(\\.\\d+)? (<|<=)\\d+(\\.\\d+)?(\\.\\d+)?)$"
+                  },
+                  "description": "Comparator-prefixed version ranges keyed by stack entry, for example {\"vite\": \"<6\"}. A two-sided range reads lower bound then upper bound. Multiple entries combine with AND: every entry must match for the lesson to still apply.",
+                  "minProperties": 1
+                }
+              },
+              "required": [
+                "kind",
+                "versions"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "version_independent"
+                },
+                "justification": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Why this lesson holds regardless of version. Judged, not assumed."
+                }
+              },
+              "required": [
+                "kind",
+                "justification"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "file_patterns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "task_kinds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "topics": {
+          "description": "Concepts the lesson is about, such as testing or rate-limiting. Kept out of stack because a concept has no version.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "stack",
+        "scope",
+        "file_patterns",
+        "task_kinds"
+      ],
+      "additionalProperties": false,
+      "title": "with_stack"
     },
-    "scope": {
-      "oneOf": [
-        {
+    {
+      "type": "object",
+      "properties": {
+        "stack": {
+          "maxItems": 0,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "scope": {
           "type": "object",
           "properties": {
             "kind": {
               "type": "string",
-              "const": "versioned"
-            },
-            "versions": {
-              "type": "object",
-              "propertyNames": {
-                "type": "string",
-                "minLength": 1
-              },
-              "additionalProperties": {
-                "type": "string",
-                "pattern": "^((<|<=|=)\\d+(\\.\\d+)?(\\.\\d+)?|(>|>=)(\\d*[1-9]\\d*(\\.\\d+)?(\\.\\d+)?|0+\\.\\d*[1-9]\\d*(\\.\\d+)?|0+\\.0+\\.\\d*[1-9]\\d*)|(>|>=)\\d+(\\.\\d+)?(\\.\\d+)? (<|<=)\\d+(\\.\\d+)?(\\.\\d+)?)$"
-              },
-              "description": "Comparator-prefixed version ranges keyed by stack entry, for example {\"vite\": \"<6\"}. A two-sided range reads lower bound then upper bound. Multiple entries combine with AND: every entry must match for the lesson to still apply.",
-              "minProperties": 1
+              "const": "no_stack"
             }
           },
-          "required": ["kind", "versions"],
+          "required": [
+            "kind"
+          ],
           "additionalProperties": false
         },
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "type": "string",
-              "const": "version_independent"
-            },
-            "justification": {
-              "type": "string",
-              "minLength": 1,
-              "description": "Why this lesson holds regardless of version. Judged, not assumed."
-            }
-          },
-          "required": ["kind", "justification"],
-          "additionalProperties": false
+        "file_patterns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "task_kinds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "topics": {
+          "description": "Concepts the lesson is about, such as testing or rate-limiting. Kept out of stack because a concept has no version.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         }
-      ]
-    },
-    "file_patterns": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "minLength": 1
-      }
-    },
-    "task_kinds": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "minLength": 1
-      }
+      },
+      "required": [
+        "stack",
+        "scope",
+        "file_patterns",
+        "task_kinds"
+      ],
+      "additionalProperties": false,
+      "title": "no_stack"
     }
-  },
-  "required": ["stack", "scope", "file_patterns", "task_kinds"],
-  "additionalProperties": false,
-  "description": "Every key of scope.versions must name an entry in stack. That rule is enforced at ingest, not by this schema, because JSON Schema cannot express a constraint spanning two fields."
+  ],
+  "description": "The union enforces the pairing of stack and scope: a non-empty stack takes a versioned or version_independent scope, an empty stack takes no_stack. The rule that every key of scope.versions must name an entry in stack is enforced at ingest, not by this schema."
 }

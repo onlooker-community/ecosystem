@@ -155,6 +155,41 @@ _candidate() {
   [ "$status" -eq 1 ]
 }
 
+_no_stack_candidate() {
+  jq -cn '{
+    claim: "Name a test for what it asserts",
+    rationale: "A reader trusts the name before the body.",
+    evidence: {
+      artifact_ids: ["01KZ45MKAM734ZS7JK24D2DK0R"], session_ids: ["sess-1"],
+      project_key: "6a7678979e31", observed_at: "2026-08-03T15:59:48Z",
+      resolution: "Renamed the tests.", observed_on: {}, unresolved: []
+    },
+    applies_to: {stack: [], scope: {kind: "no_stack"}, file_patterns: [],
+      task_kinds: [], topics: ["testing"]}
+  }'
+}
+
+@test "validate_candidate accepts a no_stack candidate with topics" {
+  run librarian_lesson_validate_candidate "$(_no_stack_candidate)"
+  [ "$status" -eq 0 ]
+}
+
+@test "validate_confirmed accepts a no_stack candidate" {
+  run librarian_lesson_validate_confirmed "$(_no_stack_candidate)"
+  [ "$status" -eq 0 ]
+}
+
+@test "validate_candidate rejects no_stack carrying a stack entry" {
+  run librarian_lesson_validate_candidate "$(_no_stack_candidate | jq -c '.applies_to.stack = ["vite"]')"
+  [ "$status" -eq 1 ]
+}
+
+@test "validate_candidate rejects an observed key that is not in stack" {
+  run librarian_lesson_validate_candidate "$(_no_stack_candidate \
+    | jq -c '.evidence.observed_on = {vite: {version: "5.4.21", source: "lockfile", basis: "head"}}')"
+  [ "$status" -eq 1 ]
+}
+
 # ----------------------------------------------------------------------------
 # Storage: the lessons/ subtree, proposal writes, the declined ledger, and
 # artifact-keyed idempotency.
