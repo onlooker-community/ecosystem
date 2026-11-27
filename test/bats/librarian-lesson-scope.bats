@@ -65,3 +65,18 @@ _scope() { librarian_lesson_scope_from_observation "$1" "$2"; }
 	run _scope '["vite"]' 'not json'
 	[ "$output" = '{"kind":"unscoped"}' ]
 }
+
+@test "a non-string version on one entry does not drop the others" {
+	out=$(_scope '["a","b"]' '{"observed_on":{"a":{"version":5,"source":"probe","basis":"machine"},"b":{"version":"2.1.0","source":"lockfile","basis":"head"}},"unresolved":[]}')
+	[ "$out" = '{"kind":"versioned","versions":{"b":">=2.1.0 <3"}}' ]
+}
+
+@test "a non-string stack element does not drop the others" {
+	out=$(_scope '[3,"b"]' '{"observed_on":{"b":{"version":"2.1.0","source":"lockfile","basis":"head"}},"unresolved":[]}')
+	[ "$out" = '{"kind":"versioned","versions":{"b":">=2.1.0 <3"}}' ]
+}
+
+@test "a version too large for a number gets no range" {
+	[ -z "$(_range 99999999999999999999.1)" ] || return 1
+	[ -z "$(_range 0.99999999999999999999)" ]
+}

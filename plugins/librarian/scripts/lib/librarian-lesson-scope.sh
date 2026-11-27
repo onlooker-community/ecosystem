@@ -7,7 +7,8 @@
 # Anything else, including a prerelease, a bare major or a date, gets none.
 _LIBRARIAN_LESSON_D4='
 	def d4:
-		(capture("^\\^?v?(?<x>[0-9]+)\\.(?<y>[0-9]+)(\\.(?<z>[0-9]+))?$") // null) as $m
+		strings
+		| (capture("^\\^?v?(?<x>[0-9]{1,9})\\.(?<y>[0-9]{1,9})(\\.(?<z>[0-9]{1,9}))?$") // null) as $m
 		| if $m == null then empty
 		  else
 			($m.x | tonumber) as $x
@@ -31,8 +32,8 @@ librarian_lesson_scope_from_observation() {
 	jq -cn --argjson stack "$stack" --argjson obs "$observation" "${_LIBRARIAN_LESSON_D4}"'
 		if ($stack | length) == 0 then {kind: "no_stack"}
 		else
-			([$stack[] as $e
-			  | ($obs.observed_on[$e].version? // empty) as $v
+			([$stack[] | strings as $e
+			  | ((($obs.observed_on? | objects | .[$e]? | objects | .version?)) // empty) as $v
 			  | ([$v | d4] | first) as $r
 			  | select($r != null)
 			  | {key: $e, value: $r}] | from_entries) as $versions
