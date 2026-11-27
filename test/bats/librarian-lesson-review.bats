@@ -1119,6 +1119,23 @@ _set_status() {
 	[[ "$output" == *"  c — unresolved"* ]]
 }
 
+@test "lessons list keeps and marks a row whose evidence D6 cannot read" {
+	# The marker mirrors the D6 gate, which holds a candidate it cannot read.
+	# A condition that errors on such a row used to drop the row from the
+	# list entirely, hiding the one candidate a person had to see.
+	_cli_setup
+	librarian_lesson_write_proposal "$PROJECT_KEY" \
+		"$(_candidate "$(_versioned)" | jq -c '.claim = "no-evidence" | del(.evidence)')" \
+		"01KZ45MKAM734ZS7JK24D2DK0R" >/dev/null
+	librarian_lesson_write_proposal "$PROJECT_KEY" \
+		"$(_candidate "$(_versioned)" | jq -c '.claim = "string-unresolved" | .evidence.unresolved = "mystery"')" \
+		"01KZ45MKGQ7QZWMABQ4H12SHSV" >/dev/null
+	run librarian_cli lessons list "$PROJECT_REPO"
+	[ "$status" -eq 0 ] || return 1
+	[[ "$output" == *"no-evidence — unresolved"* ]] || return 1
+	[[ "$output" == *"string-unresolved — unresolved"* ]]
+}
+
 @test "lessons list does not mark a candidate whose unresolved list is empty" {
 	_cli_setup
 	librarian_lesson_write_proposal "$PROJECT_KEY" \

@@ -436,7 +436,10 @@ librarian_cli_lessons_list() {
 	#
 	# A pending candidate with an unresolved entry is marked too: the unattended
 	# path never confirms one (D6), so the person reading this list is its only
-	# way out, and nothing else on the row says why it is still waiting.
+	# way out, and nothing else on the row says why it is still waiting. The
+	# test is the gate's own, negated, so a candidate the gate holds because it
+	# cannot read the evidence is marked too, and the condition always yields a
+	# value: one that yielded nothing would drop the row from the list.
 	printf '%s' "$rows" | jq -r --arg status "$status" '.[]
 		| "\(.id)  \(.candidate.claim)"
 		  + (if .candidate.applies_to.scope.kind == "unscoped"
@@ -444,8 +447,9 @@ librarian_cli_lessons_list() {
 		     elif .candidate.applies_to.scope.kind == "no_stack"
 		     then " — no tool" else "" end)
 		  + (if $status == "pending"
-		        and ((.candidate.evidence | objects | .unresolved) | type) == "array"
-		        and (.candidate.evidence.unresolved | length) > 0
+		        and ((.candidate.evidence | type) == "object"
+		             and ((.candidate.evidence.unresolved // []) | type == "array" and length == 0)
+		             | not)
 		     then " — unresolved" else "" end)'
 }
 
