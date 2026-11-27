@@ -24,7 +24,10 @@
 # librarian-lesson-storage.sh, librarian-lesson-validate.sh,
 # librarian-lesson-review.sh, librarian-lesson-judge.sh,
 # librarian-lesson-rubric.sh, librarian-author-key.sh,
-# librarian-lesson-promote.sh
+# librarian-lesson-promote.sh. librarian_cli_lessons_reconsider also calls
+# librarian_lesson_transform_one, so a caller that reaches it sources
+# librarian-lesson-observe.sh, librarian-lesson-scope.sh and
+# librarian-lesson-transform.sh too.
 
 # ----------------------------------------------------------------------------
 # Project key + memory store path resolution
@@ -785,8 +788,9 @@ librarian_cli_lessons_status() {
 # Replay declined artifacts back through the transform. Two reasons are
 # replayable, each because a later change made the original refusal wrong:
 #
-#   no_versions     (default) forced onto the unscoped route, which now
-#                   exists for exactly these artifacts (ONL-107).
+#   no_versions     (default) goes back through the transform, which no
+#                   longer asks the model for versions: it reads them from the
+#                   project, so the refusal this decline recorded cannot recur.
 #   schema_invalid  only for an artifact with no session_id. Those were
 #                   refused because the transform wrote session_ids: [""]
 #                   (ONL-108). Any other schema_invalid failed for a reason
@@ -825,9 +829,8 @@ librarian_cli_lessons_reconsider() {
 
 	# remove_declined has already rewritten the file, so anything not replayed
 	# here has to have its decline put back. Without that, a --limit run would
-	# silently make every remaining id eligible on the next scan, outside the
-	# per-scan cap the transform applies.
-	local id artifact result session forced count=0 unscoped=0
+	# silently make every remaining id eligible on the next scan, unreviewed.
+	local id artifact result session count=0
 	while IFS= read -r id; do
 		[[ -z "$id" ]] && continue
 		if [[ "$limit" -gt 0 && "$count" -ge "$limit" ]]; then
@@ -841,14 +844,7 @@ librarian_cli_lessons_reconsider() {
 			librarian_lesson_append_declined "$key" "$id" "$reason"
 			continue
 		fi
-		forced=""
-		if [[ "$reason" == "no_versions" ]]; then
-			# Forced unscoped, not routed: this artifact's decline record says the
-			# versioned route already refused it, and the pre-gate would send it
-			# straight back there — every no_versions decline passed that gate by
-			# definition. See ONL-107.
-			forced="unscoped"
-		else
+		if [[ "$reason" != "no_versions" ]]; then
 			session=$(printf '%s' "$artifact" | jq -r '.session_id // ""' 2>/dev/null)
 			if [[ -n "$session" ]]; then
 				printf '%s: has a session, decline kept\n' "$id"
@@ -856,7 +852,7 @@ librarian_cli_lessons_reconsider() {
 				continue
 			fi
 		fi
-		result=$(librarian_lesson_transform_one "$key" "$artifact" "$unscoped" "$forced")
+		result=$(librarian_lesson_transform_one "$key" "$artifact")
 		case "$result" in
 			# skipped:seen means a proposal or another decline already records
 			# it, which is a verdict too; writing this one back would duplicate it.
@@ -869,9 +865,6 @@ librarian_cli_lessons_reconsider() {
 				printf '%s: %s, decline kept\n' "$id" "${result:-unavailable}"
 				librarian_lesson_append_declined "$key" "$id" "$reason"
 				;;
-		esac
-		case "$result" in
-			proposed:*:unscoped) unscoped=$((unscoped + 1)) ;;
 		esac
 		count=$((count + 1))
 	done <<< "$ids"

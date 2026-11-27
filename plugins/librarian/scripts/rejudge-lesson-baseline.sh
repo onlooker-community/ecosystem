@@ -38,7 +38,8 @@ fi
 for lib in onlooker-project-key librarian-ulid librarian-storage \
 	librarian-lesson-storage librarian-lesson-validate librarian-config \
 	librarian-author-key librarian-lesson-review librarian-lesson-rubric \
-	librarian-lesson-judge librarian-lesson-promote librarian-lesson-transform \
+	librarian-lesson-judge librarian-lesson-promote librarian-lesson-observe \
+	librarian-lesson-scope librarian-lesson-transform \
 	librarian-lesson-auto; do
 	# shellcheck disable=SC1090
 	source "${PLUGIN_ROOT}/scripts/lib/${lib}.sh" || {

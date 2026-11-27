@@ -6,26 +6,6 @@
 # so enforcement here is jq. The two mechanisms have been proven able to
 # disagree, so tests assert them separately.
 
-# Version-shaped token check. Returns 0 when the artifact could plausibly
-# yield a versioned scope, 1 when it definitionally cannot.
-#
-# This rejects only what is impossible, never what is merely low quality:
-# the transform can emit `versioned` scope alone, so an artifact with no
-# version token anywhere cannot produce a valid scope.versions.
-#
-# Usage: librarian_lesson_pregate <artifact_json>
-librarian_lesson_pregate() {
-	local artifact="${1:-}"
-	[[ -z "$artifact" ]] && return 1
-
-	local text
-	text=$(printf '%s' "$artifact" | jq -r '((.summary // "") + " " + (.detail // ""))' 2>/dev/null) || return 1
-	[[ -z "$text" ]] && return 1
-
-	# Dotted (5.4.21), v-prefixed (v5), or x-range (5.x).
-	printf '%s' "$text" | grep -qE '([0-9]+\.[0-9]+)|(\bv[0-9]+)|([0-9]+\.x\b)'
-}
-
 # Version range check, mirroring the vendored pattern.
 #
 # Accepts: <6  <=6  =6  >4  >=4  ">=4 <6"

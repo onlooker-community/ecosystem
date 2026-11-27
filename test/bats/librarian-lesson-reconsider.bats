@@ -3,7 +3,7 @@
 # Replaying declined artifacts. A decline is terminal — librarian_lesson_seen
 # reads declined.jsonl — so recovering one means rewriting that record, which
 # is the only place in the pipeline that removes a terminal decision.
-# no_versions replays forced unscoped (ONL-107); schema_invalid replays only
+# no_versions replays through the ordinary transform; schema_invalid replays only
 # artifacts with no session (ONL-108); no_resolution is still a correct refusal.
 
 setup() {
@@ -16,7 +16,8 @@ setup() {
 _reconsider_setup() {
   for lib in onlooker-project-key librarian-ulid librarian-storage \
     librarian-lesson-storage librarian-lesson-validate librarian-config \
-    librarian-archivist-reader librarian-lesson-transform librarian-emit \
+    librarian-archivist-reader librarian-lesson-observe librarian-lesson-scope \
+    librarian-lesson-transform librarian-emit \
     librarian-cli; do
     # shellcheck disable=SC1091
     source "${PLUGIN_ROOT}/scripts/lib/${lib}.sh"
@@ -41,10 +42,10 @@ _reconsider_setup() {
 prompt=$(cat)
 if [[ "$prompt" == *"stub-answers-nothing"* ]]; then
   exit 0
-elif [[ "$prompt" == *"<scope-mode>unscoped</scope-mode>"* ]]; then
-  printf '%s' '{"claim":"A bare Release-As footer bumps every component","rationale":"release-please applies an unscoped footer to the whole manifest.","evidence":{"resolution":"Scope the bump in the manifest instead."},"applies_to":{"stack":["release-please"],"scope":{"kind":"unscoped"},"file_patterns":[],"task_kinds":[]}}'
+elif [[ "$prompt" == *"Release-As"* ]]; then
+  printf '%s' '{"claim":"A bare Release-As footer bumps every component","rationale":"release-please applies an unscoped footer to the whole manifest.","evidence":{"resolution":"Scope the bump in the manifest instead."},"applies_to":{"stack":["release-please"],"topics":["release management"],"file_patterns":[],"task_kinds":[]}}'
 elif [[ "$prompt" == *"module-runner"* ]]; then
-  printf '%s' '{"claim":"Vitest 4 cannot import vite/module-runner on Vite 5","rationale":"vite/module-runner ships in Vite 6; Vitest 4 assumes it exists.","evidence":{"resolution":"Pin vitest to 3.x until Vite 6 lands."},"applies_to":{"stack":["vite","vitest"],"scope":{"kind":"versioned","versions":{"vite":"<6","vitest":">=4"}},"file_patterns":[],"task_kinds":[]}}'
+  printf '%s' '{"claim":"Vitest 4 cannot import vite/module-runner on Vite 5","rationale":"vite/module-runner ships in Vite 6; Vitest 4 assumes it exists.","evidence":{"resolution":"Pin vitest to 3.x until Vite 6 lands."},"applies_to":{"stack":["vite","vitest"],"topics":["testing"],"file_patterns":[],"task_kinds":[]}}'
 else
   printf '%s' 'not json at all'
 fi
@@ -110,9 +111,7 @@ _seed_artifact_on_disk() {
 
 @test "reconsider replays a no_versions decline into a parked proposal" {
   _reconsider_setup
-  # Carries a version-shaped token on purpose: every real no_versions decline
-  # does, because passing the pre-gate is how it reached the model at all. A
-  # token-free fixture here passes whether or not reconsider forces the route.
+  # The stack has nothing Observe can resolve here, so the candidate is parked.
   _seed_artifact_on_disk "01M3B87J7046SJE5BECNMP670K" \
     "restore the ecosystem version above 0.61.10" \
     "A bare Release-As footer on 39b3bba hit every component. See 449.55."
@@ -162,7 +161,7 @@ _seed_artifact_on_disk() {
   [ "$status" -eq 0 ] \
     && [ "$(ls "${LESSONS_DIR}/proposals" | wc -l | tr -d ' ')" -eq 1 ] \
     && jq -e '.candidate.evidence.session_ids == []
-              and .candidate.applies_to.scope.kind == "versioned"' \
+              and .candidate.applies_to.scope.kind == "unscoped"' \
       "${LESSONS_DIR}/proposals/"*.json \
     && ! grep -q "01M3B87J7046SJE5BECNMP670K" "${LESSONS_DIR}/declined.jsonl"
 }
@@ -193,10 +192,10 @@ _seed_artifact_on_disk() {
   [ "$status" -eq 1 ] && [[ "$output" == *"no_resolution"* ]]
 }
 
-@test "reconsider puts back a decline the unscoped cap skipped" {
+@test "reconsider puts back a decline that --limit stopped before" {
   # remove_declined has already dropped every eligible decline, and a replayed
   # artifact is older than the scan watermark, so no later scan would ever see
-  # one the cap skipped. Without its decline it is neither declined nor
+  # one the limit skipped. Without its decline it is neither declined nor
   # proposed, and nothing reconsiders it again (ONL-186).
   _reconsider_setup
   local ids=(01M3B87J7046SJE5BECNMP670K 01M3B93JPGAKHGEQ5KD9N836HD
@@ -208,10 +207,10 @@ _seed_artifact_on_disk() {
       >> "${LESSONS_DIR}/declined.jsonl"
   done
 
-  run librarian_cli lessons reconsider "$PROJECT_REPO"
+  run librarian_cli lessons reconsider --limit 3 "$PROJECT_REPO"
   [ "$status" -eq 0 ] \
     && [ "$(ls "${LESSONS_DIR}/proposals" | wc -l | tr -d ' ')" -eq 3 ] \
-    && [[ "$output" == *"skipped:unscoped_cap, decline kept"* ]] \
+    && [[ "$output" == *"stopped at --limit 3"* ]] \
     && [ "$(jq -s '[.[] | select(.reason == "no_versions")] | length' \
       < "${LESSONS_DIR}/declined.jsonl")" -eq 1 ]
 }

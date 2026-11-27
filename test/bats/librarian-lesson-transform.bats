@@ -16,26 +16,6 @@ _artifact() {
   jq -cn --arg s "$1" --arg d "$2" '{summary: $s, detail: $d}'
 }
 
-@test "pregate accepts an artifact carrying a dotted version" {
-  run librarian_lesson_pregate "$(_artifact "Vitest 4.1.9 breaks" "against Vite 5.4.21")"
-  [ "$status" -eq 0 ]
-}
-
-@test "pregate accepts a v-prefixed version" {
-  run librarian_lesson_pregate "$(_artifact "broken on v5" "see notes")"
-  [ "$status" -eq 0 ]
-}
-
-@test "pregate accepts an x-range" {
-  run librarian_lesson_pregate "$(_artifact "fails on 5.x" "see notes")"
-  [ "$status" -eq 0 ]
-}
-
-@test "pregate skips an artifact with no version token at all" {
-  run librarian_lesson_pregate "$(_artifact "Prefer functional patterns" "User said so during review.")"
-  [ "$status" -eq 1 ]
-}
-
 @test "valid_range accepts the four comparator forms and a two-sided range" {
   for r in "<6" "<=6" "=6" ">4" ">=4" ">=4 <6"; do
     run librarian_lesson_valid_range "$r"
@@ -359,6 +339,10 @@ _transform_setup() {
   source "${PLUGIN_ROOT}/scripts/lib/librarian-config.sh"
   librarian_config_load "$PROJECT_REPO"
   # shellcheck disable=SC1091
+  source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-observe.sh"
+  # shellcheck disable=SC1091
+  source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-scope.sh"
+  # shellcheck disable=SC1091
   source "${PLUGIN_ROOT}/scripts/lib/librarian-lesson-transform.sh"
   librarian_lesson_storage_init "$PROJECT_KEY"
 
@@ -387,21 +371,31 @@ elif [[ "$prompt" == *"no-resolution-stub"* ]]; then
   printf '%s' '{"eligible":false,"reason":"no_resolution"}'
 elif [[ "$prompt" == *"no-versions-stub"* ]]; then
   printf '%s' '{"eligible":false,"reason":"no_versions"}'
-elif [[ "$prompt" == *"npm-range-stub"* ]]; then
-  printf '%s' '{"claim":"c","rationale":"r","evidence":{"resolution":"fix"},"applies_to":{"stack":["vite"],"scope":{"kind":"versioned","versions":{"vite":"^5.4.21"}},"file_patterns":[],"task_kinds":[]}}'
-# The unscoped route is selected by the prompt's own mode marker, not by a
-# fixture marker: build_prompt stamps it from the pre-gate, so matching on it
-# proves the routing rather than the fixture naming.
-elif [[ "$prompt" == *"<scope-mode>unscoped</scope-mode>"* ]]; then
-  printf '%s' '{"claim":"A bare Release-As footer bumps every component","rationale":"release-please applies an unscoped footer to the whole manifest.","evidence":{"resolution":"Scope the bump in the manifest instead."},"applies_to":{"stack":["release-please"],"scope":{"kind":"unscoped"},"file_patterns":[],"task_kinds":[]}}'
+elif [[ "$prompt" == *"release-please-stub"* ]]; then
+  printf '%s' '{"claim":"A bare Release-As footer bumps every component","rationale":"release-please applies an unscoped footer to the whole manifest.","evidence":{"resolution":"Scope the bump in the manifest instead."},"applies_to":{"stack":["release-please"],"topics":["release management"],"file_patterns":[],"task_kinds":[]}}'
+elif [[ "$prompt" == *"no-stack-stub"* ]]; then
+  printf '%s' '{"claim":"Name tests for what they assert","rationale":"A name that states the assertion tells a reader what broke.","evidence":{"resolution":"Rename the test after its assertion."},"applies_to":{"stack":[],"topics":["testing"],"file_patterns":[],"task_kinds":[]}}'
+elif [[ "$prompt" == *"scope-smuggle-stub"* ]]; then
+  printf '%s' '{"claim":"Vitest 4 cannot import vite/module-runner on Vite 5","rationale":"vite/module-runner ships in Vite 6; Vitest 4 assumes it exists.","evidence":{"resolution":"Pin vitest to 3.x until Vite 6 lands."},"applies_to":{"stack":["vite","vitest"],"topics":["testing"],"scope":{"kind":"version_independent","justification":"x"},"file_patterns":[],"task_kinds":[]}}'
 elif [[ "$prompt" == *"module-runner"* ]]; then
-  printf '%s' '{"claim":"Vitest 4 cannot import vite/module-runner on Vite 5","rationale":"vite/module-runner ships in Vite 6; Vitest 4 assumes it exists.","evidence":{"resolution":"Pin vitest to 3.x until Vite 6 lands."},"applies_to":{"stack":["vite","vitest"],"scope":{"kind":"versioned","versions":{"vite":"<6","vitest":">=4"}},"file_patterns":[],"task_kinds":[]}}'
+  printf '%s' '{"claim":"Vitest 4 cannot import vite/module-runner on Vite 5","rationale":"vite/module-runner ships in Vite 6; Vitest 4 assumes it exists.","evidence":{"resolution":"Pin vitest to 3.x until Vite 6 lands."},"applies_to":{"stack":["vite","vitest"],"topics":["testing"],"file_patterns":[],"task_kinds":[]}}'
 else
   printf '%s' 'not json at all'
 fi
 STUB
   chmod +x "${STUB_BIN}/claude"
   export PATH="${STUB_BIN}:${PATH}"
+
+  # Register the repo so Observe resolves vite and vitest from a lockfile at
+  # the session commit (_seed's created_at is 2026-08-03).
+  mkdir -p "${ONLOOKER_DIR}/librarian/${PROJECT_KEY}"
+  jq -n --arg k "$PROJECT_KEY" --arg r "$PROJECT_REPO" '{project_key: $k, repo_root: $r}' \
+    > "${ONLOOKER_DIR}/librarian/${PROJECT_KEY}/manifest.json"
+  printf '%s' '{"lockfileVersion":3,"packages":{"":{},"node_modules/vite":{"version":"5.4.21"},"node_modules/vitest":{"version":"4.1.9"}}}' \
+    > "${PROJECT_REPO}/package-lock.json"
+  git -C "$PROJECT_REPO" add package-lock.json
+  GIT_AUTHOR_DATE="2026-08-01T00:00:00Z" GIT_COMMITTER_DATE="2026-08-01T00:00:00Z" \
+    git -C "$PROJECT_REPO" commit -q -m lock
 }
 
 _seed() {
@@ -418,8 +412,10 @@ _seed() {
   [ "$status" -eq 0 ]
   [[ "$output" == proposed:* ]] || return 1
   id="${output#proposed:}"
-  jq -e '.candidate.applies_to.scope.versions.vite == "<6"
-     and .candidate.applies_to.scope.versions.vitest == ">=4"' \
+  jq -e '.candidate.applies_to.scope == {kind: "versioned", versions: {vite: ">=5.4.21 <6", vitest: ">=4.1.9 <5"}}
+     and .candidate.evidence.observed_on.vite.source == "lockfile"
+     and .candidate.evidence.unresolved == []
+     and .candidate.applies_to.topics == ["testing"]' \
     "${LESSONS_DIR}/proposals/${id}.json"
 }
 
@@ -436,13 +432,6 @@ _seed() {
   tail -n 1 "${LESSONS_DIR}/declined.jsonl" | jq -e '.reason == "no_resolution"'
 }
 
-@test "transform_one declines when the model cannot infer versions" {
-  _transform_setup
-  art=$(_seed "01KZ45MKGQ7QZWMABQ4H12SHSV" "no-versions-stub: 5.4 something" "detail 1.2")
-  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
-  [ "$output" = "declined:no_versions" ]
-}
-
 @test "transform_one declines unparseable model output as transform_invalid" {
   _transform_setup
   art=$(_seed "01KZ45MKME229J0QK0690TREAB" "garbage 1.0" "detail 2.0")
@@ -450,21 +439,17 @@ _seed() {
   [ "$output" = "declined:transform_invalid" ]
 }
 
-@test "transform_one declines an npm-style range as schema_invalid" {
-  _transform_setup
-  art=$(_seed "01KZ45MKS84KPZQNWC02Z8FE0K" "npm-range-stub 5.4" "detail 1.0")
-  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
-  [ "$output" = "declined:schema_invalid" ]
-}
-
 @test "transform_one parks a version-free artifact without touching the ledger" {
   _transform_setup
-  art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "Prefer functional patterns" "User said so.")
+  art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "release-please-stub: prefer functional patterns" "User said so.")
   run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
-  # Asserted skipped:pregate before ONL-107. The artifact is now routed to the
-  # unscoped prompt and parked for a human rather than dropped with no record at
-  # all; the half that still holds is that it never reaches the decline ledger.
-  [[ "$output" == proposed:* ]] || return 1
+  # Parked for a human rather than dropped with no record at all; it never
+  # reaches the decline ledger.
+  [[ "$output" == proposed:*:unscoped ]] || return 1
+  id="${output#proposed:}"; id="${id%%:*}"
+  jq -e '.candidate.applies_to.scope == {kind: "unscoped"}
+     and .candidate.evidence.unresolved == ["release-please"]' \
+    "${LESSONS_DIR}/proposals/${id}.json" || return 1
   [ ! -f "${LESSONS_DIR}/declined.jsonl" ]
 }
 
@@ -551,22 +536,6 @@ STUB
     ' "${LESSONS_DIR}/proposals/${id}.json"
 }
 
-@test "build_prompt states there is no version-independent option and forbids npm ranges" {
-  # All three checks are chained with && into one statement — see the note
-  # on the provenance-stitching test above: a bare, non-last `[[ ]]` does
-  # not gate the test under the bash 3.2 that `bats` resolves on this
-  # machine. Only the third check was originally last, so deleting the
-  # "no version-independent option" paragraph from build_prompt passed
-  # this test as first written — the check for it ran, failed, and the
-  # failure was silently swallowed.
-  _transform_setup
-  art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "Vitest 4.1.9 / Vite 5.x" "module-runner missing in 5.4.21")
-  prompt=$(librarian_lesson_build_prompt "$art")
-  [[ "$prompt" == *"no version-independent option"* ]] \
-    && [[ "$prompt" == *'"^5.4.21"'* ]] \
-    && [[ "$prompt" == *'">=0"'* ]]
-}
-
 @test "transform_one proposes a session-less artifact with no session ids" {
   # archivist-mine.sh writes session_id: null for every commit with no
   # Claude-Session trailer, and archivist-extract.sh does when the hook
@@ -591,7 +560,7 @@ STUB
   cat > "${STUB_BIN}/claude" <<'STUB'
 #!/usr/bin/env bash
 cat >/dev/null
-printf '%s' 'Here is the JSON you requested: {"claim":"Vitest 4 cannot import vite/module-runner on Vite 5","rationale":"vite/module-runner ships in Vite 6; Vitest 4 assumes it exists.","evidence":{"resolution":"Pin vitest to 3.x until Vite 6 lands."},"applies_to":{"stack":["vite","vitest"],"scope":{"kind":"versioned","versions":{"vite":"<6","vitest":">=4"}},"file_patterns":[],"task_kinds":[]}} Hope that helps!'
+printf '%s' 'Here is the JSON you requested: {"claim":"Vitest 4 cannot import vite/module-runner on Vite 5","rationale":"vite/module-runner ships in Vite 6; Vitest 4 assumes it exists.","evidence":{"resolution":"Pin vitest to 3.x until Vite 6 lands."},"applies_to":{"stack":["vite","vitest"],"topics":["testing"],"file_patterns":[],"task_kinds":[]}} Hope that helps!'
 STUB
   chmod +x "${STUB_BIN}/claude"
   art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "Vitest 4.1.9 / Vite 5.x mismatch" \
@@ -643,7 +612,7 @@ STUB
   cat > "${STUB_BIN}/claude" <<'STUB'
 #!/usr/bin/env bash
 cat >/dev/null
-printf '%s' 'The artifact uses ${v:-N} under set -u. {"claim":"Vitest 4 cannot import vite/module-runner on Vite 5","rationale":"vite/module-runner ships in Vite 6; Vitest 4 assumes it exists.","evidence":{"resolution":"Pin vitest to 3.x until Vite 6 lands."},"applies_to":{"stack":["vite","vitest"],"scope":{"kind":"versioned","versions":{"vite":"<6","vitest":">=4"}},"file_patterns":[],"task_kinds":[]}}'
+printf '%s' 'The artifact uses ${v:-N} under set -u. {"claim":"Vitest 4 cannot import vite/module-runner on Vite 5","rationale":"vite/module-runner ships in Vite 6; Vitest 4 assumes it exists.","evidence":{"resolution":"Pin vitest to 3.x until Vite 6 lands."},"applies_to":{"stack":["vite","vitest"],"topics":["testing"],"file_patterns":[],"task_kinds":[]}}'
 STUB
   chmod +x "${STUB_BIN}/claude"
   art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "Vitest 4.1.9 / Vite 5.x mismatch" \
@@ -810,133 +779,93 @@ STUB
   [ "$status" -ne 0 ]
 }
 
-# --- routing: the pre-gate selects a mode, it does not drop the artifact -----
+# --- the scope is derived, not asked for ---------------------------------------
 
 @test "transform_one parks an artifact with no version token instead of skipping it" {
   _transform_setup
-  art=$(_seed "01M3B87J7046SJE5BECNMP670K" "Release-As bumps every component" \
+  art=$(_seed "01M3B87J7046SJE5BECNMP670K" "release-please-stub: Release-As bumps every component" \
     "A bare footer was meant for one package and hit the whole manifest.")
   run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
   [ "$status" -eq 0 ]
-  [[ "$output" == proposed:* ]] || return 1
-  # Task 3 appends the route to a parked result, so strip twice. Written this
-  # way now so Task 3 does not have to come back and edit this test.
+  [[ "$output" == proposed:*:unscoped ]] || return 1
   id="${output#proposed:}"; id="${id%%:*}"
-  jq -e '.candidate.applies_to.scope.kind == "unscoped"' \
+  jq -e '.candidate.applies_to.scope == {kind: "unscoped"}
+     and .candidate.evidence.unresolved == ["release-please"]' \
     "${LESSONS_DIR}/proposals/${id}.json"
 }
 
 @test "an artifact with no version token is never declined no_versions" {
   _transform_setup
-  art=$(_seed "01M3B93JPGAKHGEQ5KD9N836HD" "Release-As bumps every component" \
+  art=$(_seed "01M3B93JPGAKHGEQ5KD9N836HD" "release-please-stub: Release-As bumps every component" \
     "A bare footer was meant for one package and hit the whole manifest.")
   run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
   [ ! -f "${LESSONS_DIR}/declined.jsonl" ] || \
     ! grep -q "01M3B93JPGAKHGEQ5KD9N836HD" "${LESSONS_DIR}/declined.jsonl"
 }
 
-@test "an artifact WITH a version token still takes the versioned route" {
-  _transform_setup
-  art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "Vitest 4.1.9 / Vite 5.x mismatch" \
-    "Vitest 4.1.9 imports vite/module-runner which is absent in Vite 5.4.21.")
-  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
-  [[ "$output" == proposed:* ]] || return 1
-  id="${output#proposed:}"; id="${id%%:*}"
-  jq -e '.candidate.applies_to.scope.kind == "versioned"' \
-    "${LESSONS_DIR}/proposals/${id}.json"
-}
-
-@test "build_prompt carries the claim constraints in both modes" {
+@test "build prompt carries the claim constraints" {
   # ONL-110 / ecosystem-1z07vm.2. Each constraint answers a defect the
   # 2026-10-18 judges named: one remedy framed as required, an assertion the
   # artifact does not support, and file_patterns broader than the evidence.
-  # The stack rule is there because asking for less project detail made the
-  # model empty stack too, which the validator discards (2 -> 9 schema_invalid
-  # on a 36-artifact run). Chained with && for the bash 3.2 reason noted above.
+  # The stack rule says what a stack entry is, so concepts go in topics.
+  # Chained with && for the bash 3.2 reason noted above.
   _transform_setup
   art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "Vitest 4.1.9 / Vite 5.x" "module-runner missing in 5.4.21")
-  for mode in versioned unscoped; do
-    prompt=$(librarian_lesson_build_prompt "$art" "$mode")
-    [[ "$prompt" == *"One fix that worked is not the only fix"* ]] \
-      && [[ "$prompt" == *"checkable against the"*"artifact text"* ]] \
-      && [[ "$prompt" == *"never one of this project's paths"* ]] \
-      && [[ "$prompt" == *"stack always lists at least one tool"* ]] \
-      || return 1
-  done
-}
-
-@test "build_prompt marks the mode so the model knows which contract applies" {
-  _transform_setup
-  art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "no token here" "none either")
-  run librarian_lesson_build_prompt "$art" unscoped
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"<scope-mode>unscoped</scope-mode>"* ]] || return 1
-  [[ "$output" != *"There is no version-independent option"* ]]
-}
-
-# --- the unscoped route is capped per scan ------------------------------------
-
-@test "the unscoped route stops at the cap and declines nothing" {
-  _transform_setup
-  mkdir -p "${PROJECT_REPO}/.claude"
-  printf '%s\n' '{"librarian":{"lesson_transform":{"unscoped_per_scan":1}}}' \
-    > "${PROJECT_REPO}/.claude/settings.json"
-  librarian_config_load "$PROJECT_REPO"
-
-  art1=$(_seed "01M3B87J7046SJE5BECNMP6701" "Release-As bumps every component" \
-    "A bare footer was meant for one package and hit the whole manifest.")
-  run librarian_lesson_transform_one "$PROJECT_KEY" "$art1" 0
-  [[ "$output" == proposed:* ]] || return 1
-
-  art2=$(_seed "01M3B87J7046SJE5BECNMP6702" "Release-As bumps every component" \
-    "A bare footer was meant for one package and hit the whole manifest.")
-  run librarian_lesson_transform_one "$PROJECT_KEY" "$art2" 1
-  [ "$output" = "skipped:unscoped_cap" ]
-
-  # A cost-control skip must leave no terminal record, or the artifact is lost.
-  [ ! -f "${LESSONS_DIR}/declined.jsonl" ] || \
-    ! grep -q "01M3B87J7046SJE5BECNMP6702" "${LESSONS_DIR}/declined.jsonl"
-}
-
-@test "the cap does not apply to the versioned route" {
-  _transform_setup
-  mkdir -p "${PROJECT_REPO}/.claude"
-  printf '%s\n' '{"librarian":{"lesson_transform":{"unscoped_per_scan":0}}}' \
-    > "${PROJECT_REPO}/.claude/settings.json"
-  librarian_config_load "$PROJECT_REPO"
-
-  art=$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "Vitest 4.1.9 / Vite 5.x mismatch" \
-    "Vitest 4.1.9 imports vite/module-runner which is absent in Vite 5.4.21.")
-  run librarian_lesson_transform_one "$PROJECT_KEY" "$art" 99
-  [[ "$output" == proposed:* ]]
+  prompt=$(librarian_lesson_build_prompt "$art")
+  [[ "$prompt" == *"One fix that worked is not the only fix"* ]] \
+    && [[ "$prompt" == *"checkable against the"*"artifact text"* ]] \
+    && [[ "$prompt" == *"never one of this project's paths"* ]] \
+    && [[ "$prompt" == *"stack lists only things with a version"* ]]
 }
 
 @test "a parked result reports its route so the worker can count it" {
   _transform_setup
-  art=$(_seed "01M3B87J7046SJE5BECNMP670K" "Release-As bumps every component" \
+  art=$(_seed "01M3B87J7046SJE5BECNMP670K" "release-please-stub: Release-As bumps every component" \
     "A bare footer was meant for one package and hit the whole manifest.")
   run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
   [[ "$output" == proposed:*:unscoped ]]
 }
 
-@test "a forced unscoped mode parks an artifact that DOES carry a version token" {
+@test "transform_one gives a stackless claim the no_stack scope" {
   _transform_setup
-  # The real population of no_versions declines. An artifact only reaches the
-  # model by passing the pre-gate, so every recorded no_versions decline
-  # contains a version-shaped token — here a bead id and a release number —
-  # and would route versioned on replay and be refused all over again. The
-  # decline record is itself the evidence that route already failed.
-  art=$(_seed "01M3B87J7046SJE5BECNMP670K" "restore the ecosystem version above 0.61.10" \
-    "A bare Release-As footer on 39b3bba hit every component. See 449.55.")
-  run librarian_lesson_transform_one "$PROJECT_KEY" "$art" 0 unscoped
-  [ "$status" -eq 0 ]
-  [[ "$output" == proposed:*:unscoped ]]
+  art=$(_seed "01M3B87J7046SJE5BECNMP670K" "no-stack-stub" "Name tests for what they assert.")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
+  [[ "$output" == proposed:* ]] || return 1
+  id="${output#proposed:}"; id="${id%%:*}"
+  jq -e '.candidate.applies_to.scope == {kind: "no_stack"} and .candidate.applies_to.stack == []' \
+    "${LESSONS_DIR}/proposals/${id}.json"
 }
 
-@test "without a forced mode that same artifact still takes the versioned route" {
+@test "a scope the model writes anyway is discarded" {
   _transform_setup
-  art=$(_seed "01M3B93JPGAKHGEQ5KD9N836HD" "no-versions-stub: restore the version above 0.61.10" \
-    "A bare Release-As footer on 39b3bba hit every component.")
-  run librarian_lesson_transform_one "$PROJECT_KEY" "$art" 0
-  [ "$output" = "declined:no_versions" ]
+  art=$(_seed "01M3B93JPGAKHGEQ5KD9N836HD" "scope-smuggle-stub" "vite module-runner")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
+  [[ "$output" == proposed:* ]] || return 1
+  id="${output#proposed:}"; id="${id%%:*}"
+  jq -e '.candidate.applies_to.scope.kind == "versioned"' "${LESSONS_DIR}/proposals/${id}.json"
+}
+
+@test "an old no_versions refusal is clamped to transform_invalid" {
+  _transform_setup
+  art=$(_seed "01KZ45MKGQ7QZWMABQ4H12SHSV" "no-versions-stub" "detail")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
+  [ "$output" = "declined:transform_invalid" ]
+}
+
+@test "the prompt asks for no scope and no no_versions refusal" {
+  _transform_setup
+  prompt=$(librarian_lesson_build_prompt "$(_seed "01KZ45MKAM734ZS7JK24D2DK0R" "s" "d")")
+  [[ "$prompt" != *'"scope"'* ]] || return 1
+  [[ "$prompt" != *"no_versions"* ]] || return 1
+  [[ "$prompt" == *'"topics"'* ]]
+}
+
+@test "an unregistered project leaves every stack entry unresolved" {
+  _transform_setup
+  rm -f "${ONLOOKER_DIR}/librarian/${PROJECT_KEY}/manifest.json"
+  art=$(_seed "01KZ45MKME229J0QK0690TREAB" "Vitest 4.1.9 / Vite 5.x" "module-runner missing")
+  run librarian_lesson_transform_one "$PROJECT_KEY" "$art"
+  [[ "$output" == proposed:*:unscoped ]] || return 1
+  id="${output#proposed:}"; id="${id%%:*}"
+  jq -e '.candidate.evidence.unresolved == ["vite", "vitest"]' "${LESSONS_DIR}/proposals/${id}.json"
 }

@@ -49,10 +49,9 @@
 # 13-panel run cited that missing support. A refusal (REFUSE) leaves the
 # candidate pending in production, never juried, so it is not judged here.
 #
-# THE UNSCOPED COST CAP IS BYPASSED, deliberately: unscoped_per_scan (3) is
-# cost control on a live scan, not a quality mechanism, and leaving it on would
-# silently truncate the batch to three parked candidates. Every call passes
-# unscoped_so_far=0.
+# THERE IS NO UNSCOPED COST CAP ANY MORE: the transform no longer routes by
+# version token, so every artifact takes the same path and nothing truncates
+# the batch.
 #
 # NOT WIRED INTO npm test. A full N=12 run costs 12 transform calls plus 24
 # judge calls. test/bats/librarian-measure-lesson-transform.bats covers the
@@ -112,7 +111,8 @@ esac
 for lib in onlooker-project-key librarian-ulid librarian-storage \
 	librarian-lesson-storage librarian-lesson-validate librarian-config \
 	librarian-author-key librarian-lesson-review librarian-lesson-rubric \
-	librarian-lesson-judge librarian-lesson-promote librarian-lesson-transform \
+	librarian-lesson-judge librarian-lesson-promote librarian-lesson-observe \
+	librarian-lesson-scope librarian-lesson-transform \
 	librarian-lesson-auto; do
 	# shellcheck disable=SC1090
 	source "${PLUGIN_ROOT}/scripts/lib/${lib}.sh" || {
@@ -249,6 +249,14 @@ SANDBOX=$(mktemp -d 2>/dev/null) || { printf 'cannot create a sandbox\n' >&2; ex
 trap 'rm -rf "$SANDBOX"' EXIT
 export ONLOOKER_DIR="$SANDBOX"
 librarian_lesson_storage_init "$PROJECT_KEY"
+# The transform reads each lesson's versions from the project's repo, and finds
+# that repo through the librarian manifest, which the sandbox does not have.
+# Copy it, or every candidate would measure as unscoped.
+if [[ -f "${REAL_ONLOOKER_DIR}/librarian/${PROJECT_KEY}/manifest.json" ]]; then
+	mkdir -p "${SANDBOX}/librarian/${PROJECT_KEY}"
+	cp "${REAL_ONLOOKER_DIR}/librarian/${PROJECT_KEY}/manifest.json" \
+		"${SANDBOX}/librarian/${PROJECT_KEY}/manifest.json"
+fi
 
 printf 'measuring %d candidates (rubric %s)\n' "$SAMPLES" "$RUBRIC_ID" >&2
 
@@ -260,8 +268,7 @@ for f in "${SELECTED[@]}"; do
 	aid=$(printf '%s' "$artifact" | jq -r '.id // ""')
 	detail_len=$(printf '%s' "$artifact" | jq -r '((.detail // "") | length)')
 
-	# unscoped_so_far=0 every time: see the header on the cost cap.
-	outcome=$(librarian_lesson_transform_one "$PROJECT_KEY" "$artifact" 0)
+	outcome=$(librarian_lesson_transform_one "$PROJECT_KEY" "$artifact")
 
 	lesson_id=""
 	parked=0

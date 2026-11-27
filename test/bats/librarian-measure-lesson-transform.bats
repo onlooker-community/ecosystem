@@ -47,8 +47,8 @@ _seed_artifact() {
 		> "${CORPUS}/${name}.json"
 }
 
-# An artifact carrying NO version token, so librarian_lesson_pregate routes the
-# transform to `unscoped` mode and the candidate comes back parked.
+# An artifact whose candidate stack (bats) Observe cannot resolve, so the
+# candidate comes back parked as `unscoped`.
 # Usage: _seed_artifact_unversioned <name>
 _seed_artifact_unversioned() {
 	local name="$1" id
@@ -81,7 +81,7 @@ if [[ "\$args" == *"--agent"* ]]; then
 elif [[ "\$prompt" == *"whether a lesson holds regardless of version"* ]]; then
 	printf '%s' '${justification}'
 else
-	printf '%s' '{"claim":"c","rationale":"r","evidence":{"resolution":"Assert the side effect in the log."},"applies_to":{"stack":["bats"],"scope":{"kind":"unscoped"},"file_patterns":[],"task_kinds":[]}}'
+	printf '%s' '{"claim":"c","rationale":"r","evidence":{"resolution":"Assert the side effect in the log."},"applies_to":{"stack":["bats"],"topics":["testing"],"file_patterns":[],"task_kinds":[]}}'
 fi
 STUB
 	chmod +x "${STUB_BIN}/claude"
@@ -106,7 +106,7 @@ if [[ "\$args" == *"--agent tribunal-judge-adversarial"* ]]; then
 elif [[ "\$args" == *"--agent tribunal-judge-standard"* ]]; then
 	printf '%s' '{"score":0.9,"passed":true,"judge_type":"standard","feedback_summary":"fine","criterion_scores":{"grounding":0.9,"scope_accuracy":0.9,"generality":0.9,"disclosure":0.95}}'
 else
-	printf '%s' '{"claim":"c","rationale":"r","evidence":{"resolution":"Pin vitest to 3.x."},"applies_to":{"stack":["vite"],"scope":{"kind":"versioned","versions":{"vite":"<6"}},"file_patterns":[],"task_kinds":[]}}'
+	printf '%s' '{"claim":"c","rationale":"r","evidence":{"resolution":"Pin vitest to 3.x."},"applies_to":{"stack":["vite"],"topics":["testing"],"file_patterns":[],"task_kinds":[]}}'
 fi
 STUB
 	chmod +x "${STUB_BIN}/claude"
@@ -325,7 +325,7 @@ cat > /dev/null
 if [[ "$args" == *"--agent"* ]]; then
 	printf ''
 else
-	printf '%s' '{"claim":"c","rationale":"r","evidence":{"resolution":"Pin vitest to 3.x."},"applies_to":{"stack":["vite"],"scope":{"kind":"versioned","versions":{"vite":"<6"}},"file_patterns":[],"task_kinds":[]}}'
+	printf '%s' '{"claim":"c","rationale":"r","evidence":{"resolution":"Pin vitest to 3.x."},"applies_to":{"stack":["vite"],"topics":["testing"],"file_patterns":[],"task_kinds":[]}}'
 fi
 STUB
 	chmod +x "${STUB_BIN}/claude"
@@ -451,12 +451,27 @@ cat > /dev/null
 if [[ "$args" == *"--agent"* ]]; then
 	printf '%s' '{"score":0.9,"passed":true,"judge_type":"standard","feedback_summary":"f","criterion_scores":{"grounding":0.9,"scope_accuracy":0.9,"generality":0.9,"disclosure":0.95}}'
 else
-	printf '%s' '{"claim":"c","rationale":"r","evidence":{"resolution":"Pin vitest to 3.x."},"applies_to":{"stack":["vite"],"scope":{"kind":"versioned","versions":{"vite":"<6"}},"file_patterns":[],"task_kinds":[]}}'
+	printf '%s' '{"claim":"c","rationale":"r","evidence":{"resolution":"Pin vitest to 3.x."},"applies_to":{"stack":["vite"],"topics":["testing"],"file_patterns":[],"task_kinds":[]}}'
 fi
 STUB
 	chmod +x "${STUB_BIN}/claude"
 	export PATH="${STUB_BIN}:${PATH}"
 	_seed_artifact A1 5
+
+	# A registered repo whose lockfile resolves vite, committed before the
+	# artifact's created_at; the harness copies the manifest into its sandbox.
+	local repo="${BATS_TEST_TMPDIR}/observed-repo"
+	mkdir -p "$repo" "${ONLOOKER_DIR}/librarian/${PROJECT_KEY}"
+	git -C "$repo" init -q
+	git -C "$repo" config user.email t@example.com
+	git -C "$repo" config user.name Test
+	printf '%s' '{"lockfileVersion":3,"packages":{"":{},"node_modules/vite":{"version":"5.4.21"}}}' \
+		> "${repo}/package-lock.json"
+	git -C "$repo" add package-lock.json
+	GIT_AUTHOR_DATE="$(relative_iso_days_ago 30)" GIT_COMMITTER_DATE="$(relative_iso_days_ago 30)" \
+		git -C "$repo" commit -q -m lock
+	jq -n --arg k "$PROJECT_KEY" --arg r "$repo" '{project_key: $k, repo_root: $r}' \
+		> "${ONLOOKER_DIR}/librarian/${PROJECT_KEY}/manifest.json"
 
 	run "$HARNESS" --samples 1 --project-key "$PROJECT_KEY" \
 		--artifacts-from "$CORPUS" --out "$OUT"
@@ -517,7 +532,7 @@ if [[ "$args" == *"--agent tribunal-judge-adversarial"* ]]; then
 elif [[ "$args" == *"--agent tribunal-judge-standard"* ]]; then
 	printf '%s' '{"score":0.9,"passed":true,"judge_type":"standard","feedback_summary":"fine","criterion_scores":{"grounding":0.9,"scope_accuracy":0.9,"generality":0.9,"disclosure":0.95}}'
 else
-	printf '%s' '{"claim":"c","rationale":"r","evidence":{"resolution":"Pin vitest to 3.x."},"applies_to":{"stack":["vite"],"scope":{"kind":"versioned","versions":{"vite":"<6"}},"file_patterns":[],"task_kinds":[]}}'
+	printf '%s' '{"claim":"c","rationale":"r","evidence":{"resolution":"Pin vitest to 3.x."},"applies_to":{"stack":["vite"],"topics":["testing"],"file_patterns":[],"task_kinds":[]}}'
 fi
 STUB
 	chmod +x "${STUB_BIN}/claude"
