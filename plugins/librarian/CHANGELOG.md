@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.31.0](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.30.0...librarian-v0.31.0) (2026-11-27)
+
+
+### Features
+
+* **librarian:** derive a lesson's scope from observed versions ([#635](https://github.com/onlooker-community/ecosystem/issues/635)) ([d19f3ca](https://github.com/onlooker-community/ecosystem/commit/d19f3ca4f0598ff2fc7a17c15611c971e38cded0))
+
 ## [0.30.0](https://github.com/onlooker-community/ecosystem/compare/librarian-v0.29.0...librarian-v0.30.0) (2026-11-26)
 
 
